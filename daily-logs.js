@@ -1,9 +1,10 @@
 import {
     EmbedBuilder as e
 } from "discord.js";
-import { getLocalTime } from "./time-utils.js";
+import { getLocalTime, getContinentTime } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { dailyLogs, dailyLogsPath, client } from "./state.js";
+import { getContinentLabel } from "./setup-config.js";
 import o from "fs";
 
 // ==========================================
@@ -19,19 +20,21 @@ export function saveDailyLogs() {
 }
 
 export function pushToDailyLogs(type, user, targetRoom, context = "") {
-    let timeStr = getLocalTime().toLocaleTimeString("en-GB", {
+    let continentDate = getContinentTime();
+    let timeStr = continentDate.toLocaleTimeString("en-GB", {
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit"
         }),
-        prefix = "📝";
+        prefix = "📝",
+        continentLabel = getContinentLabel();
 
     if ("CLAIM_START" === type) prefix = getMsg("logs.prefixes.start");
     if ("CLAIM_END" === type) prefix = getMsg("logs.prefixes.end");
     if ("CANCEL" === type) prefix = getMsg("logs.prefixes.cancel");
     if ("QUEUE_JOIN" === type) prefix = getMsg("logs.prefixes.queue");
 
-    dailyLogs.queue.push(`\`[${timeStr} Berlin]\` ${prefix} **${user}** at *${targetRoom}* ${context ? `(${context})` : ""}`);
+    dailyLogs.queue.push(`\`[${timeStr} ${continentLabel}]\` ${prefix} **${user}** at *${targetRoom}* ${context ? `(${context})` : ""}`);
     saveDailyLogs();
 }
 

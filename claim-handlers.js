@@ -7,12 +7,13 @@ import {
 } from "discord.js";
 import { execSync, exec } from "child_process";
 import { getLocalTime, getFormattedTime12h, parseStringToDate } from "./time-utils.js";
-import { getMsg, getArray } from "./lang.js";
+import { getMsg, getArray, setLanguage, getCurrentLanguage } from "./lang.js";
 import { db, dailyLogs, antiDemonSelectionCache, saveLocalStorage, defaultFloors, lastMessages } from "./state.js";
 import { pushToDailyLogs, saveDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { refreshVisualPanel, notifyUserDM, resetPanelData } from "./panel-utils.js";
 import { hasActiveClaim, hasActiveQueue, checkPunishment, applyFiveMinCooldown, removeUserFromQueue, freeFloorAndActivateNextGracePeriod, freeAntidemonRoom, buildAntiClaimOptions, buildAntiQueueOptions } from "./claim-core.js";
+import { updateConfig, getContinentLabel, getContinentDisplayName, getContinentOffsetStr } from "./setup-config.js";
 
 // ==========================================
 // 💬 TEXT COMMAND HANDLERS (!ms, !sp, !setlogs, etc.)
@@ -111,6 +112,46 @@ export async function handleClaimMessages(msg) {
             await msg.delete()
         } catch (p) {}
         return;
+    }
+
+    // ==========================================
+    // ⚙️ SETUP COMMAND
+    // ==========================================
+    if ("!setup" === lowerContent) {
+        if (!msg.member.permissions.has("ManageMessages")) return msg.reply({
+            content: getMsg("system.permissionDeniedManageMessages")
+        }).catch(() => {});
+
+        const currentLang = getCurrentLanguage() === 'pt' ? '🇧🇷 Português' : '🇬🇧 English';
+        const currentContinent = getContinentLabel();
+        const currentContinentDisplay = getContinentDisplayName(getCurrentLanguage());
+
+        return await msg.reply({
+            content: `⚙️ **Bot Setup**\n\n📍 **Current Config:**\n🌐 Language: ${currentLang}\n🗺️ Continent: **${currentContinent}** (${currentContinentDisplay})\n\n⬇️ **Select an option to change:**`,
+            components: [
+                new t().addComponents(
+                    new i()
+                        .setCustomId("setup-language")
+                        .setPlaceholder("🌐 Select Language / Selecionar Idioma")
+                        .addOptions([
+                            { label: "🇬🇧 English", description: "Switch bot interface to English", value: "en", emoji: "🇬🇧" },
+                            { label: "🇧🇷 Português", description: "Mudar interface do bot para Português", value: "pt", emoji: "🇧🇷" }
+                        ])
+                ),
+                new t().addComponents(
+                    new i()
+                        .setCustomId("setup-continent")
+                        .setPlaceholder("🗺️ Select Continent / Selecionar Continente")
+                        .addOptions([
+                            { label: "SA  •  South America", description: getContinentOffsetStr('SA'), value: "SA", emoji: "🌎" },
+                            { label: "ASIA  •  Asia", description: getContinentOffsetStr('ASIA'), value: "ASIA", emoji: "🌏" },
+                            { label: "INMENA  •  India / MENA", description: getContinentOffsetStr('INMENA'), value: "INMENA", emoji: "🌍" },
+                            { label: "EU  •  Europe", description: getContinentOffsetStr('EU'), value: "EU", emoji: "🌍" },
+                            { label: "NA  •  North America", description: getContinentOffsetStr('NA'), value: "NA", emoji: "🌎" }
+                        ])
+                )
+            ]
+        }).catch(() => {});
     }
 
     if (lowerContent.startsWith("!ms")) {
@@ -320,6 +361,77 @@ export async function handleClaimInteractions(interaction) {
         saveLocalStorage();
         return await interaction.update({
             content: getMsg("system.resetPanelSuccess", { key: resetKey }),
+            components: []
+        }).catch(() => {});
+    }
+
+    // ==========================================
+    // ⚙️ SETUP INTERACTION HANDLERS
+    // ==========================================
+    if (interaction.isStringSelectMenu() && "setup-language" === interaction.customId) {
+        if (!interaction.member.permissions.has("ManageMessages")) {
+            return await interaction.update({
+                content: getMsg("system.permissionDeniedAdminDropped"),
+                components: [],
+                ephemeral: !0
+            }).catch(() => {});
+        }
+        const selectedLang = interaction.values[0];
+        updateConfig({ language: selectedLang });
+        setLanguage(selectedLang);
+        
+        // Refresh all panels to show updated language text immediately
+        for (let key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            await refreshVisualPanel(key);
+        }
+        
+        const langName = selectedLang === 'pt' ? '🇧🇷 Português' : '🇬🇧 English';
+        const continentName = getContinentLabel();
+        const continentDisplay = getContinentDisplayName(selectedLang);
+        
+        return await interaction.update({
+            content: `⚙️ **Bot Setup**\n\n✅ **Language changed to ${langName}**\n\n📍 **Current Config:**\n🌐 Language: ${langName}\n🗺️ Continent: **${continentName}** (${continentDisplay})\n\n⬇️ You can also change the continent below:`,
+            components: [
+                new t().addComponents(
+                    new i()
+                        .setCustomId("setup-continent")
+                        .setPlaceholder("🗺️ Select Continent / Selecionar Continente")
+                        .addOptions([
+                            { label: "SA  •  South America", description: getContinentOffsetStr('SA'), value: "SA", emoji: "🌎" },
+                            { label: "ASIA  •  Asia", description: getContinentOffsetStr('ASIA'), value: "ASIA", emoji: "🌏" },
+                            { label: "INMENA  •  India / MENA", description: getContinentOffsetStr('INMENA'), value: "INMENA", emoji: "🌍" },
+                            { label: "EU  •  Europe", description: getContinentOffsetStr('EU'), value: "EU", emoji: "🌍" },
+                            { label: "NA  •  North America", description: getContinentOffsetStr('NA'), value: "NA", emoji: "🌎" }
+                        ])
+                )
+            ]
+        }).catch(() => {});
+    }
+
+    if (interaction.isStringSelectMenu() && "setup-continent" === interaction.customId) {
+        if (!interaction.member.permissions.has("ManageMessages")) {
+            return await interaction.update({
+                content: getMsg("system.permissionDeniedAdminDropped"),
+                components: [],
+                ephemeral: !0
+            }).catch(() => {});
+        }
+        const selectedContinent = interaction.values[0];
+        updateConfig({ continent: selectedContinent });
+        
+        const currentLang = getCurrentLanguage();
+        const langName = currentLang === 'pt' ? '🇧🇷 Português' : '🇬🇧 English';
+        const continentDisplay = getContinentDisplayName(currentLang);
+        
+        // Refresh all panels to show updated timezone
+        for (let key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            await refreshVisualPanel(key);
+        }
+        
+        return await interaction.update({
+            content: `⚙️ **Bot Setup**\n\n✅ **Continent changed to ${selectedContinent}** (${continentDisplay})\n\n📍 **Current Config:**\n🌐 Language: ${langName}\n🗺️ Continent: **${selectedContinent}** (${continentDisplay})\n\n✅ All panels updated!`,
             components: []
         }).catch(() => {});
     }

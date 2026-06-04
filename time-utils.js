@@ -1,7 +1,8 @@
 import { getMsg } from "./lang.js";
+import { getContinentOffset, getContinentLabel } from "./setup-config.js";
 
 // ==========================================
-// ⏰ SCHEDULE CONSTANTS
+// ⏰ SCHEDULE CONSTANTS (Berlin time)
 // ==========================================
 
 export const redBossSchedules = [1, 4, 7, 10, 13, 16, 19, 22];
@@ -11,12 +12,84 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 // ⏰ DATE/TIME UTILITIES
 // ==========================================
 
+/** Returns current time in Berlin (Europe/Berlin) — used for internal logic */
 export function getLocalTime() {
     let timeStr = (new Date).toLocaleString("en-US", {
         timeZone: "Europe/Berlin"
     });
     return new Date(timeStr);
 }
+
+/** Returns current time adjusted to the configured continent */
+export function getContinentTime() {
+    const berlinDate = getLocalTime();
+    const offset = getContinentOffset();
+    return new Date(berlinDate.getTime() + offset * 3600000);
+}
+
+/** Converts a Berlin-time Date to the configured continent time */
+export function berlinToContinentTime(berlinDate) {
+    const offset = getContinentOffset();
+    return new Date(berlinDate.getTime() + offset * 3600000);
+}
+
+/**
+ * Converts a time string from Berlin time to the configured continent time.
+ * Handles formats: "HH:MM", "killed at HH:MM", "HH:MM ~ HH:MM", "HH:MM:SS"
+ */
+export function convertTimeStrToContinent(timeStr) {
+    if (!timeStr) return timeStr;
+    const offset = getContinentOffset();
+    if (offset === 0) return timeStr;
+
+    // Handle "HH:MM ~ HH:MM" format
+    if (timeStr.includes(' ~ ')) {
+        const parts = timeStr.split(' ~ ');
+        return parts.map(p => convertSingleTime(p, offset)).join(' ~ ');
+    }
+    
+    return convertSingleTime(timeStr, offset);
+}
+
+function convertSingleTime(str, offset) {
+    // Handle "killed at HH:MM" format
+    let prefix = '';
+    let timePart = str;
+    if (str.toLowerCase().startsWith('killed at ')) {
+        prefix = str.slice(0, 10); // "killed at "
+        timePart = str.slice(10);
+    }
+    
+    const trimmed = timePart.trim();
+    const isPM = trimmed.toLowerCase().includes('pm');
+    const isAM = trimmed.toLowerCase().includes('am');
+    
+    let cleanTime = trimmed.replace(/am/i, '').replace(/pm/i, '').trim();
+    const parts = cleanTime.split(':');
+    if (parts.length < 2) return str;
+    
+    let hour = parseInt(parts[0], 10);
+    const min = parseInt(parts[1], 10);
+    const sec = parts[2] ? parseInt(parts[2], 10) : 0;
+    
+    // Convert to 24h for calculation
+    if (isPM && hour < 12) hour += 12;
+    if (isAM && hour === 12) hour = 0;
+    
+    // Apply offset
+    let newHour = hour + offset;
+    if (newHour < 0) newHour += 24;
+    if (newHour >= 24) newHour -= 24;
+    
+    // Format back
+    const formattedMin = String(min).padStart(2, '0');
+    const formattedSec = parts[2] ? ':' + String(sec).padStart(2, '0') : '';
+    const result = `${String(newHour).padStart(2, '0')}:${formattedMin}${formattedSec}`;
+    
+    return prefix ? prefix + result : result;
+}
+
+
 
 export function isRoomOpen(schedules) {
     let hr = getLocalTime().toLocaleTimeString("en-GB", {
@@ -51,10 +124,11 @@ export function getEndLimitCountdown(endLimitStr) {
     let limitTime = parseStringToDate(endLimitStr);
     if (!limitTime) return getMsg("rooms.claimBefore", { endLimit: endLimitStr });
     let remainingSecs = Math.floor((limitTime.getTime() - getLocalTime().getTime()) / 1e3);
-    if (remainingSecs <= 0) return `⏳ Expired (${getMsg("render.countdownUntil")} ${endLimitStr})`;
+    let displayTime = convertTimeStrToContinent(endLimitStr);
+    if (remainingSecs <= 0) return `⏳ Expired (${getMsg("render.countdownUntil")} ${displayTime})`;
     let mins = Math.floor(remainingSecs / 60);
     let secs = remainingSecs % 60;
-    return `⏳ Claim within ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${endLimitStr})`;
+    return `⏳ Claim within ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${displayTime})`;
 }
 
 export function calculateNextOpening(schedules) {

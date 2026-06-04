@@ -5,9 +5,10 @@ import {
     ButtonStyle as a,
     StringSelectMenuBuilder as i
 } from "discord.js";
-import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate } from "./time-utils.js";
+import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate, convertTimeStrToContinent } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { db } from "./state.js";
+import { getContinentLabel } from "./setup-config.js";
 
 // ==========================================
 // 🎨 RENDERING (Embeds & Buttons)
@@ -38,7 +39,7 @@ export function renderEmbed(key) {
     
     // Dynamic title with time window
     "antidemon" !== current.type && current.timeWindow 
-        ? embed.setTitle(`${current.title} \u200B \u200B \u200B \u200B \` ⏱️ ${current.timeWindow} \``) 
+        ? embed.setTitle(`${current.title} \u200B \u200B \u200B \u200B \` ⏱️ ${convertTimeStrToContinent(current.timeWindow)} \``) 
         : embed.setTitle(current.title);
     
     // Footer with update timestamp
@@ -58,14 +59,19 @@ export function renderEmbed(key) {
                     if (remainingSecs > 0) {
                         let mins = Math.floor(remainingSecs / 60);
                         let secs = remainingSecs % 60;
-                        remainingClaimStr = `⏱️ ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${endTimeStr})`;
+                        let displayEndTime = convertTimeStrToContinent(endTimeStr);
+                        remainingClaimStr = `⏱️ ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${displayEndTime})`;
                     } else {
                         remainingClaimStr = "⏱️ Expiring...";
                     }
                 }
             }
+            // Convert the timeWindow (stored Berlin time) to local time
+            let displayTimeField = rData.timeWindow 
+                ? convertTimeStrToContinent(rData.timeWindow)
+                : rData.time;
             let block = "🔴 Claimed" === rData.status && rData.ownerName 
-                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n\`\`\`` 
+                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || displayTimeField}\n\`\`\`` 
                 : rData.endLimit && rData.nextName 
                     ? `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\`\n${getEndLimitCountdown(rData.endLimit)}` 
                     : `\`\`\`yaml\n🟢 Available\n\`\`\``;
@@ -92,7 +98,7 @@ export function renderEmbed(key) {
             if (current.next) {
                 desc += current.next.endLimit
                     ? `\`\`\`md\n⏭️ ${current.next.userName} — ${getEndLimitCountdown(current.next.endLimit)}\n\`\`\`\n`
-                    : `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "Berlin" })}\n\`\`\`\n`;
+                    : `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: getContinentLabel() })}\n\`\`\`\n`;
             }
         } else if (current.next && current.next.endLimit) {
             desc += `\`\`\`md\n⏭️ ${current.next.userName} — ${getEndLimitCountdown(current.next.endLimit)}\n\`\`\`\n`;
@@ -101,7 +107,7 @@ export function renderEmbed(key) {
                 ? `\`\`\`fix\n🟢 ${getMsg("rooms.roomIsOpen")}\n\`\`\`\n` 
                 : `\`\`\`yaml\n🔴 ${getMsg("rooms.eventEnded")}\n\`\`\`\n`;
         } else if (current.next) {
-            desc += `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "Berlin" })}\n\`\`\`\n`;
+            desc += `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: getContinentLabel() })}\n\`\`\`\n`;
         } else {
             desc += `\`\`\`yaml\n🟢 Available\n\`\`\`\n`;
         }
