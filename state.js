@@ -14,12 +14,11 @@ export let dailyLogs = { configChannelId: null, queue: [] };
 export let alertCache = { warning5mAfter: {}, spawnAlerted: {} };
 export let antiDemonSelectionCache = {};
 
-export let client, db, rankingDb, saveLocalStorage, logEvent, lastMessages;
+export let client, db, saveLocalStorage, logEvent, lastMessages;
 
 export function initState(opts) {
     client = opts.client;
     db = opts.db;
-    rankingDb = opts.rankingDb || null;
     saveLocalStorage = opts.saveLocalStorage;
     logEvent = opts.logEvent;
     lastMessages = opts.lastMessages;

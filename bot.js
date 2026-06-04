@@ -7,8 +7,8 @@ import { startTickInterval } from "./panel-tick.js";
 // 🚀 INITIALIZATION
 // ==========================================
 
-export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, rankingDatabase) {
-    initState({ client: botClient, db: database, rankingDb: rankingDatabase || null, saveLocalStorage: saveStorageFn, logEvent: logEventFn, lastMessages: messagesTracker });
+export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker) {
+    initState({ client: botClient, db: database, saveLocalStorage: saveStorageFn, logEvent: logEventFn, lastMessages: messagesTracker });
 
     defaultFloors.forEach(floor => {
         db[`${floor}peak`] || (db[`${floor}peak`] = {

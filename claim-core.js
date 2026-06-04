@@ -1,6 +1,6 @@
 import { getLocalTime, getFormattedTime12h } from "./time-utils.js";
 import { getMsg } from "./lang.js";
-import { db, rankingDb, punishments, punishmentsPath, saveLocalStorage, logEvent } from "./state.js";
+import { db, punishments, punishmentsPath, saveLocalStorage, logEvent } from "./state.js";
 import { notifyUserDM } from "./panel-utils.js";
 import o from "fs";
 
@@ -8,24 +8,9 @@ import o from "fs";
 // 🧠 CLAIM / QUEUE / PUNISHMENT LOGIC
 // ==========================================
 
-// Returns all Discord user IDs linked to the same in-game account (owner + all pilots)
+// Returns the user ID as a single-element array (pilot linking removed)
 export function getAllLinkedIds(userId) {
-    let linkedIds = new Set([userId]);
-    let usersData = rankingDb && rankingDb.users ? rankingDb.users : null;
-    // If user has pilots, add them
-    if (usersData && usersData[userId] && usersData[userId].pilotIds) {
-        usersData[userId].pilotIds.forEach(id => linkedIds.add(id));
-    }
-    // If user is a pilot of someone, add owner and their other pilots
-    if (usersData) {
-        for (let uid in usersData) {
-            if (usersData[uid].pilotIds && usersData[uid].pilotIds.includes(userId)) {
-                linkedIds.add(uid);
-                usersData[uid].pilotIds.forEach(id => linkedIds.add(id));
-            }
-        }
-    }
-    return [...linkedIds];
+    return [userId];
 }
 
 export function hasActiveClaim(uid) {
