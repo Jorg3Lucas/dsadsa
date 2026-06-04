@@ -1,7 +1,7 @@
 import {
     EmbedBuilder as e
 } from "discord.js";
-import { getLocalTime, getContinentTime } from "./time-utils.js";
+import { getLocalTime } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { dailyLogs, dailyLogsPath, client } from "./state.js";
 import { getContinentLabel } from "./setup-config.js";
@@ -20,8 +20,8 @@ export function saveDailyLogs() {
 }
 
 export function pushToDailyLogs(type, user, targetRoom, context = "") {
-    let continentDate = getContinentTime();
-    let timeStr = continentDate.toLocaleTimeString("en-GB", {
+    let now = getLocalTime();
+    let timeStr = now.toLocaleTimeString("en-GB", {
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit"

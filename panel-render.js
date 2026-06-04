@@ -5,7 +5,7 @@ import {
     ButtonStyle as a,
     StringSelectMenuBuilder as i
 } from "discord.js";
-import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate, convertTimeStrToContinent } from "./time-utils.js";
+import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { db } from "./state.js";
 import { getContinentLabel } from "./setup-config.js";
@@ -37,9 +37,9 @@ export function renderEmbed(key) {
         now = getLocalTime();
     let embed = new e().setColor(embedColor);
     
-    // Dynamic title with time window
+    // Dynamic title with time window (já está no horário local do continente)
     "antidemon" !== current.type && current.timeWindow 
-        ? embed.setTitle(`${current.title} \u200B \u200B \u200B \u200B \` ⏱️ ${convertTimeStrToContinent(current.timeWindow)} \``) 
+        ? embed.setTitle(`${current.title} \u200B \u200B \u200B \u200B \` ⏱️ ${current.timeWindow} \``) 
         : embed.setTitle(current.title);
     
     // Footer with update timestamp
@@ -59,17 +59,14 @@ export function renderEmbed(key) {
                     if (remainingSecs > 0) {
                         let mins = Math.floor(remainingSecs / 60);
                         let secs = remainingSecs % 60;
-                        let displayEndTime = convertTimeStrToContinent(endTimeStr);
-                        remainingClaimStr = `⏱️ ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${displayEndTime})`;
+                        remainingClaimStr = `⏱️ ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${endTimeStr})`;
                     } else {
                         remainingClaimStr = "⏱️ Expiring...";
                     }
                 }
             }
-            // Convert the timeWindow (stored Berlin time) to local time
-            let displayTimeField = rData.timeWindow 
-                ? convertTimeStrToContinent(rData.timeWindow)
-                : rData.time;
+            // Time já está no horário local do continente
+            let displayTimeField = rData.timeWindow || rData.time;
             let block = "🔴 Claimed" === rData.status && rData.ownerName 
                 ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || displayTimeField}\n\`\`\`` 
                 : rData.endLimit && rData.nextName 
