@@ -905,12 +905,13 @@ export async function handleClaimInteractions(interaction) {
                     }
                     // Build summon location options (available or reserved for this user)
                     const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
-                    const locOptions = summonProps.filter(loc => {
-                        if (targetObj[loc].status === "🔴 Claimed") return false;
-                        // If reserved for someone else (has nextId), hide from non-priority users
-                        if (targetObj[loc].nextId && targetObj[loc].nextId !== uid) return false;
-                        return true;
-                    }).map(loc => ({
+                    // Find which locations the user has priority reservation on
+                    const priorityLocs = summonProps.filter(loc => targetObj[loc].nextId === uid && targetObj[loc].status !== "🔴 Claimed");
+                    // Find freely available locations
+                    const freeLocs = summonProps.filter(loc => targetObj[loc].status !== "🔴 Claimed" && !targetObj[loc].nextId);
+                    // If user has priority, ONLY show reserved locations — otherwise show all free ones
+                    const showLocs = priorityLocs.length > 0 ? priorityLocs : freeLocs;
+                    const locOptions = showLocs.map(loc => ({
                         label: targetObj[loc].name,
                         value: loc,
                         emoji: "🌀"
