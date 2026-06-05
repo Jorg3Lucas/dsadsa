@@ -481,7 +481,43 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
             startTime = getLocalTime(),
             endTime = new Date(startTime.getTime() + 6e4 * calcMinutes),
             rangeStr = `${getFormattedTime12h(startTime)} ~ ${getFormattedTime12h(endTime)}`,
-            applyClaim = roomKey => {
+            roomsToClaim = [];
+
+        if ("mid-left" === configSelected) roomsToClaim = ["left", "mid"];
+        else if ("mid-right" === configSelected) roomsToClaim = ["mid", "right"];
+        else roomsToClaim = [configSelected];
+
+        // Check priority reservation for each room being claimed — block if reserved for someone else
+        for (let roomKey of roomsToClaim) {
+            if (targetFloor[roomKey].nextId && targetFloor[roomKey].nextId !== uid) {
+                let timeRemainingStr = "";
+                if (targetFloor[roomKey].endLimit) {
+                    let limitTime = parseStringToDate(targetFloor[roomKey].endLimit);
+                    if (limitTime) {
+                        let diffMins = Math.ceil((limitTime.getTime() - getLocalTime().getTime()) / 6e4);
+                        if (diffMins > 0) {
+                            timeRemainingStr = getMsg("cooldowns.timeRemaining", { minutes: diffMins });
+                        }
+                    }
+                }
+                if (timeRemainingStr) {
+                    delete antiDemonSelectionCache[uid];
+                    return await interaction.update({
+                        content: getMsg("cooldowns.floorReservedNotice", { userName: targetFloor[roomKey].nextName, timeRemaining: timeRemainingStr }),
+                        components: [],
+                        ephemeral: !0
+                    }).catch(() => {});
+                }
+                // endLimit expired — clear the queue and proceed
+                targetFloor[roomKey].nextId = null;
+                targetFloor[roomKey].nextName = null;
+                targetFloor[roomKey].endLimit = null;
+                targetFloor[roomKey].formattedTimeNext = "";
+                "🟢 Open" === targetFloor[roomKey].status && (targetFloor[roomKey].status = "🟢 Available");
+            }
+        }
+
+        let applyClaim = roomKey => {
                 targetFloor[roomKey].nextId === uid && (targetFloor[roomKey].nextId = null, targetFloor[roomKey].nextName = null, targetFloor[roomKey].endLimit = null);
                 targetFloor[roomKey].status = "🔴 Claimed";
                 targetFloor[roomKey].ownerId = uid;
@@ -490,7 +526,7 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                 targetFloor[roomKey].timeWindow = rangeStr;
             };
 
-        "mid-left" === configSelected ? (applyClaim("left"), applyClaim("mid")) : "mid-right" === configSelected ? (applyClaim("mid"), applyClaim("right")) : applyClaim(configSelected);
+        roomsToClaim.forEach(roomKey => applyClaim(roomKey));
         pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - Config: ${configSelected.toUpperCase()}`, `Total Ticket: ${calcMinutes} min until ${getFormattedTime12h(endTime)}`);
 
         notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", {
@@ -832,9 +868,14 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                         content: getMsg("rooms.limitReached"),
                         ephemeral: !0
                     }).catch(() => {});
-                    // Build summon location options (only available ones — not claimed and not reserved)
+                    // Build summon location options (available or reserved for this user)
                     const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
-                    const locOptions = summonProps.filter(loc => targetObj[loc].status !== "🔴 Claimed" && !targetObj[loc].nextId).map(loc => ({
+                    const locOptions = summonProps.filter(loc => {
+                        if (targetObj[loc].status === "🔴 Claimed") return false;
+                        // If reserved for someone else (has nextId), hide from non-priority users
+                        if (targetObj[loc].nextId && targetObj[loc].nextId !== uid) return false;
+                        return true;
+                    }).map(loc => ({
                         label: targetObj[loc].name,
                         value: loc,
                         emoji: "🌀"
