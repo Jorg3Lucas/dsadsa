@@ -71,6 +71,8 @@ export async function fetchClanPowerData(logEvent) {
                 if (cells.length >= 3) {
                     let rawNick = cells.eq(0).text().trim().normalize('NFC');
                     let nick = rawNick.split(/[\n\r]+/)[0].trim();
+                    // Strip impersonation suffix (冒用) added by hofgamer.com
+                    nick = nick.replace(/\(冒用\)/g, '').trim();
                     let powerText = cells.eq(2).text().replace(/[\n\t\r,]/g, '').trim();
                     let power = parseInt(powerText, 10);
                     if (nick && !isNaN(power) && power > 0) {
