@@ -258,6 +258,60 @@ export async function dispatchDailyLogs(isForced = false) {
                 await channel.send(
                     embed ? { embeds: [embed], files: [att] } : { files: [att] }
                 );
+            },
+            // Method D: plain object in files[] (no AttachmentBuilder wrapper)
+            async () => {
+                await channel.send(
+                    embed
+                        ? { embeds: [embed], files: [{ attachment: buffer, name: fileName }] }
+                        : { files: [{ attachment: buffer, name: fileName }] }
+                );
+            },
+            // Method E: direct REST API via manual multipart (bypasses discord.js entirely)
+            async () => {
+                const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
+                if (!token) throw new Error("No bot token found");
+
+                const boundary = "----bufferBot" + Math.random().toString(36).slice(2);
+                const parts = [];
+
+                // File part
+                parts.push(Buffer.from(
+                    `--${boundary}\r\n` +
+                    `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"\r\n` +
+                    `Content-Type: text/plain; charset=utf-8\r\n\r\n`
+                ));
+                parts.push(buffer);
+                parts.push(Buffer.from("\r\n"));
+
+                // Embed part (if any)
+                if (embed) {
+                    parts.push(Buffer.from(
+                        `--${boundary}\r\n` +
+                        `Content-Disposition: form-data; name="payload_json"\r\n` +
+                        `Content-Type: application/json\r\n\r\n` +
+                        `${JSON.stringify({ embeds: [embed.toJSON()] })}\r\n`
+                    ));
+                }
+
+                // Closing boundary
+                parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+                const body = Buffer.concat(parts);
+
+                const { default: axios } = await import("axios");
+                await axios.post(
+                    `https://discord.com/api/v10/channels/${channel.id}/messages`,
+                    body,
+                    {
+                        headers: {
+                            Authorization: `Bot ${token}`,
+                            "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                            "Content-Length": String(Buffer.byteLength(body))
+                        },
+                        maxBodyLength: Infinity
+                    }
+                );
             }
         ];
         for (const method of methods) {
