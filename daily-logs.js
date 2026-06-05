@@ -203,7 +203,7 @@ export async function dispatchDailyLogs(isForced = false) {
             .setColor(isForced ? "#0099ff" : "#2b2d31")
             .setDescription(getMsg("logs.noActivity"))
             .setTimestamp();
-        await channel.send({ embeds: [embed] });
+        await channel.send({ embeds: [embed] }).catch(() => {});
         return true;
     }
 
@@ -241,7 +241,12 @@ export async function dispatchDailyLogs(isForced = false) {
         )
         .setTimestamp();
 
-    await channel.send({ embeds: [embed], files: [attachment] });
+    try {
+        await channel.send({ embeds: [embed], files: [attachment] });
+    } catch (err) {
+        console.error("❌ Error sending claim report:", err.message);
+        return false;
+    }
 
     // Clear the queue after dispatch (unless forced/manual)
     if (!isForced) {

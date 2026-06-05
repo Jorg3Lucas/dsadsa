@@ -129,13 +129,7 @@
         "setupSuccess": "✅ Report channel configured.",
         "setupError": "❌ You don't have permission to configure report channels.",
         "modRequired": "❌ Only Staff can send reports manually.",
-        "noChannel": "❌ No report channel configured. Use `!setlogs` first.",
-        "prefixes": {
-            "start": "🟢 [CLAIMED]",
-            "end": "🔴 [ENDED]",
-            "cancel": "🟠 [CANCELED]",
-            "queue": "🟨 [JOINED QUEUE]"
-        }
+        "noChannel": "❌ No report channel configured. Use `!setlogs` first."
     },
     "ranking": {
         "commands": {
