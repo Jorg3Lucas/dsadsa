@@ -60,7 +60,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
     // A. MODAL SUBMIT HANDLER
     if (interaction.isModalSubmit() && interaction.customId === 'register_modal') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         
         const nickname = interaction.fields.getTextInputValue('character_nickname').trim().normalize('NFC');
 
@@ -87,10 +87,10 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     // B. MANUAL CLAN SELECTION DROPDOWN (ADMIN)
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_clan_manual_')) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: getMsg('ranking.responses.selectClanMenu.noPermission'), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.selectClanMenu.noPermission'), flags: 64 });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         const targetId = interaction.customId.replace('select_clan_manual_', '');
         const selectedClan = interaction.values[0];
 
@@ -124,7 +124,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const userProfile = db.users[interaction.user.id];
 
         if (!userProfile || !userProfile.pilotIds || !userProfile.pilotIds.includes(pilotToRemoveId)) {
-            return interaction.followUp({ content: getMsg('ranking.responses.removepilot.error'), ephemeral: true });
+            return interaction.followUp({ content: getMsg('ranking.responses.removepilot.error'), flags: 64 });
         }
 
         userProfile.pilotIds = userProfile.pilotIds.filter(id => id !== pilotToRemoveId);
@@ -549,7 +549,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     }
 
     if (commandName === 'pilot') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         const pilotMember = options.getMember('member');
         
         const userProfile = db.users[user.id];
@@ -586,7 +586,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
 
         if (!isActuallyRegistered || !userProfile.pilotIds || userProfile.pilotIds.length === 0) {
-            return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), flags: 64 });
         }
 
         const menuOptions = [];
@@ -612,12 +612,12 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.reply({
             content: getMsg('ranking.responses.removepilot.menuContent'),
             components: [row],
-            ephemeral: true
+            flags: 64
         });
     }
 
     if (commandName === 'forcesync') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
         await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true); 
         return interaction.editReply(getMsg('ranking.responses.forcesync.success'));
@@ -647,7 +647,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                     )
                 ],
-                ephemeral: true
+                flags: 64
             });
         }
 
@@ -676,7 +676,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.reply({
             content: getMsg('ranking.responses.manualregister.cacheNotFound', { nickname }),
             components: [actionRow],
-            ephemeral: true
+            flags: 64
         });
     }
 
@@ -685,20 +685,20 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const pilotMember = options.getMember('pilot');
 
         if (!db.users[ownerMember.id]) {
-            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.ownerNotRegistered', { displayName: ownerMember.displayName }), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.ownerNotRegistered', { displayName: ownerMember.displayName }), flags: 64 });
         }
         if (ownerMember.id === pilotMember.id) {
-            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.selfPilot'), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.selfPilot'), flags: 64 });
         }
 
         if (!db.users[ownerMember.id].pilotIds) db.users[ownerMember.id].pilotIds = [];
 
         if (db.users[ownerMember.id].pilotIds.length >= 4) {
-            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.limitReached'), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.limitReached'), flags: 64 });
         }
 
         if (db.users[ownerMember.id].pilotIds.includes(pilotMember.id)) {
-            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.alreadyLinked'), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.alreadyLinked'), flags: 64 });
         }
 
         confirmationCache[`${user.id}-manualpilot`] = {
@@ -717,7 +717,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     new ButtonBuilder().setCustomId('confirm-manualpilot-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                 )
             ],
-            ephemeral: true
+            flags: 64
         });
     }
 
@@ -726,11 +726,11 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const pilotMember = options.getMember('pilot');
 
         if (!db.users[ownerMember.id]) {
-            return interaction.reply({ content: getMsg('ranking.responses.manualremovepilot.ownerNotRegistered', { displayName: ownerMember.displayName }), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.manualremovepilot.ownerNotRegistered', { displayName: ownerMember.displayName }), flags: 64 });
         }
 
         if (!db.users[ownerMember.id].pilotIds || !db.users[ownerMember.id].pilotIds.includes(pilotMember.id)) {
-            return interaction.reply({ content: getMsg('ranking.responses.manualremovepilot.notLinked', { pilotDisplay: pilotMember.displayName }), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.manualremovepilot.notLinked', { pilotDisplay: pilotMember.displayName }), flags: 64 });
         }
 
         confirmationCache[`${user.id}-manualremovepilot`] = {
@@ -748,12 +748,12 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     new ButtonBuilder().setCustomId('confirm-manualremovepilot-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                 )
             ],
-            ephemeral: true
+            flags: 64
         });
     }
 
     if (commandName === 'cleandb') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         const seenNicknames = {};
         const duplicatesRemoved = [];
 
@@ -795,7 +795,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     if (commandName === 'manage') {
         const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
         if (userEntries.length === 0) {
-            return interaction.reply({ content: getMsg('ranking.responses.manage.noUsers'), ephemeral: true });
+            return interaction.reply({ content: getMsg('ranking.responses.manage.noUsers'), flags: 64 });
         }
 
         const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
@@ -828,14 +828,14 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.reply({
             content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),
             components,
-            ephemeral: true
+            flags: 64
         });
     }
 
     if (commandName === 'manualremove') {
         const targetMember = options.getMember('member');
 
-        if (!db.users[targetMember.id]) return interaction.reply({ content: getMsg('ranking.responses.manualremove.noRegistration'), ephemeral: true });
+        if (!db.users[targetMember.id]) return interaction.reply({ content: getMsg('ranking.responses.manualremove.noRegistration'), flags: 64 });
 
         confirmationCache[`${user.id}-manualremove`] = {
             targetId: targetMember.id,
@@ -850,7 +850,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     new ButtonBuilder().setCustomId('confirm-manualremove-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                 )
             ],
-            ephemeral: true
+            flags: 64
         });
     }
 }

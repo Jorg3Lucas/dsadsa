@@ -326,7 +326,7 @@ export async function handleClaimInteractions(interaction) {
             return await interaction.update({
                 content: getMsg("system.permissionDeniedAdminDropped"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
         let resetKey = interaction.values[0];
@@ -349,7 +349,7 @@ export async function handleClaimInteractions(interaction) {
         if (!db[resetKey]) return await interaction.update({
             content: getMsg("system.resetPanelNotFound", { key: resetKey }),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         resetPanelData(resetKey);
         await refreshVisualPanel(resetKey);
@@ -365,7 +365,7 @@ export async function handleClaimInteractions(interaction) {
             return await interaction.update({
                 content: getMsg("system.permissionDeniedAdminDropped"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
         let [, , roomType, targetUid] = interaction.values[0].split("-"),
@@ -404,14 +404,14 @@ export async function handleClaimInteractions(interaction) {
         return await interaction.update({
             content: getMsg("rooms.antidemonTimeoutCache"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
     }        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("antislide-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         let pKey = interaction.customId.replace("antislide-", ""),
             targetFloor = db[pKey],
@@ -425,7 +425,7 @@ export async function handleClaimInteractions(interaction) {
         if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         // Allow claiming if user has priority reservation (nextId) on this panel
         if (hasActiveQueue(uid)) {
@@ -433,7 +433,7 @@ export async function handleClaimInteractions(interaction) {
             if (!hasPriority) return await interaction.update({
                 content: getMsg("rooms.limitReached"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
         
@@ -454,14 +454,14 @@ export async function handleClaimInteractions(interaction) {
                     emoji: "🎫"
                 })))
             )],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
     }        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("antiticket-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         let pKey = interaction.customId.replace("antiticket-", ""),
             targetFloor = db[pKey],
@@ -471,14 +471,14 @@ export async function handleClaimInteractions(interaction) {
             return await interaction.update({
                 content: getMsg("rooms.antidemonTimeoutCache"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
 
         if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         // Allow claiming if user has priority reservation (nextId) on this panel
         if (hasActiveQueue(uid)) {
@@ -486,7 +486,7 @@ export async function handleClaimInteractions(interaction) {
             if (!hasPriority) return await interaction.update({
                 content: getMsg("rooms.limitReached"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
         
@@ -519,7 +519,7 @@ export async function handleClaimInteractions(interaction) {
                     return await interaction.update({
                         content: getMsg("cooldowns.floorReservedNotice", { userName: targetFloor[roomKey].nextName, timeRemaining: timeRemainingStr }),
                         components: [],
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 // endLimit expired — clear the queue and proceed
@@ -554,7 +554,7 @@ export async function handleClaimInteractions(interaction) {
         return await interaction.update({
             content: getMsg("rooms.antidemonClaimSuccessEphemeral"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
     }
 
@@ -563,20 +563,20 @@ export async function handleClaimInteractions(interaction) {
         if (pStr) return await interaction.update({
             content: pStr,
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         let pKey = interaction.customId.replace("antinextside-", ""),
             targetFloor = db[pKey];
         if (!targetFloor) return await interaction.update({
             content: getMsg("rooms.antidemonTimeoutCache"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
 
         if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
 
         let tryJoinQueue = roomKey => {
@@ -617,13 +617,13 @@ export async function handleClaimInteractions(interaction) {
             return await interaction.update({
                 content: getMsg("rooms.antidemonQueueSuccessEphemeral"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         } else {
             return await interaction.update({
                 content: getMsg("rooms.antidemonQueueLocked"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
     }
@@ -636,7 +636,7 @@ export async function handleClaimInteractions(interaction) {
         if (pStr) return await interaction.update({
             content: pStr,
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         let pKey = interaction.customId.replace("summonslide-", ""),
             targetFloor = db[pKey],
@@ -645,7 +645,7 @@ export async function handleClaimInteractions(interaction) {
         if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         // Allow claiming if user has priority reservation (nextId) on this panel
         if (hasActiveQueue(uid)) {
@@ -654,7 +654,7 @@ export async function handleClaimInteractions(interaction) {
             if (!hasPriority) return await interaction.update({
                 content: getMsg("rooms.limitReached"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
 
@@ -673,14 +673,14 @@ export async function handleClaimInteractions(interaction) {
                     emoji: "🎫"
                 })))
             )],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
     }        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonticket-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         let pKey = interaction.customId.replace("summonticket-", ""),
             targetFloor = db[pKey],
@@ -690,14 +690,14 @@ export async function handleClaimInteractions(interaction) {
             return await interaction.update({
                 content: getMsg("rooms.antidemonTimeoutCache"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
 
         if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         // Allow claiming if user has priority reservation (nextId) on this panel
         if (hasActiveQueue(uid)) {
@@ -706,7 +706,7 @@ export async function handleClaimInteractions(interaction) {
             if (!hasPriority) return await interaction.update({
                 content: getMsg("rooms.limitReached"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
 
@@ -734,7 +734,7 @@ export async function handleClaimInteractions(interaction) {
                 return await interaction.update({
                     content: getMsg("cooldowns.floorReservedNotice", { userName: targetFloor[selectedLoc].nextName, timeRemaining: timeRemainingStr }),
                     components: [],
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
             }
             // endLimit expired — clear the queue and proceed
@@ -772,7 +772,7 @@ export async function handleClaimInteractions(interaction) {
         return await interaction.update({
             content: getMsg("rooms.summonClaimSuccessEphemeral"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
     }
 
@@ -781,27 +781,27 @@ export async function handleClaimInteractions(interaction) {
         if (pStr) return await interaction.update({
             content: pStr,
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
         let pKey = interaction.customId.replace("summonnextside-", ""),
             targetFloor = db[pKey];
         if (!targetFloor) return await interaction.update({
             content: getMsg("rooms.antidemonTimeoutCache"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
 
         if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
 
         let selectedLoc = interaction.values[0];
         if (targetFloor[selectedLoc].nextId) return await interaction.update({
             content: getMsg("rooms.antidemonQueueLocked"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
 
         let baseTime = getLocalTime();
@@ -825,7 +825,7 @@ export async function handleClaimInteractions(interaction) {
         return await interaction.update({
             content: getMsg("rooms.summonQueueSuccessEphemeral"),
             components: [],
-            ephemeral: !0
+            flags: 64
         }).catch(() => {});
     }
 
@@ -835,7 +835,7 @@ export async function handleClaimInteractions(interaction) {
             return await interaction.update({
                 content: getMsg("system.permissionDeniedAdminDropped"),
                 components: [],
-                ephemeral: !0
+                flags: 64
             }).catch(() => {});
         }
         const action = interaction.customId.replace("confirm-resetlogs-", "");
@@ -863,13 +863,13 @@ export async function handleClaimInteractions(interaction) {
     if (targetObj) {            if ("death" === actionPrefix) {
                 if (targetObj[specificProp].status.startsWith("🔴 Killed")) return await interaction.reply({
                     content: getMsg("rooms.deathTimerRunning"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
                 if (targetObj.ownerId !== uid) return await interaction.reply({
                     content: getMsg("system.accessDenied", {
                         ownerName: targetObj.ownerName || getMsg("render.unknownUser")
                     }),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
                 let currTimeStr = getFormattedTime12h(getLocalTime());
                 let nowTs = getLocalTime().getTime();
@@ -880,7 +880,7 @@ export async function handleClaimInteractions(interaction) {
                 await refreshVisualPanel(panelKey);
                 return await interaction.reply({
                     content: getMsg("rooms.deathLogged"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
             }
         if ("floor" === actionPrefix) {
@@ -889,18 +889,18 @@ export async function handleClaimInteractions(interaction) {
                     let pStr = checkPunishment(uid);
                     if (pStr) return await interaction.reply({
                         content: pStr,
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     if (hasActiveClaim(uid)) return await interaction.reply({
                         content: getMsg("rooms.limitReached"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     // Allow claiming if user has priority reservation (nextId) on this panel
                     if (hasActiveQueue(uid)) {
                         const hasPriority = ["sp2", "sp4", "sp7", "ms11", "sp11"].some(loc => targetObj[loc].nextId === uid);
                         if (!hasPriority) return await interaction.reply({
                             content: getMsg("rooms.limitReached"),
-                            ephemeral: !0
+                            flags: 64
                         }).catch(() => {});
                     }
                     // Build summon location options (available or reserved for this user)
@@ -918,7 +918,7 @@ export async function handleClaimInteractions(interaction) {
                     }));
                     if (locOptions.length === 0) return await interaction.reply({
                         content: getMsg("rooms.antidemonQueueLocked"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     return await interaction.reply({
                         content: `🌀 **${getMsg("rooms.summonMenuSelectClaim")}**`,
@@ -928,18 +928,18 @@ export async function handleClaimInteractions(interaction) {
                             .addOptions(locOptions)
                         )
                         ],
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 if ("next" === specificProp) {
                     let pStr = checkPunishment(uid);
                     if (pStr) return await interaction.reply({
                         content: pStr,
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.reply({
                         content: getMsg("rooms.limitReached"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
                     const queueOpts = summonProps.filter(loc => targetObj[loc].status === "🔴 Claimed" && !targetObj[loc].nextId).map(loc => ({
@@ -949,7 +949,7 @@ export async function handleClaimInteractions(interaction) {
                     }));
                     if (queueOpts.length === 0) return await interaction.reply({
                         content: getMsg("rooms.antidemonQueueLocked"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     return await interaction.reply({
                         content: `🌀 **${getMsg("rooms.summonMenuSelectNext")}**`,
@@ -959,7 +959,7 @@ export async function handleClaimInteractions(interaction) {
                             .addOptions(queueOpts)
                         )
                         ],
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 if ("cancel" === specificProp) {
@@ -1001,12 +1001,12 @@ export async function handleClaimInteractions(interaction) {
                             content: anyAction 
                                 ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))
                                 : getMsg("rooms.noActiveClaimsFeedback"),
-                            ephemeral: !0
+                            flags: 64
                         }).catch(() => {});
                     }
                     return await interaction.reply({
                         content: getMsg("rooms.noActiveClaimsFeedback"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
             }
@@ -1015,18 +1015,18 @@ export async function handleClaimInteractions(interaction) {
                     let pStr = checkPunishment(uid);
                     if (pStr) return await interaction.reply({
                         content: pStr,
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     if (hasActiveClaim(uid)) return await interaction.reply({
                         content: getMsg("rooms.limitReached"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     // Allow claiming if user has priority reservation (nextId) on this panel
                     if (hasActiveQueue(uid)) {
                         const hasPriority = ["left", "mid", "right"].some(rm => targetObj[rm].nextId === uid);
                         if (!hasPriority) return await interaction.reply({
                             content: getMsg("rooms.limitReached"),
-                            ephemeral: !0
+                            flags: 64
                         }).catch(() => {});
                     }
                     return await interaction.reply({
@@ -1037,18 +1037,18 @@ export async function handleClaimInteractions(interaction) {
                             .addOptions(buildAntiClaimOptions(targetObj, uid))
                         )
                         ],
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 if ("next" === specificProp) {
                     let pStr = checkPunishment(uid);
                     if (pStr) return await interaction.reply({
                         content: pStr,
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.reply({
                         content: getMsg("rooms.limitReached"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                     return await interaction.reply({
                         content: `⚔️ **${getMsg("rooms.antidemonMenuSelectNext")}**`,
@@ -1058,7 +1058,7 @@ export async function handleClaimInteractions(interaction) {
                             .addOptions(buildAntiQueueOptions(targetObj))
                         )
                         ],
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 if ("cancel" === specificProp) {
@@ -1101,12 +1101,12 @@ export async function handleClaimInteractions(interaction) {
                             content: anyAction 
                                 ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))
                                 : getMsg("rooms.noActiveClaimsFeedback"),
-                            ephemeral: !0
+                            flags: 64
                         }).catch(() => {});
                     }
                     return await interaction.reply({
                         content: getMsg("rooms.noActiveClaimsFeedback"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
             }
@@ -1135,7 +1135,7 @@ export async function handleClaimInteractions(interaction) {
                     await refreshVisualPanel(panelKey);
                     return await interaction.reply({
                         content: getMsg("cooldowns.canceledClaimFeedback"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 if (isMod && targetObj.ownerId) {
@@ -1148,7 +1148,7 @@ export async function handleClaimInteractions(interaction) {
                     await refreshVisualPanel(panelKey);
                     return await interaction.reply({
                         content: getMsg("rooms.floorReleasedSuccess"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 if (inQueue) {
@@ -1162,12 +1162,12 @@ export async function handleClaimInteractions(interaction) {
                     await refreshVisualPanel(panelKey);
                     return await interaction.reply({
                         content: getMsg("rooms.removedFromQueueFeedback"),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
                 return await interaction.reply({
                     content: getMsg("rooms.noActiveClaimsFeedback"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
             }
 
@@ -1176,7 +1176,7 @@ export async function handleClaimInteractions(interaction) {
                     content: getMsg("system.accessDenied", {
                         ownerName: targetObj.ownerName
                     }),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
             }
 
@@ -1184,15 +1184,15 @@ export async function handleClaimInteractions(interaction) {
                 let pStr = checkPunishment(uid);
                 if (pStr) return await interaction.reply({
                     content: pStr,
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
                 if (hasActiveClaim(uid)) return await interaction.reply({
                     content: getMsg("rooms.limitReached"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
                 if (hasActiveQueue(uid)) return await interaction.reply({
                     content: getMsg("rooms.limitReached"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
 
                 if (targetObj.next && targetObj.next.userId !== uid) {
@@ -1212,7 +1212,7 @@ export async function handleClaimInteractions(interaction) {
 
                     return await interaction.reply({
                         content: getMsg("cooldowns.floorReservedNotice", { userName: targetObj.next.userName, timeRemaining: timeRemainingStr }),
-                        ephemeral: !0
+                        flags: 64
                     }).catch(() => {});
                 }
 
@@ -1236,7 +1236,7 @@ export async function handleClaimInteractions(interaction) {
                 }
                 return saveLocalStorage(), await refreshVisualPanel(panelKey), await interaction.reply({
                     content: getMsg("rooms.floorClaimSuccess"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
             }
 
@@ -1244,19 +1244,19 @@ export async function handleClaimInteractions(interaction) {
                 let pStr = checkPunishment(uid);
                 if (pStr) return await interaction.reply({
                     content: pStr,
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
                 if ("peak" === targetObj.type) return await interaction.reply({
                     content: getMsg("rooms.alreadyOwner"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
                 if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.reply({
                     content: getMsg("rooms.limitReached"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
                 if (targetObj.ownerId === uid) return await interaction.reply({
                     content: getMsg("rooms.alreadyOwner"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
 
                 let pointer = targetObj.next,
@@ -1270,7 +1270,7 @@ export async function handleClaimInteractions(interaction) {
                 }
                 if (inQueue) return await interaction.reply({
                     content: getMsg("rooms.alreadyInQueue"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
 
                 let nowTime = getLocalTime();
@@ -1301,7 +1301,7 @@ export async function handleClaimInteractions(interaction) {
 
                 return saveLocalStorage(), await refreshVisualPanel(panelKey), await interaction.reply({
                     content: getMsg("rooms.queueJoinedSuccess"),
-                    ephemeral: !0
+                    flags: 64
                 }).catch(() => {});
             }
         }
