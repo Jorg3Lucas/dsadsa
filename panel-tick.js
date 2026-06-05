@@ -97,8 +97,15 @@ export function startTickInterval() {
                             // Schedule-based bosses (Red Boss, Leader 3) are handled by the dedicated blocks above
                             if (usesScheduleRespawn(current, prop)) continue;
                             
+                            // Capture killed time string BEFORE changing status
                             let killedTimeStr = current[prop].status.replace("🔴 Killed at ", "").trim();
-                            let killedTime = parseStringToDate(killedTimeStr);
+                            // Prefer stored millisecond timestamp (timezone-safe), fall back to parsing string
+                            let killedTime;
+                            if (current[prop]._lastKilledAt) {
+                                killedTime = new Date(current[prop]._lastKilledAt);
+                            } else {
+                                killedTime = parseStringToDate(killedTimeStr);
+                            }
                             if (killedTime) {
                                 let secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
                                 let totalCooldownSeconds = 60 * current[prop].cooldown;

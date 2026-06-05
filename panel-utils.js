@@ -1,5 +1,5 @@
 import { EmbedBuilder as e } from "discord.js";
-import { getLocalTime, getFormattedTime12h } from "./time-utils.js";
+import { getLocalTime, getFormattedTime12h, parseStringToDate } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { db, client, saveLocalStorage, logEvent, lastMessages } from "./state.js";
 import { renderEmbed, renderButtons, getEmbedColor } from "./panel-render.js";
@@ -177,6 +177,41 @@ export function migrateBossCooldowns() {
     if (migrated > 0) {
         saveLocalStorage();
         logEvent(`Migrated cooldown property for ${migrated} existing boss entries.`);
+    }
+}
+
+// ==========================================
+// 🔄 MIGRATION: Backfill _lastKilledAt timestamp for existing entries
+// ==========================================
+
+export function migrateLastKilledAt() {
+    let migrated = 0;
+    for (let key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        let current = db[key];
+        for (let prop in current) {
+            if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
+            let bossData = current[prop];
+            if (!bossData || typeof bossData !== "object") continue;
+            // If boss is currently killed but has no _lastKilledAt, set it by parsing the status string
+            if (bossData.status && bossData.status.startsWith("🔴 Killed at") && !bossData._lastKilledAt) {
+                let killedTimeStr = bossData.status.replace("🔴 Killed at ", "").trim();
+                let killedDate = parseStringToDate(killedTimeStr);
+                if (killedDate) {
+                    bossData._lastKilledAt = killedDate.getTime();
+                    migrated++;
+                }
+            }
+            // Also sync _lastKilledAt into _lastKilledTimeStr if the latter is empty (for "X ago" display)
+            if (bossData._lastKilledAt && !bossData._lastKilledTimeStr) {
+                bossData._lastKilledTimeStr = getFormattedTime12h(new Date(bossData._lastKilledAt));
+                migrated++;
+            }
+        }
+    }
+    if (migrated > 0) {
+        saveLocalStorage();
+        logEvent(`Migrated _lastKilledAt timestamp for ${migrated} existing boss entries.`);
     }
 }
 
