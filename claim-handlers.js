@@ -1033,7 +1033,7 @@ export async function handleClaimInteractions(interaction) {
                         components: [new t().addComponents(new i()
                             .setCustomId(`antislide-${targetObj.type === "antidemon" ? panelKey : ""}`)
                             .setPlaceholder(getMsg("rooms.antidemonSelectPlaceholder"))
-                            .addOptions(buildAntiClaimOptions(targetObj))
+                            .addOptions(buildAntiClaimOptions(targetObj, uid))
                         )
                         ],
                         ephemeral: !0

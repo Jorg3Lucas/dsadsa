@@ -139,21 +139,27 @@ export function freeAntidemonRoom(floorObj, roomKey) {
     saveLocalStorage();
 }
 
-export function buildAntiClaimOptions(targetObj) {
+export function buildAntiClaimOptions(targetObj, uid) {
     const opts = [];
-    if (targetObj.left.status !== "🔴 Claimed") {
+    const isAvailableForUser = (room) => {
+        if (targetObj[room].status === "🔴 Claimed") return false;
+        // Reserved for someone else (has nextId for a different user) — hide it
+        if (targetObj[room].nextId && targetObj[room].nextId !== uid) return false;
+        return true;
+    };
+    if (isAvailableForUser("left")) {
         opts.push({ label: "⬅️ LEFT ROOM", description: getMsg("rooms.antidemonRoomLeft"), value: "left", emoji: "⬅️" });
     }
-    if (targetObj.mid.status !== "🔴 Claimed") {
+    if (isAvailableForUser("mid")) {
         opts.push({ label: "🔵 MID ROOM", description: getMsg("rooms.antidemonRoomMid"), value: "mid", emoji: "🔵" });
     }
-    if (targetObj.right.status !== "🔴 Claimed") {
+    if (isAvailableForUser("right")) {
         opts.push({ label: "➡️ RIGHT ROOM", description: getMsg("rooms.antidemonRoomRight"), value: "right", emoji: "➡️" });
     }
-    if (targetObj.left.status !== "🔴 Claimed" && targetObj.mid.status !== "🔴 Claimed") {
+    if (isAvailableForUser("left") && isAvailableForUser("mid")) {
         opts.push({ label: "🔵⬅️ MID + LEFT", description: getMsg("rooms.antidemonRoomMidLeft"), value: "mid-left", emoji: "🔵" });
     }
-    if (targetObj.mid.status !== "🔴 Claimed" && targetObj.right.status !== "🔴 Claimed") {
+    if (isAvailableForUser("mid") && isAvailableForUser("right")) {
         opts.push({ label: "🔵➡️ MID + RIGHT", description: getMsg("rooms.antidemonRoomMidRight"), value: "mid-right", emoji: "🔵" });
     }
     return opts;
