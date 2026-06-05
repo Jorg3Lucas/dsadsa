@@ -293,15 +293,7 @@ export function renderButtons(key) {
                 .setStyle(a.Danger)
         );
         
-        // Add queue button for non-fury/frenzy and non-peak floors — only if room is occupied
-        if (!key.includes("fury") && !key.includes("frenzy") && !key.includes("peak") && current.ownerId) {
-            coreRow.addComponents(
-                new n()
-                    .setCustomId(`floor-${key}-next`)
-                    .setLabel(getMsg("buttons.nextLabel"))
-                    .setStyle(a.Primary)
-            );
-        }
+        // Magic Square / normal floors don't use the Next queue button
     }
     
     componentsList.push(coreRow);
