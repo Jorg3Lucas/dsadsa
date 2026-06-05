@@ -518,9 +518,7 @@ export async function handleClaimInteractions(interaction) {
             components: [],
             ephemeral: !0
         }).catch(() => {});
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("antislide-")) {
+    }        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("antislide-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
@@ -536,11 +534,20 @@ export async function handleClaimInteractions(interaction) {
         else if ("mid-right" === configSelected) roomsToCheck = ["mid", "right"];
         else roomsToCheck = [configSelected];
         
-if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
+        if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
             ephemeral: !0
         }).catch(() => {});
+        // Allow claiming if user has priority reservation (nextId) on this panel
+        if (hasActiveQueue(uid)) {
+            const hasPriority = ["left", "mid", "right"].some(rm => targetFloor[rm].nextId === uid);
+            if (!hasPriority) return await interaction.update({
+                content: getMsg("rooms.limitReached"),
+                components: [],
+                ephemeral: !0
+            }).catch(() => {});
+        }
         
 
         
@@ -561,9 +568,7 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
             )],
             ephemeral: !0
         }).catch(() => {});
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("antiticket-")) {
+    }        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("antiticket-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
@@ -582,11 +587,20 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
             }).catch(() => {});
         }
 
-        if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
+        if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
             ephemeral: !0
         }).catch(() => {});
+        // Allow claiming if user has priority reservation (nextId) on this panel
+        if (hasActiveQueue(uid)) {
+            const hasPriority = ["left", "mid", "right"].some(rm => targetFloor[rm].nextId === uid);
+            if (!hasPriority) return await interaction.update({
+                content: getMsg("rooms.limitReached"),
+                components: [],
+                ephemeral: !0
+            }).catch(() => {});
+        }
         
         let configSelected = cacheObj.roomConfig,
             calcMinutes = 30 * parseInt(interaction.values[0]),
@@ -728,9 +742,7 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
 
     // ==========================================
     // 🌀 SUMMON INTERACTION HANDLERS
-    // ==========================================
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonslide-")) {
+    // ==========================================        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonslide-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
@@ -741,11 +753,21 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
             targetFloor = db[pKey],
             selectedLoc = interaction.values[0];
 
-        if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
+        if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
             ephemeral: !0
         }).catch(() => {});
+        // Allow claiming if user has priority reservation (nextId) on this panel
+        if (hasActiveQueue(uid)) {
+            const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
+            const hasPriority = summonProps.some(loc => targetFloor[loc].nextId === uid);
+            if (!hasPriority) return await interaction.update({
+                content: getMsg("rooms.limitReached"),
+                components: [],
+                ephemeral: !0
+            }).catch(() => {});
+        }
 
         summonSelectionCache[uid] = {
             panelId: pKey,
@@ -764,9 +786,7 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
             )],
             ephemeral: !0
         }).catch(() => {});
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonticket-")) {
+    }        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonticket-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
@@ -785,11 +805,21 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
             }).catch(() => {});
         }
 
-        if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
+        if (hasActiveClaim(uid)) return await interaction.update({
             content: getMsg("rooms.limitReached"),
             components: [],
             ephemeral: !0
         }).catch(() => {});
+        // Allow claiming if user has priority reservation (nextId) on this panel
+        if (hasActiveQueue(uid)) {
+            const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
+            const hasPriority = summonProps.some(loc => targetFloor[loc].nextId === uid);
+            if (!hasPriority) return await interaction.update({
+                content: getMsg("rooms.limitReached"),
+                components: [],
+                ephemeral: !0
+            }).catch(() => {});
+        }
 
         let selectedLoc = cacheObj.selectedLoc,
             calcMinutes = 30 * parseInt(interaction.values[0]),
@@ -976,10 +1006,14 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                         content: getMsg("rooms.limitReached"),
                         ephemeral: !0
                     }).catch(() => {});
-                    if (hasActiveQueue(uid)) return await interaction.reply({
-                        content: getMsg("rooms.limitReached"),
-                        ephemeral: !0
-                    }).catch(() => {});
+                    // Allow claiming if user has priority reservation (nextId) on this panel
+                    if (hasActiveQueue(uid)) {
+                        const hasPriority = ["sp2", "sp4", "sp7", "ms11", "sp11"].some(loc => targetObj[loc].nextId === uid);
+                        if (!hasPriority) return await interaction.reply({
+                            content: getMsg("rooms.limitReached"),
+                            ephemeral: !0
+                        }).catch(() => {});
+                    }
                     // Build summon location options (available or reserved for this user)
                     const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
                     const locOptions = summonProps.filter(loc => {
@@ -1097,10 +1131,14 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                         content: getMsg("rooms.limitReached"),
                         ephemeral: !0
                     }).catch(() => {});
-                    if (hasActiveQueue(uid)) return await interaction.reply({
-                        content: getMsg("rooms.limitReached"),
-                        ephemeral: !0
-                    }).catch(() => {});
+                    // Allow claiming if user has priority reservation (nextId) on this panel
+                    if (hasActiveQueue(uid)) {
+                        const hasPriority = ["left", "mid", "right"].some(rm => targetObj[rm].nextId === uid);
+                        if (!hasPriority) return await interaction.reply({
+                            content: getMsg("rooms.limitReached"),
+                            ephemeral: !0
+                        }).catch(() => {});
+                    }
                     return await interaction.reply({
                         content: `👹 **${getMsg("rooms.antidemonMenuSelectClaim")}**`,
                         components: [new t().addComponents(new i()
