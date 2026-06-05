@@ -217,8 +217,6 @@ export async function dispatchDailyLogs(isForced = false) {
     const safeDate = dateStr.replace(/\//g, "-");
     const fileName = `claim-report-${safeDate}${isForced ? "-manual" : ""}.txt`;
 
-    const attachment = new AttachmentBuilder(Buffer.from(fileContent, "utf-8"), { name: fileName });
-
     // Quick-summary embed
     const totals = {
         CLAIM_START: queueData.filter(e => e.type === "CLAIM_START").length,
@@ -228,24 +226,54 @@ export async function dispatchDailyLogs(isForced = false) {
     };
     const totalEvents = Object.values(totals).reduce((a, b) => a + b, 0);
 
-    const embed = new EmbedBuilder()
-        .setTitle(getMsg("logs.title", { date: dateStr }))
-        .setColor(isForced ? "#0099ff" : "#2b2d31")
-        .setDescription(
-            `📄 **Full report attached** — \`${fileName}\`\n\n` +
-            `🟢 Claims: **${totals.CLAIM_START}**\n` +
-            `🔴 Ended: **${totals.CLAIM_END}**\n` +
-            `🟠 Canceled: **${totals.CANCEL}**\n` +
-            `🟨 Queues: **${totals.QUEUE_JOIN}**\n\n` +
-            `📊 **Total: ${totalEvents} events**`
-        )
-        .setTimestamp();
+    const buffer = Buffer.from(fileContent, "utf8");
+    console.log(`📎 Preparing claim report: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB, ${queueData.length} events)`);
 
+    // ── Attempt 1: file + embed ──
     try {
+        const attachment = new AttachmentBuilder(buffer, { name: fileName });
+        const embed = new EmbedBuilder()
+            .setTitle(getMsg("logs.title", { date: dateStr }))
+            .setColor(isForced ? "#0099ff" : "#2b2d31")
+            .setDescription(
+                `📄 **Full report attached** — \`${fileName}\`\n\n` +
+                `🟢 Claims: **${totals.CLAIM_START}**\n` +
+                `🔴 Ended: **${totals.CLAIM_END}**\n` +
+                `🟠 Canceled: **${totals.CANCEL}**\n` +
+                `🟨 Queues: **${totals.QUEUE_JOIN}**\n\n` +
+                `📊 **Total: ${totalEvents} events**`
+            )
+            .setTimestamp();
         await channel.send({ embeds: [embed], files: [attachment] });
-    } catch (err) {
-        console.error("❌ Error sending claim report:", err.message);
-        return false;
+        console.log(`✅ Claim report sent successfully: ${fileName}`);
+    } catch (err1) {
+        console.warn(`⚠️ File+embed failed (${err1.message}), trying file-only...`);
+        // ── Attempt 2: file only (no embed) ──
+        try {
+            const attachment = new AttachmentBuilder(buffer, { name: fileName });
+            await channel.send({ files: [attachment] });
+            console.log(`✅ Claim report sent (file-only): ${fileName}`);
+        } catch (err2) {
+            console.warn(`⚠️ File-only also failed (${err2.message}), falling back to embed...`);
+            // ── Attempt 3: embed only (inline text) ──
+            try {
+                const maxLines = 80;
+                const lines = fileContent.split("\n");
+                const truncated = lines.length > maxLines
+                    ? lines.slice(0, maxLines).join("\n") + `\n\n... (${lines.length - maxLines} more lines truncated — ${fileName})`
+                    : fileContent;
+                const embed = new EmbedBuilder()
+                    .setTitle(getMsg("logs.title", { date: dateStr }))
+                    .setColor(isForced ? "#0099ff" : "#2b2d31")
+                    .setDescription("```\n" + truncated.slice(0, 4080) + "\n```")
+                    .setTimestamp();
+                await channel.send({ embeds: [embed] });
+                console.log(`✅ Claim report sent (embed-only fallback): ${fileName}`);
+            } catch (err3) {
+                console.error("❌ All send methods failed:", err3.message);
+                return false;
+            }
+        }
     }
 
     // Clear the queue after dispatch (unless forced/manual)
