@@ -237,7 +237,7 @@ export function renderButtons(key) {
     let current = db[key],
         componentsList = [];
     
-    if ("fixed" !== current.type && "antidemon" !== current.type) {
+    if ("fixed" !== current.type && "antidemon" !== current.type && "summon" !== current.type) {
         let row = new t();
         let hasProperties = !1;
         for (let prop in current) {
