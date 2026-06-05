@@ -763,8 +763,11 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
 
                     if (isOwner || isInQueue || isMod) {
                         let penalized = !1;
+                        let anyAction = !1;
                         return ["left", "mid", "right"].forEach(rm => {
-                            if (targetObj[rm].ownerId === uid || isMod) {
+                            // Only cancel rooms where the user is the actual owner (not all rooms just because isMod)
+                            if (targetObj[rm].ownerId === uid) {
+                                anyAction = !0;
                                 let currentLoggedName = targetObj[rm].ownerName || uName;
                                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                                 notifyUserDM(targetObj[rm].ownerId, getMsg("rooms.dmRemovedNotice", {
@@ -774,7 +777,9 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                                 freeAntidemonRoom(targetObj, rm);
                                 isMod || penalized || (applyFiveMinCooldown(uid), penalized = !0);
                             }
-                            if (targetObj[rm].nextId === uid || isMod) {
+                            // Only cancel queue where the user is actually in queue
+                            if (targetObj[rm].nextId === uid) {
+                                anyAction = !0;
                                 let currentLoggedName = targetObj[rm].nextName || uName;
                                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                                 notifyUserDM(targetObj[rm].nextId, getMsg("rooms.dmRemovedNotice", {
@@ -788,7 +793,9 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                                 "🟢 Open" === targetObj[rm].status && (targetObj[rm].status = "🟢 Available");
                             }
                         }), saveLocalStorage(), await refreshVisualPanel(panelKey), await interaction.reply({
-                            content: penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"),
+                            content: anyAction 
+                                ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))
+                                : getMsg("rooms.noActiveClaimsFeedback"),
                             ephemeral: !0
                         }).catch(() => {});
                     }
