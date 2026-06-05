@@ -229,50 +229,127 @@ export async function dispatchDailyLogs(isForced = false) {
     const buffer = Buffer.from(fileContent, "utf8");
     console.log(`📎 Preparing claim report: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB, ${queueData.length} events)`);
 
-    // ── Attempt 1: file + embed ──
-    try {
-        const attachment = new AttachmentBuilder(buffer, { name: fileName });
-        const embed = new EmbedBuilder()
-            .setTitle(getMsg("logs.title", { date: dateStr }))
-            .setColor(isForced ? "#0099ff" : "#2b2d31")
-            .setDescription(
-                `📄 **Full report attached** — \`${fileName}\`\n\n` +
-                `🟢 Claims: **${totals.CLAIM_START}**\n` +
-                `🔴 Ended: **${totals.CLAIM_END}**\n` +
-                `🟠 Canceled: **${totals.CANCEL}**\n` +
-                `🟨 Queues: **${totals.QUEUE_JOIN}**\n\n` +
-                `📊 **Total: ${totalEvents} events**`
-            )
-            .setTimestamp();
-        await channel.send({ embeds: [embed], files: [attachment] });
-        console.log(`✅ Claim report sent successfully: ${fileName}`);
-    } catch (err1) {
-        console.warn(`⚠️ File+embed failed (${err1.message}), trying file-only...`);
-        // ── Attempt 2: file only (no embed) ──
-        try {
-            const attachment = new AttachmentBuilder(buffer, { name: fileName });
-            await channel.send({ files: [attachment] });
-            console.log(`✅ Claim report sent (file-only): ${fileName}`);
-        } catch (err2) {
-            console.warn(`⚠️ File-only also failed (${err2.message}), falling back to embed...`);
-            // ── Attempt 3: embed only (inline text) ──
+    // ── Helper: try to send a file, returns true on success ──
+    const trySendFile = async (embed) => {
+        const methods = [
+            // Method A: file path on disk (most reliable)
+            async () => {
+                const tmpPath = `./${fileName}`;
+                fs.writeFileSync(tmpPath, buffer);
+                try {
+                    const att = new AttachmentBuilder(tmpPath);
+                    await channel.send(
+                        embed ? { embeds: [embed], files: [att] } : { files: [att] }
+                    );
+                } finally {
+                    try { fs.unlinkSync(tmpPath); } catch {}
+                }
+            },
+            // Method B: explicit { attachment, name } object
+            async () => {
+                const att = new AttachmentBuilder({ attachment: buffer, name: fileName });
+                await channel.send(
+                    embed ? { embeds: [embed], files: [att] } : { files: [att] }
+                );
+            },
+            // Method C: Buffer with options (original approach)
+            async () => {
+                const att = new AttachmentBuilder(buffer, { name: fileName });
+                await channel.send(
+                    embed ? { embeds: [embed], files: [att] } : { files: [att] }
+                );
+            }
+        ];
+        for (const method of methods) {
             try {
-                const maxLines = 80;
-                const lines = fileContent.split("\n");
-                const truncated = lines.length > maxLines
-                    ? lines.slice(0, maxLines).join("\n") + `\n\n... (${lines.length - maxLines} more lines truncated — ${fileName})`
-                    : fileContent;
+                await method();
+                return true;
+            } catch (err) {
+                console.warn(`  ⚠️ File method failed: ${err.message}`);
+            }
+        }
+        return false;
+    };
+
+    // ── Attempt 1: file + embed (try all 3 methods) ──
+    const summaryEmbed = new EmbedBuilder()
+        .setTitle(getMsg("logs.title", { date: dateStr }))
+        .setColor(isForced ? "#0099ff" : "#2b2d31")
+        .setDescription(
+            `📄 **Full report attached** — \`${fileName}\`\n\n` +
+            `🟢 Claims: **${totals.CLAIM_START}**\n` +
+            `🔴 Ended: **${totals.CLAIM_END}**\n` +
+            `🟠 Canceled: **${totals.CANCEL}**\n` +
+            `🟨 Queues: **${totals.QUEUE_JOIN}**\n\n` +
+            `📊 **Total: ${totalEvents} events**`
+        )
+        .setTimestamp();
+
+    const fileOk = await trySendFile(summaryEmbed);
+    if (fileOk) {
+        console.log(`✅ Claim report sent successfully: ${fileName}`);
+    } else {
+        console.warn(`⚠️ All file methods failed, falling back to multi-embed (full content)...`);
+        // ── Fallback: multi-embed with full content (no truncation) ──
+        try {
+            const MAX_DESC = 4096;
+            const FENCE = "```\n";
+            const FENCE_END = "\n```";
+            const FENCE_OVERHEAD = FENCE.length + FENCE_END.length;
+            const MAX_PER_EMBED = MAX_DESC - FENCE_OVERHEAD;
+
+            const lines = fileContent.split("\n");
+            const chunks = [];
+            let currentChunk = "";
+            for (const line of lines) {
+                const candidate = currentChunk ? currentChunk + "\n" + line : line;
+                if (candidate.length > MAX_PER_EMBED) {
+                    if (currentChunk) { chunks.push(currentChunk); currentChunk = ""; }
+                    if (line.length > MAX_PER_EMBED) {
+                        for (let i = 0; i < line.length; i += MAX_PER_EMBED)
+                            chunks.push(line.slice(i, i + MAX_PER_EMBED));
+                    } else { currentChunk = line; }
+                } else { currentChunk = candidate; }
+            }
+            if (currentChunk) chunks.push(currentChunk);
+
+            const summaryMsg =
+                `${LOG_ICONS.CLAIM_START} Claims: **${totals.CLAIM_START}** | ` +
+                `${LOG_ICONS.CLAIM_END} Ended: **${totals.CLAIM_END}** | ` +
+                `${LOG_ICONS.CANCEL} Canceled: **${totals.CANCEL}** | ` +
+                `${LOG_ICONS.QUEUE_JOIN} Queues: **${totals.QUEUE_JOIN}**\n` +
+                `📊 **Total: ${totalEvents} events** — \`${fileName}\``;
+
+            const pageCount = chunks.length;
+
+            if (pageCount <= 1) {
+                const avail = MAX_DESC - summaryMsg.length - 2 - FENCE_OVERHEAD;
                 const embed = new EmbedBuilder()
                     .setTitle(getMsg("logs.title", { date: dateStr }))
                     .setColor(isForced ? "#0099ff" : "#2b2d31")
-                    .setDescription("```\n" + truncated.slice(0, 4080) + "\n```")
+                    .setDescription(summaryMsg + "\n\n" + FENCE + (chunks[0] || "").slice(0, Math.max(0, avail)) + FENCE_END)
                     .setTimestamp();
                 await channel.send({ embeds: [embed] });
-                console.log(`✅ Claim report sent (embed-only fallback): ${fileName}`);
-            } catch (err3) {
-                console.error("❌ All send methods failed:", err3.message);
-                return false;
+            } else {
+                const summaryPage = new EmbedBuilder()
+                    .setTitle(getMsg("logs.title", { date: dateStr }))
+                    .setColor(isForced ? "#0099ff" : "#2b2d31")
+                    .setDescription(summaryMsg + `\n\n📄 Report split across **${pageCount} pages** ↓`)
+                    .setTimestamp();
+                await channel.send({ embeds: [summaryPage] });
+
+                for (let i = 0; i < pageCount; i++) {
+                    const pageEmbed = new EmbedBuilder()
+                        .setColor(isForced ? "#0099ff" : "#2b2d31")
+                        .setDescription(FENCE + chunks[i].slice(0, MAX_PER_EMBED) + FENCE_END)
+                        .setFooter({ text: `Page ${i + 1} of ${pageCount}` });
+                    await channel.send({ embeds: [pageEmbed] });
+                }
             }
+            console.log(`✅ Claim report sent (${pageCount} embed page(s), full content): ${fileName}`);
+        } catch (err) {
+            console.error("❌ All send methods failed:", err.message);
+            return false;
         }
     }
 
