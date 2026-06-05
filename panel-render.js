@@ -147,8 +147,14 @@ export function renderEmbed(key) {
 
                     // Show countdown for killed bosses instead of static time
                     if (displayStatus.startsWith("🔴 Killed at") && current[prop].cooldown) {
-                        let killedTimeStr = displayStatus.replace("🔴 Killed at ", "").trim();
-                        let killedTime = parseStringToDate(killedTimeStr);
+                        // Prefer stored millisecond timestamp (timezone-safe), fall back to parsing string
+                        let killedTime;
+                        if (current[prop]._lastKilledAt) {
+                            killedTime = new Date(current[prop]._lastKilledAt);
+                        } else {
+                            let killedTimeStr = displayStatus.replace("🔴 Killed at ", "").trim();
+                            killedTime = parseStringToDate(killedTimeStr);
+                        }
                         if (killedTime) {
                             // Schedule-based respawn (Red Boss, Leader 3) — based on fixed schedules
                             if (usesScheduleRespawn(current, prop)) {
@@ -184,8 +190,14 @@ export function renderEmbed(key) {
                     }
                     
                     // Show elapsed time since last death
-                    if (displayStatus === "🟢 Available" && current[prop]._lastKilledTimeStr) {
-                        let killedDate = parseStringToDate(current[prop]._lastKilledTimeStr);
+                    if (displayStatus === "🟢 Available" && (current[prop]._lastKilledAt || current[prop]._lastKilledTimeStr)) {
+                        // Prefer stored millisecond timestamp (timezone-safe), fall back to parsing string
+                        let killedDate;
+                        if (current[prop]._lastKilledAt) {
+                            killedDate = new Date(current[prop]._lastKilledAt);
+                        } else {
+                            killedDate = parseStringToDate(current[prop]._lastKilledTimeStr);
+                        }
                         if (killedDate) {
                             let diffMs = now.getTime() - killedDate.getTime();
                             let diffMins = Math.floor(diffMs / 6e4);

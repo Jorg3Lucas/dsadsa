@@ -685,28 +685,29 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
     let [actionPrefix, panelKey, specificProp] = interaction.customId.split("-"),
         targetObj = db[panelKey];
 
-    if (targetObj) {
-        if ("death" === actionPrefix) {
-            if (targetObj[specificProp].status.startsWith("🔴 Killed")) return await interaction.reply({
-                content: getMsg("rooms.deathTimerRunning"),
-                ephemeral: !0
-            }).catch(() => {});
-            if (targetObj.ownerId !== uid) return await interaction.reply({
-                content: getMsg("system.accessDenied", {
-                    ownerName: targetObj.ownerName || getMsg("render.unknownUser")
-                }),
-                ephemeral: !0
-            }).catch(() => {});
-            let currTimeStr = getFormattedTime12h(getLocalTime());
+    if (targetObj) {            if ("death" === actionPrefix) {
+                if (targetObj[specificProp].status.startsWith("🔴 Killed")) return await interaction.reply({
+                    content: getMsg("rooms.deathTimerRunning"),
+                    ephemeral: !0
+                }).catch(() => {});
+                if (targetObj.ownerId !== uid) return await interaction.reply({
+                    content: getMsg("system.accessDenied", {
+                        ownerName: targetObj.ownerName || getMsg("render.unknownUser")
+                    }),
+                    ephemeral: !0
+                }).catch(() => {});
+                let currTimeStr = getFormattedTime12h(getLocalTime());
+                let nowTs = getLocalTime().getTime();
 
-            targetObj[specificProp].status = `🔴 Killed at ${currTimeStr}`;
-            saveLocalStorage();
-            await refreshVisualPanel(panelKey);
-            return await interaction.reply({
-                content: getMsg("rooms.deathLogged"),
-                ephemeral: !0
-            }).catch(() => {});
-        }
+                targetObj[specificProp].status = `🔴 Killed at ${currTimeStr}`;
+                targetObj[specificProp]._lastKilledAt = nowTs;
+                saveLocalStorage();
+                await refreshVisualPanel(panelKey);
+                return await interaction.reply({
+                    content: getMsg("rooms.deathLogged"),
+                    ephemeral: !0
+                }).catch(() => {});
+            }
         if ("floor" === actionPrefix) {
             if ("antidemon" === targetObj.type) {
                 if ("claim" === specificProp) {

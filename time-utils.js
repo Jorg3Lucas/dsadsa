@@ -114,5 +114,13 @@ export function parseStringToDate(str) {
     isPm && hr < 12 && (hr += 12);
     isAm && 12 === hr && (hr = 0);
     let res = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hr, min, sec);
-    return res.getTime() - base.getTime() < -432e5 && res.setDate(res.getDate() + 1), res;
+    // If result is >12h ahead of base, the killed time was yesterday (e.g. killed 14:00, now 01:30 next day)
+    if (res.getTime() - base.getTime() > 432e5) {
+        res.setDate(res.getDate() - 1);
+    }
+    // If result is >12h behind base, the killed time was tomorrow (e.g. killed 23:00, now 02:00 next day)
+    if (res.getTime() - base.getTime() < -432e5) {
+        res.setDate(res.getDate() + 1);
+    }
+    return res;
 }
