@@ -109,7 +109,7 @@ function loadLocalStorageRanking() {
 // ==========================================
 // 🚀 READY EVENT
 // ==========================================
-client.once('ready', async () => {
+client.once('clientReady', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
     loadLocalStorageRanking();
