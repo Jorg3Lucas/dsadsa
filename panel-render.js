@@ -17,10 +17,12 @@ export function getEmbedColor(current) {
     if (!current) return "#2b2d31";
     if (current.ownerId) return "#5865F2"; // Occupied - Discord Blurple
     if (current.next) return "#FEE75C"; // Has queue - Discord Yellow
-    if ("antidemon" === current.type) {
-        let hasClaimed = current.left.status.startsWith("🔴") || current.mid.status.startsWith("🔴") || current.right.status.startsWith("🔴");
+    if ("antidemon" === current.type || "summon" === current.type) {
+        const props = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11"] : ["left", "mid", "right"];
+        let hasClaimed = props.some(p => current[p] && current[p].status.startsWith("🔴"));
         if (hasClaimed) return "#5865F2";
-        if (current.left.nextId || current.mid.nextId || current.right.nextId) return "#FEE75C"; // Has queue
+        let hasQueue = props.some(p => current[p] && current[p].nextId);
+        if (hasQueue) return "#FEE75C"; // Has queue
     }
     if ("fixed" === current.type) {
         return isRoomOpen(current.schedules) ? "#57F287" : "#2b2d31"; // Green if open
@@ -44,9 +46,10 @@ export function renderEmbed(key) {
     // Footer with update timestamp
     embed.setTimestamp();
 
-    if ("antidemon" === current.type) {
+    if ("antidemon" === current.type || "summon" === current.type) {
+        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11"] : ["left", "mid", "right"];
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
-        for (let room of ["left", "mid", "right"]) {
+        for (let room of summonProps) {
             let rData = current[room];
             // Calculate remaining claim time for claimed rooms
             let remainingClaimStr = "";
@@ -261,8 +264,9 @@ export function renderButtons(key) {
     // Core action buttons
     let coreRow = new t();
     
-    if ("antidemon" === current.type) {
-        let anyClaimed = current.left.status === "🔴 Claimed" || current.mid.status === "🔴 Claimed" || current.right.status === "🔴 Claimed";
+    if ("antidemon" === current.type || "summon" === current.type) {
+        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11"] : ["left", "mid", "right"];
+        let anyClaimed = summonProps.some(p => current[p] && current[p].status === "🔴 Claimed");
         coreRow.addComponents(
             new n()
                 .setCustomId(`floor-${key}-claim`)

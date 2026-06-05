@@ -179,6 +179,17 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
+    // Initialize summon panel
+    db.summon || (db.summon = {
+        type: "summon",
+        title: "🌀 Summon Locations",
+        sp2: { name: "⭐ SP 2F", status: "🟢 Available", ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+        sp4: { name: "⭐ SP 4F", status: "🟢 Available", ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+        sp7: { name: "⭐ SP 7F", status: "🟢 Available", ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+        ms11: { name: "👹 MS 11 (Goblin)", status: "🟢 Available", ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+        sp11: { name: "⭐ SP 11F (Goblin)", status: "🟢 Available", ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+    });
+
     loadPunishmentsFromDisk();
 
     migrateBossCooldowns();
