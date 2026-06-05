@@ -195,19 +195,24 @@ export function renderEmbed(key) {
                         } else {
                             killedDate = parseStringToDate(current[prop]._lastKilledTimeStr);
                         }
-                        if (killedDate) {
+                        if (killedDate && !isNaN(killedDate.getTime())) {
                             let diffMs = now.getTime() - killedDate.getTime();
-                            let diffMins = Math.floor(diffMs / 6e4);
-                            let diffHours = Math.floor(diffMs / 36e5);
-                            if (diffMins < 1) {
-                                displayStatus = `🟢 Now`;
-                            } else if (diffHours < 1) {
-                                displayStatus = `🟢 ${diffMins}m ago`;
+                            // If diffMs is negative, the killed time is in the future — data inconsistency, show plain available
+                            if (diffMs < 0) {
+                                displayStatus = "🟢 Available";
                             } else {
-                                let remainingMins = diffMins % 60;
-                                displayStatus = remainingMins > 0
-                                    ? `🟢 ${diffHours}h ${remainingMins}m ago`
-                                    : `🟢 ${diffHours}h ago`;
+                                let diffMins = Math.floor(diffMs / 6e4);
+                                let diffHours = Math.floor(diffMs / 36e5);
+                                if (diffMins < 1) {
+                                    displayStatus = `🟢 Now`;
+                                } else if (diffHours < 1) {
+                                    displayStatus = `🟢 ${diffMins}m ago`;
+                                } else {
+                                    let remainingMins = diffMins % 60;
+                                    displayStatus = remainingMins > 0
+                                        ? `🟢 ${diffHours}h ${remainingMins}m ago`
+                                        : `🟢 ${diffHours}h ago`;
+                                }
                             }
                         }
                     }

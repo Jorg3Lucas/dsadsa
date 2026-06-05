@@ -197,9 +197,21 @@ export function migrateLastKilledAt() {
             if (bossData.status && bossData.status.startsWith("🔴 Killed at") && !bossData._lastKilledAt) {
                 let killedTimeStr = bossData.status.replace("🔴 Killed at ", "").trim();
                 let killedDate = parseStringToDate(killedTimeStr);
-                if (killedDate) {
+                if (killedDate && !isNaN(killedDate.getTime())) {
                     bossData._lastKilledAt = killedDate.getTime();
                     migrated++;
+                }
+            }
+            // Also handle entries already "🟢 Available" that have _lastKilledTimeStr but no _lastKilledAt
+            if (bossData.status === "🟢 Available" && !bossData._lastKilledAt && bossData._lastKilledTimeStr) {
+                let killedDate = parseStringToDate(bossData._lastKilledTimeStr);
+                if (killedDate && !isNaN(killedDate.getTime())) {
+                    let diffMs = getLocalTime().getTime() - killedDate.getTime();
+                    // Only set if the time is in the past (valid old killed time)
+                    if (diffMs > 0) {
+                        bossData._lastKilledAt = killedDate.getTime();
+                        migrated++;
+                    }
                 }
             }
             // Also sync _lastKilledAt into _lastKilledTimeStr if the latter is empty (for "X ago" display)
