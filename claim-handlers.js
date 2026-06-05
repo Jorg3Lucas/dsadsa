@@ -742,7 +742,8 @@ export async function handleClaimInteractions(interaction) {
 
     // ==========================================
     // 🌀 SUMMON INTERACTION HANDLERS
-    // ==========================================        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonslide-")) {
+    // ==========================================
+        if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonslide-")) {
         let pStr = checkPunishment(uid);
         if (pStr) return await interaction.update({
             content: pStr,
