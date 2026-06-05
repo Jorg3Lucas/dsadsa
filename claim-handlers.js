@@ -8,7 +8,7 @@ import {
 import { execSync, exec } from "child_process";
 import { getLocalTime, getFormattedTime12h, parseStringToDate } from "./time-utils.js";
 import { getMsg, getArray, setLanguage, getCurrentLanguage } from "./lang.js";
-import { db, dailyLogs, antiDemonSelectionCache, saveLocalStorage, defaultFloors, lastMessages } from "./state.js";
+import { db, dailyLogs, antiDemonSelectionCache, summonSelectionCache, saveLocalStorage, defaultFloors, lastMessages } from "./state.js";
 import { pushToDailyLogs, saveDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { refreshVisualPanel, notifyUserDM, resetPanelData } from "./panel-utils.js";
@@ -91,6 +91,15 @@ export async function handleClaimMessages(msg) {
                         label: `${cleanedTitle} - ${room.toUpperCase()} Room`,
                         description: `${getMsg("system.kickCurrentLabel")} ${current[room].ownerName}`,
                         value: `kick-${key}-${room}-${current[room].ownerId}`
+                    });
+                }
+            } else if ("summon" === current.type) {
+                const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
+                for (let loc of summonProps) {
+                    "🔴 Claimed" === current[loc].status && current[loc].ownerId && optionsList.push({
+                        label: `${cleanedTitle} - ${current[loc].name}`,
+                        description: `${getMsg("system.kickCurrentLabel")} ${current[loc].ownerName}`,
+                        value: `kick-${key}-${loc}-${current[loc].ownerId}`
                     });
                 }
             } else {
@@ -248,6 +257,33 @@ export async function handleClaimMessages(msg) {
         try {
             await msg.delete()
         } catch (C) {}
+    }
+
+    if ("!summon" === lowerContent) {
+        let pKey = "summon";
+        db._panelMapping || (db._panelMapping = {});
+
+        if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
+            try {
+                let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
+                oldMsg && await oldMsg.delete().catch(() => {});
+            } catch (C) {}
+        }
+
+        let pMsg = await msg.channel.send({
+            embeds: [renderEmbed(pKey)],
+            components: renderButtons(pKey)
+        });
+        lastMessages[pKey] = pMsg;
+        db._panelMapping[pKey] = {
+            channelId: msg.channel.id,
+            messageId: pMsg.id
+        };
+        saveLocalStorage();
+        try {
+            await msg.delete()
+        } catch (C) {}
+        return;
     }
 
     if ("!update" === lowerContent) {
@@ -654,6 +690,161 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
         }
     }
 
+    // ==========================================
+    // 🌀 SUMMON INTERACTION HANDLERS
+    // ==========================================
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonslide-")) {
+        let pStr = checkPunishment(uid);
+        if (pStr) return await interaction.update({
+            content: pStr,
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+        let pKey = interaction.customId.replace("summonslide-", ""),
+            targetFloor = db[pKey],
+            selectedLoc = interaction.values[0];
+
+        if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
+            content: getMsg("rooms.limitReached"),
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+
+        summonSelectionCache[uid] = {
+            panelId: pKey,
+            selectedLoc: selectedLoc
+        };
+        return await interaction.update({
+            content: `🎫 **${getMsg("rooms.antidemonPromptSelection")}**`,
+            components: [new t().addComponents(new i()
+                .setCustomId(`summonticket-${pKey}`)
+                .setPlaceholder(getMsg("rooms.antidemonTicketPlaceholder"))
+                .addOptions(getArray("tickets").map(e => ({
+                    label: e.label,
+                    value: e.value,
+                    emoji: "🎫"
+                })))
+            )],
+            ephemeral: !0
+        }).catch(() => {});
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonticket-")) {
+        let pStr = checkPunishment(uid);
+        if (pStr) return await interaction.update({
+            content: pStr,
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+        let pKey = interaction.customId.replace("summonticket-", ""),
+            targetFloor = db[pKey],
+            cacheObj = summonSelectionCache[uid];
+
+        if (!cacheObj || cacheObj.panelId !== pKey) {
+            return await interaction.update({
+                content: getMsg("rooms.antidemonTimeoutCache"),
+                components: [],
+                ephemeral: !0
+            }).catch(() => {});
+        }
+
+        if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
+            content: getMsg("rooms.limitReached"),
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+
+        let selectedLoc = cacheObj.selectedLoc,
+            calcMinutes = 30 * parseInt(interaction.values[0]),
+            startTime = getLocalTime(),
+            endTime = new Date(startTime.getTime() + 6e4 * calcMinutes),
+            rangeStr = `${getFormattedTime12h(startTime)} ~ ${getFormattedTime12h(endTime)}`;
+
+        // Clear any existing next/queue for this user on this location
+        if (targetFloor[selectedLoc].nextId === uid) {
+            targetFloor[selectedLoc].nextId = null;
+            targetFloor[selectedLoc].nextName = null;
+            targetFloor[selectedLoc].endLimit = null;
+            targetFloor[selectedLoc].formattedTimeNext = "";
+        }
+
+        targetFloor[selectedLoc].status = "🔴 Claimed";
+        targetFloor[selectedLoc].ownerId = uid;
+        targetFloor[selectedLoc].ownerName = uName;
+        targetFloor[selectedLoc].time = `${getFormattedTime12h(startTime)}\nto  ${getFormattedTime12h(endTime)}`;
+        targetFloor[selectedLoc].timeWindow = rangeStr;
+
+        pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${targetFloor[selectedLoc].name}`, `Total Ticket: ${calcMinutes} min until ${getFormattedTime12h(endTime)}`);
+
+        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", {
+            title: `${targetFloor.title} (${targetFloor[selectedLoc].name})`,
+            window: rangeStr
+        }));
+
+        delete summonSelectionCache[uid];
+        saveLocalStorage();
+        await refreshVisualPanel(pKey);
+        return await interaction.update({
+            content: getMsg("rooms.summonClaimSuccessEphemeral"),
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("summonnextside-")) {
+        let pStr = checkPunishment(uid);
+        if (pStr) return await interaction.update({
+            content: pStr,
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+        let pKey = interaction.customId.replace("summonnextside-", ""),
+            targetFloor = db[pKey];
+        if (!targetFloor) return await interaction.update({
+            content: getMsg("rooms.antidemonTimeoutCache"),
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+
+        if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update({
+            content: getMsg("rooms.limitReached"),
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+
+        let selectedLoc = interaction.values[0];
+        if (targetFloor[selectedLoc].nextId) return await interaction.update({
+            content: getMsg("rooms.antidemonQueueLocked"),
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+
+        let baseTime = getLocalTime();
+        if (targetFloor[selectedLoc].timeWindow) {
+            let calcLimit = parseStringToDate(targetFloor[selectedLoc].timeWindow.split(" ~ ")[1]);
+            calcLimit && (baseTime = calcLimit);
+        }
+
+        targetFloor[selectedLoc].nextId = uid;
+        targetFloor[selectedLoc].nextName = uName;
+        targetFloor[selectedLoc].formattedTimeNext = getFormattedTime12h(baseTime);
+        targetFloor[selectedLoc].endLimit = null;
+
+        pushToDailyLogs("QUEUE_JOIN", uName, `${targetFloor.title} - ${targetFloor[selectedLoc].name}`, getMsg("render.joinedAsNext"));
+        notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", {
+            title: `${targetFloor.title} - ${targetFloor[selectedLoc].name}`
+        }));
+
+        saveLocalStorage();
+        await refreshVisualPanel(pKey);
+        return await interaction.update({
+            content: getMsg("rooms.summonQueueSuccessEphemeral"),
+            components: [],
+            ephemeral: !0
+        }).catch(() => {});
+    }
+
     // Confirmation handler for !resetlogs
     if (interaction.isButton() && interaction.customId.startsWith("confirm-resetlogs-")) {
         if (!interaction.member.permissions.has("ManageMessages")) {
@@ -709,6 +900,122 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                 }).catch(() => {});
             }
         if ("floor" === actionPrefix) {
+            if ("summon" === targetObj.type) {
+                if ("claim" === specificProp) {
+                    let pStr = checkPunishment(uid);
+                    if (pStr) return await interaction.reply({
+                        content: pStr,
+                        ephemeral: !0
+                    }).catch(() => {});
+                    if (hasActiveClaim(uid)) return await interaction.reply({
+                        content: getMsg("rooms.limitReached"),
+                        ephemeral: !0
+                    }).catch(() => {});
+                    if (hasActiveQueue(uid)) return await interaction.reply({
+                        content: getMsg("rooms.limitReached"),
+                        ephemeral: !0
+                    }).catch(() => {});
+                    // Build summon location options (only available ones)
+                    const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
+                    const locOptions = summonProps.filter(loc => targetObj[loc].status !== "🔴 Claimed").map(loc => ({
+                        label: targetObj[loc].name,
+                        value: loc,
+                        emoji: "🌀"
+                    }));
+                    if (locOptions.length === 0) return await interaction.reply({
+                        content: getMsg("rooms.antidemonQueueLocked"),
+                        ephemeral: !0
+                    }).catch(() => {});
+                    return await interaction.reply({
+                        content: `🌀 **${getMsg("rooms.summonMenuSelectClaim")}**`,
+                        components: [new t().addComponents(new i()
+                            .setCustomId(`summonslide-${panelKey}`)
+                            .setPlaceholder(getMsg("rooms.summonSelectPlaceholder"))
+                            .addOptions(locOptions)
+                        )
+                        ],
+                        ephemeral: !0
+                    }).catch(() => {});
+                }
+                if ("next" === specificProp) {
+                    let pStr = checkPunishment(uid);
+                    if (pStr) return await interaction.reply({
+                        content: pStr,
+                        ephemeral: !0
+                    }).catch(() => {});
+                    if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.reply({
+                        content: getMsg("rooms.limitReached"),
+                        ephemeral: !0
+                    }).catch(() => {});
+                    const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
+                    const queueOpts = summonProps.filter(loc => targetObj[loc].status === "🔴 Claimed" && !targetObj[loc].nextId).map(loc => ({
+                        label: targetObj[loc].name,
+                        value: loc,
+                        emoji: "🌀"
+                    }));
+                    if (queueOpts.length === 0) return await interaction.reply({
+                        content: getMsg("rooms.antidemonQueueLocked"),
+                        ephemeral: !0
+                    }).catch(() => {});
+                    return await interaction.reply({
+                        content: `🌀 **${getMsg("rooms.summonMenuSelectNext")}**`,
+                        components: [new t().addComponents(new i()
+                            .setCustomId(`summonnextside-${panelKey}`)
+                            .setPlaceholder(getMsg("rooms.summonSelectPlaceholder"))
+                            .addOptions(queueOpts)
+                        )
+                        ],
+                        ephemeral: !0
+                    }).catch(() => {});
+                }
+                if ("cancel" === specificProp) {
+                    const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
+                    let isMod = interaction.member.permissions.has("ManageMessages"),
+                        isOwner = summonProps.some(p => targetObj[p].ownerId === uid),
+                        isInQueue = summonProps.some(p => targetObj[p].nextId === uid);
+
+                    if (isOwner || isInQueue || isMod) {
+                        let penalized = !1;
+                        let anyAction = !1;
+                        return summonProps.forEach(loc => {
+                            if (targetObj[loc].ownerId === uid) {
+                                anyAction = !0;
+                                let currentLoggedName = targetObj[loc].ownerName || uName;
+                                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${targetObj[loc].name}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
+                                notifyUserDM(targetObj[loc].ownerId, getMsg("rooms.dmRemovedNotice", {
+                                    title: `${targetObj.title} - ${targetObj[loc].name}`,
+                                    reason: isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel")
+                                }));
+                                freeAntidemonRoom(targetObj, loc);
+                                isMod || penalized || (applyFiveMinCooldown(uid), penalized = !0);
+                            }
+                            if (targetObj[loc].nextId === uid) {
+                                anyAction = !0;
+                                let currentLoggedName = targetObj[loc].nextName || uName;
+                                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${targetObj[loc].name} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
+                                notifyUserDM(targetObj[loc].nextId, getMsg("rooms.dmRemovedNotice", {
+                                    title: `${targetObj.title} - ${targetObj[loc].name} (Queue)`,
+                                    reason: isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel")
+                                }));
+                                targetObj[loc].nextId = null;
+                                targetObj[loc].nextName = null;
+                                targetObj[loc].endLimit = null;
+                                targetObj[loc].formattedTimeNext = "";
+                                "🟢 Open" === targetObj[loc].status && (targetObj[loc].status = "🟢 Available");
+                            }
+                        }), saveLocalStorage(), await refreshVisualPanel(panelKey), await interaction.reply({
+                            content: anyAction 
+                                ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))
+                                : getMsg("rooms.noActiveClaimsFeedback"),
+                            ephemeral: !0
+                        }).catch(() => {});
+                    }
+                    return await interaction.reply({
+                        content: getMsg("rooms.noActiveClaimsFeedback"),
+                        ephemeral: !0
+                    }).catch(() => {});
+                }
+            }
             if ("antidemon" === targetObj.type) {
                 if ("claim" === specificProp) {
                     let pStr = checkPunishment(uid);

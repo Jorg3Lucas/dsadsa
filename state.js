@@ -13,6 +13,7 @@ export let punishments = {};
 export let dailyLogs = { configChannelId: null, queue: [] };
 export let alertCache = { warning5mAfter: {}, spawnAlerted: {} };
 export let antiDemonSelectionCache = {};
+export let summonSelectionCache = {};
 
 export let client, db, saveLocalStorage, logEvent, lastMessages;
 
