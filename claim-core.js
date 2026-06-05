@@ -127,29 +127,32 @@ export function freeAntidemonRoom(floorObj, roomKey) {
 export function buildAntiClaimOptions(targetObj, uid) {
     const opts = [];
     
-    // Find which rooms the user has priority reservation on (nextId === uid)
-    const priorityRooms = ["left", "mid", "right"].filter(rm => targetObj[rm].nextId === uid && targetObj[rm].status !== "🔴 Claimed");
-    // Find rooms that are freely available (not claimed, no nextId for anyone)
-    const freeRooms = ["left", "mid", "right"].filter(rm => targetObj[rm].status !== "🔴 Claimed" && !targetObj[rm].nextId);
+    // Check which rooms the user has priority reservation on
+    const hasPriority = (room) => targetObj[room].nextId === uid && targetObj[room].status !== "🔴 Claimed";
     
-    // If user has priority reservations, ONLY show those — otherwise show all free rooms
-    const showRooms = priorityRooms.length > 0 ? priorityRooms : freeRooms;
-    const isShown = (room) => showRooms.includes(room);
-    
-    if (isShown("left")) {
-        opts.push({ label: "⬅️ LEFT ROOM", description: getMsg("rooms.antidemonRoomLeft"), value: "left", emoji: "⬅️" });
-    }
-    if (isShown("mid")) {
-        opts.push({ label: "🔵 MID ROOM", description: getMsg("rooms.antidemonRoomMid"), value: "mid", emoji: "🔵" });
-    }
-    if (isShown("right")) {
-        opts.push({ label: "➡️ RIGHT ROOM", description: getMsg("rooms.antidemonRoomRight"), value: "right", emoji: "➡️" });
-    }
-    if (isShown("left") && isShown("mid")) {
+    if (hasPriority("left") && hasPriority("mid")) {
+        // User was in queue for MID + LEFT (double room)
         opts.push({ label: "🔵⬅️ MID + LEFT", description: getMsg("rooms.antidemonRoomMidLeft"), value: "mid-left", emoji: "🔵" });
-    }
-    if (isShown("mid") && isShown("right")) {
+    } else if (hasPriority("mid") && hasPriority("right")) {
+        // User was in queue for MID + RIGHT (double room)
         opts.push({ label: "🔵➡️ MID + RIGHT", description: getMsg("rooms.antidemonRoomMidRight"), value: "mid-right", emoji: "🔵" });
+    } else if (hasPriority("left") || hasPriority("mid") || hasPriority("right")) {
+        // User was in queue for a single room
+        if (hasPriority("left")) opts.push({ label: "⬅️ LEFT ROOM", description: getMsg("rooms.antidemonRoomLeft"), value: "left", emoji: "⬅️" });
+        if (hasPriority("mid")) opts.push({ label: "🔵 MID ROOM", description: getMsg("rooms.antidemonRoomMid"), value: "mid", emoji: "🔵" });
+        if (hasPriority("right")) opts.push({ label: "➡️ RIGHT ROOM", description: getMsg("rooms.antidemonRoomRight"), value: "right", emoji: "➡️" });
+    } else {
+        // No priority — show all freely available rooms
+        const freeRooms = ["left", "mid", "right"].filter(rm => targetObj[rm].status !== "🔴 Claimed" && !targetObj[rm].nextId);
+        if (freeRooms.includes("left")) opts.push({ label: "⬅️ LEFT ROOM", description: getMsg("rooms.antidemonRoomLeft"), value: "left", emoji: "⬅️" });
+        if (freeRooms.includes("mid")) opts.push({ label: "🔵 MID ROOM", description: getMsg("rooms.antidemonRoomMid"), value: "mid", emoji: "🔵" });
+        if (freeRooms.includes("right")) opts.push({ label: "➡️ RIGHT ROOM", description: getMsg("rooms.antidemonRoomRight"), value: "right", emoji: "➡️" });
+        if (freeRooms.includes("left") && freeRooms.includes("mid")) {
+            opts.push({ label: "🔵⬅️ MID + LEFT", description: getMsg("rooms.antidemonRoomMidLeft"), value: "mid-left", emoji: "🔵" });
+        }
+        if (freeRooms.includes("mid") && freeRooms.includes("right")) {
+            opts.push({ label: "🔵➡️ MID + RIGHT", description: getMsg("rooms.antidemonRoomMidRight"), value: "mid-right", emoji: "🔵" });
+        }
     }
     return opts;
 }
