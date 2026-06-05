@@ -149,8 +149,9 @@ export function startTickInterval() {
                 }
             }
 
-            if ("antidemon" === current.type) {
-                for (let room of ["left", "mid", "right"]) {
+            if ("antidemon" === current.type || "summon" === current.type) {
+                const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11"] : ["left", "mid", "right"];
+                for (let room of roomList) {
                     let rData = current[room];
                     if ("🔴 Claimed" === rData.status && rData.timeWindow) {
                         let limitTime = parseStringToDate(rData.timeWindow.split(" ~ ")[1]);
@@ -221,8 +222,9 @@ export function startTickInterval() {
             }
             // Force refresh for countdown timers
             if (!panelUpdate) {
-                if ("antidemon" === current.type) {
-                    for (let room of ["left", "mid", "right"]) {
+                if ("antidemon" === current.type || "summon" === current.type) {
+                    const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11"] : ["left", "mid", "right"];
+                    for (let room of roomList) {
                         let rData = current[room];
                         if (("🔴 Claimed" === rData.status && rData.timeWindow) || rData.endLimit) {
                             panelUpdate = !0;

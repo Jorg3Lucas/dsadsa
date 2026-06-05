@@ -649,6 +649,35 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
             endTime = new Date(startTime.getTime() + 6e4 * calcMinutes),
             rangeStr = `${getFormattedTime12h(startTime)} ~ ${getFormattedTime12h(endTime)}`;
 
+        // Check priority reservation — if someone is next in queue (not the current user), block claim
+        if (targetFloor[selectedLoc].nextId && targetFloor[selectedLoc].nextId !== uid) {
+            let timeRemainingStr = "";
+            if (targetFloor[selectedLoc].endLimit) {
+                let limitTime = parseStringToDate(targetFloor[selectedLoc].endLimit);
+                if (limitTime) {
+                    let diffMs = limitTime.getTime() - getLocalTime().getTime();
+                    let diffMins = Math.ceil(diffMs / 6e4);
+                    if (diffMins > 0) {
+                        timeRemainingStr = getMsg("cooldowns.timeRemaining", { minutes: diffMins });
+                    }
+                }
+            }
+            if (timeRemainingStr) {
+                delete summonSelectionCache[uid];
+                return await interaction.update({
+                    content: getMsg("cooldowns.floorReservedNotice", { userName: targetFloor[selectedLoc].nextName, timeRemaining: timeRemainingStr }),
+                    components: [],
+                    ephemeral: !0
+                }).catch(() => {});
+            }
+            // endLimit expired — clear the queue and proceed
+            targetFloor[selectedLoc].nextId = null;
+            targetFloor[selectedLoc].nextName = null;
+            targetFloor[selectedLoc].endLimit = null;
+            targetFloor[selectedLoc].formattedTimeNext = "";
+            "🟢 Open" === targetFloor[selectedLoc].status && (targetFloor[selectedLoc].status = "🟢 Available");
+        }
+
         // Clear any existing next/queue for this user on this location
         if (targetFloor[selectedLoc].nextId === uid) {
             targetFloor[selectedLoc].nextId = null;
@@ -803,9 +832,9 @@ if (hasActiveClaim(uid) || hasActiveQueue(uid)) return await interaction.update(
                         content: getMsg("rooms.limitReached"),
                         ephemeral: !0
                     }).catch(() => {});
-                    // Build summon location options (only available ones)
+                    // Build summon location options (only available ones — not claimed and not reserved)
                     const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11"];
-                    const locOptions = summonProps.filter(loc => targetObj[loc].status !== "🔴 Claimed").map(loc => ({
+                    const locOptions = summonProps.filter(loc => targetObj[loc].status !== "🔴 Claimed" && !targetObj[loc].nextId).map(loc => ({
                         label: targetObj[loc].name,
                         value: loc,
                         emoji: "🌀"
