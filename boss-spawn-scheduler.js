@@ -87,6 +87,12 @@ const bossSpawns = [
     times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
   { world: "W2", layer: "1", map: "Nine Dragon Palace", boss: "Wi Gwangryeong",
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
+
+  // ═══ GOLDEN SPHERE ═══
+  { world: "W1", layer: "1", map: "Roaring Flame Island", boss: "Golden Sphere",
+    times: [3,9,15,21].map(h => ({ h, m: 0 })) },
+  { world: "W2", layer: "1", map: "Nine Dragon Palace", boss: "Golden Sphere",
+    times: [5,11,17,23].map(h => ({ h, m: 0 })) },
 ];
 
 // ─── Build spawn time key for cache ──────────────────────
