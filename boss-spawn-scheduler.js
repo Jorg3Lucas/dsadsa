@@ -88,11 +88,6 @@ const bossSpawns = [
   { world: "W2", layer: "1", map: "Nine Dragon Palace", boss: "Wi Gwangryeong",
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
 
-  // ═══ GOLDEN SPHERE ═══
-  { world: "W1", layer: "1", map: "Roaring Flame Island", boss: "Golden Sphere",
-    times: [3,9,15,21].map(h => ({ h, m: 0 })) },
-  { world: "W2", layer: "1", map: "Nine Dragon Palace", boss: "Golden Sphere",
-    times: [5,11,17,23].map(h => ({ h, m: 0 })) },
 ];
 
 // ─── Build spawn time key for cache ──────────────────────
@@ -184,6 +179,8 @@ const scheduledEvents = [
   { name: "World Boss Labyrinth", hours: [10, 20] },
   { name: "World Boss Valley", hours: [12, 22] },
   { name: "Mirage", hours: [0, 22] },
+  { name: "Golden Sphere (W1 Roaring Flame)", hours: [3, 9, 15, 21] },
+  { name: "Golden Sphere (W2 Nine Dragon)", hours: [5, 11, 17, 23] },
 ];
 
 // Day-specific weekly events
@@ -191,8 +188,11 @@ const scheduledEvents = [
 const weeklyScheduledEvents = [
   { name: "Krukan (Schackling Abbadon)", day: 1, hour: 23 },
   { name: "Valley War", day: 3, hour: 22 },
-  { name: "Hellbar 7F Purgatory", day: 3, hour: 23 },
+  { name: "Purgatory (Hellbar 7F)", day: 3, hour: 23 },
   { name: "Utukan (Crimson Abbadon)", day: 5, hour: 23 },
+  { name: "Altar Defense + Living Wraiths Event", day: 4, hour: 22 },
+  { name: "Mirage Living Wraiths", day: 4, hour: 23 },
+  { name: "Heist", day: 5, hour: 22 },
 ];
 
 let scheduledBossAlertCache = {};

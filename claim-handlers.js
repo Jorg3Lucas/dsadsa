@@ -94,9 +94,14 @@ export async function handleClaimMessages(msg) {
                 `• **World Boss Labyrinth**\n` +
                 `• **World Boss Valley**\n` +
                 `• **Mirage**\n` +
+                `• **Golden Sphere (W1 Roaring Flame)**\n` +
+                `• **Golden Sphere (W2 Nine Dragon)**\n` +
                 `• **Krukan (Schackling Abbadon)** — Mon 23:00\n` +
                 `• **Valley War** — Wed 22:00\n` +
-                `• **Hellbar 7F Purgatory** — Wed 23:00\n` +
+                `• **Purgatory (Hellbar 7F)** — Wed 23:00\n` +
+                `• **Altar Defense + Living Wraiths Event** — Thu 22:00\n` +
+                `• **Mirage Living Wraiths** — Thu 23:00\n` +
+                `• **Heist** — Fri 22:00\n` +
                 `• **Utukan (Crimson Abbadon)** — Fri 23:00\n\n` +
                 `⏰ Notifications are sent 10 minutes before each spawn.\n\n` +
                 `Get ready and **don't forget to do the mission!** 💪`
