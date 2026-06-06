@@ -8,9 +8,7 @@ import { saveDailyLogs } from "./daily-logs.js";
 // 🎯 PARTY SCANNER CONFIGURATION
 // ==========================================
 
-const CROP_RATIO_W = 0.22; // % of image width from left edge (≈420px on 1920px — covers 3 party columns)
-const CROP_RATIO_H = 0.88; // % of image height from top (≈950px on 1080px — covers full party list)
-const PARTY_COLUMNS = 3;   // MIR4 party has up to 3 vertical columns
+const PARTY_COLUMNS = 3;   // MIR4 party has up to 3 vertical columns in raids
 const EVENT_WINDOW_MINUTES = 75; // 75 min window (covers 1h events + 15min grace)
 const OCR_LANGUAGE = "eng";
 const MAX_PARTY_NAMES = 15; // MIR4 max party members
@@ -20,6 +18,7 @@ const MAX_PARTY_NAMES = 15; // MIR4 max party members
  * These are common in MIR4 party UI.
  */
 const KNOWN_UI = new Set([
+  "cambiar", "mazo", "cuerpo", "esp", "deck", // Interface filters for safe crop zone
   "party", "clan", "member", "members", "online", "offline",
   "leader", "invite", "kick", "promote", "demote", "leave",
   "follow", "attack", "defend", "retreat", "ready", "cancel",
@@ -45,12 +44,12 @@ const ocrQueue = [];
 /**
  * In-memory presence cache per event type.
  * Structure: {
- *   portal: {
- *     players: { "PlayerName": { count, firstSeen, lastSeen } },
- *     windowEnd: timestamp,
- *     screenshots: [ { authorId, authorName, names, timestamp } ]
- *   },
- *   ...
+ * portal: {
+ * players: { "PlayerName": { count, firstSeen, lastSeen } },
+ * windowEnd: timestamp,
+ * screenshots: [ { authorId, authorName, names, timestamp } ]
+ * },
+ * ...
  * }
  */
 let presenceCache = {};
@@ -110,37 +109,44 @@ async function prepareOcrRegion(buffer, left, top, width, height) {
     .extract({ left, top, width, height })
     .resize(resizedW, resizedH, { kernel: "lanczos3" })
     .grayscale()
-    .threshold(110) // Binarize: clean out HP bars, semi-transparent BG
+    .threshold(175) // Binarize aggressively: completely wipes HP bars and semi-transparent BG
+    .sharpen()
     .toBuffer();
 }
 
 /**
- * Crop the LEFT SIDE of the image (party strip) and split into 3 equal
- * vertical columns. Each column is OCR'd separately so names don't
- * get mixed across columns.
+ * Crop the LEFT SIDE of the image (party strip) using dynamic scaling.
+ * Generates both 3 split columns (for 15-member raids) AND a full single column 
+ * region to act as an accurate fallback for normal 5-member parties.
  */
 async function cropPartyRegions(buffer) {
   const metadata = await sharp(buffer).metadata();
   const imgW = metadata.width || 1920;
   const imgH = metadata.height || 1080;
 
-  const stripW = Math.max(200, Math.floor(imgW * CROP_RATIO_W));
-  const stripH = Math.max(200, Math.floor(imgH * CROP_RATIO_H));
-  const colW = Math.floor(stripW / PARTY_COLUMNS);
+  // Dynamic area constraints based on incoming image resolution
+  const safeCropW = Math.floor(imgW * 0.20); // 20% width is ideal for covering all 3 columns
+  const safeCropH = Math.floor(imgH * 0.23); // 23% height ends cleanly before bottom UI nodes (Cambiar mazo)
 
-  const columnRegions = await Promise.all(
-    Array.from({ length: PARTY_COLUMNS }, (_, i) =>
-      prepareOcrRegion(buffer, i * colW, 0, colW, stripH)
-    )
-  );
+  // Anchor offsets to bypass native UI frames (speaker icons and level tags)
+  const startX = Math.floor(imgW * 0.04); // Skips left edge artifacts (microphones)
+  const startY = Math.floor(imgH * 0.20); // Skips top level/HP profiles of the player
 
-  return { col1: columnRegions[0], col2: columnRegions[1], col3: columnRegions[2] };
+  const colW = Math.floor(safeCropW / PARTY_COLUMNS);
+
+  const [col1, col2, col3, fullRegion] = await Promise.all([
+    prepareOcrRegion(buffer, startX, startY, colW, safeCropH),
+    prepareOcrRegion(buffer, startX + colW, startY, colW, safeCropH),
+    prepareOcrRegion(buffer, startX + (colW * 2), startY, safeCropW - (colW * 2), safeCropH),
+    prepareOcrRegion(buffer, startX, startY, safeCropW, safeCropH) // Single unified block fallback
+  ]);
+
+  return { col1, col2, col3, fullRegion };
 }
 
 /**
  * Get or create a shared Tesseract worker with PSM 6 (single block)
  * and a character whitelist (letters, numbers, common symbols).
- * We reuse the same worker to avoid the ~2s startup cost per image.
  */
 async function getOcrWorker() {
   if (!ocrWorker) {
@@ -155,11 +161,9 @@ async function getOcrWorker() {
 
 /**
  * Run OCR on a preprocessed image buffer.
- * Uses a mutex to prevent concurrent worker.recognize() calls,
- * which Tesseract.js does not support safely.
+ * Uses a mutex to prevent concurrent worker.recognize() calls.
  */
 async function runOcr(buffer) {
-  // If worker is busy, queue and wait
   if (ocrWorkerBusy) {
     return new Promise((resolve, reject) => {
       ocrQueue.push({ buffer, resolve, reject });
@@ -173,7 +177,6 @@ async function runOcr(buffer) {
     return data.text;
   } finally {
     ocrWorkerBusy = false;
-    // Process next in queue
     if (ocrQueue.length > 0) {
       const next = ocrQueue.shift();
       runOcr(next.buffer).then(next.resolve).catch(next.reject);
@@ -183,8 +186,6 @@ async function runOcr(buffer) {
 
 /**
  * Parse OCR text output into clean player names.
- * With the character whitelist already filtering most garbage,
- * we just split lines and validate basic name criteria.
  */
 function extractPlayerNames(ocrText) {
   const lines = ocrText.split("\n")
@@ -194,20 +195,17 @@ function extractPlayerNames(ocrText) {
   const names = new Set();
 
   for (let line of lines) {
-    // Skip purely numeric (HP values, timers)
     if (/^\d{2,}$/.test(line)) continue;
-
-    // Skip known UI text
     if (KNOWN_UI.has(line.toLowerCase())) continue;
+    if (/\s/.test(line)) continue; // MIR4 names never contain spaces
 
-    // Skip lines with spaces — MIR4 names never have spaces
-    if (/\s/.test(line)) continue;
+    // Filter lines composed strictly of non-alphanumeric junk
+    if (/^[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+$/.test(line)) continue;
 
-    // Remove leading/trailing non-name artifacts
+    // Remove leading/trailing non-name bracket or icon fragments
     line = line.replace(/^[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+/, "");
     line = line.replace(/[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+$/, "");
 
-    // Validate length
     if (line.length < 3 || line.length > 18) continue;
     if (/^[_\-.]+$/.test(line)) continue;
 
@@ -222,14 +220,9 @@ function extractPlayerNames(ocrText) {
 // 📋 PRESENCE MANAGEMENT
 // ==========================================
 
-/**
- * Register detected player names for an event.
- * Extends the event window if a new screenshot arrives near the end.
- */
 function registerPresence(eventType, names, authorId, authorName) {
   const now = Date.now();
 
-  // Initialize cache bucket if needed
   if (!presenceCache[eventType]) {
     presenceCache[eventType] = {
       players: {},
@@ -240,15 +233,12 @@ function registerPresence(eventType, names, authorId, authorName) {
 
   const cache = presenceCache[eventType];
 
-  // If the event window has expired, start fresh
   if (now > cache.windowEnd) {
     cache.players = {};
     cache.windowEnd = now + EVENT_WINDOW_MINUTES * 60 * 1000;
     cache.screenshots = [];
   }
 
-  // Register the screenshot author as a participant
-  // (The author is the one who posted the screenshot)
   if (!cache.players[authorName]) {
     cache.players[authorName] = {
       count: 1,
@@ -261,7 +251,6 @@ function registerPresence(eventType, names, authorId, authorName) {
     cache.players[authorName].lastSeen = now;
   }
 
-  // Register each detected party member
   for (const name of names) {
     if (cache.players[name]) {
       cache.players[name].count++;
@@ -276,7 +265,6 @@ function registerPresence(eventType, names, authorId, authorName) {
     }
   }
 
-  // Log the event for reporting
   cache.screenshots.push({
     authorId,
     authorName,
@@ -285,9 +273,6 @@ function registerPresence(eventType, names, authorId, authorName) {
   });
 }
 
-/**
- * Build a presence report for a given event type.
- */
 function buildPresenceReport(eventType) {
   const cache = presenceCache[eventType];
   if (!cache || Object.keys(cache.players).length === 0) {
@@ -296,14 +281,10 @@ function buildPresenceReport(eventType) {
 
   const now = Date.now();
   const isActive = now <= cache.windowEnd;
-  const timeLeft = isActive
-    ? Math.ceil((cache.windowEnd - now) / 60000)
-    : 0;
+  const timeLeft = isActive ? Math.ceil((cache.windowEnd - now) / 60000) : 0;
 
-  // Get unique authors (people who posted screenshots)
   const uniqueAuthors = [...new Set(cache.screenshots.map(s => s.authorName))];
 
-  // Sort players by count (most seen first)
   const sortedPlayers = Object.entries(cache.players)
     .sort(([, a], [, b]) => b.count - a.count)
     .map(([name, data]) => ({
@@ -327,9 +308,6 @@ function buildPresenceReport(eventType) {
   };
 }
 
-/**
- * Build a combined report for all event types.
- */
 function buildAllReports() {
   const reports = [];
   for (const eventType of Object.keys(EVENT_LABELS)) {
@@ -350,32 +328,32 @@ async function processPartyScreenshot(msg, eventType, attachment) {
     // Step 1: Download the image
     const buffer = await downloadImage(attachment.url);
 
-    // Step 2: Crop and preprocess (left strip → 3 columns)
+    // Step 2: Crop and preprocess regions dynamically
     const regions = await cropPartyRegions(buffer);
 
-    // Step 3: OCR each column separately (PSM 6 = single vertical block per column)
-    const [col1Text, col2Text, col3Text] = await Promise.all([
+    // Step 3: OCR all four segments concurrently
+    const [col1Text, col2Text, col3Text, fullText] = await Promise.all([
       runOcr(regions.col1),
       runOcr(regions.col2),
-      runOcr(regions.col3)
+      runOcr(regions.col3),
+      runOcr(regions.fullRegion)
     ]);
 
-    // Step 4: Extract names from each column
+    // Step 4: Extract names per parsed segment
     const col1Names = extractPlayerNames(col1Text);
     const col2Names = extractPlayerNames(col2Text);
     const col3Names = extractPlayerNames(col3Text);
+    const fullNames = extractPlayerNames(fullText);
 
-    // Step 5: Merge — each column is already separate, just dedup
-    const mergedNames = [...new Set([...col1Names, ...col2Names, ...col3Names])];
+    // Step 5: Merge and Deduplicate across split blocks and fallback block
+    const mergedNames = [...new Set([...col1Names, ...col2Names, ...col3Names, ...fullNames])];
 
-    // Debug: log raw OCR text when results seem off
+    // Debug tracking: outputs data matrices if parsing encounters structural edge anomalies
     if (mergedNames.length > 16 || mergedNames.length === 0) {
-      const colLabels = ["Col 1", "Col 2", "Col 3"];
-      const texts = [col1Text, col2Text, col3Text];
-      for (let i = 0; i < 3; i++) {
-        console.log(`[PartyScanner] 📝 Raw OCR — ${colLabels[i]}:`);
-        console.log(`  ${texts[i].replace(/\n/g, "\n  ").slice(0, 500)}`);
-      }
+      console.log(`[PartyScanner] 📝 Raw OCR — Col 1: ${col1Text.replace(/\n/g, " ").slice(0, 100)}`);
+      console.log(`[PartyScanner] 📝 Raw OCR — Col 2: ${col2Text.replace(/\n/g, " ").slice(0, 100)}`);
+      console.log(`[PartyScanner] 📝 Raw OCR — Col 3: ${col3Text.replace(/\n/g, " ").slice(0, 100)}`);
+      console.log(`[PartyScanner] 📝 Raw OCR — Full: ${fullText.replace(/\n/g, " ").slice(0, 100)}`);
     }
 
     if (mergedNames.length === 0) {
@@ -390,7 +368,6 @@ async function processPartyScreenshot(msg, eventType, attachment) {
 
     console.log(`[PartyScanner] ✅ ${eventType}: ${displayName} — detected ${mergedNames.length} members: ${mergedNames.join(", ")}`);
 
-    // If we detected too many, warn in console but keep the data
     if (mergedNames.length > 16) {
       console.log(`[PartyScanner] ⚠️ Unusually high member count (${mergedNames.length}) — OCR may be picking up UI text`);
     }
@@ -414,28 +391,21 @@ export function initPartyScanner(client) {
   client.on("messageCreate", async (msg) => {
     if (msg.author.bot) return;
 
-    // Check if this channel is configured for party scanning
     const eventType = getEventTypeForChannel(msg.channel.id);
     if (!eventType) return;
 
-    // Check for image attachments
     const imageAttachment = msg.attachments.find(
       a => a.contentType && a.contentType.startsWith("image/")
     );
     if (!imageAttachment) return;
 
-    // Small delay to let the image propagate on Discord's CDN
     await new Promise(r => setTimeout(r, 500));
-
     await processPartyScreenshot(msg, eventType, imageAttachment);
   });
 
   console.log("✅ [PartyScanner] Ready — monitoring configured channels for screenshots");
 }
 
-/**
- * Get the current presence report for display.
- */
 export function getPartyPresenceReport(eventType = null) {
   if (eventType) {
     return buildPresenceReport(eventType);
@@ -443,9 +413,6 @@ export function getPartyPresenceReport(eventType = null) {
   return buildAllReports();
 }
 
-/**
- * Manually clear presence cache for an event type (admin use).
- */
 export function clearPartyPresence(eventType = null) {
   if (eventType) {
     delete presenceCache[eventType];
@@ -455,9 +422,6 @@ export function clearPartyPresence(eventType = null) {
   return true;
 }
 
-/**
- * Get the list of available event categories and their icons.
- */
 export const EVENT_CONFIG = Object.entries(EVENT_LABELS).map(([key, label]) => ({
   key,
   label,
