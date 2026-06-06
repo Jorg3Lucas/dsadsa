@@ -135,8 +135,8 @@ export function startTickInterval() {
                         if ("🟢 Available" === current[prop].status && current[prop]._freeSince > 0 && current._claimTimestamp) {
                             if (current[prop]._freeSince > current._claimTimestamp) {
                                 let minutesIdle = Math.floor((now.getTime() - current[prop]._freeSince) / 6e4);
-                                let targetKeyAlert = `${key}-${prop}-${now.getHours()}-${now.getMinutes()}`;
-                                if (minutesIdle === 5 && current.ownerId && !alertCache.warning5mAfter[targetKeyAlert]) {
+                                let targetKeyAlert = `${key}-${prop}`;
+                                if (minutesIdle >= 5 && current.ownerId && !alertCache.warning5mAfter[targetKeyAlert]) {
                                     notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
                                         title: current.title,
                                         boss: current[prop].name
