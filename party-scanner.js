@@ -8,8 +8,9 @@ import { saveDailyLogs } from "./daily-logs.js";
 // 🎯 PARTY SCANNER CONFIGURATION
 // ==========================================
 
-const CROP_RATIO_W = 0.22; // % of image width from left edge (≈420px on 1920px)
-const CROP_RATIO_H = 0.28; // % of image height from top edge (≈300px on 1080px)
+const CROP_RATIO_W = 0.22; // % of image width from left edge (≈420px on 1920px — covers 3 party columns)
+const CROP_RATIO_H = 0.88; // % of image height from top (≈950px on 1080px — covers full party list)
+const PARTY_COLUMNS = 3;   // MIR4 party has up to 3 vertical columns
 const EVENT_WINDOW_MINUTES = 75; // 75 min window (covers 1h events + 15min grace)
 const OCR_LANGUAGE = "eng";
 const MAX_PARTY_NAMES = 15; // MIR4 max party members
@@ -98,52 +99,56 @@ async function downloadImage(url) {
 }
 
 /**
- * Preprocess an image region with sharp for optimal OCR accuracy:
- * - Resize 2x for better character recognition
- * - Grayscale (removes color noise)
- * - Sharpen (enhances edges)
- * - Normalize (improves contrast)
+ * Preprocess a single party column with sharp:
+ * - Resize 3x for tiny MIR4 text
+ * - Grayscale + threshold to binarize (clean background, keep text)
  */
 async function prepareOcrRegion(buffer, left, top, width, height) {
+  const resizedW = Math.max(100, width * 3);
+  const resizedH = Math.max(100, height * 3);
   return await sharp(buffer)
     .extract({ left, top, width, height })
-    .resize(width * 2, height * 2, { kernel: "lanczos3" })
+    .resize(resizedW, resizedH, { kernel: "lanczos3" })
     .grayscale()
-    .sharpen()
-    .normalize()
+    .threshold(110) // Binarize: clean out HP bars, semi-transparent BG
     .toBuffer();
 }
 
 /**
- * Crop the top-left party region and split into left/right halves
- * to handle MIR4's two-column party layout.
+ * Crop the LEFT SIDE of the image (party strip) and split into 3 equal
+ * vertical columns. Each column is OCR'd separately so names don't
+ * get mixed across columns.
  */
 async function cropPartyRegions(buffer) {
   const metadata = await sharp(buffer).metadata();
   const imgW = metadata.width || 1920;
   const imgH = metadata.height || 1080;
 
-  const cropW = Math.max(200, Math.floor(imgW * CROP_RATIO_W));
-  const cropH = Math.max(200, Math.floor(imgH * CROP_RATIO_H));
-  const halfW = Math.floor(cropW / 2);
+  const stripW = Math.max(200, Math.floor(imgW * CROP_RATIO_W));
+  const stripH = Math.max(200, Math.floor(imgH * CROP_RATIO_H));
+  const colW = Math.floor(stripW / PARTY_COLUMNS);
 
-  const [fullRegion, leftHalf, rightHalf] = await Promise.all([
-    prepareOcrRegion(buffer, 0, 0, cropW, cropH),
-    prepareOcrRegion(buffer, 0, 0, halfW, cropH),
-    // Right half starts at halfway point of the crop region
-    prepareOcrRegion(buffer, halfW, 0, cropW - halfW, cropH)
-  ]);
+  const columnRegions = await Promise.all(
+    Array.from({ length: PARTY_COLUMNS }, (_, i) =>
+      prepareOcrRegion(buffer, i * colW, 0, colW, stripH)
+    )
+  );
 
-  return { fullRegion, leftHalf, rightHalf };
+  return { col1: columnRegions[0], col2: columnRegions[1], col3: columnRegions[2] };
 }
 
 /**
- * Get or create a shared Tesseract worker.
+ * Get or create a shared Tesseract worker with PSM 6 (single block)
+ * and a character whitelist (letters, numbers, common symbols).
  * We reuse the same worker to avoid the ~2s startup cost per image.
  */
 async function getOcrWorker() {
   if (!ocrWorker) {
     ocrWorker = await createWorker(OCR_LANGUAGE);
+    await ocrWorker.setParameters({
+      tessedit_pageseg_mode: '6',
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789·ツ_ []()-."
+    });
   }
   return ocrWorker;
 }
@@ -178,42 +183,31 @@ async function runOcr(buffer) {
 
 /**
  * Parse OCR text output into clean player names.
- * Filters out UI text artifacts and known non-name strings.
+ * With the character whitelist already filtering most garbage,
+ * we just split lines and validate basic name criteria.
  */
 function extractPlayerNames(ocrText) {
   const lines = ocrText.split("\n")
     .map(l => l.trim())
-    .filter(l => l.length > 2);
+    .filter(l => l.length >= 3);
 
   const names = new Set();
 
   for (let line of lines) {
-    // Skip purely numeric lines (HP values, coords, timers)
+    // Skip purely numeric (HP values, timers)
     if (/^\d{2,}$/.test(line)) continue;
-    if (/^[\d\s]+$/.test(line)) continue;
 
-    // Skip lines that are only special characters (icon artifacts)
-    if (/^[^a-zA-Z0-9À-ÿ_\-\[\]()]+$/.test(line)) continue;
-
-    // Skip known UI text (case-insensitive)
+    // Skip known UI text
     if (KNOWN_UI.has(line.toLowerCase())) continue;
 
-    // Skip lines with whitespace — MIR4 player names never have spaces
+    // Skip lines with spaces — MIR4 names never have spaces
     if (/\s/.test(line)) continue;
 
-    // Skip lines with common UI punctuation
-    if (/[:\/%><@#\$&*+=\"']/.test(line)) continue;
+    // Remove leading/trailing non-name artifacts
+    line = line.replace(/^[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+/, "");
+    line = line.replace(/[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+$/, "");
 
-    // Skip lines that look like UI headers (all caps, 4+ chars)
-    const hasOnlyUppercaseLetters = /^[A-ZÀ-Ü\s]+$/.test(line.replace(/[_\-\[\]()]/g, ""));
-    if (hasOnlyUppercaseLetters && line.replace(/[_\-\[\]()\s]/g, "").length > 3) continue;
-
-    // Remove leading non-name characters (speaker icon artifacts)
-    line = line.replace(/^[^a-zA-Z0-9À-ÿ_\-\[\]()]+/, "");
-    // Remove trailing non-name characters (HP bar artifacts)
-    line = line.replace(/[^a-zA-Z0-9À-ÿ_\-\[\]()]+$/, "");
-
-    // Validate length and content
+    // Validate length
     if (line.length < 3 || line.length > 18) continue;
     if (/^[_\-.]+$/.test(line)) continue;
 
@@ -356,33 +350,32 @@ async function processPartyScreenshot(msg, eventType, attachment) {
     // Step 1: Download the image
     const buffer = await downloadImage(attachment.url);
 
-    // Step 2: Crop and preprocess
+    // Step 2: Crop and preprocess (left strip → 3 columns)
     const regions = await cropPartyRegions(buffer);
 
-    // Step 3: OCR all three regions
-    const [fullText, leftText, rightText] = await Promise.all([
-      runOcr(regions.fullRegion),
-      runOcr(regions.leftHalf),
-      runOcr(regions.rightHalf)
+    // Step 3: OCR each column separately (PSM 6 = single vertical block per column)
+    const [col1Text, col2Text, col3Text] = await Promise.all([
+      runOcr(regions.col1),
+      runOcr(regions.col2),
+      runOcr(regions.col3)
     ]);
 
-    // Step 4: Extract names from each region
-    const leftNames = extractPlayerNames(leftText);
-    const rightNames = extractPlayerNames(rightText);
-    const fullNames = extractPlayerNames(fullText);
+    // Step 4: Extract names from each column
+    const col1Names = extractPlayerNames(col1Text);
+    const col2Names = extractPlayerNames(col2Text);
+    const col3Names = extractPlayerNames(col3Text);
 
-    // Step 5: Merge — dedup by exact match across all regions
-    // Split-column (left+right) handles 2-column layout; full region is fallback
-    const mergedNames = [...new Set([...leftNames, ...rightNames, ...fullNames])];
+    // Step 5: Merge — each column is already separate, just dedup
+    const mergedNames = [...new Set([...col1Names, ...col2Names, ...col3Names])];
 
     // Debug: log raw OCR text when results seem off
     if (mergedNames.length > 16 || mergedNames.length === 0) {
-      console.log(`[PartyScanner] 📝 Raw OCR — Full region:`);
-      console.log(`  ${fullText.replace(/\n/g, "\n  ").slice(0, 500)}`);
-      console.log(`[PartyScanner] 📝 Raw OCR — Left half:`);
-      console.log(`  ${leftText.replace(/\n/g, "\n  ").slice(0, 500)}`);
-      console.log(`[PartyScanner] 📝 Raw OCR — Right half:`);
-      console.log(`  ${rightText.replace(/\n/g, "\n  ").slice(0, 500)}`);
+      const colLabels = ["Col 1", "Col 2", "Col 3"];
+      const texts = [col1Text, col2Text, col3Text];
+      for (let i = 0; i < 3; i++) {
+        console.log(`[PartyScanner] 📝 Raw OCR — ${colLabels[i]}:`);
+        console.log(`  ${texts[i].replace(/\n/g, "\n  ").slice(0, 500)}`);
+      }
     }
 
     if (mergedNames.length === 0) {
