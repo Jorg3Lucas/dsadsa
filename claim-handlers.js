@@ -876,6 +876,7 @@ export async function handleClaimInteractions(interaction) {
 
                 targetObj[specificProp].status = `🔴 Killed at ${currTimeStr}`;
                 targetObj[specificProp]._lastKilledAt = nowTs;
+                pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr}`);
                 saveLocalStorage();
                 await refreshVisualPanel(panelKey);
                 return await interaction.reply({
