@@ -205,17 +205,17 @@ async function downloadImage(url) {
 }
 
 /**
- * Crop the left-side party strip — expanded to 28% width, 92% height
- * to ensure even wide party lists or unusual UI layouts are captured.
- * Original Python logic was 22% × 88%.
+ * Crop the left-side party strip — generous 40% width, 75% height so it
+ * captures the party list reliably across different resolutions (mobile,
+ * PC, emulator, ultrawide). Original Python logic was 22% × 88%.
  */
 async function cropPartyStrip(buffer) {
   const metadata = await sharp(buffer).metadata();
   const w = metadata.width;
   const h = metadata.height;
 
-  const cropW = Math.max(120, Math.round(w * 0.28));
-  const cropH = Math.max(100, Math.round(h * 0.92));
+  const cropW = Math.max(150, Math.round(w * 0.40));
+  const cropH = Math.max(100, Math.round(h * 0.85));
 
   return await sharp(buffer)
     .extract({ left: 0, top: 0, width: cropW, height: cropH })
@@ -271,11 +271,12 @@ async function runOcrSpaceApi(imageUrl) {
   // 1. Download full image
   const fullBuffer = await downloadImage(imageUrl);
 
-  // 2. Crop to party list area
+  // 2. Crop to party list area (fallback: full image if crop yields nothing)
   const croppedBuffer = await cropPartyStrip(fullBuffer);
-  const base64Image = `data:image/png;base64,${croppedBuffer.toString("base64")}`;
 
-  // 3. Send to OCR.space
+  const tryOcr = async (buffer, label) => {
+    const base64Image = `data:image/png;base64,${buffer.toString("base64")}`;
+    // Send to OCR.space
   const response = await axios.post(
     OCR_SPACE_API_URL,
     new URLSearchParams({
@@ -291,7 +292,7 @@ async function runOcrSpaceApi(imageUrl) {
         apikey: OCR_SPACE_API_KEY,
         "Content-Type": "application/x-www-form-urlencoded"
       },
-      timeout: 30000
+      timeout: 90000
     }
   );
 
@@ -309,7 +310,7 @@ async function runOcrSpaceApi(imageUrl) {
     );
   }
 
-  // 4. Extract & filter player names
+  // Extract & filter player names
   const rawText = (data.ParsedResults || [])
     .map(r => r.ParsedText)
     .join("\n");
@@ -318,11 +319,29 @@ async function runOcrSpaceApi(imageUrl) {
     .split(/\r?\n/)
     .map(l => l.trim())
     .filter(l => l.length > 0)
-    .map(l => cleanName(l))       // strip leading/trailing artifact chars
+    .map(l => cleanName(l))
     .filter(l => l.length > 0)
     .filter(l => isValidName(l));
 
-  return { names: [...new Set(names)], count: names.length, rawText };
+  return { names: [...new Set(names)], count: names.length, rawText, label };
+  };
+
+  // 3. Try cropped image first (with error fallback to full image)
+  let croppedResult;
+  try {
+    croppedResult = await tryOcr(croppedBuffer, "crop");
+  } catch (err) {
+    console.log(`[PartyScanner] ⚠️ Crop OCR failed (${err.message}), trying full image...`);
+    return await tryOcr(fullBuffer, "full");
+  }
+
+  // 4. If crop returned no names, try full image as fallback
+  if (croppedResult.names.length === 0) {
+    console.log(`[PartyScanner] ⚠️ Crop OCR returned no names, trying full image...`);
+    return await tryOcr(fullBuffer, "full");
+  }
+
+  return croppedResult;
 }
 
 // ==========================================
