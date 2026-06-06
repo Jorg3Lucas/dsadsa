@@ -280,11 +280,11 @@ async function runOcrSpaceApi(imageUrl) {
     OCR_SPACE_API_URL,
     new URLSearchParams({
       base64Image,
-      language: "eng,jpn,kor,cht",
+      language: "auto",
       isOverlayRequired: "false",
       detectOrientation: "true",
       scale: "true",
-      OCREngine: "1"
+      OCREngine: "2"
     }),
     {
       headers: {
