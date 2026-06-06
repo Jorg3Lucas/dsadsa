@@ -35,6 +35,132 @@ const KNOWN_UI = new Set([
 
 let presenceCache = {};
 
+// ── Known clan member names (from rankingDb) ──
+let knownNames = [];            // raw names as stored
+let knownNamesNormalized = [];  // NFC-lowercased for exact matching
+let knownNamesFuzzy = [];       // NFD-decomposed-stripped for fuzzy matching
+
+/**
+ * Rebuild the known-names index from the ranking database.
+ * Should be called after the ranking DB is loaded/updated.
+ */
+export function setKnownNamesFromRankingDb(rankingDb) {
+  if (!rankingDb?.users) {
+    knownNames = [];
+    knownNamesNormalized = [];
+    knownNamesFuzzy = [];
+    return;
+  }
+
+  const names = [];
+  const seen = new Set();
+
+  for (const user of Object.values(rankingDb.users)) {
+    if (user.nickname && !seen.has(user.nickname)) {
+      seen.add(user.nickname);
+      const raw = user.nickname.trim();
+      names.push(raw);
+    }
+    // Also collect pilot nicks (they share the owner's nickname)
+    // Pilots use the same nickname as the owner
+  }
+
+  knownNames = names;
+  knownNamesNormalized = names.map(n => n.normalize('NFC').toLowerCase());
+  knownNamesFuzzy = names.map(n => normalizeForFuzzy(n));
+
+  console.log(`[PartyScanner] 📖 Loaded ${names.length} known clan member names for fuzzy matching`);
+}
+
+/**
+ * Normalize a string for fuzzy comparison:
+ * - NFD decompose (split base + combining marks)
+ * - Strip combining diacritical marks
+ * - Lowercase
+ * - Strip common name-special characters (brackets, dots, etc.)
+ */
+function normalizeForFuzzy(text) {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')  // strip combining diacritics
+    .replace(/[^a-zA-Z0-9]/g, '')       // keep only alphanumeric
+    .toLowerCase();
+}
+
+/**
+ * Levenshtein distance between two strings.
+ */
+function levenshtein(a, b) {
+  const m = a.length;
+  const n = b.length;
+  // Use a single-row optimization for small strings (names are max 18 chars)
+  let prev = new Array(n + 1);
+  let curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        curr[j - 1] + 1,      // insert
+        prev[j] + 1,           // delete
+        prev[j - 1] + cost     // substitute
+      );
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+/**
+ * Try to fuzzy-match an OCR name against the known clan member list.
+ * Returns { matched: true, name: "corrected name" } or { matched: false }.
+ */
+function fuzzyMatchName(ocrName) {
+  const fuzzy = normalizeForFuzzy(ocrName);
+  if (fuzzy.length < 3) return null;
+
+  // 1. Exact match on normalized name — quick path
+  const normalizedOcr = ocrName.normalize('NFC').toLowerCase();
+  const exactIdx = knownNamesNormalized.indexOf(normalizedOcr);
+  if (exactIdx !== -1) {
+    return { matched: true, name: knownNames[exactIdx], confidence: 'exact' };
+  }
+
+  // 2. Exact match on fuzzy-normalized (ignoring diacritics + special chars)
+  const fuzzyIdx = knownNamesFuzzy.indexOf(fuzzy);
+  if (fuzzyIdx !== -1) {
+    return { matched: true, name: knownNames[fuzzyIdx], confidence: 'normalized' };
+  }
+
+  // 3. Levenshtein distance — find the closest match within threshold
+  //    Threshold scales with name length: 1 edit per ~5 chars, min 1, max 3
+  const threshold = Math.max(1, Math.min(3, Math.floor(fuzzy.length / 5)));
+
+  let bestDist = Infinity;
+  let bestIdx = -1;
+
+  for (let i = 0; i < knownNamesFuzzy.length; i++) {
+    const dist = levenshtein(fuzzy, knownNamesFuzzy[i]);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i;
+      if (dist === 0) break; // can't beat zero
+    }
+  }
+
+  if (bestDist > 0 && bestDist <= threshold) {
+    return {
+      matched: true,
+      name: knownNames[bestIdx],
+      confidence: 'fuzzy',
+      distance: bestDist
+    };
+  }
+
+  return null;
+}
+
 // ==========================================
 // 🔧 HELPERS
 // ==========================================
@@ -303,7 +429,7 @@ async function processPartyScreenshot(msg, eventType, attachment) {
     // Step 2: Run OCR via OCR.space
     const result = await runOcrSpaceApi(attachment.url);
 
-    const mergedNames = result.names || [];
+    let mergedNames = result.names || [];
 
     if (mergedNames.length === 0) {
       console.log(`[PartyScanner] ⚠️ No player names detected in ${eventType} screenshot from ${msg.author.username}`);
@@ -312,7 +438,26 @@ async function processPartyScreenshot(msg, eventType, attachment) {
       return;
     }
 
-    // Step 3: Register presence
+    // Step 3: Fuzzy-match OCR names against known clan members
+    const corrections = [];
+    if (knownNames.length > 0) {
+      mergedNames = mergedNames.map(ocrName => {
+        const match = fuzzyMatchName(ocrName);
+        if (match && match.confidence !== 'exact') {
+          corrections.push({ ocr: ocrName, corrected: match.name, confidence: match.confidence });
+          return match.name;
+        }
+        return ocrName;
+      });
+      // Deduplicate again after corrections
+      mergedNames = [...new Set(mergedNames)];
+    }
+
+    if (corrections.length > 0) {
+      console.log(`[PartyScanner] 🔧 Fuzzy corrections: ${corrections.map(c => `${c.ocr} → ${c.corrected} (${c.confidence})`).join(", ")}`);
+    }
+
+    // Step 4: Register presence
     const displayName = msg.member?.displayName || msg.author.username;
     registerPresence(eventType, mergedNames, msg.author.id, displayName);
 
@@ -322,7 +467,7 @@ async function processPartyScreenshot(msg, eventType, attachment) {
       console.log(`[PartyScanner] ⚠️ Unusually high member count (${mergedNames.length})`);
     }
 
-    // Step 4: React to acknowledge
+    // Step 5: React to acknowledge
     try { await msg.react("✅"); } catch (e) {}
 
   } catch (err) {
@@ -335,7 +480,7 @@ async function processPartyScreenshot(msg, eventType, attachment) {
 // 🎬 INITIALIZATION
 // ==========================================
 
-export function initPartyScanner(client) {
+export function initPartyScanner(client, rankingDb) {
   console.log("🔍 [PartyScanner] Initializing...");
 
   if (OCR_SPACE_AVAILABLE) {
@@ -344,6 +489,9 @@ export function initPartyScanner(client) {
     console.log("⚠️ [PartyScanner] OCR_SPACE_API_KEY not set — set this env var for OCR support");
     console.log("   Get a free key at https://ocr.space/ocrapi");
   }
+
+  // Load known clan member names for fuzzy matching
+  setKnownNamesFromRankingDb(rankingDb);
 
   client.on("messageCreate", async (msg) => {
     if (msg.author.bot) return;

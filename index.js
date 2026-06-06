@@ -131,7 +131,7 @@ client.once('clientReady', async () => {
     }, 10000);
 
     // Passing a basic console.log fallback to prevent parameter mismatch
-    initPartyScanner(client);
+    initPartyScanner(client, rankingDb);
     initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb);
 });
 
