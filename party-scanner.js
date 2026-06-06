@@ -214,8 +214,8 @@ async function cropPartyStrip(buffer) {
   const w = metadata.width;
   const h = metadata.height;
 
-  const cropW = Math.max(150, Math.round(w * 0.40));
-  const cropH = Math.max(100, Math.round(h * 0.85));
+  const cropW = Math.max(200, Math.round(w * 0.60));
+  const cropH = Math.max(100, Math.round(h * 0.95));
 
   return await sharp(buffer)
     .extract({ left: 0, top: 0, width: cropW, height: cropH })
@@ -323,7 +323,7 @@ async function runOcrSpaceApi(imageUrl) {
     .filter(l => l.length > 0)
     .filter(l => isValidName(l));
 
-  return { names: [...new Set(names)], count: names.length, rawText, label };
+  return { names: [...new Set(names)], count: names.length, rawText };
   };
 
   // 3. Try cropped image first (with error fallback to full image)
@@ -460,27 +460,37 @@ async function processPartyScreenshot(msg, eventType, attachment) {
       return;
     }
 
-    // Step 3: Fuzzy-match OCR names against known clan members
-    const unmatched = knownNames.length > 0 ? mergedNames.filter(n => !fuzzyMatchName(n)) : [];
-    if (unmatched.length > 0) {
-      console.log(`[PartyScanner] ⚠️ ${unmatched.length} OCR names did NOT match any known clan member: ${unmatched.join(", ")}`);
-    }
+    // Step 3: Filter OCR names — ONLY keep names that match known clan members
     const corrections = [];
+    const matchedNames = [];
+    const unmatchedNames = [];
     if (knownNames.length > 0) {
-      mergedNames = mergedNames.map(ocrName => {
+      for (const ocrName of mergedNames) {
         const match = fuzzyMatchName(ocrName);
-        if (match && match.confidence !== 'exact') {
-          corrections.push({ ocr: ocrName, corrected: match.name, confidence: match.confidence });
-          return match.name;
+        if (match) {
+          // Keep the corrected (canonical) name
+          matchedNames.push(match.name);
+          if (match.confidence !== 'exact') {
+            corrections.push({ ocr: ocrName, corrected: match.name, confidence: match.confidence });
+          }
+        } else {
+          unmatchedNames.push(ocrName);
         }
-        return ocrName;
-      });
-      // Deduplicate again after corrections
-      mergedNames = [...new Set(mergedNames)];
+      }
+      mergedNames = [...new Set(matchedNames)];
     }
 
     if (corrections.length > 0) {
       console.log(`[PartyScanner] 🔧 Fuzzy corrections: ${corrections.map(c => `${c.ocr} → ${c.corrected} (${c.confidence})`).join(", ")}`);
+    }
+    if (unmatchedNames.length > 0) {
+      console.log(`[PartyScanner] ⚠️ ${unmatchedNames.length} OCR names did NOT match any clan member (discarded): ${unmatchedNames.join(", ")}`);
+    }
+
+    if (mergedNames.length === 0) {
+      console.log(`[PartyScanner] ⚠️ No names matched known clan members in ${eventType} screenshot from ${msg.author.username}`);
+      try { await msg.react("❓"); } catch (e) {}
+      return;
     }
 
     // Step 4: Register presence
