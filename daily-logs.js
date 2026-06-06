@@ -53,14 +53,16 @@ const LOG_ICONS = {
     CLAIM_START: "🟢",
     CLAIM_END:   "🔴",
     CANCEL:      "🟠",
-    QUEUE_JOIN:  "🟨"
+    QUEUE_JOIN:  "🟨",
+    DEATH_MARK:  "💀"
 };
 
 const LOG_LABELS = {
     CLAIM_START: "CLAIMS STARTED",
     CLAIM_END:   "CLAIMS ENDED",
     CANCEL:      "CANCELED",
-    QUEUE_JOIN:  "QUEUE JOINS"
+    QUEUE_JOIN:  "QUEUE JOINS",
+    DEATH_MARK:  "DEATH MARKS"
 };
 
 const HR = "─".repeat(66);
@@ -103,7 +105,7 @@ function migrateEntry(entry, dateStr) {
  */
 function buildReportText(queueData, dateStr, isForced) {
     // Group entries by type
-    const groups = { CLAIM_START: [], CLAIM_END: [], CANCEL: [], QUEUE_JOIN: [] };
+    const groups = { CLAIM_START: [], CLAIM_END: [], CANCEL: [], QUEUE_JOIN: [], DEATH_MARK: [] };
     for (const entry of queueData) {
         const type = entry.type && groups[entry.type] ? entry.type : "CLAIM_START";
         groups[type].push(entry);
