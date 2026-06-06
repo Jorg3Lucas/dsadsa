@@ -284,7 +284,7 @@ async function runOcrSpaceApi(imageUrl) {
       isOverlayRequired: "false",
       detectOrientation: "true",
       scale: "true",
-      OCREngine: "2"
+      OCREngine: "1"
     }),
     {
       headers: {
