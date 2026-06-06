@@ -134,8 +134,9 @@ function fuzzyMatchName(ocrName) {
   }
 
   // 3. Levenshtein distance — find the closest match within threshold
-  //    Threshold scales with name length: 1 edit per ~5 chars, min 1, max 3
-  const threshold = Math.max(1, Math.min(3, Math.floor(fuzzy.length / 5)));
+  //    More generous: 1 edit per ~3 chars, min 2, max 5
+  //    Catches OCR misreadings of special chars (e.g., Ñ→N, ü→u, 尺→R)
+  const threshold = Math.max(2, Math.min(5, Math.floor(fuzzy.length / 3)));
 
   let bestDist = Infinity;
   let bestIdx = -1;
