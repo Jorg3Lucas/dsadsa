@@ -192,9 +192,28 @@ export function renderEmbed(key) {
                         }
                     }
                     
-                    // Show elapsed time since last death
-                    if (displayStatus === "🟢 Available" && (current[prop]._lastKilledAt || current[prop]._lastKilledTimeStr)) {
-                        // Prefer stored millisecond timestamp (timezone-safe), fall back to parsing string
+                    // Show elapsed time since respawn (progressive counter from _freeSince)
+                    if (displayStatus === "🟢 Available" && current[prop]._freeSince > 0) {
+                        let freeDate = new Date(current[prop]._freeSince);
+                        let diffMs = now.getTime() - freeDate.getTime();
+                        if (diffMs < 0) {
+                            displayStatus = "🟢 Available";
+                        } else {
+                            let diffMins = Math.floor(diffMs / 6e4);
+                            let diffHours = Math.floor(diffMs / 36e5);
+                            if (diffMins < 1) {
+                                displayStatus = `🟢 Now`;
+                            } else if (diffHours < 1) {
+                                displayStatus = `🟢 ${diffMins}m ago`;
+                            } else {
+                                let remainingMins = diffMins % 60;
+                                displayStatus = remainingMins > 0
+                                    ? `🟢 ${diffHours}h ${remainingMins}m ago`
+                                    : `🟢 ${diffHours}h ago`;
+                            }
+                        }
+                    } else if (displayStatus === "🟢 Available" && !current[prop]._freeSince && (current[prop]._lastKilledAt || current[prop]._lastKilledTimeStr)) {
+                        // Fallback: use _lastKilledAt if _freeSince is not available
                         let killedDate;
                         if (current[prop]._lastKilledAt) {
                             killedDate = new Date(current[prop]._lastKilledAt);
@@ -203,7 +222,6 @@ export function renderEmbed(key) {
                         }
                         if (killedDate && !isNaN(killedDate.getTime())) {
                             let diffMs = now.getTime() - killedDate.getTime();
-                            // If diffMs is negative, the killed time is in the future — data inconsistency, show plain available
                             if (diffMs < 0) {
                                 displayStatus = "🟢 Available";
                             } else {
