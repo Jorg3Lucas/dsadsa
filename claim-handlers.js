@@ -50,12 +50,12 @@ export async function handleClaimMessages(msg) {
         }
     }
 
-    if ("!setbosschannel2" === lowerContent) {
+    if ("!seteventchannel" === lowerContent) {
         if (msg.member.permissions.has("ManageGuild")) {
-            dailyLogs.scheduledBossChannelId = msg.channel.id;
+            dailyLogs.scheduledEventChannelId = msg.channel.id;
             saveDailyLogs();
             return msg.reply({
-                content: "✅ Global boss alerts (Red Boss, Leader 3, Purgatory) will be sent to this channel with @everyone."
+                content: "✅ Event alerts (Red Boss, Leader 3, Purgatory, etc.) will be sent to this channel with @everyone."
             }).catch(() => {});
         } else {
             return msg.reply({
@@ -64,41 +64,41 @@ export async function handleClaimMessages(msg) {
         }
     }
 
-    if ("!testglobalboss" === lowerContent) {
+    if ("!testevent" === lowerContent) {
         if (!msg.member.permissions.has("ManageMessages")) {
             return msg.reply({
                 content: "❌ You need the Manage Messages permission to use this."
             }).catch(() => {});
         }
-        if (!dailyLogs.scheduledBossChannelId) {
+        if (!dailyLogs.scheduledEventChannelId) {
             return msg.reply({
-                content: "❌ No global boss channel configured. Use `!setbosschannel2` first."
+                content: "❌ No event channel configured. Use `!seteventchannel` first."
             }).catch(() => {});
         }
-        const targetChannel = msg.guild.channels.cache.get(dailyLogs.scheduledBossChannelId);
+        const targetChannel = msg.guild.channels.cache.get(dailyLogs.scheduledEventChannelId);
         if (!targetChannel) {
             return msg.reply({
-                content: "❌ Configured channel not found. Re-configure with `!setbosschannel2`."
+                content: "❌ Configured channel not found. Re-configure with `!seteventchannel`."
             }).catch(() => {});
         }
         const testEmbed = new e()
-            .setTitle("🚨 Global Boss Alert! 🚨")
+            .setTitle("🚨 Event Alert! 🚨")
             .setColor("#ff6600")
             .setDescription(
                 `🔔 **TEST NOTIFICATION** 🔔\n\n` +
-                `This is a test alert to verify the global boss system is working correctly.\n\n` +
+                `This is a test alert to verify the event system is working correctly.\n\n` +
                 `The following events would be announced here:\n` +
                 `• **Red Boss (Secret Peak)**\n` +
                 `• **Leader 3 (Magic Square)**\n` +
                 `• **Purgatory**\n` +
                 `• **World Boss Labyrinth**\n` +
                 `• **World Boss Valley**\n` +
-                `• **Mirage**\n` +
+                `• **Mirage World Boss**\n` +
                 `• **Golden Sphere (W1 Roaring Flame)**\n` +
                 `• **Golden Sphere (W2 Nine Dragon)**\n` +
                 `• **Krukan (Schackling Abbadon)** — Mon 23:00\n` +
                 `• **Valley War** — Wed 22:00\n` +
-                `• **Purgatory (Hellbar 7F)** — Wed 23:00\n` +
+                `• **Hellbar (7F Purgatory)** — Wed 23:00\n` +
                 `• **Altar Defense + Living Wraiths Event** — Thu 22:00\n` +
                 `• **Mirage Living Wraiths** — Thu 23:00\n` +
                 `• **Heist** — Fri 22:00\n` +
@@ -110,7 +110,7 @@ export async function handleClaimMessages(msg) {
         try {
             await targetChannel.send({ content: "@everyone", embeds: [testEmbed] });
             return msg.reply({
-                content: `✅ Test global boss alert sent to ${targetChannel}.`
+                content: `✅ Test event alert sent to ${targetChannel}.`
             }).catch(() => {});
         } catch (err) {
             return msg.reply({
