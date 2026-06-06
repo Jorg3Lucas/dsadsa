@@ -50,6 +50,70 @@ export async function handleClaimMessages(msg) {
         }
     }
 
+    if ("!setbosschannel2" === lowerContent) {
+        if (msg.member.permissions.has("ManageGuild")) {
+            dailyLogs.scheduledBossChannelId = msg.channel.id;
+            saveDailyLogs();
+            return msg.reply({
+                content: "✅ Global boss alerts (Red Boss, Leader 3, Purgatory) will be sent to this channel with @everyone."
+            }).catch(() => {});
+        } else {
+            return msg.reply({
+                content: "❌ You need the Manage Server permission to configure this."
+            }).catch(() => {});
+        }
+    }
+
+    if ("!testglobalboss" === lowerContent) {
+        if (!msg.member.permissions.has("ManageMessages")) {
+            return msg.reply({
+                content: "❌ You need the Manage Messages permission to use this."
+            }).catch(() => {});
+        }
+        if (!dailyLogs.scheduledBossChannelId) {
+            return msg.reply({
+                content: "❌ No global boss channel configured. Use `!setbosschannel2` first."
+            }).catch(() => {});
+        }
+        const targetChannel = msg.guild.channels.cache.get(dailyLogs.scheduledBossChannelId);
+        if (!targetChannel) {
+            return msg.reply({
+                content: "❌ Configured channel not found. Re-configure with `!setbosschannel2`."
+            }).catch(() => {});
+        }
+        const testEmbed = new e()
+            .setTitle("🚨 Global Boss Alert! 🚨")
+            .setColor("#ff6600")
+            .setDescription(
+                `🔔 **TEST NOTIFICATION** 🔔\n\n` +
+                `This is a test alert to verify the global boss system is working correctly.\n\n` +
+                `The following events would be announced here:\n` +
+                `• **Red Boss (Secret Peak)**\n` +
+                `• **Leader 3 (Magic Square)**\n` +
+                `• **Purgatory**\n` +
+                `• **World Boss Labyrinth**\n` +
+                `• **World Boss Valley**\n` +
+                `• **Mirage**\n` +
+                `• **Krukan (Schackling Abbadon)** — Mon 23:00\n` +
+                `• **Valley War** — Wed 22:00\n` +
+                `• **Hellbar 7F Purgatory** — Wed 23:00\n` +
+                `• **Utukan (Crimson Abbadon)** — Fri 23:00\n\n` +
+                `⏰ Notifications are sent 10 minutes before each spawn.\n\n` +
+                `Get ready and **don't forget to do the mission!** 💪`
+            )
+            .setTimestamp();
+        try {
+            await targetChannel.send({ content: "@everyone", embeds: [testEmbed] });
+            return msg.reply({
+                content: `✅ Test global boss alert sent to ${targetChannel}.`
+            }).catch(() => {});
+        } catch (err) {
+            return msg.reply({
+                content: `❌ Failed to send test alert: ${err.message}`
+            }).catch(() => {});
+        }
+    }
+
     if ("!logs" === lowerContent) {
         if (!msg.member.permissions.has("ManageMessages")) return msg.reply({
             content: getMsg("logs.modRequired")

@@ -10,7 +10,7 @@ export const dailyLogsPath = s.resolve("./daily-logs.json");
 export const defaultFloors = ["7", "8", "9", "10"];
 
 export let punishments = {};
-export let dailyLogs = { configChannelId: null, queue: [], bossSpawnChannelId: null };
+export let dailyLogs = { configChannelId: null, queue: [], bossSpawnChannelId: null, scheduledBossChannelId: null };
 export let alertCache = { warning5mAfter: {}, spawnAlerted: {} };
 export let antiDemonSelectionCache = {};
 export let summonSelectionCache = {};

@@ -5,7 +5,7 @@
 
 import { EmbedBuilder } from "discord.js";
 import { client, dailyLogs, bossSpawnAlertCache } from "./state.js";
-import { getLocalTime } from "./time-utils.js";
+import { getLocalTime, redBossSchedules, leader3Schedules } from "./time-utils.js";
 
 // ─── Boss schedule entries ───────────────────────────────
 // Each entry: { world, layer, map, boss, times }
@@ -169,5 +169,122 @@ export async function sendBossSpawnAlerts() {
     } catch (err) {
       console.error(`❌ [Boss Spawn Alert] Failed to send: ${err.message}`);
     }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 🌍 SCHEDULED GLOBAL BOSS ALERTS (Red Boss, Leader 3, Purgatory)
+// 10 minutes before each spawn, with @everyone mention
+// ══════════════════════════════════════════════════════════
+
+const scheduledEvents = [
+  { name: "Red Boss (Secret Peak)", hours: redBossSchedules },
+  { name: "Leader 3 (Magic Square)", hours: leader3Schedules },
+  { name: "Purgatory", hours: [0, 6, 12, 18] },
+  { name: "World Boss Labyrinth", hours: [10, 20] },
+  { name: "World Boss Valley", hours: [12, 22] },
+  { name: "Mirage", hours: [0, 22] },
+];
+
+// Day-specific weekly events
+// getDay(): Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
+const weeklyScheduledEvents = [
+  { name: "Krukan (Schackling Abbadon)", day: 1, hour: 23 },
+  { name: "Valley War", day: 3, hour: 22 },
+  { name: "Hellbar 7F Purgatory", day: 3, hour: 23 },
+  { name: "Utukan (Crimson Abbadon)", day: 5, hour: 23 },
+];
+
+let scheduledBossAlertCache = {};
+
+export function resetScheduledBossAlertCache() {
+  scheduledBossAlertCache = {};
+}
+
+function getUpcomingScheduledAlerts() {
+  const now = getLocalTime();
+  const currentDay = now.getDay();
+  const results = [];
+
+  for (const event of scheduledEvents) {
+    for (const hour of event.hours) {
+      // Calculate the "10 minutes before" time
+      let alertH = hour;
+      let alertM = 0 - 10;
+      if (alertM < 0) {
+        alertM += 60;
+        alertH = (alertH - 1 + 24) % 24;
+      }
+
+      // Check if current server time matches the alert time
+      if (now.getHours() === alertH && now.getMinutes() === alertM) {
+        const cacheKey = `${event.name}-${hour}`;
+        if (!scheduledBossAlertCache[cacheKey]) {
+          results.push({ name: event.name, hour, cacheKey });
+        }
+      }
+    }
+  }
+
+  // Check day-specific weekly events
+  for (const event of weeklyScheduledEvents) {
+    if (currentDay !== event.day) continue;
+
+    let alertH = event.hour;
+    let alertM = 0 - 10;
+    if (alertM < 0) {
+      alertM += 60;
+      alertH = (alertH - 1 + 24) % 24;
+    }
+
+    if (now.getHours() === alertH && now.getMinutes() === alertM) {
+      const cacheKey = `${event.name}-${event.day}-${event.hour}`;
+      if (!scheduledBossAlertCache[cacheKey]) {
+        results.push({ name: event.name, hour: event.hour, cacheKey });
+      }
+    }
+  }
+
+  return results;
+}
+
+export async function sendScheduledBossAlerts() {
+  if (!dailyLogs.scheduledBossChannelId) return;
+
+  const channel = await client.channels.fetch(dailyLogs.scheduledBossChannelId).catch(() => null);
+  if (!channel) return;
+
+  const alerts = getUpcomingScheduledAlerts();
+  if (alerts.length === 0) return;
+
+  // Build list of event names for this alert time
+  const eventNames = alerts.map(a => a.name);
+  const firstAlert = alerts[0];
+
+  const spawnHour12 = firstAlert.hour % 12 || 12;
+  const amPm = firstAlert.hour < 12 ? "AM" : "PM";
+  const timeStr = `${spawnHour12}:00 ${amPm}`;
+
+  const description =
+    `The following bosses are spawning in **10 minutes**:\n\n` +
+    eventNames.map(n => `• **${n}**`).join("\n") +
+    `\n\n` +
+    `⏰ **Spawn time:** ${timeStr} (Server Time)\n\n` +
+    `Get ready and **don't forget to do the mission!** 💪`;
+
+  const embed = new EmbedBuilder()
+    .setTitle("🚨 Global Boss Alert! 🚨")
+    .setColor("#ff6600")
+    .setDescription(description)
+    .setTimestamp();
+
+  try {
+    await channel.send({ content: "@everyone", embeds: [embed] });
+    for (const alert of alerts) {
+      scheduledBossAlertCache[alert.cacheKey] = true;
+    }
+    console.log(`✅ [Scheduled Boss Alert] Sent: ${eventNames.join(", ")} at ${timeStr}`);
+  } catch (err) {
+    console.error(`❌ [Scheduled Boss Alert] Failed to send: ${err.message}`);
   }
 }

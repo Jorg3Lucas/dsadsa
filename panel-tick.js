@@ -1,5 +1,5 @@
 import { getLocalTime, isRoomOpen, parseStringToDate, usesScheduleRespawn, getFormattedTime12h, redBossSchedules, leader3Schedules } from "./time-utils.js";
-import { sendBossSpawnAlerts } from "./boss-spawn-scheduler.js";
+import { sendBossSpawnAlerts, sendScheduledBossAlerts, resetScheduledBossAlertCache } from "./boss-spawn-scheduler.js";
 import { getMsg, reloadLanguage } from "./lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "./state.js";
 import { pushToDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
@@ -22,12 +22,13 @@ export function startTickInterval() {
             alertCache.warning5mAfter = {};
             alertCache.spawnAlerted = {};
             Object.keys(bossSpawnAlertCache).forEach(k => delete bossSpawnAlertCache[k]);
+            resetScheduledBossAlertCache();
         }
 
-        // ── Boss spawn alerts (checks Asia Server Time) ──
-        // Only check on exact minute boundaries to avoid duplicate sends
+        // ── Boss spawn alerts (5 min before, individual bosses) ──
         if (now.getSeconds() < 15) {
             await sendBossSpawnAlerts();
+            await sendScheduledBossAlerts();
         }
 
         for (let key in db) {
