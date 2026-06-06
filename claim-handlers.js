@@ -36,6 +36,20 @@ export async function handleClaimMessages(msg) {
         }
     }
 
+    if ("!setbosschannel" === lowerContent) {
+        if (msg.member.permissions.has("ManageGuild")) {
+            dailyLogs.bossSpawnChannelId = msg.channel.id;
+            saveDailyLogs();
+            return msg.reply({
+                content: "✅ Boss spawn notifications will be sent to this channel."
+            }).catch(() => {});
+        } else {
+            return msg.reply({
+                content: "❌ You need the Manage Server permission to configure this."
+            }).catch(() => {});
+        }
+    }
+
     if ("!logs" === lowerContent) {
         if (!msg.member.permissions.has("ManageMessages")) return msg.reply({
             content: getMsg("logs.modRequired")

@@ -1,6 +1,7 @@
 import { getLocalTime, isRoomOpen, parseStringToDate, usesScheduleRespawn, getFormattedTime12h, redBossSchedules, leader3Schedules } from "./time-utils.js";
+import { sendBossSpawnAlerts } from "./boss-spawn-scheduler.js";
 import { getMsg, reloadLanguage } from "./lang.js";
-import { db, alertCache, saveLocalStorage } from "./state.js";
+import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "./state.js";
 import { pushToDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
 import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom } from "./claim-core.js";
@@ -15,10 +16,18 @@ export function startTickInterval() {
             now = getLocalTime();
         reloadLanguage();
 
+        // ── Daily logs dispatch at 18:00 Berlin time ──
         if (18 === now.getHours() && 0 === now.getMinutes()) {
             await dispatchDailyLogs(!1);
             alertCache.warning5mAfter = {};
             alertCache.spawnAlerted = {};
+            Object.keys(bossSpawnAlertCache).forEach(k => delete bossSpawnAlertCache[k]);
+        }
+
+        // ── Boss spawn alerts (checks Asia Server Time) ──
+        // Only check on exact minute boundaries to avoid duplicate sends
+        if (now.getSeconds() < 15) {
+            await sendBossSpawnAlerts();
         }
 
         for (let key in db) {
