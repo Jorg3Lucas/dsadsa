@@ -82,8 +82,8 @@ export function setKnownNamesFromRankingDb(rankingDb) {
 function normalizeForFuzzy(text) {
   return text
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')  // strip combining diacritics
-    .replace(/[^a-zA-Z0-9]/g, '')       // keep only alphanumeric
+    .replace(/[\u0300-\u036f]/g, '')        // strip combining diacritics
+    .replace(/[^\p{L}\p{N}]/gu, '')          // keep letters & numbers from ANY script
     .toLowerCase();
 }
 
@@ -205,48 +205,51 @@ async function downloadImage(url) {
 }
 
 /**
- * Crop the left-side party strip (22% width, 88% height) — mirrors the
- * Python crop logic so we only OCR the relevant area.
+ * Crop the left-side party strip — expanded to 28% width, 92% height
+ * to ensure even wide party lists or unusual UI layouts are captured.
+ * Original Python logic was 22% × 88%.
  */
 async function cropPartyStrip(buffer) {
   const metadata = await sharp(buffer).metadata();
   const w = metadata.width;
   const h = metadata.height;
 
-  const cropW = Math.max(100, Math.round(w * 0.22));
-  const cropH = Math.max(100, Math.round(h * 0.88));
+  const cropW = Math.max(120, Math.round(w * 0.28));
+  const cropH = Math.max(100, Math.round(h * 0.92));
 
   return await sharp(buffer)
     .extract({ left: 0, top: 0, width: cropW, height: cropH })
-    .png() // ensure PNG
+    .png()
     .toBuffer();
 }
 
 /**
- * Strip leading/trailing non-name characters from an OCR token.
- * Ported from the Python party_ocr.py `clean_name()`.
+ * Strip leading/trailing characters that are NOT plausible name chars.
+ * Uses Unicode property escapes (\p{L} = any letter from any script) so
+ * Japanese, Korean, Chinese, accented Latin, etc. are all preserved.
  */
 function cleanName(text) {
-  return text.replace(/^[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+/, "")
-             .replace(/[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+$/, "")
-             .trim();
+  return text
+    .replace(/^[^\p{L}\p{N}_\-\[\]()·丶ツ]+/u, '')
+    .replace(/[^\p{L}\p{N}_\-\[\]()·丶ツ]+$/u, '');
 }
 
 /**
  * Validate a single token as a plausible MIR4 player name.
+ * Works with any script (Latin, Japanese, Korean, Chinese, etc.).
  */
 function isValidName(text) {
   const t = text.trim();
 
-  if (t.length < 3 || t.length > 18) return false;
-  if (/^\d+$/.test(t)) return false;                // purely numeric
-  if (KNOWN_UI.has(t.toLowerCase())) return false;   // known UI label
-  if (t.includes(" ")) return false;                 // MIR4 names have no spaces
+  if (t.length < 3 || t.length > 18) return false;  // MIR4 name length limits
+  if (/^\p{N}+$/u.test(t)) return false;             // purely numeric (Unicode-aware)
+  if (KNOWN_UI.has(t.toLowerCase())) return false;    // known UI label
+  if (t.includes(" ")) return false;                  // MIR4 names have no spaces
 
-  // Reject if only special chars remain after stripping common symbols
+  // Reject if after stripping common decorational symbols nothing remains
   const cleaned = t.replace(/[_\-\u005b\u005d()\u00b7\u30c4]/g, "");
   if (cleaned.length === 0) return false;
-  if (/^\d+$/.test(cleaned)) return false;
+  if (/^\p{N}+$/u.test(cleaned)) return false;
 
   return true;
 }
@@ -277,7 +280,7 @@ async function runOcrSpaceApi(imageUrl) {
     OCR_SPACE_API_URL,
     new URLSearchParams({
       base64Image,
-      language: "eng",
+      language: "eng,jpn,kor,cht,chs",
       isOverlayRequired: "false",
       detectOrientation: "true",
       scale: "true",
@@ -433,12 +436,16 @@ async function processPartyScreenshot(msg, eventType, attachment) {
 
     if (mergedNames.length === 0) {
       console.log(`[PartyScanner] ⚠️ No player names detected in ${eventType} screenshot from ${msg.author.username}`);
-      console.log(`[PartyScanner] 📄 Raw OCR text: ${result.rawText?.slice(0, 300)}`);
+      console.log(`[PartyScanner] 📄 Raw OCR text: ${result.rawText?.slice(0, 500)}`);
       try { await msg.react("❓"); } catch (e) {}
       return;
     }
 
     // Step 3: Fuzzy-match OCR names against known clan members
+    const unmatched = knownNames.length > 0 ? mergedNames.filter(n => !fuzzyMatchName(n)) : [];
+    if (unmatched.length > 0) {
+      console.log(`[PartyScanner] ⚠️ ${unmatched.length} OCR names did NOT match any known clan member: ${unmatched.join(", ")}`);
+    }
     const corrections = [];
     if (knownNames.length > 0) {
       mergedNames = mergedNames.map(ocrName => {
