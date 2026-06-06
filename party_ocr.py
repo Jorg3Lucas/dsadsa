@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-MIR4 Party Scanner — EasyOCR Backend
+MIR4 Party Scanner — EasyOCR Backend  [DEPRECATED]
 
-Usage:
+⚠️  This script is deprecated. OCR functionality has been migrated to the
+    OCR.space cloud API (see party-scanner.js → runOcrSpaceApi).
+
+    Kept only as a local fallback reference. No longer called by the bot.
+
+Usage (historical):
   python3 party_ocr.py <image_path> [--crop_w RATIO] [--crop_h RATIO] [--columns N]
 
 Takes a screenshot path, extracts player names from the left-side party list
@@ -10,6 +15,9 @@ using EasyOCR, and outputs a JSON array of names to stdout.
 
 Requires: pip install easyocr opencv-python-headless numpy
 """
+
+import warnings
+warnings.warn("party_ocr.py is deprecated — the bot now uses OCR.space API", DeprecationWarning)
 
 import sys
 import json

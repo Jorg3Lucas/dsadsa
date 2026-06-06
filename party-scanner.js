@@ -1,8 +1,5 @@
-import { spawn } from "child_process";
-import fs from "fs";
-import path from "path";
-import os from "os";
 import axios from "axios";
+import sharp from "sharp";
 import { dailyLogs } from "./state.js";
 
 // ==========================================
@@ -10,14 +7,31 @@ import { dailyLogs } from "./state.js";
 // ==========================================
 
 const EVENT_WINDOW_MINUTES = 75;
-const MAX_PARTY_NAMES = 15;
-const PYTHON_SCRIPT = path.resolve("./party_ocr.py");
+// ── OCR.space API ─────────────────────────
+const OCR_SPACE_API_URL = "https://api.ocr.space/parse/image";
+const OCR_SPACE_API_KEY = process.env.OCR_SPACE_API_KEY;
+const OCR_SPACE_AVAILABLE = !!OCR_SPACE_API_KEY;
+
+// ── OCR filtering (ported from Python backend) ──
+const KNOWN_UI = new Set([
+  "party", "clan", "member", "members", "online", "offline",
+  "leader", "invite", "kick", "promote", "demote", "leave",
+  "follow", "attack", "defend", "retreat", "ready", "cancel",
+  "accept", "decline", "close", "settings", "exit", "chat",
+  "whisper", "friend", "block", "report", "request", "trade",
+  "guild", "alliance", "search", "list", "create", "join",
+  "apply", "pending", "invitations", "combat", "power", "level",
+  "name", "title", "rank", "exp", "hp", "mp", "atk", "def",
+  "option", "menu", "back", "next", "page", "home", "start",
+  "loading", "connect", "login", "logout", "select", "enter",
+  "auto", "manual", "target", "alert", "notice", "system",
+  "confirm", "server", "control", "display", "graphics", "sound",
+  "party1", "party2", "party3"
+]);
 
 // ==========================================
 // 🧠 RUNTIME STATE
 // ==========================================
-
-let pythonAvailable = null; // null = unknown, true/false after first check
 
 let presenceCache = {};
 
@@ -53,7 +67,7 @@ const EVENT_ICONS = {
 };
 
 // ==========================================
-// 🖼️ EASYOCR (PYTHON) BACKEND
+// 🖼️ OCR.SPACE BACKEND
 // ==========================================
 
 async function downloadImage(url) {
@@ -65,83 +79,121 @@ async function downloadImage(url) {
 }
 
 /**
- * Check if Python and the EasyOCR script are available.
- * Runs once and caches the result.
+ * Crop the left-side party strip (22% width, 88% height) — mirrors the
+ * Python crop logic so we only OCR the relevant area.
  */
-async function checkPythonAvailable() {
-  if (pythonAvailable !== null) return pythonAvailable;
+async function cropPartyStrip(buffer) {
+  const metadata = await sharp(buffer).metadata();
+  const w = metadata.width;
+  const h = metadata.height;
 
-  try {
-    // Check if Python exists
-    await new Promise((resolve, reject) => {
-      const proc = spawn("python3", ["--version"], { timeout: 5000 });
-      let stderr = "";
-      proc.on("error", () => reject(new Error("python3 not found")));
-      proc.on("exit", (code) => {
-        code === 0 ? resolve() : reject(new Error(`python3 exit code ${code}`));
-      });
-    });
+  const cropW = Math.max(100, Math.round(w * 0.22));
+  const cropH = Math.max(100, Math.round(h * 0.88));
 
-    // Check if the OCR script exists
-    if (!fs.existsSync(PYTHON_SCRIPT)) {
-      throw new Error(`OCR script not found: ${PYTHON_SCRIPT}`);
-    }
-
-    pythonAvailable = true;
-    console.log("[PartyScanner] ✅ Python + EasyOCR available");
-    return true;
-  } catch (err) {
-    pythonAvailable = false;
-    console.error("[PartyScanner] ❌ Python/EasyOCR not available:", err.message);
-    console.error("[PartyScanner] To install: pip install easyocr opencv-python-headless numpy");
-    return false;
-  }
+  return await sharp(buffer)
+    .extract({ left: 0, top: 0, width: cropW, height: cropH })
+    .png() // ensure PNG
+    .toBuffer();
 }
 
 /**
- * Call the Python EasyOCR script to extract names from an image.
- * Saves the image to a temp file, calls the script, parses JSON output.
+ * Strip leading/trailing non-name characters from an OCR token.
+ * Ported from the Python party_ocr.py `clean_name()`.
  */
-async function runPythonOcr(imageBuffer) {
-  const tmpDir = os.tmpdir();
-  const tmpFile = path.join(tmpDir, `mir4_pt_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
+function cleanName(text) {
+  return text.replace(/^[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+/, "")
+             .replace(/[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+$/, "")
+             .trim();
+}
 
-  try {
-    // Save image to temp file
-    fs.writeFileSync(tmpFile, imageBuffer);
+/**
+ * Validate a single token as a plausible MIR4 player name.
+ */
+function isValidName(text) {
+  const t = text.trim();
 
-    // Call Python OCR script
-    const result = await new Promise((resolve, reject) => {
-      const proc = spawn("python3", [PYTHON_SCRIPT, tmpFile, "--debug"], {
-        timeout: 120000, // 120s — EasyOCR downloads model (~100MB) on first run
-        stdio: ["ignore", "pipe", "pipe"]
-      });
+  if (t.length < 3 || t.length > 18) return false;
+  if (/^\d+$/.test(t)) return false;                // purely numeric
+  if (KNOWN_UI.has(t.toLowerCase())) return false;   // known UI label
+  if (t.includes(" ")) return false;                 // MIR4 names have no spaces
 
-      let stdout = "";
-      let stderr = "";
+  // Reject if only special chars remain after stripping common symbols
+  const cleaned = t.replace(/[_\-\u005b\u005d()\u00b7\u30c4]/g, "");
+  if (cleaned.length === 0) return false;
+  if (/^\d+$/.test(cleaned)) return false;
 
-      proc.stdout.on("data", (data) => { stdout += data.toString(); });
-      proc.stderr.on("data", (data) => { stderr += data.toString(); });
+  return true;
+}
 
-      proc.on("error", (err) => reject(err));
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          reject(new Error(`Python OCR exited with code ${code}: ${stderr.slice(0, 500)}`));
-        } else {
-          try {
-            resolve(JSON.parse(stdout));
-          } catch (e) {
-            reject(new Error(`Invalid JSON from Python OCR: ${stdout.slice(0, 200)}`));
-          }
-        }
-      });
-    });
-
-    return result;
-  } finally {
-    // Clean up temp file
-    try { fs.unlinkSync(tmpFile); } catch (e) {}
+/**
+ * Run OCR via OCR.space API.
+ *
+ * Steps:
+ *  1. Downloads the full image
+ *  2. Crops to the left-side party strip (so OCR sees mostly names)
+ *  3. Sends the cropped region as base64 to OCR.space
+ *  4. Parses + filters the returned text into a name list
+ */
+async function runOcrSpaceApi(imageUrl) {
+  if (!OCR_SPACE_AVAILABLE) {
+    throw new Error("OCR_SPACE_API_KEY not configured. Set the OCR_SPACE_API_KEY environment variable.");
   }
+
+  // 1. Download full image
+  const fullBuffer = await downloadImage(imageUrl);
+
+  // 2. Crop to party list area
+  const croppedBuffer = await cropPartyStrip(fullBuffer);
+  const base64Image = `data:image/png;base64,${croppedBuffer.toString("base64")}`;
+
+  // 3. Send to OCR.space
+  const response = await axios.post(
+    OCR_SPACE_API_URL,
+    new URLSearchParams({
+      base64Image,
+      language: "eng",
+      isOverlayRequired: "false",
+      detectOrientation: "true",
+      scale: "true",
+      OCREngine: "2"
+    }),
+    {
+      headers: {
+        apikey: OCR_SPACE_API_KEY,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      timeout: 30000
+    }
+  );
+
+  const data = response.data;
+
+  if (data.OCRExitCode !== 1) {
+    throw new Error(
+      `OCR.space error (exit ${data.OCRExitCode}): ${(data.ErrorMessage || []).join(", ") || "Unknown"}`
+    );
+  }
+
+  if (data.IsErroredOnProcessing) {
+    throw new Error(
+      `OCR.space processing error: ${(data.ErrorMessage || []).join(", ") || "Unknown"}`
+    );
+  }
+
+  // 4. Extract & filter player names
+  const rawText = (data.ParsedResults || [])
+    .map(r => r.ParsedText)
+    .join("\n");
+
+  const names = rawText
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map(l => cleanName(l))       // strip leading/trailing artifact chars
+    .filter(l => l.length > 0)
+    .filter(l => isValidName(l));
+
+  return { names: [...new Set(names)], count: names.length, rawText };
 }
 
 // ==========================================
@@ -241,45 +293,26 @@ async function processPartyScreenshot(msg, eventType, attachment) {
   try {
     console.log(`[PartyScanner] Processing ${eventType} screenshot from ${msg.author.username}...`);
 
-    // Step 1: Check Python/EasyOCR availability
-    const pyOk = await checkPythonAvailable();
-    if (!pyOk) {
-      console.log(`[PartyScanner] ❌ Python OCR unavailable — skipping screenshot`);
+    // Step 1: Check OCR.space availability
+    if (!OCR_SPACE_AVAILABLE) {
+      console.error("[PartyScanner] ❌ OCR_SPACE_API_KEY not set — skipping screenshot");
       try { await msg.react("⚠️"); } catch (e) {}
       return;
     }
 
-    // Step 2: Download the image
-    const buffer = await downloadImage(attachment.url);
-
-    // Step 3: Run Python EasyOCR
-    const result = await runPythonOcr(buffer);
-
-    // Handle error from Python
-    if (result.error) {
-      console.error(`[PartyScanner] ❌ Python OCR error: ${result.error}`);
-      try { await msg.react("❌"); } catch (e) {}
-      return;
-    }
+    // Step 2: Run OCR via OCR.space
+    const result = await runOcrSpaceApi(attachment.url);
 
     const mergedNames = result.names || [];
 
-    // Debug: log column details when results are unexpected
-    if (mergedNames.length > 16 || mergedNames.length === 0) {
-      if (result.columns) {
-        for (const col of result.columns) {
-          console.log(`[PartyScanner] 📝 Col ${col.index + 1}: ${col.names.join(", ") || "(empty)"}`);
-        }
-      }
-    }
-
     if (mergedNames.length === 0) {
       console.log(`[PartyScanner] ⚠️ No player names detected in ${eventType} screenshot from ${msg.author.username}`);
+      console.log(`[PartyScanner] 📄 Raw OCR text: ${result.rawText?.slice(0, 300)}`);
       try { await msg.react("❓"); } catch (e) {}
       return;
     }
 
-    // Step 4: Register presence
+    // Step 3: Register presence
     const displayName = msg.member?.displayName || msg.author.username;
     registerPresence(eventType, mergedNames, msg.author.id, displayName);
 
@@ -289,7 +322,7 @@ async function processPartyScreenshot(msg, eventType, attachment) {
       console.log(`[PartyScanner] ⚠️ Unusually high member count (${mergedNames.length})`);
     }
 
-    // Step 5: React to acknowledge
+    // Step 4: React to acknowledge
     try { await msg.react("✅"); } catch (e) {}
 
   } catch (err) {
@@ -305,14 +338,12 @@ async function processPartyScreenshot(msg, eventType, attachment) {
 export function initPartyScanner(client) {
   console.log("🔍 [PartyScanner] Initializing...");
 
-  // Check Python availability at startup (async, non-blocking)
-  checkPythonAvailable().then(ok => {
-    if (ok) {
-      console.log("✅ [PartyScanner] EasyOCR backend ready");
-    } else {
-      console.log("⚠️ [PartyScanner] EasyOCR not available — will check again on first screenshot");
-    }
-  });
+  if (OCR_SPACE_AVAILABLE) {
+    console.log("✅ [PartyScanner] OCR.space API key found — ready");
+  } else {
+    console.log("⚠️ [PartyScanner] OCR_SPACE_API_KEY not set — set this env var for OCR support");
+    console.log("   Get a free key at https://ocr.space/ocrapi");
+  }
 
   client.on("messageCreate", async (msg) => {
     if (msg.author.bot) return;
