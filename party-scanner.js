@@ -8,10 +8,11 @@ import { saveDailyLogs } from "./daily-logs.js";
 // 🎯 PARTY SCANNER CONFIGURATION
 // ==========================================
 
-const CROP_RATIO_W = 0.35; // % of image width from left edge
-const CROP_RATIO_H = 0.40; // % of image height from top edge
+const CROP_RATIO_W = 0.13; // % of image width from left edge (≈250px on 1920px)
+const CROP_RATIO_H = 0.20; // % of image height from top edge (≈216px on 1080px)
 const EVENT_WINDOW_MINUTES = 75; // 75 min window (covers 1h events + 15min grace)
 const OCR_LANGUAGE = "eng";
+const MAX_PARTY_NAMES = 15; // MIR4 max party members
 
 /**
  * Known UI text strings that should be filtered out from OCR results.
@@ -23,8 +24,13 @@ const KNOWN_UI = new Set([
   "follow", "attack", "defend", "retreat", "ready", "cancel",
   "accept", "decline", "close", "settings", "exit", "chat",
   "whisper", "friend", "block", "report", "request", "trade",
-  "party", "clan", "guild", "alliance", "search", "list",
-  "create", "join", "apply", "invitations", "pending"
+  "guild", "alliance", "search", "list", "create", "join",
+  "apply", "pending", "invitations", "combat", "power", "level",
+  "name", "title", "rank", "exp", "hp", "mp", "atk", "def",
+  "option", "menu", "back", "next", "page", "home", "start",
+  "loading", "connect", "login", "logout", "select", "enter",
+  "auto", "manual", "target", "alert", "notice", "system",
+  "confirm", "server"
 ]);
 
 // ==========================================
@@ -177,29 +183,42 @@ async function runOcr(buffer) {
 function extractPlayerNames(ocrText) {
   const lines = ocrText.split("\n")
     .map(l => l.trim())
-    .filter(l => l.length > 1);
+    .filter(l => l.length > 2);
 
   const names = new Set();
 
   for (let line of lines) {
-    // Skip purely numeric lines (HP values, damage numbers, etc.)
-    if (/^\d+$/.test(line)) continue;
+    // Skip purely numeric lines (HP values, coords, timers)
+    if (/^\d{2,}$/.test(line)) continue;
+    if (/^[\d\s]+$/.test(line)) continue;
 
     // Skip lines that are only special characters (icon artifacts)
     if (/^[^a-zA-Z0-9À-ÿ_\-\[\]()]+$/.test(line)) continue;
 
-    // Skip known UI text
+    // Skip known UI text (case-insensitive)
     if (KNOWN_UI.has(line.toLowerCase())) continue;
+
+    // Skip lines with whitespace — MIR4 player names never have spaces
+    if (/\s/.test(line)) continue;
+
+    // Skip lines with common UI punctuation
+    if (/[:\/%><@#\$&*+=\"']/.test(line)) continue;
+
+    // Skip lines that look like UI headers (all caps, 4+ chars)
+    const hasOnlyUppercaseLetters = /^[A-ZÀ-Ü\s]+$/.test(line.replace(/[_\-\[\]()]/g, ""));
+    if (hasOnlyUppercaseLetters && line.replace(/[_\-\[\]()\s]/g, "").length > 3) continue;
 
     // Remove leading non-name characters (speaker icon artifacts)
     line = line.replace(/^[^a-zA-Z0-9À-ÿ_\-\[\]()]+/, "");
     // Remove trailing non-name characters (HP bar artifacts)
     line = line.replace(/[^a-zA-Z0-9À-ÿ_\-\[\]()]+$/, "");
 
-    // If the remaining text is at least 2 chars and doesn't look like garbage
-    if (line.length >= 2 && !/^[_\-.]+$/.test(line)) {
-      names.add(line);
-    }
+    // Validate length and content
+    if (line.length < 3 || line.length > 18) continue;
+    if (/^[_\-.]+$/.test(line)) continue;
+
+    names.add(line);
+    if (names.size >= MAX_PARTY_NAMES) break;
   }
 
   return [...names];
@@ -356,20 +375,32 @@ async function processPartyScreenshot(msg, eventType, attachment) {
     // Split-column (left+right) handles 2-column layout; full region is fallback
     const mergedNames = [...new Set([...leftNames, ...rightNames, ...fullNames])];
 
+    // Debug: log raw OCR text when results seem off
+    if (mergedNames.length > 16 || mergedNames.length === 0) {
+      console.log(`[PartyScanner] 📝 Raw OCR — Full region:`);
+      console.log(`  ${fullText.replace(/\n/g, "\n  ").slice(0, 500)}`);
+      console.log(`[PartyScanner] 📝 Raw OCR — Left half:`);
+      console.log(`  ${leftText.replace(/\n/g, "\n  ").slice(0, 500)}`);
+      console.log(`[PartyScanner] 📝 Raw OCR — Right half:`);
+      console.log(`  ${rightText.replace(/\n/g, "\n  ").slice(0, 500)}`);
+    }
+
     if (mergedNames.length === 0) {
       console.log(`[PartyScanner] ⚠️ No player names detected in ${eventType} screenshot from ${msg.author.username}`);
-      console.log(`  OCR text (left): ${leftText.slice(0, 100)}`);
-      console.log(`  OCR text (right): ${rightText.slice(0, 100)}`);
       try { await msg.react("❓"); } catch (e) {}
       return;
     }
 
     // Step 6: Register presence
     const displayName = msg.member?.displayName || msg.author.username;
-    const authorName = msg.author.username;
     registerPresence(eventType, mergedNames, msg.author.id, displayName);
 
     console.log(`[PartyScanner] ✅ ${eventType}: ${displayName} — detected ${mergedNames.length} members: ${mergedNames.join(", ")}`);
+
+    // If we detected too many, warn in console but keep the data
+    if (mergedNames.length > 16) {
+      console.log(`[PartyScanner] ⚠️ Unusually high member count (${mergedNames.length}) — OCR may be picking up UI text`);
+    }
 
     // Step 7: React to acknowledge
     try { await msg.react("✅"); } catch (e) {}
