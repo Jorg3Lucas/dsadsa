@@ -8,17 +8,18 @@ import { saveDailyLogs } from "./daily-logs.js";
 // 🎯 PARTY SCANNER CONFIGURATION
 // ==========================================
 
-const PARTY_COLUMNS = 3;   // MIR4 party has up to 3 vertical columns in raids
-const EVENT_WINDOW_MINUTES = 75; // 75 min window (covers 1h events + 15min grace)
+const CROP_RATIO_W = 0.22; // Mantido o seu original que cobria bem a largura
+const CROP_RATIO_H = 0.35; // Reduzido de 0.88 para 0.35 (pega até 15 membros, mas ignora o botão 'Cambiar mazo')
+const PARTY_COLUMNS = 3;   
+const EVENT_WINDOW_MINUTES = 75; 
 const OCR_LANGUAGE = "eng";
-const MAX_PARTY_NAMES = 15; // MIR4 max party members
+const MAX_PARTY_NAMES = 15; 
 
 /**
  * Known UI text strings that should be filtered out from OCR results.
- * These are common in MIR4 party UI.
  */
 const KNOWN_UI = new Set([
-  "cambiar", "mazo", "cuerpo", "esp", "deck", // Interface filters for safe crop zone
+  "cambiar", "mazo", "cuerpo", "deck",
   "party", "clan", "member", "members", "online", "offline",
   "leader", "invite", "kick", "promote", "demote", "leave",
   "follow", "attack", "defend", "retreat", "ready", "cancel",
@@ -40,18 +41,6 @@ const KNOWN_UI = new Set([
 let ocrWorker = null;
 let ocrWorkerBusy = false;
 const ocrQueue = [];
-
-/**
- * In-memory presence cache per event type.
- * Structure: {
- * portal: {
- * players: { "PlayerName": { count, firstSeen, lastSeen } },
- * windowEnd: timestamp,
- * screenshots: [ { authorId, authorName, names, timestamp } ]
- * },
- * ...
- * }
- */
 let presenceCache = {};
 
 // ==========================================
@@ -98,56 +87,46 @@ async function downloadImage(url) {
 }
 
 /**
- * Preprocess a single party column with sharp:
- * - Resize 3x for tiny MIR4 text
- * - Grayscale + threshold to binarize (clean background, keep text)
+ * Voltamos exatamente ao seu pipeline original que dava certo:
+ * - Redimensiona 2x para manter a proporção que o seu Tesseract entendia
+ * - Grayscale + Sharpen + Normalize (sem threshold agressivo para não sumir com as letras)
  */
 async function prepareOcrRegion(buffer, left, top, width, height) {
-  const resizedW = Math.max(100, width * 3);
-  const resizedH = Math.max(100, height * 3);
   return await sharp(buffer)
     .extract({ left, top, width, height })
-    .resize(resizedW, resizedH, { kernel: "lanczos3" })
+    .resize(width * 2, height * 2, { kernel: "lanczos3" })
     .grayscale()
-    .threshold(175) // Binarize aggressively: completely wipes HP bars and semi-transparent BG
     .sharpen()
+    .normalize()
     .toBuffer();
 }
 
 /**
- * Crop the LEFT SIDE of the image (party strip) using dynamic scaling.
- * Generates both 3 split columns (for 15-member raids) AND a full single column 
- * region to act as an accurate fallback for normal 5-member parties.
+ * Recorta a área da PT e gera as 3 colunas para expedições,
+ * além do bloco completo como o seu código original fazia.
  */
 async function cropPartyRegions(buffer) {
   const metadata = await sharp(buffer).metadata();
   const imgW = metadata.width || 1920;
   const imgH = metadata.height || 1080;
 
-  // Dynamic area constraints based on incoming image resolution
-  const safeCropW = Math.floor(imgW * 0.20); // 20% width is ideal for covering all 3 columns
-  const safeCropH = Math.floor(imgH * 0.23); // 23% height ends cleanly before bottom UI nodes (Cambiar mazo)
+  const cropW = Math.max(200, Math.floor(imgW * CROP_RATIO_W));
+  const cropH = Math.max(200, Math.floor(imgH * CROP_RATIO_H));
+  
+  // Dividimos a largura em 3 para o modo expedição
+  const colW = Math.floor(cropW / PARTY_COLUMNS);
 
-  // Anchor offsets to bypass native UI frames (speaker icons and level tags)
-  const startX = Math.floor(imgW * 0.04); // Skips left edge artifacts (microphones)
-  const startY = Math.floor(imgH * 0.20); // Skips top level/HP profiles of the player
-
-  const colW = Math.floor(safeCropW / PARTY_COLUMNS);
-
+  // Começamos em 0 no X e Y para manter idêntico ao seu corte original que capturava os nicks
   const [col1, col2, col3, fullRegion] = await Promise.all([
-    prepareOcrRegion(buffer, startX, startY, colW, safeCropH),
-    prepareOcrRegion(buffer, startX + colW, startY, colW, safeCropH),
-    prepareOcrRegion(buffer, startX + (colW * 2), startY, safeCropW - (colW * 2), safeCropH),
-    prepareOcrRegion(buffer, startX, startY, safeCropW, safeCropH) // Single unified block fallback
+    prepareOcrRegion(buffer, 0, 0, colW, cropH),
+    prepareOcrRegion(buffer, colW, 0, colW, cropH),
+    prepareOcrRegion(buffer, colW * 2, 0, cropW - (colW * 2), cropH),
+    prepareOcrRegion(buffer, 0, 0, cropW, cropH) // Sua região inteira original
   ]);
 
   return { col1, col2, col3, fullRegion };
 }
 
-/**
- * Get or create a shared Tesseract worker with PSM 6 (single block)
- * and a character whitelist (letters, numbers, common symbols).
- */
 async function getOcrWorker() {
   if (!ocrWorker) {
     ocrWorker = await createWorker(OCR_LANGUAGE);
@@ -159,10 +138,6 @@ async function getOcrWorker() {
   return ocrWorker;
 }
 
-/**
- * Run OCR on a preprocessed image buffer.
- * Uses a mutex to prevent concurrent worker.recognize() calls.
- */
 async function runOcr(buffer) {
   if (ocrWorkerBusy) {
     return new Promise((resolve, reject) => {
@@ -184,9 +159,6 @@ async function runOcr(buffer) {
   }
 }
 
-/**
- * Parse OCR text output into clean player names.
- */
 function extractPlayerNames(ocrText) {
   const lines = ocrText.split("\n")
     .map(l => l.trim())
@@ -197,12 +169,11 @@ function extractPlayerNames(ocrText) {
   for (let line of lines) {
     if (/^\d{2,}$/.test(line)) continue;
     if (KNOWN_UI.has(line.toLowerCase())) continue;
-    if (/\s/.test(line)) continue; // MIR4 names never contain spaces
+    if (/\s/.test(line)) continue; 
 
-    // Filter lines composed strictly of non-alphanumeric junk
     if (/^[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+$/.test(line)) continue;
 
-    // Remove leading/trailing non-name bracket or icon fragments
+    // Limpeza de artefatos nas bordas
     line = line.replace(/^[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+/, "");
     line = line.replace(/[^a-zA-Z0-9À-ÿ_\-\[\]()·ツ]+$/, "");
 
@@ -282,7 +253,6 @@ function buildPresenceReport(eventType) {
   const now = Date.now();
   const isActive = now <= cache.windowEnd;
   const timeLeft = isActive ? Math.ceil((cache.windowEnd - now) / 60000) : 0;
-
   const uniqueAuthors = [...new Set(cache.screenshots.map(s => s.authorName))];
 
   const sortedPlayers = Object.entries(cache.players)
@@ -325,13 +295,10 @@ async function processPartyScreenshot(msg, eventType, attachment) {
   try {
     console.log(`[PartyScanner] Processing ${eventType} screenshot from ${msg.author.username}...`);
 
-    // Step 1: Download the image
     const buffer = await downloadImage(attachment.url);
-
-    // Step 2: Crop and preprocess regions dynamically
     const regions = await cropPartyRegions(buffer);
 
-    // Step 3: OCR all four segments concurrently
+    // OCR nas 3 colunas paralelas + região cheia unificada
     const [col1Text, col2Text, col3Text, fullText] = await Promise.all([
       runOcr(regions.col1),
       runOcr(regions.col2),
@@ -339,21 +306,16 @@ async function processPartyScreenshot(msg, eventType, attachment) {
       runOcr(regions.fullRegion)
     ]);
 
-    // Step 4: Extract names per parsed segment
     const col1Names = extractPlayerNames(col1Text);
     const col2Names = extractPlayerNames(col2Text);
     const col3Names = extractPlayerNames(col3Text);
     const fullNames = extractPlayerNames(fullText);
 
-    // Step 5: Merge and Deduplicate across split blocks and fallback block
+    // Unimos tudo eliminando duplicatas
     const mergedNames = [...new Set([...col1Names, ...col2Names, ...col3Names, ...fullNames])];
 
-    // Debug tracking: outputs data matrices if parsing encounters structural edge anomalies
     if (mergedNames.length > 16 || mergedNames.length === 0) {
-      console.log(`[PartyScanner] 📝 Raw OCR — Col 1: ${col1Text.replace(/\n/g, " ").slice(0, 100)}`);
-      console.log(`[PartyScanner] 📝 Raw OCR — Col 2: ${col2Text.replace(/\n/g, " ").slice(0, 100)}`);
-      console.log(`[PartyScanner] 📝 Raw OCR — Col 3: ${col3Text.replace(/\n/g, " ").slice(0, 100)}`);
-      console.log(`[PartyScanner] 📝 Raw OCR — Full: ${fullText.replace(/\n/g, " ").slice(0, 100)}`);
+      console.log(`[PartyScanner] 📝 Raw OCR — Full: ${fullText.replace(/\n/g, " ").slice(0, 150)}`);
     }
 
     if (mergedNames.length === 0) {
@@ -362,17 +324,11 @@ async function processPartyScreenshot(msg, eventType, attachment) {
       return;
     }
 
-    // Step 6: Register presence
     const displayName = msg.member?.displayName || msg.author.username;
     registerPresence(eventType, mergedNames, msg.author.id, displayName);
 
     console.log(`[PartyScanner] ✅ ${eventType}: ${displayName} — detected ${mergedNames.length} members: ${mergedNames.join(", ")}`);
 
-    if (mergedNames.length > 16) {
-      console.log(`[PartyScanner] ⚠️ Unusually high member count (${mergedNames.length}) — OCR may be picking up UI text`);
-    }
-
-    // Step 7: React to acknowledge
     try { await msg.react("✅"); } catch (e) {}
 
   } catch (err) {
