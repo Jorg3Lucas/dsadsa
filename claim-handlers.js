@@ -13,7 +13,6 @@ import { pushToDailyLogs, saveDailyLogs, dispatchDailyLogs } from "./daily-logs.
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { refreshVisualPanel, notifyUserDM, resetPanelData } from "./panel-utils.js";
 import { hasActiveClaim, hasActiveQueue, checkPunishment, applyFiveMinCooldown, removeUserFromQueue, freeFloorAndActivateNextGracePeriod, freeAntidemonRoom, buildAntiClaimOptions, buildAntiQueueOptions } from "./claim-core.js";
-import { getPartyPresenceReport, clearPartyPresence } from "./party-scanner.js";
 
 // ==========================================
 // 💬 TEXT COMMAND HANDLERS (!ms, !sp, !setlogs, etc.)
@@ -120,99 +119,6 @@ export async function handleClaimMessages(msg) {
         }
     }
 
-    // ==========================================
-    // 🎯 PARTY SCANNER COMMANDS
-    // ==========================================
-
-    const PARTY_EVENTS = {
-        portal:    { label: "Portals (SP/MS)",        icon: "🌀" },
-        heist:     { label: "Heist",                  icon: "💰" },
-        tobd:      { label: "TOBD",                    icon: "⚔️" },
-        altar:     { label: "Altar Defense",           icon: "🛡️" },
-        purgatory: { label: "Purgatory",               icon: "🔥" },
-        wb:        { label: "World Boss (Valley/Labyrinth/Mirage)", icon: "🌍" }
-    };
-
-    // Generate dynamic channel-set commands for each event type
-    for (const [evt, cfg] of Object.entries(PARTY_EVENTS)) {
-        const cmd = `!set${evt}channel`;
-        if (lowerContent === cmd) {
-            if (!msg.member.permissions.has("ManageGuild")) {
-                return msg.reply({
-                    content: "❌ You need the Manage Server permission to configure this."
-                }).catch(() => {});
-            }
-            dailyLogs.partyScannerChannels = dailyLogs.partyScannerChannels || {};
-            dailyLogs.partyScannerChannels[evt] = msg.channel.id;
-            saveDailyLogs();
-            return msg.reply({
-                content: `${cfg.icon} **Party Scanner** — ${cfg.label} screenshots will be monitored in this channel.`
-            }).catch(() => {});
-        }
-    }
-
-    if ("!partyreport" === lowerContent) {
-        if (!msg.member.permissions.has("ManageMessages")) {
-            return msg.reply({
-                content: "❌ You need the Manage Messages permission to use this."
-            }).catch(() => {});
-        }
-        const reports = getPartyPresenceReport();
-        if (!reports || reports.length === 0) {
-            return msg.reply({
-                content: "📭 No party presence data available yet. Post screenshots in configured channels first."
-            }).catch(() => {});
-        }
-        const MAX_EMBED_DESC = 4096;
-        const embed = new e().setTitle("📋 Party Presence Report").setColor("#5865F2").setTimestamp();
-        let desc = "";
-        for (const report of reports) {
-            const section = [
-                `\n${report.icon} **${report.label}**`,
-                report.windowActive 
-                    ? `⏳ Window active — ${report.timeLeftMinutes} min remaining` 
-                    : `❌ Window expired — no active event`,
-                `📸 Screenshots: **${report.totalScreenshots}** | Authors: **${report.authorCount}**`,
-                `👥 Unique players detected: **${report.totalPlayers}**`
-            ].join("\n") + "\n";
-
-            let playerBlock = "";
-            if (report.players.length > 0) {
-                const maxShow = 25;
-                playerBlock = "```\n";
-                for (const p of report.players.slice(0, maxShow)) {
-                    playerBlock += `${p.name.padEnd(22)} ×${p.timesSeen}\n`;
-                }
-                if (report.players.length > maxShow) {
-                    playerBlock += `... +${report.players.length - maxShow} more\n`;
-                }
-                playerBlock += "```\n";
-            }
-
-            const totalSection = section + playerBlock;
-            // If adding this section would exceed the limit, skip player details for this event
-            if ((desc + totalSection).length > MAX_EMBED_DESC) {
-                const summaryOnly = section + `└ ${report.totalPlayers} players total\n\n`;
-                desc += summaryOnly;
-            } else {
-                desc += totalSection;
-            }
-        }
-        embed.setDescription(desc);
-        return msg.reply({ embeds: [embed] }).catch(() => {});
-    }
-
-    if ("!clearpresence" === lowerContent) {
-        if (!msg.member.permissions.has("ManageMessages")) {
-            return msg.reply({
-                content: "❌ You need the Manage Messages permission to use this."
-            }).catch(() => {});
-        }
-        clearPartyPresence();
-        return msg.reply({
-            content: "🗑️ Party presence cache cleared for all events."
-        }).catch(() => {});
-    }
 
     if ("!logs" === lowerContent) {
         if (!msg.member.permissions.has("ManageMessages")) return msg.reply({

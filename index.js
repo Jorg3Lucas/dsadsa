@@ -11,7 +11,6 @@ import {
     handleClaimMessages,
     handleClaimInteractions
 } from './bot.js';
-import { initPartyScanner } from './party-scanner.js';
 import {
     registerMir4SlashCommands,
     initMir4BotEvents,
@@ -130,8 +129,6 @@ client.once('clientReady', async () => {
         await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, true);
     }, 10000);
 
-    // Passing a basic console.log fallback to prevent parameter mismatch
-    initPartyScanner(client, rankingDb);
     initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb);
 });
 
