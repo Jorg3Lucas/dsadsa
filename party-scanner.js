@@ -8,8 +8,8 @@ import { saveDailyLogs } from "./daily-logs.js";
 // 🎯 PARTY SCANNER CONFIGURATION
 // ==========================================
 
-const CROP_RATIO_W = 0.13; // % of image width from left edge (≈250px on 1920px)
-const CROP_RATIO_H = 0.20; // % of image height from top edge (≈216px on 1080px)
+const CROP_RATIO_W = 0.22; // % of image width from left edge (≈420px on 1920px)
+const CROP_RATIO_H = 0.28; // % of image height from top edge (≈300px on 1080px)
 const EVENT_WINDOW_MINUTES = 75; // 75 min window (covers 1h events + 15min grace)
 const OCR_LANGUAGE = "eng";
 const MAX_PARTY_NAMES = 15; // MIR4 max party members
