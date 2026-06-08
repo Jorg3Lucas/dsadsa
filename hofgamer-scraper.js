@@ -43,8 +43,12 @@ export async function fetchWithBrowser(url, { timeout = 90000 } = {}) {
     const page = await context.newPage();
 
     try {
+        // NOT using 'networkidle' — Cloudflare challenge keeps connections open,
+        // which would cause 'networkidle' to timeout indefinitely.
+        // Using 'domcontentloaded' loads the challenge page HTML, then
+        // we wait for the challenge to resolve via waitForFunction below.
         await page.goto(url, {
-            waitUntil: 'networkidle',
+            waitUntil: 'domcontentloaded',
             timeout
         });
 
