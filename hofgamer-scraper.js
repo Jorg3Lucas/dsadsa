@@ -29,13 +29,9 @@ export async function closeBrowser() {
 
 /**
  * Fetches a URL using a real Chromium browser to bypass Cloudflare JS challenges.
- * @param {string} url - The URL to fetch
- * @param {object} options
- * @param {number} [options.timeout=45000] - Navigation timeout in ms
- * @param {number} [options.waitAfterLoad=5000] - Extra wait after page load in ms
- * @returns {Promise<string>} The fully rendered HTML content
+ * Waits for the Cloudflare challenge to fully resolve and the real content to load.
  */
-export async function fetchWithBrowser(url, { timeout = 45000, waitAfterLoad = 5000 } = {}) {
+export async function fetchWithBrowser(url, { timeout = 90000 } = {}) {
     const browser = await getBrowser();
     const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -43,20 +39,33 @@ export async function fetchWithBrowser(url, { timeout = 45000, waitAfterLoad = 5
         locale: 'en-US',
         timezoneId: 'America/New_York'
     });
-    
-    // Block unnecessary resources to speed up loading
+
     const page = await context.newPage();
-    await page.route('**/*.{png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot}', route => route.abort());
-    
+
     try {
         await page.goto(url, {
             waitUntil: 'networkidle',
             timeout
         });
-        
-        // Extra wait for Cloudflare challenge to fully resolve
-        await page.waitForTimeout(waitAfterLoad);
-        
+
+        // Wait for Cloudflare challenge to resolve by detecting real content
+        // The challenge page shows "Just a moment..." or "Checking your browser"
+        // We poll until those texts disappear, meaning the real page loaded
+            try {
+                await page.waitForFunction(() => {
+                    const text = document.body?.innerText || '';
+                    const noCloudflare = !text.includes('Just a moment') &&
+                                         !text.includes('Checking your browser');
+                    const hasContent = text.length > 200 || document.querySelector('table');
+                    return noCloudflare && hasContent;
+                }, { timeout: 30000, polling: 500 });
+            } catch {
+                // Challenge may have already resolved or page loaded without challenge
+            }
+
+        // Extra stabilization time for JavaScript-rendered content
+        await page.waitForTimeout(5000);
+
         // Get the fully rendered HTML
         const html = await page.content();
         return html;
