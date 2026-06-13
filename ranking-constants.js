@@ -8,6 +8,7 @@ export const DISCORD_SERVER_ID = '1432320162278670440';
 
 export const CLAN_ROLES = {
     "浪人・AEON・": "1503933709756141620",
+    "浪人・MMM・": "1503933709756141620",
     "浪人・Kitty・": "1503933844909326478",
     "・URSUS・": "1503933886260969472",
     "浪人・OnëPH・": "1503933923132964915"
@@ -18,6 +19,7 @@ export const CLAN_POWER_THRESHOLD = 400000;
 
 export const HOFGAMER_CLAN_URLS = {
     "浪人・AEON・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBAEON%E3%83%BB",
+    "浪人・MMM・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBMMM%E3%83%BB",
     "・URSUS・": "https://www.hofgamer.com/clan/detail/?clan=%E3%83%BBURSUS%E3%83%BB",
     "浪人・Kitty・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBKitty%E3%83%BB",
     "浪人・OnëPH・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBOn%C3%ABPH%E3%83%BB"
