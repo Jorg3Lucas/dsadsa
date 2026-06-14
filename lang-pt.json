@@ -106,6 +106,26 @@
         "memberLabel": "Membro",
         "countdownUntil": "até"
     },
+    "commands": {
+        "title": "📋 Comandos Disponíveis",
+        "panelCommands": "📊 **Comandos de Painéis**",
+        "panelDesc": "Cria e gerencia painéis de claim",
+        "adminCommands": "⚙️ **Comandos de Admin**",
+        "adminDesc": "Gerencia logs, painéis e claims",
+        "generalCommands": "ℹ️ **Comandos Gerais**",
+        "generalDesc": "Comandos utilitários",
+        "cmdMs": "`!ms <andar>` - Cria painéis da Magic Square (7-12)",
+        "cmdSp": "`!sp <andar>` - Cria painéis do Secret Peak (7-10)",
+        "cmdSummon": "`!summon` - Cria painel de Summon",
+        "cmdSetlogs": "`!setlogs` - Define este canal para relatórios",
+        "cmdLogs": "`!logs` - Envia relatório manualmente",
+        "cmdResetlogs": "`!resetlogs` - Limpa logs acumulados",
+        "cmdKick": "`!kick` - Remove o claim de um jogador",
+        "cmdReset": "`!reset` - Reseta painel(is) ao padrão",
+        "cmdUpdate": "`!update` - Git pull e reinicia o bot",
+        "cmdCommands": "`!commands` - Mostra esta mensagem de ajuda",
+        "buttonInfo": "💡 **Dica:** Use os botões nos painéis para Claim, Entrar na Fila ou marcar bosses como mortos."
+    },
     "logs": {
         "title": "📜 RELATÓRIO DIÁRIO DE CLAIMS • {date}",
         "noActivity": "Nenhuma atividade registrada hoje.",

@@ -111,6 +111,26 @@
         "memberLabel": "Member",
         "countdownUntil": "until"
     },
+    "commands": {
+        "title": "📋 Available Commands",
+        "panelCommands": "📊 **Panel Commands**",
+        "panelDesc": "Create and manage claim panels",
+        "adminCommands": "⚙️ **Admin Commands**",
+        "adminDesc": "Manage logs, panels and claims",
+        "generalCommands": "ℹ️ **General Commands**",
+        "generalDesc": "Utility commands",
+        "cmdMs": "`!ms <floor>` - Create Magic Square panels (7-12)",
+        "cmdSp": "`!sp <floor>` - Create Secret Peak panels (7-10)",
+        "cmdSummon": "`!summon` - Create Summon panel",
+        "cmdSetlogs": "`!setlogs` - Set this channel for daily reports",
+        "cmdLogs": "`!logs` - Send daily report manually",
+        "cmdResetlogs": "`!resetlogs` - Clear accumulated logs",
+        "cmdKick": "`!kick` - Remove a player's claim",
+        "cmdReset": "`!reset` - Reset panel(s) to defaults",
+        "cmdUpdate": "`!update` - Git pull and restart bot",
+        "cmdCommands": "`!commands` - Show this help message",
+        "buttonInfo": "💡 **Tip:** Use the buttons on the panels to Claim, Join Queue, or mark bosses as killed."
+    },
     "logs": {
         "title": "📜 DAILY CLAIM REPORT • {date}",
         "noActivity": "No activity recorded today.",

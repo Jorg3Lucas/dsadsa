@@ -22,6 +22,32 @@ export async function handleClaimMessages(msg) {
     if (msg.author.bot) return;
     let lowerContent = msg.content.toLowerCase().trim();
 
+    if ("!commands" === lowerContent || "!help" === lowerContent) {
+        const helpEmbed = new e()
+            .setTitle(getMsg("commands.title"))
+            .setColor("#5865F2")
+            .addFields(
+                {
+                    name: getMsg("commands.panelCommands"),
+                    value: `${getMsg("commands.panelDesc")}\n${getMsg("commands.cmdMs")}\n${getMsg("commands.cmdSp")}\n${getMsg("commands.cmdSummon")}`,
+                    inline: !1
+                },
+                {
+                    name: getMsg("commands.adminCommands"),
+                    value: `${getMsg("commands.adminDesc")}\n${getMsg("commands.cmdSetlogs")}\n${getMsg("commands.cmdLogs")}\n${getMsg("commands.cmdResetlogs")}\n${getMsg("commands.cmdKick")}\n${getMsg("commands.cmdReset")}\n${getMsg("commands.cmdUpdate")}`,
+                    inline: !1
+                },
+                {
+                    name: getMsg("commands.generalCommands"),
+                    value: `${getMsg("commands.generalDesc")}\n${getMsg("commands.cmdCommands")}`,
+                    inline: !1
+                }
+            )
+            .setFooter({ text: getMsg("commands.buttonInfo") })
+            .setTimestamp();
+        return msg.reply({ embeds: [helpEmbed] }).catch(() => {});
+    }
+
     if ("!setlogs" === lowerContent) {
         if (msg.member.permissions.has("ManageGuild")) {
             dailyLogs.configChannelId = msg.channel.id;
