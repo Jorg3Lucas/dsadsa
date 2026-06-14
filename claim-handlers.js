@@ -255,7 +255,7 @@ export async function handleClaimMessages(msg) {
             if (updateReply) await updateReply.edit({ content: getMsg("system.updateSuccess", { output: output.slice(0, 1900) }) }).catch(() => {});
             // Install any new dependencies
             execSync("npm install", { encoding: "utf8", cwd: process.cwd(), stdio: "pipe" });
-            exec("pm2 restart bot", () => process.exit());
+            exec("pm2 restart a21", () => process.exit());
         } catch (e) {
             if (updateReply) await updateReply.edit({ content: getMsg("system.updateError", { error: (e.message || e).slice(0, 1900) }) }).catch(() => {});
         }
