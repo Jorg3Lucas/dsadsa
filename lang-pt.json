@@ -21,8 +21,8 @@
         "resetLogsEmpty": "📭 Nenhum log para limpar.",
         "resetLogsDenied": "🛡️ Apenas Staff pode resetar logs.",
         "updateRunningGit": "🔄 Executando `git pull`...",
-        "updateSuccess": "✅ `git pull` concluído:\\n```\\n{output}\\n```\\n🔄 Reiniciando...",
-        "updateError": "❌ Erro na atualização:\\n```\\n{error}\\n```"
+        "updateSuccess": "✅ `git pull` concluído:\n```\n{output}\n```\n🔄 Reiniciando...",
+        "updateError": "❌ Erro na atualização:\n```\n{error}\n```"
     },
     "buttons": {
         "claimLabel": "⚔️ Claim",
@@ -86,17 +86,17 @@
         "antidemonQueueRight": "Entrar na fila da sala direita",
         "antidemonQueueMidLeft": "Entrar na fila central e esquerda",
         "antidemonQueueMidRight": "Entrar na fila central e direita",
-        "dmClaimStartedNotice": "👑 **Claim Ativo**\\n\\nVocê agora controla **{title}**.\\n⏳ Duração: **{window}**.",
-        "dmQueueJoinedNotice": "🟨 **Fila Ingressada**\\n\\nVocê está na fila para **{title}**.",
-        "dmRemovedNotice": "⚠️ **Claim Removido**\\n\\nSeu claim/posição na fila em **{title}** foi encerrado.\\nMotivo: *{reason}*",
-        "floorExpiredDM": "⌛ **Claim Expirado**\\n\\nSeu tempo em **{title}** terminou.",
-        "floorTurnArrivedDM": "🟢 **Sua Vez!**\\n\\n**{title}** está disponível.\\nReivindique em **5 minutos** ou perca seu lugar.",
-        "floorAbsenceDM": "❌ **Fila Perdida**\\n\\nVocê não reivindicou **{title}** a tempo e perdeu sua posição.",
-        "antidemonTurnArrivedDM": "🟢 **Sua Vez!**\\n\\nA sala Antidemon **{roomKey}** em **{title}** está pronta.\\nAtive seus tickets em **5 minutos**.",
-        "antidemonAbsenceDM": "❌ **Fila Perdida**\\n\\nVocê não ativou seus tickets para **{roomKey}** a tempo.",
-        "dmBossNotMarkedWarning": "⚠️ **Lembrete de Boss**\\n\\n**{boss}** em **{title}** está disponível há mais de 5 minutos.\\nNão esqueça de registrar a morte.",
-        "dmImmediateSpawn": "🚨 **SPAWN IMEDIATO**\\n\\n**{boss}** acabou de spawnar em **{title}**!",
-        "dmImmediateSpawnFixed": "🚨 **SPAWN IMEDIATO**\\n\\n**{boss}** acabou de spawnar em **{title}**! Vá agora!"
+        "dmClaimStartedNotice": "👑 **Claim Ativo**\n\nVocê agora controla **{title}**.\n⏳ Duração: **{window}**.",
+        "dmQueueJoinedNotice": "🟨 **Fila Ingressada**\n\nVocê está na fila para **{title}**.",
+        "dmRemovedNotice": "⚠️ **Claim Removido**\n\nSeu claim/posição na fila em **{title}** foi encerrado.\nMotivo: *{reason}*",
+        "floorExpiredDM": "⌛ **Claim Expirado**\n\nSeu tempo em **{title}** terminou.",
+        "floorTurnArrivedDM": "🟢 **Sua Vez!**\n\n**{title}** está disponível.\nReivindique em **5 minutos** ou perca seu lugar.",
+        "floorAbsenceDM": "❌ **Fila Perdida**\n\nVocê não reivindicou **{title}** a tempo e perdeu sua posição.",
+        "antidemonTurnArrivedDM": "🟢 **Sua Vez!**\n\nA sala Antidemon **{roomKey}** em **{title}** está pronta.\nAtive seus tickets em **5 minutos**.",
+        "antidemonAbsenceDM": "❌ **Fila Perdida**\n\nVocê não ativou seus tickets para **{roomKey}** a tempo.",
+        "dmBossNotMarkedWarning": "⚠️ **Lembrete de Boss**\n\n**{boss}** em **{title}** está disponível há mais de 5 minutos.\nNão esqueça de registrar a morte.",
+        "dmImmediateSpawn": "🚨 **SPAWN IMEDIATO**\n\n**{boss}** acabou de spawnar em **{title}**!",
+        "dmImmediateSpawnFixed": "🚨 **SPAWN IMEDIATO**\n\n**{boss}** acabou de spawnar em **{title}**! Vá agora!"
     },
     "render": {
         "unknownUser": "Usuário Desconhecido",
@@ -130,169 +130,6 @@
             "end": "🔴 [FINALIZADO]",
             "cancel": "🟠 [CANCELADO]",
             "queue": "🟨 [ENTROU NA FILA]"
-        }
-    },
-    "ranking": {
-        "commands": {
-            "register": {
-                "description": "Link sua conta do Discord ao seu personagem MIR4 usando um formulário.",
-                "modalTitle": "Link Personagem MIR4",
-                "inputLabel": "Nome do Personagem (Exatamente como no jogo)",
-                "inputPlaceholder": "ex.: xVraeL"
-            },
-            "pilot": {
-                "description": "Adicione um funcionário piloto à sua conta (Máximo de 4).",
-                "options": {
-                    "member": "Selecione o membro piloto."
-                }
-            },
-            "removepilot": {
-                "description": "Remova um piloto específico da sua conta."
-            },
-            "forcesync": {
-                "description": "⚡ [Admin] Force uma sincronização imediata com o site oficial."
-            },
-            "manualregister": {
-                "description": "👑 [Admin] Registre um jogador usando verificação de cache ou atribuição manual de clã.",
-                "options": {
-                    "member": "Membro do Discord.",
-                    "nickname": "Nome do personagem no jogo."
-                }
-            },
-            "manualpilot": {
-                "description": "👑 [Admin] Vincule manualmente um piloto a um perfil de personagem.",
-                "options": {
-                    "owner": "Selecione o dono do personagem.",
-                    "pilot": "Selecione o usuário do Discord que atua como piloto."
-                }
-            },
-            "manage": {
-                "description": "👑 [Admin] Gerencie jogadores registrados via menus interativos"
-            },
-            "cleandb": {
-                "description": "👑 [Admin] Remova todas as entradas de apelidos duplicados do banco local."
-            },
-            "manualremove": {
-                "description": "👑 [Admin] Remova completamente o registro manual e perfil de um jogador.",
-                "options": {
-                    "member": "Membro do Discord para limpar."
-                }
-            },
-            "manualremovepilot": {
-                "description": "👑 [Admin] Remova manualmente um piloto de um personagem.",
-                "options": {
-                    "owner": "Selecione o dono do personagem.",
-                    "pilot": "Selecione o piloto a ser removido."
-                }
-            }
-        },
-        "responses": {
-            "register": {
-                "alreadyRegistered": "❌ Este apelido já está registrado por outro usuário.",
-                "success": "✅ Vinculado com sucesso a **{nickname}**."
-            },
-            "pilot": {
-                "notRegistered": "❌ **Acesso Negado!** Você não tem uma conta registrada. Use o comando `/register` primeiro.",
-                "selfPilot": "❌ Ação inválida. Você não pode se definir como piloto.",
-                "limitReached": "❌ Limite de Operação Atingido! Você pode registrar até **4 pilotos** por conta.",
-                "alreadyLinked": "❌ Este piloto já está vinculado ao seu perfil.",
-                "success": "✅ **Pilot configurado!** {pilotMember} foi configurado como piloto ({count}/4) para a conta **{nick}**."
-            },
-            "removepilot": {
-                "noPilots": "❌ Você não tem pilotos ativos registrados em sua conta.",
-                "menuContent": "👇 **Menu de Gerenciamento de Pilotos:** Selecione qual funcionário você deseja desvincular da sua conta:",
-                "menuPlaceholder": "Escolha qual piloto remover...",
-                "optionDescription": "Remover o acesso de piloto deste membro.",
-                "success": "✅ **Sucesso!** O piloto foi removido da sua lista. As funções e apelidos estão sendo restaurados.",
-                "error": "❌ **Erro:** Este piloto não pertence mais à sua conta."
-            },
-            "forcesync": {
-                "log": "⚡ Administrador {tag} forçou uma atualização completa do banco de dados.",
-                "success": "⚡ **Sincronização forçada concluída!** Valores de ranking mais recentes obtidos do portal oficial e funções atualizadas."
-            },
-            "manualregister": {
-                "confirm": "⚠️ Registrar **{username}** como **{nickname}** em **{clan}**?",
-                "cacheFound": "✅ **Registrado via Cache!** Perfil vinculado a **{nickname}** no clã **{clan}**.",
-                "cacheNotFound": "👑 **Aviso:** \"{nickname}\" não pôde ser encontrado nos dados de cache do ranking. Selecione a alocação correta de clã abaixo:",
-                "menuPlaceholder": "Escolha a alocação correta de clã...",
-                "optionDescription": "Travar jogador no clã: {clanName}"
-            },
-            "manualpilot": {
-                "confirm": "⚠️ Vincular {pilotDisplay} como piloto de {ownerDisplay}?",
-                "ownerNotRegistered": "❌ O membro dono **{displayName}** não possui um perfil ativo configurado.",
-                "selfPilot": "❌ Você não pode definir um usuário como piloto de si mesmo.",
-                "limitReached": "❌ Substituição de Admin Falhou: O dono já atingiu o limite de **4 pilotos**.",
-                "success": "✅ **Sucesso!** {pilotMember} vinculado manualmente como piloto para **{nick}**."
-            },
-            "manualremovepilot": {
-                "confirm": "⚠️ Remover piloto {pilotDisplay} de {ownerDisplay}?",
-                "ownerNotRegistered": "❌ O membro dono **{displayName}** não possui um perfil ativo configurado.",
-                "notLinked": "❌ **{pilotDisplay}** não está vinculado como piloto a este dono.",
-                "success": "✅ **Sucesso!** Piloto **{pilotDisplay}** removido de **{ownerDisplay}**."
-            },
-            "cleandb": {
-                "noDuplicates": "✨ **Nenhuma entrada duplicada encontrada!**",
-                "success": "✅ **Limpeza de Banco concluída!**\\n\\nPerfis duplicados estruturais removidos:\\n{list}"
-            },
-            "manualremove": {
-                "noRegistration": "❌ Este usuário não possui entradas de registro válidas.",
-                "confirm": "⚠️ Tem certeza que deseja remover completamente o registro de **{username}**? Isso limpará todos os pilotos, cargos e apelidos.",
-                "success": "✅ **Sucesso!** Registros de **{username}** excluídos."
-            },
-            "manage": {
-                "noUsers": "❌ Nenhum usuário registrado encontrado.",
-                "pageInfo": "Página **{current}**/**{total}** — {count} usuários",
-                "listPlaceholder": "Selecione um jogador para gerenciar...",
-                "actionPrompt": "👇 **Gerenciar {username}** — Selecione uma ação:",
-                "actionRemove": "🗑️ Remover registro",
-                "actionRemoveDesc": "Excluir permanentemente o perfil deste usuário",
-                "actionPilot": "✈️ Remover piloto",
-                "actionPilotDesc": "Desvincular um piloto deste usuário",
-                "actionClan": "🔁 Mudar clã",
-                "actionClanDesc": "Atribuir manualmente um clã",
-                "pilotSelectPlaceholder": "Selecione um piloto para remover...",
-                "noPilots": "❌ **{username}** não possui pilotos registrados.",
-                "actionRemoveConfirm": "⚠️ Tem certeza que deseja remover completamente o registro de **{username}**?",
-                "removePilotConfirm": "⚠️ Remover piloto de **{username}**?",
-                "back": "🔙 Voltar"
-            },
-            "setwelcome": {
-                "noPermission": "❌ Você precisa ser Administrador para executar este comando.",
-                "success": "✅ **Sucesso!** O destino de boas-vindas foi configurado para {channel}."
-            },
-            "selectClanMenu": {
-                "noPermission": "❌ Você precisa ser Administrador para interagir com este menu.",
-                "prompt": "Selecione um clã para **{nickname}**:",
-                "success": "✅ **Sucesso!** O jogador foi registrado manualmente e travado no clã **{clan}**.",
-                "error": "❌ Erro ao processar registro manual."
-            }
-        },
-        "welcome": {
-            "message": "👋 Olá {member}, bem-vindo ao nosso servidor!\\n\\n⚠️ **Requisito Importante:** Seu personagem **DEVE** estar visível no ranking oficial do servidor (Top 1000) para que o bot possa encontrá-lo e atribuir os cargos.\\n\\n🔄 **Atualizações de Ranking:** O bot atualiza o cache do banco de dados e sincroniza os cargos todos os dias às **22:00 (Horário do Servidor EU)**.\\n\\n📌 **Como solicitar e adquirir seus cargos automaticamente:**\\n1️⃣ Execute o comando `/register` para abrir o formulário e digite exatamente o nome do seu personagem no jogo.\\n2️⃣ Tem funcionários ou pilotos cuidando dos seus personagens? Você pode conceder a eles os cargos correspondentes usando `/pilot` e mencionando a conta Discord deles (**Limite de até 4 pilotos no total**).\\n3️⃣ Se precisar desassociar um funcionário, basta usar `/removepilot` e selecionar o alvo no menu.\\n\\nDivirta-se e tenha um ótimo jogo! 🚀"
-        },
-        "logs": {
-            "syncStart": "⏳ [Sync] Iniciando rotina de atualização de cargos e apelidos...",
-            "syncAbort": "❌ [Sync] Abortando ciclo de sincronização: Lista de membros indisponível.",
-            "syncComplete": "🏁 [MIR4] Sincronização concluída.",
-            "syncError": "❌ Erro durante a sincronização: {error}",
-            "fetchStart": "🚀 [MIR4] Buscando Top 1000 do site oficial...",
-            "fetchPageError": "❌ Erro na página {page}: {error}",
-            "gatewayWarning": "⚠️ [Gateway Warning] Gateway ocupado. Usando lista de membros em cache.",
-            "autoLink": "🔗 [Auto-Link] {username} vinculado automaticamente como piloto ({count}/4) para {baseNick}",
-            "imposterDetected": "⚠️ [Segurança] Resetando apelido de impostor para {username} tentando clonar {nickname}",
-            "roleAdded": "✅ [Automação] Cargo [{clan}] adicionado a {username}",
-            "roleRemoved": "❌ [Automação] Cargo [{clan}] removido de {username}",
-            "memberLeave": "🏃‍♂️ [Leave-Handler] Membro registrado {tag} saiu do servidor. Limpando registro e desvinculando pilotos.",
-            "pilotCleaned": "🗑️ [Leave-Handler] Piloto {tag} limpo devido à saída do dono da conta.",
-            "manualLink": "👑 [Manual] Administrador travou usuário {targetId} no clã {selectedClan}",
-            "welcomeError": "❌ Erro ao enviar saudação de boas-vindas: {error}",
-            "leaveError": "❌ Erro ao executar varredura guildMemberRemove: {error}",
-            "subsystemInit": "Subsistema inicializado e painéis atualizados automaticamente no Client global.",
-            "panelRecovery": "Iniciando recuperação automática de painéis e limpeza de chat...",
-            "panelRestoreFailed": "Falha ao restaurar painel {key}: {error}",
-            "floorReleased": "{title} completamente liberado/fechado.",
-            "commandsRegistered": "✅ Todos os comandos de barra registrados com sucesso com proteções administrativas.",
-            "commandsError": "❌ Erro ao registrar comandos de barra: {error}"
         }
     }
 }
