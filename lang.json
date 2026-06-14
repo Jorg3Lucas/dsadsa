@@ -128,6 +128,7 @@
         "cmdKick": "`!kick` - Remove a player's claim",
         "cmdReset": "`!reset` - Reset panel(s) to defaults",
         "cmdUpdate": "`!update` - Git pull and restart bot",
+        "cmdSetup": "`!setup` - Configure language and continent",
         "cmdCommands": "`!commands` - Show this help message",
         "buttonInfo": "💡 **Tip:** Use the buttons on the panels to Claim, Join Queue, or mark bosses as killed."
     },

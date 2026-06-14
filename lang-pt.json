@@ -123,6 +123,7 @@
         "cmdKick": "`!kick` - Remove o claim de um jogador",
         "cmdReset": "`!reset` - Reseta painel(is) ao padrão",
         "cmdUpdate": "`!update` - Git pull e reinicia o bot",
+        "cmdSetup": "`!setup` - Configurar idioma e continente",
         "cmdCommands": "`!commands` - Mostra esta mensagem de ajuda",
         "buttonInfo": "💡 **Dica:** Use os botões nos painéis para Claim, Entrar na Fila ou marcar bosses como mortos."
     },
