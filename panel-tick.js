@@ -27,15 +27,6 @@ export function startTickInterval() {
             let panelUpdate = !1;
 
             if ("peak" === current.type && isRoomOpen(redBossSchedules)) {
-                if ("🟢 Available" !== current.red.status && now.getMinutes() === 5 && current.ownerId) {
-                    if (!alertCache.warning5mAfter[`${key}-red-${now.getHours()}`]) {
-                        notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
-                            title: current.title,
-                            boss: current.red.name
-                        }));
-                        alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] = !0;
-                    }
-                }
                 if ("🟢 Available" !== current.red.status && now.getMinutes() === 0) {
                     current.red._lastKilledTimeStr = current.red.status.replace("🔴 Killed at ", "").trim();
                     current.red.status = "🟢 Available";
@@ -52,15 +43,6 @@ export function startTickInterval() {
             }
 
             if ("normal" === current.type && current.boss3 && isRoomOpen(leader3Schedules)) {
-                if ("🟢 Available" !== current.boss3.status && now.getMinutes() === 5 && current.ownerId) {
-                    if (!alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`]) {
-                        notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
-                            title: current.title,
-                            boss: current.boss3.name
-                        }));
-                        alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] = !0;
-                    }
-                }
                 if ("🟢 Available" !== current.boss3.status && now.getMinutes() === 0) {
                     current.boss3._lastKilledTimeStr = current.boss3.status.replace("🔴 Killed at ", "").trim();
                     current.boss3.status = "🟢 Available";
@@ -131,20 +113,7 @@ export function startTickInterval() {
                             }
                         }
                         
-                        // DM warning: 5min after boss respawn, only if respawn happened AFTER claim started
-                        if ("🟢 Available" === current[prop].status && current[prop]._freeSince > 0 && current._claimTimestamp) {
-                            if (current[prop]._freeSince > current._claimTimestamp) {
-                                let minutesIdle = Math.floor((now.getTime() - current[prop]._freeSince) / 6e4);
-                                let targetKeyAlert = `${key}-${prop}`;
-                                if (minutesIdle >= 5 && current.ownerId && !alertCache.warning5mAfter[targetKeyAlert]) {
-                                    notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
-                                        title: current.title,
-                                        boss: current[prop].name
-                                    }));
-                                    alertCache.warning5mAfter[targetKeyAlert] = !0;
-                                }
-                            }
-                        }
+
                     }
                 }
             }
