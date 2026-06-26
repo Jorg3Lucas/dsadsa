@@ -1,0 +1,30 @@
+{
+  "name": "ranking_mir4",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "lint": "eslint . --max-warnings=100",
+    "lint:fix": "eslint . --fix --max-warnings=100",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "dependencies": {
+    "axios": "^1.16.1",
+    "cheerio": "^1.2.0",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2",
+    "googleapis": "^173.0.0",
+    "node-cron": "^4.2.1",
+    "playwright": "^1.60.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0"
+  }
+}
