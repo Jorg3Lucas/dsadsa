@@ -15,6 +15,9 @@ salary-poll-db.json
 google_credentials.json
 ranking_logs.txt
 
+# Per-guild data files
+data/
+
 # OS files
 .DS_Store
 Thumbs.db
