@@ -1,63 +1,220 @@
-import o from "fs";
-import s from "path";
+// ==========================================
+// 🏗️ MULTI-GUILD STATE MANAGER
+// Each Discord server (guild) gets its own
+// isolated state: db, config, caches, etc.
+// ==========================================
+
+import fs from "fs";
+import path from "path";
 import { runBackup } from "./auto-backup.js";
 
-// ==========================================
-// 🏗️ MODULE-LEVEL STATE
-// ==========================================
+const DATA_DIR = path.resolve("./data");
 
-export const punishmentsPath = s.resolve("./punishments.json");
-export const dailyLogsPath = s.resolve("./daily-logs.json");
-export const defaultFloors = ["7", "8", "9", "10"];
+// ─── Per-guild state registry ──────────────
 
-export let punishments = {};
-export let dailyLogs = { configChannelId: null, queue: [], bossSpawnChannelId: null, scheduledEventChannelId: null };
-export let alertCache = { warning5mAfter: {}, spawnAlerted: {} };
-export let antiDemonSelectionCache = {};
-export let summonSelectionCache = {};
-export let bossSpawnAlertCache = {};
+const guildStates = {};
 
+// ─── Ensure data directory exists ──────────
 
-export let client, db, rankingDb, saveLocalStorage, logEvent, lastMessages;
-
-export function initState(opts) {
-    client = opts.client;
-    db = opts.db;
-    rankingDb = opts.rankingDb || null;
-    saveLocalStorage = opts.saveLocalStorage;
-    logEvent = opts.logEvent;
-    lastMessages = opts.lastMessages;
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
 }
 
-export function loadDailyLogsFromDisk() {
-    try {
-        if (o.existsSync(dailyLogsPath)) {
-            dailyLogs = JSON.parse(o.readFileSync(dailyLogsPath, "utf8"));
+// ─── Path helpers ──────────────────────────
+
+function dbPath(guildId) {
+  return path.join(DATA_DIR, `database_${guildId}.json`);
+}
+
+function punishmentsPath(guildId) {
+  return path.join(DATA_DIR, `punishments_${guildId}.json`);
+}
+
+function dailyLogsPath(guildId) {
+  return path.join(DATA_DIR, `daily-logs_${guildId}.json`);
+}
+
+// ─── Guild state factory ───────────────────
+
+export function initGuildState(guildId, opts = {}) {
+  ensureDataDir();
+
+  if (guildStates[guildId]) {
+    return guildStates[guildId]; // already initialized
+  }
+
+  const defaultFloors = opts.defaultFloors || ["7", "8", "9", "10"];
+  const timezone = opts.timezone || "Europe/Berlin";
+
+  // ── Load database ──
+  let db = {};
+  const lastMessages = {};
+  const dbFile = dbPath(guildId);
+  try {
+    if (fs.existsSync(dbFile)) {
+      const raw = fs.readFileSync(dbFile, "utf8");
+      const parsed = JSON.parse(raw);
+      db = parsed.maps || {};
+      if (parsed.panels) {
+        for (const panelId in parsed.panels) {
+          lastMessages[panelId] = parsed.panels[panelId];
         }
-    } catch (l) {
-        console.error("❌ Error loading daily-logs.json file:", l.message);
+      }
+      console.log(`✅ [${guildId}] Claim database loaded.`);
     }
-}
+  } catch (e) {
+    console.error(`❌ [${guildId}] Error loading claim database:`, e.message);
+  }
 
-export function loadPunishmentsFromDisk() {
-    if (o.existsSync(punishmentsPath)) {
-        try {
-            punishments = JSON.parse(o.readFileSync(punishmentsPath, "utf8"));
-        } catch (s) {}
-    }
-}
-
-export function savePunishmentsToDisk() {
+  // ── Persistence helpers ──
+  const saveLocalStorage = () => {
     try {
-        // Backup before overwriting
-        runBackup(["./punishments.json"]);
+      runBackup([dbFile]);
 
-        o.writeFileSync(punishmentsPath, JSON.stringify(punishments, null, 2));
-    } catch (e) {}
+      const persistentMessages = {};
+      for (const panelId in lastMessages) {
+        if (lastMessages[panelId]) {
+          persistentMessages[panelId] = {
+            channelId: lastMessages[panelId].channelId,
+            messageId:
+              lastMessages[panelId].id || lastMessages[panelId].messageId,
+          };
+        }
+      }
+      fs.writeFileSync(
+        dbFile,
+        JSON.stringify({ maps: db, panels: persistentMessages }, null, 2),
+        "utf8",
+      );
+    } catch (e) {
+      console.error(`❌ [${guildId}] Error saving database:`, e.message);
+    }
+  };
+
+  const logEvent = (msg) => {
+    console.log(`[${guildId}] ${msg}`);
+  };
+
+  // ── Assemble state ──
+  const state = {
+    guildId,
+    client: opts.client || null,
+    db,
+    timezone,
+    defaultFloors,
+    saveLocalStorage,
+    logEvent,
+    lastMessages,
+    punishments: {},
+    dailyLogs: {
+      configChannelId: null,
+      queue: [],
+      bossSpawnChannelId: null,
+      scheduledEventChannelId: null,
+    },
+    alertCache: { warning5mAfter: {}, spawnAlerted: {}, _dailyDispatched: false },
+    antiDemonSelectionCache: {},
+    summonSelectionCache: {},
+    bossSpawnAlertCache: {},
+
+    dbFile,
+    punishmentsFile: punishmentsPath(guildId),
+    dailyLogsFile: dailyLogsPath(guildId),
+
+    // Inline loaders
+    loadPunishmentsFromDisk() {
+      if (fs.existsSync(this.punishmentsFile)) {
+        try {
+          this.punishments = JSON.parse(
+            fs.readFileSync(this.punishmentsFile, "utf8"),
+          );
+        } catch (_) {}
+      }
+    },
+    savePunishmentsToDisk() {
+      try {
+        runBackup([this.punishmentsFile]);
+        fs.writeFileSync(
+          this.punishmentsFile,
+          JSON.stringify(this.punishments, null, 2),
+        );
+      } catch (_) {}
+    },
+    loadDailyLogsFromDisk() {
+      try {
+        if (fs.existsSync(this.dailyLogsFile)) {
+          this.dailyLogs = JSON.parse(
+            fs.readFileSync(this.dailyLogsFile, "utf8"),
+          );
+        }
+      } catch (e) {
+        console.error(
+          `❌ [${guildId}] Error loading daily-logs:`,
+          e.message,
+        );
+      }
+    },
+    saveDailyLogs() {
+      try {
+        runBackup([this.dailyLogsFile]);
+        fs.writeFileSync(
+          this.dailyLogsFile,
+          JSON.stringify(this.dailyLogs, null, 2),
+        );
+      } catch (e) {
+        console.error(
+          `❌ [${guildId}] Error saving daily-logs:`,
+          e.message,
+        );
+      }
+    },
+  };
+
+  // Load persisted data
+  state.loadPunishmentsFromDisk();
+  state.loadDailyLogsFromDisk();
+
+  guildStates[guildId] = state;
+  return state;
 }
 
-// ==========================================
-// 🏗️ MODULE-LEVEL STATE (loaded at import time)
-// ==========================================
+// ─── Accessors ─────────────────────────────
 
-loadDailyLogsFromDisk();
+export function getGuildState(guildId) {
+  return guildStates[guildId] || null;
+}
+
+export function getAllGuildStates() {
+  return Object.values(guildStates);
+}
+
+export function getClient() {
+  const states = Object.values(guildStates);
+  return states.length > 0 ? states[0].client : null;
+}
+
+export function getDb(guildId) {
+  const s = guildStates[guildId];
+  return s ? s.db : null;
+}
+
+export function getLastMessages(guildId) {
+  const s = guildStates[guildId];
+  return s ? s.lastMessages : null;
+}
+
+export function getDefaultFloors(guildId) {
+  const s = guildStates[guildId];
+  return s ? s.defaultFloors : ["7", "8", "9", "10"];
+}
+
+export function getTimezone(guildId) {
+  const s = guildStates[guildId];
+  return s ? s.timezone : "Europe/Berlin";
+}
+
+export function removeGuildState(guildId) {
+  delete guildStates[guildId];
+}

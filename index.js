@@ -1,249 +1,100 @@
-import {
-    Client,
-    GatewayIntentBits
-} from 'discord.js';
-import fs from 'fs';
-import path from 'path';
-import 'dotenv/config';
+// ==========================================
+// 🚀 INDEX — MULTI-SERVER ENTRY POINT
+// Supports multiple Discord servers (guilds),
+// each with its own isolated data and config.
+// Only the Claim system is loaded here.
+// ==========================================
 
-import {
-    initClaimSystem,
-    handleClaimMessages,
-    handleClaimInteractions
-} from './bot.js';
-import { startAutoBackup, runBackup } from './auto-backup.js';
-import { initTempVoiceSystem } from './temp-voice.js';
-import { loadTicketState, initTicketSystem } from './ticket-system.js';
-import {
-    registerMir4SlashCommands,
-    initMir4BotEvents,
-    handleMir4Interactions,
-    runDailySynchronization
-} from './ranking_sync.js';
-import {
-    loadSalaryState,
-    initSalaryCron
-} from './salary-poll.js';
+import { Client, GatewayIntentBits } from "discord.js";
+import "dotenv/config";
 
-const DISCORD_SERVER_ID = '1432320162278670440';
+import { initGuildState, getGuildState } from "./state.js";
+import {
+  initClaimSystem,
+  handleClaimMessages,
+  handleClaimInteractions,
+} from "./bot.js";
+import { startAutoBackup } from "./auto-backup.js";
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates
-    ]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
 });
-
-const dbClaimPath = path.resolve('./database.json');
-const dbRankingPath = path.resolve('./database_ranking.json');
-const rankingLogsPath = path.resolve('./ranking_logs.txt');
-
-let claimDb = {};
-let rankingDb = {
-    users: {}
-};
-const claimLastMessages = {};
-
-function logRankingEvent(message) {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] ${message}\n`;
-    console.log(`[Ranking] ${message}`);
-    fs.appendFileSync(rankingLogsPath, logMessage, 'utf8');
-}
-
-try {
-    if (fs.existsSync(dbClaimPath)) {
-        const claimData = fs.readFileSync(dbClaimPath, 'utf8');
-        const parsedClaim = JSON.parse(claimData);
-        claimDb = parsedClaim.maps || {};
-        if (parsedClaim.panels) {
-            for (const panelId in parsedClaim.panels) {
-                claimLastMessages[panelId] = parsedClaim.panels[panelId];
-            }
-        }
-        console.log('✅ Claim database loaded successfully.');
-    }
-} catch (e) {
-    console.error('❌ Error pre-loading claim database:', e);
-}
-
-function saveClaimStorage() {
-    try {
-        // Backup before overwriting
-        runBackup(['./database.json']);
-
-        const persistentMessages = {};
-        for (const panelId in claimLastMessages) {
-            if (claimLastMessages[panelId]) {
-                persistentMessages[panelId] = {
-                    channelId: claimLastMessages[panelId].channelId,
-                    messageId: claimLastMessages[panelId].id || claimLastMessages[panelId].messageId
-                };
-            }
-        }
-        fs.writeFileSync(dbClaimPath, JSON.stringify({
-            maps: claimDb,
-            panels: persistentMessages
-        }, null, 2), 'utf8');
-    } catch (e) {
-        console.error('❌ Error saving claim database:', e);
-    }
-}
-
-function saveRankingStorage() {
-    try {
-        // Backup before overwriting
-        runBackup(['./database_ranking.json']);
-
-        fs.writeFileSync(dbRankingPath, JSON.stringify(rankingDb, null, 2), 'utf8');
-    } catch (error) {
-        console.error('❌ Error saving ranking database:', error);
-    }
-}
-
-function loadLocalStorageRanking() {
-    try {
-        if (fs.existsSync(dbRankingPath)) {
-            const data = fs.readFileSync(dbRankingPath, 'utf8');
-            rankingDb = JSON.parse(data);
-            if (!rankingDb.users) rankingDb.users = {};
-            console.log('✅ Ranking database loaded successfully.');
-        } else {
-            saveRankingStorage();
-            console.log('📝 New database_ranking.json file created.');
-        }
-    } catch (error) {
-        console.error('❌ Error loading ranking database:', error);
-    }
-}
 
 // ==========================================
 // 🚀 READY EVENT
 // ==========================================
-client.once('ready', async () => {
-    console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
+client.once("ready", async () => {
+  console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
+  console.log(
+    `🌍 Bot is in ${client.guilds.cache.size} guild(s):`,
+    client.guilds.cache.map((g) => `${g.name} (${g.id})`).join(", "),
+  );
 
-    loadLocalStorageRanking();
-    logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
+  // ── Initialize each guild independently ──
+  for (const [, guild] of client.guilds.cache) {
+    const guildId = guild.id;
+    console.log(`\n🔧 Initializing guild: ${guild.name} (${guildId})`);
 
-    const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
-    if (guild) {
-        await registerMir4SlashCommands(guild);
-    } else {
-        console.error('❌ Error: Invalid Server ID configuration.');
-    }
+    const guildState = initGuildState(guildId, {
+      client,
+      timezone: "Europe/Berlin", // Configurable per guild in the future
+    });
 
-    initMir4BotEvents(client, rankingDb, saveRankingStorage, logRankingEvent);
+    // Initialize the claim system for this guild
+    initClaimSystem(guildId);
+  }
 
-    setTimeout(async () => {
-        console.log('🧪 [Test] Starting forced validation scan...');
-        await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, true);
-    }, 10000);
+  // ── Start global services ──
+  startAutoBackup(6);
 
-    // Start auto-backup scheduler
-    startAutoBackup(6);
-
-    initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb);
-
-    // Initialize Temp Voice system
-    initTempVoiceSystem(client);
-
-    // Initialize Ticket system
-    initTicketSystem(client);
-
-    // Initialize Salary Poll system
-    loadSalaryState();
-    initSalaryCron();
+  console.log("\n✅ All guilds initialized. Bot is fully operational.\n");
 });
 
 // ==========================================
 // ✉️ MESSAGE CREATE EVENT
 // ==========================================
-client.on('messageCreate', async (message) => {
-    try {
-        await handleClaimMessages(message);
-    } catch (error) {
-        console.error('❌ [MessageCreate Error]:', error);
-        if (error.stack) console.error('📋 [Stack]:', error.stack);
-    }
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+  if (!message.guildId) return;
+
+  try {
+    const guildState = getGuildState(message.guildId);
+    if (!guildState) return;
+    await handleClaimMessages(message);
+  } catch (error) {
+    console.error(`❌ [${message.guildId}] MessageCreate Error:`, error);
+  }
 });
 
 // ==========================================
 // 🖱️ INTERACTION CREATE EVENT
 // ==========================================
-client.on('interactionCreate', async (interaction) => {
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.guildId) return;
+
+  try {
+    const guildState = getGuildState(interaction.guildId);
+    if (!guildState) return;
+
+    await handleClaimInteractions(interaction);
+  } catch (error) {
+    console.error(`❌ [${interaction.guildId}] Interaction Error:`, error);
     try {
-        // A. SLASH COMMANDS (/)
-        if (interaction.isCommand()) {
-            const rankingCommands = [
-                'register',
-                'pilot',
-                'removepilot',
-                'forcesync',
-                'manualregister',
-                'manualpilot',
-                'manualremove',
-                'manualremovepilot',
-                'cleandb',
-                'manage'
-            ];
-
-            if (rankingCommands.includes(interaction.commandName)) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            } else {
-                return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-            }
-        }
-
-        // B. USER SELECT MENUS (e.g. ticket add member)
-        if (interaction.isUserSelectMenu()) {
-            return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-        }
-
-        // C. STRING SELECT MENUS
-        if (interaction.isStringSelectMenu()) {
-            const rankingMenus = ['select_pilot_to_remove', 'select_clan_manual_', 'manage_'];
-            const isRankingMenu = rankingMenus.some(id => interaction.customId.startsWith(id));
-
-            if (isRankingMenu) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            } else {
-                return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-            }
-        }
-
-        // D. MODAL SUBMITS
-        if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'register_modal') {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            } else {
-                return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-            }
-        }
-
-        // E. PANEL BUTTON CLICKS
-        if (interaction.isButton()) {
-            if (interaction.customId.startsWith('confirm-manual') || interaction.customId.startsWith('manage_')) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-        }
-
-    } catch (error) {
-        console.error('❌ Error caught in unified interaction router:', error);
-        if (error.stack) console.error('📋 [Stack]:', error.stack);
-        // Prevent interaction timeout — reply if not already replied
-        try {
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ An unexpected error occurred. Please try again.', flags: 64 }).catch(() => {});
-            }
-        } catch (e) {
-            // Silently fail — interaction may have already timed out
-        }
-    }
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction
+          .reply({
+            content: "❌ An unexpected error occurred. Please try again.",
+            flags: 64,
+          })
+          .catch(() => {});
+      }
+    } catch (_) {}
+  }
 });
 
 client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);

@@ -7,18 +7,14 @@
 
 import fs from "fs";
 import path from "path";
+import { getAllGuildStates } from "./state.js";
 
 const BACKUP_DIR = path.resolve("./backups");
-const MAX_BACKUPS = 7; // keep last 7 backups per file
+const MAX_BACKUPS = 7;
 
-// All JSON files that should be backed up
-const BACKUP_FILES = [
-  "./database.json",
-  "./database_ranking.json",
-  "./salary-poll-db.json",
+// Static files to back up
+const STATIC_BACKUP_FILES = [
   "./daily-logs.json",
-  "./punishments.json",
-  "./ranking_cache.json"
 ];
 
 let backupInterval = null;
@@ -38,14 +34,28 @@ function safeFileName(filePath) {
   return path.basename(filePath).replace(/\.json$/, "");
 }
 
+// ─── Get all backup files (static + per-guild) ───
+
+function getAllBackupFiles() {
+  const files = [...STATIC_BACKUP_FILES];
+
+  // Add per-guild data files
+  for (const state of getAllGuildStates()) {
+    if (state.dbFile) files.push(state.dbFile);
+    if (state.dailyLogsFile) files.push(state.dailyLogsFile);
+    if (state.punishmentsFile) files.push(state.punishmentsFile);
+  }
+
+  return files;
+}
+
 // ─── Run a single backup cycle ───────────────
 
 export function runBackup(targetFiles) {
   ensureBackupDir();
 
-  const filesToBackup = targetFiles && targetFiles.length > 0
-    ? targetFiles
-    : BACKUP_FILES;
+  const filesToBackup =
+    targetFiles && targetFiles.length > 0 ? targetFiles : getAllBackupFiles();
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   let count = 0;
@@ -62,88 +72,78 @@ export function runBackup(targetFiles) {
       fs.copyFileSync(resolvedPath, backupPath);
       count++;
 
-      // Rotate old backups for this file
       rotateBackups(baseName);
     } catch (err) {
-      console.error(`❌ [Auto-Backup] Failed to backup ${filePath}:`, err.message);
+      console.error(
+        `❌ [Auto-Backup] Failed to backup ${filePath}:`,
+        err.message,
+      );
     }
   }
 
   if (count > 0) {
-    console.log(`✅ [Auto-Backup] Backed up ${count} file(s) to ${BACKUP_DIR}`);
+    console.log(
+      `✅ [Auto-Backup] Backed up ${count} file(s) to ${BACKUP_DIR}`,
+    );
   }
   return count;
 }
 
-// ─── Rotate old backups (keep only last N) ───
+// ─── Rotate old backups ──────────────────────
 
 function rotateBackups(baseName) {
   try {
-    const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith(baseName + "_") && f.endsWith(".json"))
-      .map(f => ({
+    const files = fs
+      .readdirSync(BACKUP_DIR)
+      .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".json"))
+      .map((f) => ({
         name: f,
-        time: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs
+        time: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs,
       }))
-      .sort((a, b) => b.time - a.time); // newest first
+      .sort((a, b) => b.time - a.time);
 
-    // Remove excess backups
     const toRemove = files.slice(MAX_BACKUPS);
     for (const file of toRemove) {
       fs.unlinkSync(path.join(BACKUP_DIR, file.name));
     }
 
     if (toRemove.length > 0) {
-      console.log(`🗑️ [Auto-Backup] Rotated ${toRemove.length} old backup(s) for ${baseName}`);
+      console.log(
+        `🗑️ [Auto-Backup] Rotated ${toRemove.length} old backup(s) for ${baseName}`,
+      );
     }
   } catch (err) {
-    console.error(`❌ [Auto-Backup] Rotation error for ${baseName}:`, err.message);
-  }
-}
-
-// ─── Pre-write backup (quick backup before saving) ───
-
-export function backupBeforeWrite(filePath) {
-  ensureBackupDir();
-
-  const resolvedPath = path.resolve(filePath);
-  if (!fs.existsSync(resolvedPath)) return;
-
-  try {
-    const baseName = safeFileName(filePath);
-    const backupName = `${baseName}_prewrite_${Date.now()}.json`;
-    const backupPath = path.join(BACKUP_DIR, backupName);
-
-    fs.copyFileSync(resolvedPath, backupPath);
-    rotateBackups(baseName);
-  } catch (err) {
-    console.error(`❌ [Auto-Backup] Pre-write backup failed for ${filePath}:`, err.message);
+    console.error(
+      `❌ [Auto-Backup] Rotation error for ${baseName}:`,
+      err.message,
+    );
   }
 }
 
 // ─── Start scheduled backups ─────────────────
 
 export function startAutoBackup(intervalHours = 6) {
-  // Clear any existing interval
   if (backupInterval) {
     clearInterval(backupInterval);
   }
 
   const intervalMs = intervalHours * 60 * 60 * 1000;
 
-  // Run first backup after 1 minute (give bot time to initialize)
   setTimeout(() => {
     console.log(`⏰ [Auto-Backup] Running initial backup...`);
     runBackup();
   }, 60 * 1000);
 
-  // Schedule recurring backups
   backupInterval = setInterval(() => {
-    console.log(`⏰ [Auto-Backup] Running scheduled backup (every ${intervalHours}h)...`);
+    console.log(
+      `⏰ [Auto-Backup] Running scheduled backup (every ${intervalHours}h)...`,
+    );
     runBackup();
   }, intervalMs);
 
-  console.log(`📅 [Auto-Backup] Scheduled: every ${intervalHours} hour(s) — keeping last ${MAX_BACKUPS} backups`);
+  console.log(
+    `📅 [Auto-Backup] Scheduled: every ${intervalHours} hour(s) — keeping last ${MAX_BACKUPS} backups`,
+  );
 }
 
 // ─── Stop scheduled backups ──────────────────
@@ -161,12 +161,13 @@ export function stopAutoBackup() {
 export function listBackups() {
   ensureBackupDir();
 
-  const files = fs.readdirSync(BACKUP_DIR)
-    .filter(f => f.endsWith(".json"))
-    .map(f => ({
+  const files = fs
+    .readdirSync(BACKUP_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => ({
       name: f,
       size: fs.statSync(path.join(BACKUP_DIR, f)).size,
-      time: fs.statSync(path.join(BACKUP_DIR, f)).mtime
+      time: fs.statSync(path.join(BACKUP_DIR, f)).mtime,
     }))
     .sort((a, b) => b.time - a.time);
 
