@@ -698,10 +698,13 @@ async function processBuyOrder(interaction, fixedAmount) {
 
     } catch (error) {
         console.error('❌ Error creating order:', error);
-        await interaction.editReply({
-            content: `❌ Erro ao criar pedido: ${error.message}`,
-            flags: 64
-        });
+        // Try to send error feedback, but don't fail if the interaction already timed out
+        try {
+            const errorMsg = error.name === 'AbortError'
+                ? '❌ Tempo limite excedido. O pedido foi criado! Use /orders para ver seus pedidos e copiar o código PIX.'
+                : `❌ Erro ao criar pedido: ${error.message}`;
+            await interaction.editReply({ content: errorMsg, flags: 64 });
+        } catch { /* interaction may have already expired */ }
     }
 }
 
