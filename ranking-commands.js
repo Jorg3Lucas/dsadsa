@@ -8,6 +8,7 @@ import { getMsg } from './lang.js';
 export async function registerMir4SlashCommands(guild) {
     try {
         await guild.commands.set([
+            // ── Ranking commands ──
             {
                 name: 'register',
                 description: getMsg('ranking.commands.register.description')
@@ -67,6 +68,32 @@ export async function registerMir4SlashCommands(guild) {
                 options: [
                     { type: 6, name: 'owner', description: getMsg('ranking.commands.manualremovepilot.options.owner'), required: true },
                     { type: 6, name: 'pilot', description: getMsg('ranking.commands.manualremovepilot.options.pilot'), required: true }
+                ]
+            },
+            // ── Gold Shop commands ──
+            {
+                name: 'shop',
+                description: '🛒 Ver a loja de Gold do MIR4'
+            },
+            {
+                name: 'orders',
+                description: '📋 Ver seus pedidos de Gold'
+            },
+            {
+                name: 'order',
+                description: '🔍 Ver detalhes de um pedido',
+                options: [{ type: 3, name: 'id', description: 'ID do pedido (ex: GOLD-000001)', required: true }]
+            },
+            {
+                name: 'goldadmin',
+                description: '👑 [Admin] Gerenciar loja de gold',
+                default_member_permissions: PermissionFlagsBits.ManageMessages.toString(),
+                options: [
+                    { type: 1, name: 'stats', description: 'Ver estatísticas da loja' },
+                    { type: 1, name: 'pedidos', description: 'Ver pedidos pendentes de entrega' },
+                    { type: 1, name: 'entregar', description: 'Marcar um pedido como entregue', options: [{ type: 3, name: 'id', description: 'ID do pedido', required: true }] },
+                    { type: 1, name: 'cancelar', description: 'Cancelar um pedido', options: [{ type: 3, name: 'id', description: 'ID do pedido', required: true }, { type: 3, name: 'motivo', description: 'Motivo do cancelamento', required: false }] },
+                    { type: 1, name: 'produtos', description: 'Gerenciar produtos da loja' }
                 ]
             }
         ]);

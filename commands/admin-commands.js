@@ -36,6 +36,9 @@ export async function handleAdminCommand(msg) {
     if ("!seteventchannel" === lowerContent) {
         return handleSetEventChannel(msg);
     }
+    if ("!goldshop" === lowerContent) {
+        return handleGoldShopPanel(msg);
+    }
     if ("!testevent" === lowerContent) {
         return handleTestEvent(msg);
     }
@@ -62,6 +65,43 @@ export async function handleAdminCommand(msg) {
     }
 
     return false; // not handled
+}
+
+// ==========================================
+// 🏪 GOLD SHOP PANEL
+// ==========================================
+
+async function handleGoldShopPanel(msg) {
+    if (!msg.member || !msg.member.permissions.has("ManageMessages")) {
+        return msg.reply({ content: "❌ Você precisa da permissão Gerenciar Mensagens." }).catch(() => {});
+    }
+
+    try {
+        const { buildGoldPanelEmbed, buildGoldPanelButtons } = await import('../interactions/gold-interactions.js');
+
+        const embed = buildGoldPanelEmbed();
+        const components = buildGoldPanelButtons();
+
+        // Delete existing gold panel if it exists in this channel
+        const goldDb = (await import('../gold-shop.js')).default;
+        const existing = goldDb.getPanelRef();
+        if (existing && existing.channelId === msg.channel.id) {
+            try {
+                const oldMsg = await msg.channel.messages.fetch(existing.messageId).catch(() => null);
+                if (oldMsg) await oldMsg.delete();
+            } catch { /* message may have been deleted already */ }
+        }
+
+        const sent = await msg.channel.send({ embeds: [embed], components });
+        goldDb.savePanelRef(msg.channel.id, sent.id);
+
+        try { await msg.delete(); } catch { /* message may have been deleted */ }
+
+        console.log(`🏪 Gold Shop panel created in channel ${msg.channel.id}`);
+    } catch (error) {
+        console.error('❌ Error creating gold shop panel:', error);
+        await msg.reply({ content: '❌ Erro ao criar painel gold shop.' }).catch(() => {});
+    }
 }
 
 // ==========================================

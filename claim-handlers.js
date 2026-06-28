@@ -13,6 +13,7 @@ import { canHandleAntidemonInteraction, handleAntidemonInteraction } from "./int
 import { canHandleSummonInteraction, handleSummonInteraction } from "./interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "./interactions/floor-interactions.js";
 import { canHandleSalaryInteraction, handleSalaryInteraction } from "./interactions/salary-interactions.js";
+import { canHandleGoldInteraction, handleGoldInteraction, handleGoldModalSubmit } from "./interactions/gold-interactions.js";
 
 // ==========================================
 // 💬 TEXT COMMAND ROUTER
@@ -64,7 +65,17 @@ export async function handleClaimInteractions(interaction) {
         return await handleTicketInteraction(interaction);
     }
 
-    // 6. Floor interactions (buttons: death, claim, cancel, next)
+    // 6. Gold shop interactions
+    if (canHandleGoldInteraction(interaction)) {
+        return await handleGoldInteraction(interaction);
+    }
+
+    // 7. Gold shop modal submits
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('gold-modal-')) {
+        return await handleGoldModalSubmit(interaction);
+    }
+
+    // 8. Floor interactions (buttons: death, claim, cancel, next)
     if (canHandleFloorInteraction(interaction)) {
         return await handleFloorInteraction(interaction, uid, uName);
     }

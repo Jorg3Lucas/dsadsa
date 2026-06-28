@@ -24,6 +24,9 @@ import {
     loadSalaryState,
     initSalaryCron
 } from './salary-poll.js';
+import { handleGoldSlashCommand } from './commands/gold-commands.js';
+import { initGoldShop } from './gold-shop.js';
+import { initMercadoPago, checkGoldEnvVars } from './mercadopago.js';
 
 const DISCORD_SERVER_ID = '1432320162278670440';
 
@@ -157,6 +160,41 @@ client.once('ready', async () => {
     // Initialize Salary Poll system
     loadSalaryState();
     initSalaryCron();
+
+    // Initialize Gold Shop system
+    const { buildGoldPanelEmbed, buildGoldPanelButtons } = await import('./interactions/gold-interactions.js');
+    initGoldShop();
+    initMercadoPago();
+    checkGoldEnvVars();
+
+    // Auto-recover gold panel on restart
+    try {
+        const goldDb = await import('./gold-shop.js');
+        const panelRef = goldDb.getPanelRef();
+        if (panelRef && panelRef.channelId && panelRef.messageId) {
+            const channel = await client.channels.fetch(panelRef.channelId).catch(() => null);
+            if (channel) {
+                try {
+                    const oldMsg = await channel.messages.fetch(panelRef.messageId).catch(() => null);
+                    if (oldMsg) {
+                        await oldMsg.edit({ embeds: [buildGoldPanelEmbed()], components: buildGoldPanelButtons() }).catch(() => {});
+                        console.log('🏪 Gold Shop panel auto-recovered.');
+                    } else {
+                        throw new Error('Message not found');
+                    }
+                } catch {
+                    // Message was deleted, re-create
+                    const newMsg = await channel.send({ embeds: [buildGoldPanelEmbed()], components: buildGoldPanelButtons() });
+                    goldDb.savePanelRef(channel.id, newMsg.id);
+                    console.log('🏪 Gold Shop panel re-created after deletion.');
+                }
+            }
+        }
+    } catch (err) {
+        console.error('❌ Gold panel auto-recovery error:', err.message);
+    }
+
+    console.log('🏪 Gold Shop system initialized.');
 });
 
 // ==========================================
@@ -193,9 +231,15 @@ client.on('interactionCreate', async (interaction) => {
 
             if (rankingCommands.includes(interaction.commandName)) {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            } else {
-                return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
             }
+
+            // Gold shop slash commands
+            const goldCommands = ['shop', 'orders', 'order', 'goldadmin'];
+            if (goldCommands.includes(interaction.commandName)) {
+                return await handleGoldSlashCommand(interaction);
+            }
+
+            return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
         }
 
         // B. USER SELECT MENUS (e.g. ticket add member)
