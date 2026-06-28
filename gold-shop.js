@@ -33,6 +33,7 @@ const DEFAULT_PRODUCTS = [
 const goldDb = {
     products: [...DEFAULT_PRODUCTS],
     orders: {},
+    goldStock: 0,
     config: {
         adminRoleId: process.env.GOLD_ADMIN_ROLE_ID || '',
         adminChannelId: process.env.GOLD_ADMIN_CHANNEL_ID || '',
@@ -54,6 +55,7 @@ function loadGoldDatabase() {
             if (data.products) goldDb.products = data.products;
             if (data.orders) goldDb.orders = data.orders;
             if (data.config) goldDb.config = { ...goldDb.config, ...data.config };
+            if (typeof data.goldStock === 'number') goldDb.goldStock = data.goldStock;
             console.log(`✅ Gold shop database loaded. ${Object.keys(goldDb.orders).length} orders found.`);
         } else {
             saveGoldDatabase();
@@ -345,6 +347,40 @@ export function updateProductPrice(productId, newPrice) {
 }
 
 /**
+ * Create a dynamic order with custom gold amount and price
+ */
+export function createDynamicOrder(userId, userName, goldAmount, price, characterName, server, tierLabel) {
+    const orderId = generateOrderId();
+    const now = new Date().toISOString();
+
+    const order = {
+        orderId,
+        userId,
+        userName,
+        productId: 'dynamic',
+        productName: `💛 ${goldAmount.toLocaleString()} Gold`,
+        goldAmount,
+        price: Number(price.toFixed(2)),
+        status: 'pending',
+        paymentId: null,
+        pixQrCode: null,
+        pixCopiaCola: null,
+        paymentExpiresAt: null,
+        characterName,
+        server,
+        createdAt: now,
+        paidAt: null,
+        deliveredAt: null,
+        deliveredBy: null,
+        notes: `📊 ${tierLabel}`
+    };
+
+    goldDb.orders[orderId] = order;
+    saveGoldDatabase();
+    return order;
+}
+
+/**
  * Add a new product to the catalog
  */
 export function addProduct(id, name, amount, price) {
@@ -364,6 +400,103 @@ export function addProduct(id, name, amount, price) {
     return product;
 }
 
+// ==========================================
+// 💰 GOLD STOCK & PRICING
+// ==========================================
+
+/** Preço por unidade base (1053 gold) em cada tier */
+const PRICE_TIERS = [
+    { maxGold: 5000,  pricePerUnit: 18.00 },
+    { maxGold: 10000, pricePerUnit: 17.00 },
+    { maxGold: Infinity, pricePerUnit: 16.50 }
+];
+
+/** Unidade base de gold */
+export const GOLD_UNIT = 1053;
+
+/**
+ * Get current available gold stock
+ */
+export function getGoldStock() {
+    const stock = goldDb.goldStock || 0;
+    return stock;
+}
+
+/**
+ * Set available gold stock (admin only)
+ */
+export function setGoldStock(amount) {
+    if (amount < 0) throw new Error('Estoque não pode ser negativo.');
+    goldDb.goldStock = Math.floor(amount);
+    saveGoldDatabase();
+    return goldDb.goldStock;
+}
+
+/**
+ * Deduct gold from stock after delivery
+ */
+export function deductStock(amount) {
+    const current = getGoldStock();
+    if (current < amount) throw new Error('Estoque insuficiente.');
+    goldDb.goldStock = current - amount;
+    saveGoldDatabase();
+    return goldDb.goldStock;
+}
+
+/**
+ * Calculate dynamic price based on gold amount and tier
+ * 
+ * Tiers:
+ *   ≤ 5k gold:    R$ 18,00 per 1053 gold
+ *   ≤ 10k gold:   R$ 17,00 per 1053 gold
+ *   > 10k gold:   R$ 16,50 per 1053 gold
+ *
+ * @param {number} goldAmount - How much gold to buy
+ * @returns {{ goldAmount: number, units: number, pricePerUnit: number, totalPrice: number, tier: string }}
+ */
+export function calculatePrice(goldAmount) {
+    if (goldAmount < GOLD_UNIT) {
+        throw new Error(`Mínimo de ${GOLD_UNIT.toLocaleString()} gold por compra.`);
+    }
+
+    const stock = getGoldStock();
+    if (goldAmount > stock) {
+        throw new Error(`Estoque insuficiente. Disponível: ${stock.toLocaleString()} gold.`);
+    }
+
+    // Find the applicable tier (< for "a partir de" semantics)
+    const tier = PRICE_TIERS.find(t => goldAmount < t.maxGold);
+    const pricePerUnit = tier.pricePerUnit;
+
+    const units = goldAmount / GOLD_UNIT;
+    const totalPrice = parseFloat((units * pricePerUnit).toFixed(2));
+
+    const tierLabel = goldAmount < 5000
+        ? '💵 R$ 18,00/un (< 5k)'
+        : goldAmount < 10000
+            ? '💰 R$ 17,00/un (5k-10k)'
+            : '💎 R$ 16,50/un (> 10k)';
+
+    return {
+        goldAmount,
+        units: parseFloat(units.toFixed(2)),
+        pricePerUnit,
+        totalPrice,
+        tierLabel
+    };
+}
+
+/**
+ * Get pricing tiers info for display
+ */
+export function getPricingInfo() {
+    return [
+        { label: '💵 Até 5.000 gold', price: 'R$ 18,00', per: '1.053 gold' },
+        { label: '💰 De 5k a 10k gold', price: 'R$ 17,00', per: '1.053 gold' },
+        { label: '💎 Acima de 10k gold', price: 'R$ 16,50', per: '1.053 gold' }
+    ];
+}
+
 /**
  * Get shop statistics for admin dashboard
  */
@@ -381,6 +514,7 @@ export function getShopStats() {
         totalGoldSold: orders
             .filter(o => o.status === 'delivered')
             .reduce((sum, o) => sum + o.goldAmount, 0),
+        goldStock: getGoldStock(),
         activeProducts: goldDb.products.filter(p => p.active).length
     };
 }
@@ -418,6 +552,7 @@ export default {
     getAllProducts,
     getProduct,
     createOrder,
+    createDynamicOrder,
     updateOrderPayment,
     markOrderAsPaid,
     markOrderAsDelivered,
@@ -433,5 +568,11 @@ export default {
     getShopStats,
     getPanelRef,
     savePanelRef,
-    clearPanelRef
+    clearPanelRef,
+    getGoldStock,
+    setGoldStock,
+    deductStock,
+    calculatePrice,
+    getPricingInfo,
+    GOLD_UNIT
 };

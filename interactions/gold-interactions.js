@@ -226,32 +226,28 @@ export function buildPixEmbed(order, qrCodeBase64, qrCodeText) {
 
 /** Renders the persistent gold shop panel embed */
 export function buildGoldPanelEmbed() {
-    const products = goldShop.getActiveProducts();
+    const stock = goldShop.getGoldStock();
+    const pricing = goldShop.getPricingInfo();
 
     const embed = new EmbedBuilder()
         .setColor(0xFEE75C)
         .setTitle('🛒 Gold Shop - MIR4')
         .setDescription(
             '💰 **Compre Gold do MIR4 com PIX!**\n\n' +
-            '📌 O pagamento é processado via **Mercado Pago**.\n' +
-            '🔄 Após a confirmação do pagamento, nossa equipe fará a entrega no jogo.\n' +
-            '⏳ O PIX tem validade de **30 minutos**.\n' +
-            '💬 **Clique nos botões abaixo para comprar!**\n\n' +
+            `💛 **Gold Disponível:** ${stock.toLocaleString()}\n` +
             '━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-            '**📋 Catálogo de Produtos:**'
+            '**📊 Tabela de Preços (Preço por unidade de 1.053 gold):**\n\n' +
+            pricing.map(t => `${t.label}: **${t.price}** / ${t.per}`).join('\n') +
+            '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+            '🔄 Mais gold = mais barato! Quanto mais comprar, menor o preço por unidade.\n' +
+            '📌 Pagamento via **PIX** (Mercado Pago).\n' +
+            '⏳ Entrega rápida após confirmação do pagamento.\n' +
+            '━━━━━━━━━━━━━━━━━━━━━━━━━'
         )
         .setTimestamp();
 
-    for (const product of products) {
-        embed.addFields({
-            name: `${product.name}`,
-            value: `💛 **${(product.amount / 1000000).toFixed(1)}M Gold** — 💰 **${formatCurrency(product.price)}**`,
-            inline: false
-        });
-    }
-
     embed.setFooter({
-        text: 'Clique em um produto abaixo para comprar'
+        text: stock > 0 ? `💛 ${stock.toLocaleString()} gold em estoque` : '⚠️ Estoque vazio — aguarde reposição'
     });
 
     return embed;
@@ -259,25 +255,45 @@ export function buildGoldPanelEmbed() {
 
 /** Renders the persistent gold shop panel buttons */
 export function buildGoldPanelButtons() {
-    const products = goldShop.getActiveProducts();
+    const stock = goldShop.getGoldStock();
     const rows = [];
 
-    // Create rows of buttons (max 3 per row)
-    for (let i = 0; i < products.length; i += 3) {
-        const row = new ActionRowBuilder();
-        const batch = products.slice(i, i + 3);
+    // Buy button
+    const buyRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('gold-buy-custom')
+            .setLabel(`💛 Comprar Gold${stock > 0 ? ` (${stock.toLocaleString()} disp.)` : ''}`)
+            .setStyle(stock > 0 ? ButtonStyle.Success : ButtonStyle.Secondary)
+            .setDisabled(stock <= 0)
+    );
+    rows.push(buyRow);
 
-        for (const product of batch) {
-            row.addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`gold-buy-${product.id}`)
-                    .setLabel(`${(product.amount / 1000000).toFixed(0)}M - ${formatCurrency(product.price)}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setEmoji('💛')
-            );
+    // Quick buy options: 1053, 2106, 3159, 5000, 10000
+    if (stock > 0) {
+        const quickAmounts = [
+            goldShop.GOLD_UNIT,
+            goldShop.GOLD_UNIT * 2,
+            goldShop.GOLD_UNIT * 3,
+            5000,
+            10000
+        ].filter(a => a <= stock);
+
+        for (let i = 0; i < quickAmounts.length; i += 3) {
+            const row = new ActionRowBuilder();
+            const batch = quickAmounts.slice(i, i + 3);
+            for (const amount of batch) {
+                try {
+                    const pricing = goldShop.calculatePrice(amount);
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`gold-quick-${amount}`)
+                            .setLabel(`${(amount / 1000).toFixed(0)}K gold - ${formatCurrency(pricing.totalPrice)}`)
+                            .setStyle(ButtonStyle.Primary)
+                    );
+                } catch { /* amount exceeds stock or invalid */ }
+            }
+            if (batch.length > 0) rows.push(row);
         }
-
-        rows.push(row);
     }
 
     // Bottom row: utility buttons
@@ -301,7 +317,7 @@ export function buildGoldPanelButtons() {
 // 🧩 CAN HANDLE
 // ==========================================
 
-const GOLD_PREFIXES = ['gold-buy-', 'gold-my-orders', 'gold-shop-back', 'gold-deliver-', 'gold-toggle-', 'gold-cancel-order-', 'gold-refresh-order-', 'gold-admin-menu', 'gold-stats', 'gold-pending-orders', 'gold-manage-products', 'gold-add-product', 'gold-edit-price-', 'gold-delete-menu', 'gold-select-delete', 'gold-refresh-panel'];
+const GOLD_PREFIXES = ['gold-buy-', 'gold-quick-', 'gold-my-orders', 'gold-shop-back', 'gold-deliver-', 'gold-toggle-', 'gold-cancel-order-', 'gold-refresh-order-', 'gold-admin-menu', 'gold-stats', 'gold-pending-orders', 'gold-manage-products', 'gold-add-product', 'gold-edit-price-', 'gold-delete-menu', 'gold-select-delete', 'gold-refresh-panel', 'gold-set-stock'];
 
 export function canHandleGoldInteraction(interaction) {
     const cid = interaction.customId;
@@ -321,8 +337,14 @@ export async function handleGoldInteraction(interaction) {
     if (cid === 'gold-shop-back') {
         return handleShopBack(interaction);
     }
+    if (cid === 'gold-buy-custom') {
+        return handleBuyCustom(interaction);
+    }
+    if (cid.startsWith('gold-quick-')) {
+        return handleQuickBuy(interaction);
+    }
     if (cid.startsWith('gold-buy-')) {
-        return handleBuyButton(interaction);
+        return handleBuyCustom(interaction);
     }
     if (cid.startsWith('gold-deliver-')) {
         return handleDeliverButton(interaction);
@@ -348,6 +370,9 @@ export async function handleGoldInteraction(interaction) {
     if (cid === 'gold-manage-products') {
         return handleAdminProductsButton(interaction);
     }
+    if (cid === 'gold-set-stock') {
+        return handleSetStock(interaction);
+    }
     if (cid === 'gold-add-product') {
         return handleAddProductButton(interaction);
     }
@@ -368,33 +393,30 @@ export async function handleGoldInteraction(interaction) {
 }
 
 // ==========================================
-// 🛒 BUY FLOW
+// 🛒 CUSTOM BUY (opens modal to enter gold amount)
 // ==========================================
 
-async function handleBuyButton(interaction) {
-    const productId = interaction.customId.replace('gold-buy-', '');
+async function handleBuyCustom(interaction) {
+    const stock = goldShop.getGoldStock();
+    if (stock <= 0) {
+        return interaction.reply({ content: '❌ Estoque vazio no momento. Aguarde reposição.', flags: 64 });
+    }
 
-    // Check if Mercado Pago is initialized
     const mpReady = !!process.env.MERCADO_PAGO_ACCESS_TOKEN;
     if (!mpReady) {
-        return interaction.reply({
-            content: '❌ O sistema de pagamento não está configurado. Entre em contato com o administrador.',
-            flags: 64
-        });
+        return interaction.reply({ content: '❌ Sistema de pagamento não configurado.', flags: 64 });
     }
 
-    const product = goldShop.getProduct(productId);
-    if (!product || !product.active) {
-        return interaction.reply({
-            content: '❌ Produto não encontrado ou indisponível.',
-            flags: 64
-        });
-    }
-
-    // Show modal to ask for character name
     const modal = new ModalBuilder()
-        .setCustomId(`gold-modal-${productId}`)
-        .setTitle(`Comprar ${product.name}`);
+        .setCustomId('gold-modal-buy-custom')
+        .setTitle('💛 Comprar Gold');
+
+    const goldInput = new TextInputBuilder()
+        .setCustomId('gold-amount')
+        .setLabel(`Quanto gold deseja comprar? (Mín: ${goldShop.GOLD_UNIT}, Máx: ${stock})`)
+        .setPlaceholder(`Ex: ${goldShop.GOLD_UNIT}`)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
 
     const characterInput = new TextInputBuilder()
         .setCustomId('gold-character-name')
@@ -414,10 +436,61 @@ async function handleBuyButton(interaction) {
         .setMinLength(2)
         .setMaxLength(10);
 
-    const firstRow = new ActionRowBuilder().addComponents(characterInput);
-    const secondRow = new ActionRowBuilder().addComponents(serverInput);
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(goldInput),
+        new ActionRowBuilder().addComponents(characterInput),
+        new ActionRowBuilder().addComponents(serverInput)
+    );
 
-    modal.addComponents(firstRow, secondRow);
+    await interaction.showModal(modal);
+}
+
+// ==========================================
+// ⚡ QUICK BUY (pre-defined amounts)
+// ==========================================
+
+async function handleQuickBuy(interaction) {
+    const amount = parseInt(interaction.customId.replace('gold-quick-', ''), 10);
+    if (isNaN(amount) || amount <= 0) {
+        return interaction.reply({ content: '❌ Quantidade inválida.', flags: 64 });
+    }
+
+    const stock = goldShop.getGoldStock();
+    if (amount > stock) {
+        return interaction.reply({ content: `❌ Estoque insuficiente. Disponível: ${stock.toLocaleString()} gold.`, flags: 64 });
+    }
+
+    const mpReady = !!process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    if (!mpReady) {
+        return interaction.reply({ content: '❌ Sistema de pagamento não configurado.', flags: 64 });
+    }
+
+    const modal = new ModalBuilder()
+        .setCustomId(`gold-modal-quick-${amount}`)
+        .setTitle(`💛 ${amount.toLocaleString()} Gold`);
+
+    const characterInput = new TextInputBuilder()
+        .setCustomId('gold-character-name')
+        .setLabel('🎮 Nome do personagem (exatamente como no jogo)')
+        .setPlaceholder('Digite o nome do seu personagem...')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(20);
+
+    const serverInput = new TextInputBuilder()
+        .setCustomId('gold-server')
+        .setLabel('🌍 Servidor (ASIA / EU / SA)')
+        .setPlaceholder('EU')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(10);
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(characterInput),
+        new ActionRowBuilder().addComponents(serverInput)
+    );
 
     await interaction.showModal(modal);
 }
@@ -439,37 +512,63 @@ export async function handleGoldModalSubmit(interaction) {
         return handleEditPriceModal(interaction);
     }
 
-    // ── Handle buy modal (standard) ──
-    if (!modalId.startsWith('gold-modal-')) return false;
-
-    const productId = modalId.replace('gold-modal-', '');
-    const product = goldShop.getProduct(productId);
-    if (!product || !product.active) {
-        return interaction.reply({
-            content: '❌ Produto não encontrado ou indisponível.',
-            flags: 64
-        });
+    // ── Handle set stock modal ──
+    if (modalId === 'gold-modal-set-stock') {
+        return handleSetStockModal(interaction);
     }
 
+    // ── Handle custom buy ──
+    if (modalId === 'gold-modal-buy-custom') {
+        return processBuyOrder(interaction, null);
+    }
+
+    // ── Handle quick buy ──
+    if (modalId.startsWith('gold-modal-quick-')) {
+        const amount = parseInt(modalId.replace('gold-modal-quick-', ''), 10);
+        return processBuyOrder(interaction, amount);
+    }
+
+    return false;
+}
+
+/**
+ * Process a buy order with dynamic pricing
+ */
+async function processBuyOrder(interaction, fixedAmount) {
     const characterName = interaction.fields.getTextInputValue('gold-character-name').trim();
     const server = interaction.fields.getTextInputValue('gold-server').trim().toUpperCase();
 
     if (!['ASIA', 'EU', 'SA'].includes(server)) {
-        return interaction.reply({
-            content: '❌ Servidor inválido. Use ASIA, EU ou SA.',
-            flags: 64
-        });
+        return interaction.reply({ content: '❌ Servidor inválido. Use ASIA, EU ou SA.', flags: 64 });
+    }
+
+    // Get gold amount from modal or fixed
+    let goldAmount;
+    if (fixedAmount) {
+        goldAmount = fixedAmount;
+    } else {
+        const amountStr = interaction.fields.getTextInputValue('gold-amount').trim().replace(/\./g, '').replace(/,/g, '');
+        goldAmount = parseInt(amountStr, 10);
+        if (isNaN(goldAmount) || goldAmount <= 0) {
+            return interaction.reply({ content: '❌ Quantidade de gold inválida.', flags: 64 });
+        }
     }
 
     await interaction.deferReply({ flags: 64 });
 
     try {
-        // Create order in database
-        const order = await goldShop.createOrder(
+        // Calculate price dynamically
+        const pricing = goldShop.calculatePrice(goldAmount);
+
+        // Create order using the new dynamic order function
+        const order = goldShop.createDynamicOrder(
             interaction.user.id,
             interaction.user.tag,
-            productId,
-            characterName
+            pricing.goldAmount,
+            pricing.totalPrice,
+            characterName,
+            server,
+            `${pricing.tierLabel} | ${pricing.units} unidade(s) de ${goldShop.GOLD_UNIT}`
         );
 
         // Initialize Mercado Pago if needed
@@ -477,8 +576,8 @@ export async function handleGoldModalSubmit(interaction) {
 
         // Create PIX payment
         const pixResult = await createPixPayment(
-            product.price,
-            `MIR4 Gold - ${product.name} - ${order.orderId}`,
+            pricing.totalPrice,
+            `MIR4 Gold - ${goldAmount.toLocaleString()} - ${order.orderId}`,
             null,
             order.orderId
         );
@@ -491,8 +590,34 @@ export async function handleGoldModalSubmit(interaction) {
             pixResult.qrCodeBase64
         );
 
+        // Build confirmation embed
+        const confirmEmbed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('✅ Pedido Criado com Sucesso!')
+            .setDescription(
+            `📋 **Pedido:** ${order.orderId}\n` +
+            `💛 **Gold:** ${pricing.goldAmount.toLocaleString()}\n` +
+            `💰 **Valor:** R$ ${pricing.totalPrice.toFixed(2)}\n` +
+            `📊 **Preço:** ${pricing.tierLabel}\n` +
+            `🎮 **Personagem:** ${characterName}\n` +
+            `🌍 **Servidor:** ${server}\n\n` +
+            `💳 **Instruções de Pagamento enviadas no seu DM!**\n` +
+            `📌 Verifique suas mensagens privadas.\n\n` +
+            `⏳ O PIX expira em **30 minutos**.`
+            )
+            .setTimestamp();
+
         // Send DM with PIX info
-        const pixEmbed = buildPixEmbed(order, pixResult.qrCodeBase64, pixResult.qrCode);
+        const pixEmbed = buildPixEmbed(
+            {
+                orderId: order.orderId,
+                productName: order.productName,
+                price: order.price,
+                pixCopiaCola: order.pixCopiaCola
+            },
+            pixResult.qrCodeBase64,
+            pixResult.qrCode
+        );
 
         const dmComponents = [
             new ActionRowBuilder().addComponents(
@@ -511,35 +636,16 @@ export async function handleGoldModalSubmit(interaction) {
                     ? [{ attachment: Buffer.from(pixResult.qrCodeBase64, 'base64'), name: `pix-qr-${order.orderId}.png` }]
                     : []
             });
-        } catch {
-            // DM might be closed, send in channel instead
+        } catch { /* DM might be closed */
             await interaction.editReply({
                 content: '⚠️ Não consegui enviar DM. Verifique se suas DMs estão abertas.',
                 flags: 64
             });
         }
 
-        // Confirm in interaction
-        const confirmEmbed = new EmbedBuilder()
-            .setColor(0x57F287)
-            .setTitle('✅ Pedido Criado com Sucesso!')
-            .setDescription(
-                `📋 **Pedido:** ${order.orderId}\n` +
-                `💛 **Produto:** ${product.name}\n` +
-                `💰 **Valor:** R$ ${product.price.toFixed(2)}\n` +
-                `🎮 **Personagem:** ${characterName}\n\n` +
-                `💳 **Instruções de Pagamento enviadas no seu DM!**\n` +
-                `📌 Verifique suas mensagens privadas para pagar via PIX.\n\n` +
-                `⏳ O PIX expira em **30 minutos**.`
-            )
-            .setTimestamp();
+        await interaction.editReply({ embeds: [confirmEmbed], flags: 64 });
 
-        await interaction.editReply({
-            embeds: [confirmEmbed],
-            flags: 64
-        });
-
-        // Send notification to admin channel
+        // Notify admin channel
         const adminChannelId = process.env.GOLD_ADMIN_CHANNEL_ID;
         if (adminChannelId) {
             try {
@@ -551,8 +657,9 @@ export async function handleGoldModalSubmit(interaction) {
                         .setDescription(
                             `📋 **Pedido:** ${order.orderId}\n` +
                             `👤 **Cliente:** <@${interaction.user.id}> (${interaction.user.tag})\n` +
-                            `💛 **Produto:** ${product.name}\n` +
-                            `💰 **Valor:** R$ ${product.price.toFixed(2)}\n` +
+                            `💛 **Gold:** ${pricing.goldAmount.toLocaleString()}\n` +
+                            `💰 **Valor:** R$ ${pricing.totalPrice.toFixed(2)}\n` +
+                            `📊 **Tier:** ${pricing.tierLabel}\n` +
                             `🎮 **Personagem:** ${characterName}\n` +
                             `🌍 **Servidor:** ${server}\n` +
                             `📅 **Data:** ${new Date().toLocaleString('pt-BR')}`
@@ -628,8 +735,8 @@ async function handleMyOrdersButton(interaction) {
 async function handleShopBack(interaction) {
     await interaction.deferReply({ flags: 64 });
 
-    const embed = buildCatalogEmbed();
-    const components = buildCatalogButtons();
+    const embed = buildGoldPanelEmbed();
+    const components = buildGoldPanelButtons();
 
     await interaction.editReply({
         embeds: [embed],
@@ -672,8 +779,13 @@ async function handleDeliverButton(interaction) {
 
     goldShop.markOrderAsDelivered(orderId, interaction.user.tag);
 
+    // Deduct gold from stock
+    if (order.goldAmount > 0) {
+        try { goldShop.deductStock(order.goldAmount); } catch { /* stock already updated manually */ }
+    }
+
     await interaction.update({
-        content: `✅ Pedido **${orderId}** marcado como entregue!`,
+        content: `✅ Pedido **${orderId}** marcado como entregue!\n💛 -${order.goldAmount.toLocaleString()} gold do estoque.`,
         components: [],
         flags: 64
     });
@@ -728,25 +840,31 @@ async function handleAdminMenu(interaction) {
     }
 
     const stats = goldShop.getShopStats();
+    const stock = goldShop.getGoldStock();
 
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('👑 Admin - Gold Shop')
         .setDescription('Painel de administração da Gold Shop.')
         .addFields(
-            { name: '📊 Estatísticas', value: `📦 ${stats.totalOrders} pedidos | 💰 ${stats.paid} aguardando entrega | ✅ ${stats.delivered} entregues`, inline: false }
+            { name: '💛 Estoque', value: `${stock.toLocaleString()} gold`, inline: true },
+            { name: '📊 Estatísticas', value: `📦 ${stats.totalOrders} pedidos | 💰 ${stats.paid} aguardando | ✅ ${stats.delivered} entregues`, inline: false }
         )
         .setTimestamp();
 
     const components = [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
+                .setCustomId('gold-set-stock')
+                .setLabel('💛 Gerenciar Estoque')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
                 .setCustomId('gold-stats')
                 .setLabel('📊 Estatísticas')
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('gold-pending-orders')
-                .setLabel('📋 Pedidos Pendentes')
+                .setLabel('📋 Pedidos')
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('gold-manage-products')
@@ -776,10 +894,12 @@ async function handleAdminStatsButton(interaction) {
     if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
 
     const stats = goldShop.getShopStats();
+    const stock = goldShop.getGoldStock();
     const embed = new EmbedBuilder()
         .setColor(0x57F287)
         .setTitle('📊 Estatísticas da Gold Shop')
         .addFields(
+            { name: '💛 Estoque Atual', value: `${stock.toLocaleString()} gold`, inline: true },
             { name: '📦 Total de Pedidos', value: String(stats.totalOrders), inline: true },
             { name: '⏳ Pendentes', value: String(stats.pending), inline: true },
             { name: '💰 Aguardando Entrega', value: String(stats.paid), inline: true },
@@ -790,6 +910,52 @@ async function handleAdminStatsButton(interaction) {
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed], flags: 64 });
+}
+
+// ==========================================
+// 💛 SET STOCK (admin)
+// ==========================================
+
+async function handleSetStock(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const currentStock = goldShop.getGoldStock();
+
+    const modal = new ModalBuilder()
+        .setCustomId('gold-modal-set-stock')
+        .setTitle('💛 Gerenciar Estoque');
+
+    const stockInput = new TextInputBuilder()
+        .setCustomId('gold-stock-amount')
+        .setLabel('Quantidade total de gold disponível')        
+        .setPlaceholder(`Atual: ${currentStock.toLocaleString()}`)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(stockInput));
+    await interaction.showModal(modal);
+}
+
+async function handleSetStockModal(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const amountStr = interaction.fields.getTextInputValue('gold-stock-amount').trim().replace(/\./g, '').replace(/,/g, '');
+    const amount = parseInt(amountStr, 10);
+
+    if (isNaN(amount) || amount < 0) {
+        return interaction.reply({ content: '❌ Valor inválido.', flags: 64 });
+    }
+
+    goldShop.setGoldStock(amount);
+
+    await interaction.reply({
+        content: `✅ Estoque atualizado para **${amount.toLocaleString()} gold**!\n🔄 Use **Atualizar Painel** para refletir no painel público.`,
+        flags: 64
+    });
 }
 
 // ==========================================
