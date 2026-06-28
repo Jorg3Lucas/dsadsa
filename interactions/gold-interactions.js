@@ -620,9 +620,9 @@ async function processBuyOrder(interaction, fixedAmount) {
             )
             .setTimestamp();
 
-        // Add QR Code image if available
+        // Add QR Code as thumbnail (small, click to expand)
         if (pixResult.qrCodeBase64) {
-            confirmEmbed.setImage(`attachment://${pixFileName}`);
+            confirmEmbed.setThumbnail(`attachment://${pixFileName}`);
         }
 
         // Build action buttons
