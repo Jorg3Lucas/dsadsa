@@ -3,7 +3,7 @@
 // Buttons, modals, select menus
 // ==========================================
 
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
 import * as goldShop from '../gold-shop.js';
 import { createPixPayment, initMercadoPago } from '../mercadopago.js';
 
@@ -301,7 +301,7 @@ export function buildGoldPanelButtons() {
 // 🧩 CAN HANDLE
 // ==========================================
 
-const GOLD_PREFIXES = ['gold-buy-', 'gold-my-orders', 'gold-shop-back', 'gold-deliver-', 'gold-toggle-', 'gold-cancel-order-', 'gold-refresh-order-', 'gold-admin-menu', 'gold-stats', 'gold-pending-orders', 'gold-manage-products'];
+const GOLD_PREFIXES = ['gold-buy-', 'gold-my-orders', 'gold-shop-back', 'gold-deliver-', 'gold-toggle-', 'gold-cancel-order-', 'gold-refresh-order-', 'gold-admin-menu', 'gold-stats', 'gold-pending-orders', 'gold-manage-products', 'gold-add-product', 'gold-edit-price-', 'gold-delete-menu', 'gold-select-delete', 'gold-refresh-panel'];
 
 export function canHandleGoldInteraction(interaction) {
     const cid = interaction.customId;
@@ -347,6 +347,21 @@ export async function handleGoldInteraction(interaction) {
     }
     if (cid === 'gold-manage-products') {
         return handleAdminProductsButton(interaction);
+    }
+    if (cid === 'gold-add-product') {
+        return handleAddProductButton(interaction);
+    }
+    if (cid.startsWith('gold-edit-price-')) {
+        return handleEditPriceButton(interaction);
+    }
+    if (cid === 'gold-delete-menu') {
+        return handleDeleteMenu(interaction);
+    }
+    if (cid === 'gold-select-delete') {
+        return handleSelectDelete(interaction);
+    }
+    if (cid === 'gold-refresh-panel') {
+        return handleRefreshPanel(interaction);
     }
 
     return false;
@@ -412,9 +427,22 @@ async function handleBuyButton(interaction) {
 // ==========================================
 
 export async function handleGoldModalSubmit(interaction) {
-    if (!interaction.customId.startsWith('gold-modal-')) return false;
+    const modalId = interaction.customId;
 
-    const productId = interaction.customId.replace('gold-modal-', '');
+    // ── Handle add product modal ──
+    if (modalId === 'gold-modal-add-product') {
+        return handleAddProductModal(interaction);
+    }
+
+    // ── Handle edit price modal ──
+    if (modalId.startsWith('gold-modal-edit-price-')) {
+        return handleEditPriceModal(interaction);
+    }
+
+    // ── Handle buy modal (standard) ──
+    if (!modalId.startsWith('gold-modal-')) return false;
+
+    const productId = modalId.replace('gold-modal-', '');
     const product = goldShop.getProduct(productId);
     if (!product || !product.active) {
         return interaction.reply({
@@ -819,27 +847,239 @@ async function handleAdminProductsButton(interaction) {
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('🏪 Gerenciar Produtos')
-        .setDescription('Clique para ativar/desativar produtos.')
+        .setDescription('Clique em um produto para editar, ou use os botões abaixo.')
         .setTimestamp();
 
     for (const product of products) {
         embed.addFields({
-            name: `${product.name} - R$ ${product.price.toFixed(2)}`,
-            value: `💛 ${(product.amount / 1000000).toFixed(1)}M | ${product.active ? '✅ Ativo' : '❌ Inativo'}`,
+            name: `${product.id} — ${product.name}`,
+            value: `💛 **${(product.amount / 1000000).toFixed(1)}M Gold** — 💰 **R$ ${product.price.toFixed(2)}** — ${product.active ? '✅' : '❌'}`,
             inline: false
         });
     }
 
-    const components = products.map(product =>
-        new ActionRowBuilder().addComponents(
+    const components = [];
+
+    // Row 1: Toggle active/inactive for each product
+    const toggleRow = new ActionRowBuilder();
+    for (const product of products.slice(0, 5)) {
+        toggleRow.addComponents(
             new ButtonBuilder()
                 .setCustomId(`gold-toggle-${product.id}`)
-                .setLabel(`${product.active ? '❌ Desativar' : '✅ Ativar'} ${product.name}`)
+                .setLabel(product.active ? `❌ ${product.name}` : `✅ ${product.name}`)
                 .setStyle(product.active ? ButtonStyle.Danger : ButtonStyle.Success)
-        )
-    );
+        );
+    }
+    if (products.length > 0) components.push(toggleRow);
+
+    // Row 2: Edit price for each product
+    const editRow = new ActionRowBuilder();
+    for (const product of products.slice(0, 5)) {
+        editRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`gold-edit-price-${product.id}`)
+                .setLabel(`💰 ${product.name}`)
+                .setStyle(ButtonStyle.Secondary)
+        );
+    }
+    if (products.length > 0) components.push(editRow);
+
+    // Row 3: Delete and Add new
+    const actionRow = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('gold-add-product')
+                .setLabel('➕ Novo Produto')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('gold-refresh-panel')
+                .setLabel('🔄 Atualizar Painel')
+                .setStyle(ButtonStyle.Primary)
+        );
+    // Add delete buttons if more than default products
+    if (products.some(p => !['gold_100k', 'gold_500k', 'gold_1m', 'gold_2m', 'gold_5m', 'gold_10m'].includes(p.id))) {
+        actionRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId('gold-delete-menu')
+                .setLabel('🗑️ Remover')
+                .setStyle(ButtonStyle.Danger)
+        );
+    }
+    components.push(actionRow);
 
     await interaction.reply({ embeds: [embed], components, flags: 64 });
+}
+
+// ==========================================
+// ➕ ADD PRODUCT BUTTON → opens modal
+// ==========================================
+
+async function handleAddProductButton(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const modal = new ModalBuilder()
+        .setCustomId('gold-modal-add-product')
+        .setTitle('➕ Novo Produto');
+
+    const idInput = new TextInputBuilder()
+        .setCustomId('gold-product-id')
+        .setLabel('ID do produto (ex: gold_3m)')
+        .setPlaceholder('gold_3m')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(30);
+
+    const nameInput = new TextInputBuilder()
+        .setCustomId('gold-product-name')
+        .setLabel('Nome (ex: 💛 3M Gold)')
+        .setPlaceholder('💛 3M Gold')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50);
+
+    const amountInput = new TextInputBuilder()
+        .setCustomId('gold-product-amount')
+        .setLabel('Quantidade de Gold (ex: 3000000)')
+        .setPlaceholder('3000000')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+    const priceInput = new TextInputBuilder()
+        .setCustomId('gold-product-price')
+        .setLabel('Preço em R$ (ex: 120.00)')
+        .setPlaceholder('120.00')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(idInput),
+        new ActionRowBuilder().addComponents(nameInput),
+        new ActionRowBuilder().addComponents(amountInput),
+        new ActionRowBuilder().addComponents(priceInput)
+    );
+
+    await interaction.showModal(modal);
+}
+
+// ==========================================
+// 💰 EDIT PRICE BUTTON → opens modal
+// ==========================================
+
+async function handleEditPriceButton(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const productId = interaction.customId.replace('gold-edit-price-', '');
+    const product = goldShop.getProduct(productId);
+    if (!product) return interaction.reply({ content: '❌ Produto não encontrado.', flags: 64 });
+
+    const modal = new ModalBuilder()
+        .setCustomId(`gold-modal-edit-price-${productId}`)
+        .setTitle(`Editar Preço - ${product.name}`);
+
+    const priceInput = new TextInputBuilder()
+        .setCustomId('gold-new-price')
+        .setLabel('Novo preço em R$')
+        .setPlaceholder(String(product.price))
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(priceInput));
+    await interaction.showModal(modal);
+}
+
+// ==========================================
+// 🗑️ DELETE MENU → select menu
+// ==========================================
+
+async function handleDeleteMenu(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const products = goldShop.getAllProducts();
+    const deletable = products.filter(p => !['gold_100k', 'gold_500k', 'gold_1m', 'gold_2m', 'gold_5m', 'gold_10m'].includes(p.id));
+
+    if (deletable.length === 0) {
+        return interaction.reply({ content: '❌ Não há produtos personalizados para remover.', flags: 64 });
+    }
+
+    const options = deletable.map(p => ({
+        label: `${p.name} - R$ ${p.price.toFixed(2)}`,
+        description: `${(p.amount / 1000000).toFixed(1)}M Gold`,
+        value: `gold-del-prod-${p.id}`
+    }));
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId('gold-select-delete')
+        .setPlaceholder('Selecione o produto para remover...')
+        .addOptions(options);
+
+    await interaction.reply({
+        content: '🗑️ **Selecione o produto que deseja remover permanentemente:**',
+        components: [new ActionRowBuilder().addComponents(select)],
+        flags: 64
+    });
+}
+
+// ==========================================
+// 🗑️ CONFIRM DELETE
+// ==========================================
+
+async function handleSelectDelete(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const value = interaction.values[0];
+    const productId = value.replace('gold-del-prod-', '');
+    const product = goldShop.getProduct(productId);
+    if (!product) return interaction.update({ content: '❌ Produto não encontrado.', components: [], flags: 64 });
+
+    goldShop.deleteProduct(productId);
+
+    await interaction.update({
+        content: `✅ Produto **${product.name}** removido permanentemente!`,
+        components: [],
+        flags: 64
+    });
+}
+
+// ==========================================
+// 🔄 REFRESH PANEL
+// ==========================================
+
+async function handleRefreshPanel(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const panelRef = goldShop.getPanelRef();
+    if (!panelRef) {
+        return interaction.reply({ content: '❌ Nenhum painel gold encontrado. Use `!goldshop` para criar um.', flags: 64 });
+    }
+
+    await interaction.deferReply({ flags: 64 });
+
+    try {
+        const channel = await interaction.client.channels.fetch(panelRef.channelId);
+        if (!channel) throw new Error('Canal não encontrado');
+
+        const msg = await channel.messages.fetch(panelRef.messageId);
+        if (!msg) throw new Error('Mensagem não encontrada');
+
+        await msg.edit({ embeds: [buildGoldPanelEmbed()], components: buildGoldPanelButtons() });
+
+        await interaction.editReply({ content: '✅ Painel gold shop atualizado com sucesso!', flags: 64 });
+    } catch (err) {
+        goldShop.clearPanelRef();
+        await interaction.editReply({ content: `❌ Erro ao atualizar painel: ${err.message}. Use \`!goldshop\` para recriar.`, flags: 64 });
+    }
 }
 
 // ==========================================
@@ -925,4 +1165,67 @@ async function handleCancelOrderButton(interaction) {
         components: [],
         flags: 64
     });
+}
+
+// ==========================================
+// ➕ ADD PRODUCT MODAL SUBMIT
+// ==========================================
+
+async function handleAddProductModal(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const id = interaction.fields.getTextInputValue('gold-product-id').trim().replace(/\s+/g, '_').toLowerCase();
+    const name = interaction.fields.getTextInputValue('gold-product-name').trim();
+    const amountStr = interaction.fields.getTextInputValue('gold-product-amount').trim();
+    const priceStr = interaction.fields.getTextInputValue('gold-product-price').trim();
+
+    const amount = parseInt(amountStr, 10);
+    const price = parseFloat(priceStr);
+
+    if (isNaN(amount) || amount <= 0) {
+        return interaction.reply({ content: '❌ Quantidade de Gold inválida.', flags: 64 });
+    }
+    if (isNaN(price) || price <= 0) {
+        return interaction.reply({ content: '❌ Preço inválido.', flags: 64 });
+    }
+
+    try {
+        const product = goldShop.addProduct(id, name, amount, price);
+        await interaction.reply({
+            content: `✅ Produto **${product.name}** adicionado com sucesso!\n💛 ${(product.amount / 1000000).toFixed(1)}M Gold — 💰 R$ ${product.price.toFixed(2)}\n🔄 Use o botão **Atualizar Painel** para refletir as mudanças.`,
+            flags: 64
+        });
+    } catch (err) {
+        await interaction.reply({ content: `❌ ${err.message}`, flags: 64 });
+    }
+}
+
+// ==========================================
+// 💰 EDIT PRICE MODAL SUBMIT
+// ==========================================
+
+async function handleEditPriceModal(interaction) {
+    const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
+                    interaction.member.permissions.has('ManageMessages');
+    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+
+    const productId = interaction.customId.replace('gold-modal-edit-price-', '');
+    const priceStr = interaction.fields.getTextInputValue('gold-new-price').trim();
+    const price = parseFloat(priceStr);
+
+    if (isNaN(price) || price <= 0) {
+        return interaction.reply({ content: '❌ Preço inválido.', flags: 64 });
+    }
+
+    try {
+        const product = goldShop.updateProductPrice(productId, price);
+        await interaction.reply({
+            content: `✅ Preço do **${product.name}** atualizado para **R$ ${product.price.toFixed(2)}**!\n🔄 Use o botão **Atualizar Painel** para refletir as mudanças.`,
+            flags: 64
+        });
+    } catch (err) {
+        await interaction.reply({ content: `❌ ${err.message}`, flags: 64 });
+    }
 }

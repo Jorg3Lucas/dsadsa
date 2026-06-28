@@ -322,6 +322,49 @@ export function toggleProduct(productId) {
 }
 
 /**
+ * Permanently delete a product from the catalog
+ */
+export function deleteProduct(productId) {
+    const idx = goldDb.products.findIndex(p => p.id === productId);
+    if (idx === -1) throw new Error('Produto não encontrado.');
+    const removed = goldDb.products.splice(idx, 1)[0];
+    saveGoldDatabase();
+    return removed;
+}
+
+/**
+ * Update a product's price
+ */
+export function updateProductPrice(productId, newPrice) {
+    const product = getProduct(productId);
+    if (!product) throw new Error('Produto não encontrado.');
+    if (newPrice <= 0) throw new Error('Preço deve ser maior que zero.');
+    product.price = Number(newPrice.toFixed(2));
+    saveGoldDatabase();
+    return product;
+}
+
+/**
+ * Add a new product to the catalog
+ */
+export function addProduct(id, name, amount, price) {
+    if (getProduct(id)) throw new Error('Já existe um produto com este ID.');
+    if (price <= 0) throw new Error('Preço deve ser maior que zero.');
+    if (amount <= 0) throw new Error('Quantidade de gold deve ser maior que zero.');
+
+    const product = {
+        id,
+        name,
+        amount,
+        price: Number(price.toFixed(2)),
+        active: true
+    };
+    goldDb.products.push(product);
+    saveGoldDatabase();
+    return product;
+}
+
+/**
  * Get shop statistics for admin dashboard
  */
 export function getShopStats() {
