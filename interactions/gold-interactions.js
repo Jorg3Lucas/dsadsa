@@ -413,14 +413,14 @@ async function handleBuyCustom(interaction) {
 
     const goldInput = new TextInputBuilder()
         .setCustomId('gold-amount')
-        .setLabel(`Quanto gold deseja comprar? (Mín: ${goldShop.GOLD_UNIT}, Máx: ${stock})`)
+        .setLabel(`Qtd gold (Mín: ${goldShop.GOLD_UNIT}, Disp: ${stock})`)
         .setPlaceholder(`Ex: ${goldShop.GOLD_UNIT}`)
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
     const characterInput = new TextInputBuilder()
         .setCustomId('gold-character-name')
-        .setLabel('🎮 Nome do personagem (exatamente como no jogo)')
+        .setLabel('🎮 Nome do personagem (igual ao jogo)')
         .setPlaceholder('Digite o nome do seu personagem...')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
@@ -471,7 +471,7 @@ async function handleQuickBuy(interaction) {
 
     const characterInput = new TextInputBuilder()
         .setCustomId('gold-character-name')
-        .setLabel('🎮 Nome do personagem (exatamente como no jogo)')
+        .setLabel('🎮 Nome do personagem (igual ao jogo)')
         .setPlaceholder('Digite o nome do seu personagem...')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
