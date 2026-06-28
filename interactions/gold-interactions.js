@@ -317,7 +317,7 @@ export function buildGoldPanelButtons() {
 // 🧩 CAN HANDLE
 // ==========================================
 
-const GOLD_PREFIXES = ['gold-buy-', 'gold-quick-', 'gold-my-orders', 'gold-shop-back', 'gold-deliver-', 'gold-toggle-', 'gold-cancel-order-', 'gold-refresh-order-', 'gold-admin-menu', 'gold-stats', 'gold-pending-orders', 'gold-manage-products', 'gold-add-product', 'gold-edit-price-', 'gold-delete-menu', 'gold-select-delete', 'gold-refresh-panel', 'gold-set-stock'];
+const GOLD_PREFIXES = ['gold-buy-', 'gold-quick-', 'gold-my-orders', 'gold-shop-back', 'gold-deliver-', 'gold-toggle-', 'gold-cancel-order-', 'gold-refresh-order-', 'gold-admin-menu', 'gold-stats', 'gold-pending-orders', 'gold-manage-products', 'gold-add-product', 'gold-edit-price-', 'gold-delete-menu', 'gold-select-delete', 'gold-refresh-panel', 'gold-set-stock', 'gold-show-pix-'];
 
 export function canHandleGoldInteraction(interaction) {
     const cid = interaction.customId;
@@ -357,6 +357,9 @@ export async function handleGoldInteraction(interaction) {
     }
     if (cid.startsWith('gold-refresh-order-')) {
         return handleRefreshOrder(interaction);
+    }
+    if (cid.startsWith('gold-show-pix-')) {
+        return handleShowPixCode(interaction);
     }
     if (cid === 'gold-admin-menu') {
         return handleAdminMenu(interaction);
@@ -528,6 +531,12 @@ export async function handleGoldModalSubmit(interaction) {
         return processBuyOrder(interaction, amount);
     }
 
+    // ── Handle show PIX code modal (just acknowledge, no data to process)
+    if (modalId.startsWith('gold-modal-pix-code-')) {
+        await interaction.deferUpdate();
+        return;
+    }
+
     return false;
 }
 
@@ -590,60 +599,74 @@ async function processBuyOrder(interaction, fixedAmount) {
             pixResult.qrCodeBase64
         );
 
-        // Build confirmation embed
+        // Build payment confirmation embed with QR Code
+        const pixFileName = `pix-qr-${order.orderId}.png`;
         const confirmEmbed = new EmbedBuilder()
             .setColor(0x57F287)
-            .setTitle('✅ Pedido Criado com Sucesso!')
+            .setTitle('💳 Pagamento PIX')
             .setDescription(
-            `📋 **Pedido:** ${order.orderId}\n` +
+            `🛒 **Pedido:** ${order.orderId}\n` +
             `💛 **Gold:** ${pricing.goldAmount.toLocaleString()}\n` +
             `💰 **Valor:** R$ ${pricing.totalPrice.toFixed(2)}\n` +
             `📊 **Preço:** ${pricing.tierLabel}\n` +
             `🎮 **Personagem:** ${characterName}\n` +
             `🌍 **Servidor:** ${server}\n\n` +
-            `💳 **Pague com PIX usando o código abaixo:**\n` +
-            `\`\`\`\n${order.pixCopiaCola}\n\`\`\`\n\n` +
-            `⏳ O PIX expira em **30 minutos**.`
+            `📌 **Instruções:**\n` +
+            `1️⃣ Abra o app do seu banco\n` +
+            `2️⃣ Escaneie o QR Code abaixo ou use "Copia e Cola"\n` +
+            `3️⃣ Confirme o pagamento\n\n` +
+            `⏳ O PIX expira em **30 minutos**.\n` +
+            `🔄 Após o pagamento, aguarde nossa equipe entrar em contato para entrega.`
             )
             .setTimestamp();
 
-        // Send DM with PIX info
-        const pixEmbed = buildPixEmbed(
-            {
-                orderId: order.orderId,
-                productName: order.productName,
-                price: order.price,
-                pixCopiaCola: order.pixCopiaCola
-            },
-            pixResult.qrCodeBase64,
-            pixResult.qrCode
-        );
-
-        const dmComponents = [
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`gold-refresh-order-${order.orderId}`)
-                    .setLabel('🔄 Atualizar Status')
-                    .setStyle(ButtonStyle.Secondary)
-            )
-        ];
-
-        try {
-            await interaction.user.send({
-                embeds: [pixEmbed],
-                components: dmComponents,
-                files: pixResult.qrCodeBase64
-                    ? [{ attachment: Buffer.from(pixResult.qrCodeBase64, 'base64'), name: `pix-qr-${order.orderId}.png` }]
-                    : []
-            });
-        } catch { /* DM might be closed */
-            await interaction.editReply({
-                content: '⚠️ Não consegui enviar DM. Verifique se suas DMs estão abertas.',
-                flags: 64
-            });
+        // Add QR Code image if available
+        if (pixResult.qrCodeBase64) {
+            confirmEmbed.setImage(`attachment://${pixFileName}`);
         }
 
-        await interaction.editReply({ embeds: [confirmEmbed], flags: 64 });
+        // Build action buttons
+        const actionRow = new ActionRowBuilder();
+
+        // Button: show PIX code in modal
+        actionRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`gold-show-pix-${order.orderId}`)
+                .setLabel('📋 Copiar Código PIX')
+                .setStyle(ButtonStyle.Primary)
+        );
+
+        // Button: refresh order status
+        actionRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`gold-refresh-order-${order.orderId}`)
+                .setLabel('🔄 Status')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        // Link button: how to pay with PIX
+        actionRow.addComponents(
+            new ButtonBuilder()
+                .setLabel('❓ Como pagar via PIX')
+                .setStyle(ButtonStyle.Link)
+                .setURL('https://www.mercadopago.com.br/ajuda/pix')
+        );
+        actionRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`gold-cancel-order-${order.orderId}`)
+                .setLabel('❌ Cancelar')
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        const files = pixResult.qrCodeBase64
+            ? [{ attachment: Buffer.from(pixResult.qrCodeBase64, 'base64'), name: pixFileName }]
+            : [];
+
+        await interaction.editReply({
+            embeds: [confirmEmbed],
+            components: [actionRow],
+            files
+        });
 
         // Notify admin channel
         const adminChannelId = process.env.GOLD_ADMIN_CHANNEL_ID;
@@ -1246,6 +1269,36 @@ async function handleRefreshPanel(interaction) {
         goldShop.clearPanelRef();
         await interaction.editReply({ content: `❌ Erro ao atualizar painel: ${err.message}. Use \`!goldshop\` para recriar.`, flags: 64 });
     }
+}
+
+// ==========================================
+// 📋 SHOW PIX CODE (opens modal with copyable code)
+// ==========================================
+
+async function handleShowPixCode(interaction) {
+    const orderId = interaction.customId.replace('gold-show-pix-', '');
+    const order = goldShop.getOrder(orderId);
+    if (!order || !order.pixCopiaCola) {
+        return interaction.reply({ content: '❌ Código PIX não encontrado para este pedido.', flags: 64 });
+    }
+
+    if (order.userId !== interaction.user.id) {
+        return interaction.reply({ content: '❌ Este pedido não pertence a você.', flags: 64 });
+    }
+
+    const modal = new ModalBuilder()
+        .setCustomId(`gold-modal-pix-code-${orderId}`)
+        .setTitle(`PIX - ${orderId}`);
+
+    const pixInput = new TextInputBuilder()
+        .setCustomId('gold-pix-code')
+        .setLabel('📋 Código PIX (Copie e Cole no app do banco)')
+        .setValue(order.pixCopiaCola)
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(pixInput));
+    await interaction.showModal(modal);
 }
 
 // ==========================================
