@@ -601,8 +601,8 @@ async function processBuyOrder(interaction, fixedAmount) {
             `📊 **Preço:** ${pricing.tierLabel}\n` +
             `🎮 **Personagem:** ${characterName}\n` +
             `🌍 **Servidor:** ${server}\n\n` +
-            `💳 **Instruções de Pagamento enviadas no seu DM!**\n` +
-            `📌 Verifique suas mensagens privadas.\n\n` +
+            `💳 **Pague com PIX usando o código abaixo:**\n` +
+            `\`\`\`\n${order.pixCopiaCola}\n\`\`\`\n\n` +
             `⏳ O PIX expira em **30 minutos**.`
             )
             .setTimestamp();

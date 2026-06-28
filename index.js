@@ -27,6 +27,7 @@ import {
 import { handleGoldSlashCommand } from './commands/gold-commands.js';
 import { initGoldShop } from './gold-shop.js';
 import { initMercadoPago, checkGoldEnvVars } from './mercadopago.js';
+import { startWebhookServer } from './webhook-server.js';
 
 const DISCORD_SERVER_ID = '1432320162278670440';
 
@@ -166,6 +167,9 @@ client.once('ready', async () => {
     initGoldShop();
     initMercadoPago();
     checkGoldEnvVars();
+
+    // Start webhook server for automatic payment confirmation
+    startWebhookServer(client);
 
     // Auto-recover gold panel on restart
     try {
