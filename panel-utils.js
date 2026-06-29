@@ -103,8 +103,27 @@ export function resetPanelData(key) {
             sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
             sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
             ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-            sp11: { name: "⭐ SP 11F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
             sp12: { name: "⭐ SP 12F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+        };
+    } else if ("11peak" === key) {
+        db[key] = {
+            type: "peak",
+            title: "Secret Peak 11F",
+            timeWindow: "", next: null, ownerId: null, ownerName: null,
+            red: {
+                name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180,
+                _freeSince: 0, _lastKilledTimeStr: "",
+                schedules: [1, 7, 13, 19]
+            }
+        };
+    } else if ("11goblin" === key) {
+        db[key] = {
+            type: "summon",
+            title: "⭐ SP 11F (Goblin)",
+            sp11: {
+                name: "⭐ SP 11F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
+            }
         };
     } else if (is11or12) {
         let num = is11or12[1], type = is11or12[2];

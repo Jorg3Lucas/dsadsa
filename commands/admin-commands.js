@@ -19,7 +19,7 @@ import { setupTicketPanel } from "../ticket-system.js";
 import { renderEmbed, renderButtons } from "../panel-render.js";
 import { refreshVisualPanel, resetPanelData } from "../panel-utils.js";
 import { STATUS_CLAIMED } from "../constants.js";
-import { getAntidemonRoomKeys, getAntidemonRoomName } from "../claim-core.js";
+import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys } from "../claim-core.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -286,7 +286,7 @@ async function handleKick(msg) {
                 }
             }
         } else if ("summon" === current.type) {
-            const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"];
+            const summonProps = getSummonRoomKeys(key);
             for (let loc of summonProps) {
                 STATUS_CLAIMED === current[loc].status && current[loc].ownerId && optionsList.push({
                     label: `${cleanedTitle} - ${current[loc].name}`,

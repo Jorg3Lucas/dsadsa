@@ -19,7 +19,8 @@ import {
     buildAntiClaimOptions,
     buildAntiQueueOptions,
     buildActiveClaimMessage,
-    getAntidemonRoomKeys
+    getAntidemonRoomKeys,
+    getSummonRoomKeys
 } from "../claim-core.js";
 import {
     EmbedBuilder as e,
@@ -37,7 +38,7 @@ import {
 } from "../time-utils.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN, STATUS_KILLED, STATUS_KILLED_PREFIX } from "../constants.js";
 
-const SUMMON_PROPS = ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"];
+// Summon room keys are now resolved via getSummonRoomKeys(panelKey)
 
 // ⏳ Track death confirmation timeouts so they can be cancelled on button click
 const deathConfirmTimeouts = new Map();
@@ -268,14 +269,15 @@ async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {});
     }
+    const summonProps = getSummonRoomKeys(panelKey);
     if (hasActiveQueue(uid)) {
-        const hasPriority = SUMMON_PROPS.some(loc => targetObj[loc].nextId === uid);
+        const hasPriority = summonProps.some(loc => targetObj[loc].nextId === uid);
         if (!hasPriority) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {});
     }
 
     // Find available locations
-    const priorityLocs = SUMMON_PROPS.filter(loc => targetObj[loc].nextId === uid && targetObj[loc].status !== STATUS_CLAIMED);
-    const freeLocs = SUMMON_PROPS.filter(loc => targetObj[loc].status !== STATUS_CLAIMED && !targetObj[loc].nextId);
+    const priorityLocs = summonProps.filter(loc => targetObj[loc].nextId === uid && targetObj[loc].status !== STATUS_CLAIMED);
+    const freeLocs = summonProps.filter(loc => targetObj[loc].status !== STATUS_CLAIMED && !targetObj[loc].nextId);
     const showLocs = priorityLocs.length > 0 ? priorityLocs : freeLocs;
 
     const locOptions = showLocs.map(loc => ({
@@ -307,7 +309,8 @@ async function handleSummonNext(interaction, uid, uName, targetObj, panelKey) {
     }
     if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {});
 
-    const queueOpts = SUMMON_PROPS.filter(loc => targetObj[loc].status === STATUS_CLAIMED && !targetObj[loc].nextId).map(loc => ({
+    const summonProps = getSummonRoomKeys(panelKey);
+    const queueOpts = summonProps.filter(loc => targetObj[loc].status === STATUS_CLAIMED && !targetObj[loc].nextId).map(loc => ({
         label: targetObj[loc].name,
         value: loc,
         emoji: "🌀"
@@ -329,14 +332,15 @@ async function handleSummonNext(interaction, uid, uName, targetObj, panelKey) {
 
 async function handleSummonCancel(interaction, uid, uName, targetObj, panelKey) {
     let isMod = interaction.member.permissions.has("ManageMessages");
-    let isOwner = SUMMON_PROPS.some(p => targetObj[p].ownerId === uid);
-    let isInQueue = SUMMON_PROPS.some(p => targetObj[p].nextId === uid);
+    const summonProps = getSummonRoomKeys(panelKey);
+    let isOwner = summonProps.some(p => targetObj[p].ownerId === uid);
+    let isInQueue = summonProps.some(p => targetObj[p].nextId === uid);
 
     if (isOwner || isInQueue || isMod) {
         let penalized = !1;
         let anyAction = !1;
 
-        SUMMON_PROPS.forEach(loc => {
+        summonProps.forEach(loc => {
             if (targetObj[loc].ownerId === uid) {
                 anyAction = !0;
                 let currentLoggedName = targetObj[loc].ownerName || uName;

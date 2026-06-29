@@ -4,7 +4,7 @@ import { getMsg, reloadLanguage } from "./lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "./state.js";
 import { pushToDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
-import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom, getAntidemonRoomKeys } from "./claim-core.js";
+import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom, getAntidemonRoomKeys, getSummonRoomKeys } from "./claim-core.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX } from "./constants.js";
 
 // ==========================================
@@ -42,7 +42,9 @@ export function startTickInterval() {
             if (!current || key.startsWith("_")) continue;
             let panelUpdate = !1;
 
-            if ("peak" === current.type && isRoomOpen(redBossSchedules)) {
+            // Use custom schedules if available (e.g. SP11: [1,7,13,19]), fall back to default
+            const peakRedScheds = (current.red && current.red.schedules) || redBossSchedules;
+            if ("peak" === current.type && isRoomOpen(peakRedScheds)) {
                 if (STATUS_AVAILABLE !== current.red.status && now.getMinutes() === 5 && current.ownerId) {
                     if (!alertCache.warning5mAfter[`${key}-red-${now.getHours()}`]) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
@@ -177,7 +179,7 @@ export function startTickInterval() {
             }
 
             if ("antidemon" === current.type || "summon" === current.type) {
-                const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
+                const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                 for (let room of roomList) {
                     let rData = current[room];
                     if (STATUS_CLAIMED === rData.status && rData.timeWindow) {
@@ -250,7 +252,7 @@ export function startTickInterval() {
             // Force refresh for countdown timers
             if (!panelUpdate) {
                 if ("antidemon" === current.type || "summon" === current.type) {
-                    const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
+                    const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                     for (let room of roomList) {
                         let rData = current[room];
                         if ((STATUS_CLAIMED === rData.status && rData.timeWindow) || rData.endLimit) {

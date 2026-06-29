@@ -95,6 +95,7 @@ export function usesScheduleRespawn(current, prop) {
 }
 
 export function getBossSchedules(current, prop) {
+    if (current[prop] && current[prop].schedules) return current[prop].schedules;
     if ("peak" === current.type && "red" === prop) return redBossSchedules;
     if ("normal" === current.type && "boss3" === prop) return leader3Schedules;
     return null;

@@ -12,7 +12,8 @@ import {
     hasActiveQueue,
     checkPunishment,
     freeAntidemonRoom,
-    buildActiveClaimMessage
+    buildActiveClaimMessage,
+    getSummonRoomKeys
 } from "../claim-core.js";
 import {
     ActionRowBuilder as t,
@@ -25,7 +26,7 @@ import {
 } from "../time-utils.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN } from "../constants.js";
 
-const SUMMON_PROPS = ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"];
+// Dynamic helper — uses panel key to determine which locations belong to this panel
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -71,7 +72,8 @@ async function handleSummonSlide(interaction, uid) {
         return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
     }
     if (hasActiveQueue(uid)) {
-        const hasPriority = SUMMON_PROPS.some(loc => targetFloor[loc].nextId === uid);
+        const summonProps = getSummonRoomKeys(pKey);
+        const hasPriority = summonProps.some(loc => targetFloor[loc].nextId === uid);
         if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
     }
 
@@ -110,7 +112,8 @@ async function handleSummonTicket(interaction, uid, uName) {
         return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
     }
     if (hasActiveQueue(uid)) {
-        const hasPriority = SUMMON_PROPS.some(loc => targetFloor[loc].nextId === uid);
+        const summonProps = getSummonRoomKeys(pKey);
+        const hasPriority = summonProps.some(loc => targetFloor[loc].nextId === uid);
         if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
     }
 

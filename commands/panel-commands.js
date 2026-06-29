@@ -112,6 +112,30 @@ async function handleMS(msg, lowerContent) {
 
 async function handleSP(msg, lowerContent) {
     let floorNum = lowerContent.replace("!sp", "").trim();
+    
+    // SP11 — special handling: Red Boss only + goblin summon panel
+    if ("11" === floorNum) {
+        const keys = ["11peak", "11goblin"];
+        db._panelMapping || (db._panelMapping = {});
+        for (let pKey of keys) {
+            if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
+                try {
+                    let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
+                    oldMsg && await oldMsg.delete().catch(() => {});
+                } catch (C) {}
+            }
+            let pMsg = await msg.channel.send({
+                embeds: [renderEmbed(pKey)],
+                components: renderButtons(pKey)
+            });
+            lastMessages[pKey] = pMsg;
+            db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
+        }
+        saveLocalStorage();
+        try { await msg.delete() } catch (C) {}
+        return;
+    }
+
     if (!defaultFloors.includes(floorNum)) return;
 
     let pKey = `${floorNum}peak`;

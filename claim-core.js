@@ -32,7 +32,13 @@ export function hasActiveClaim(uid) {
     return getActiveClaimInfo(uid).length > 0;
 }
 
-const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"];
+const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7", "ms11", "sp12"];
+
+// Returns room keys for a summon panel based on its key
+export function getSummonRoomKeys(panelKey) {
+    if (panelKey === "11goblin") return ["sp11"];
+    return SUMMON_PROPS_INTERNAL;
+}
 
 // Rooms for expanded antidemon panels (MS11 and MS12: 1-1, 1-2, 1-3 each with LEFT/MID/RIGHT)
 const ANTIDEMON_11_12_ROOMS = [
@@ -93,7 +99,8 @@ export function getActiveClaimInfo(uid) {
                     }
                 });
             } else if ("summon" === current.type) {
-                SUMMON_PROPS_INTERNAL.forEach(loc => {
+                const summonProps = getSummonRoomKeys(key);
+                summonProps.forEach(loc => {
                     if (current[loc] && current[loc].ownerId === linkedUid) {
                         let remaining = getTimeRemainingStr(current[loc].timeWindow);
                         claims.push({ title: `${current.title} - ${current[loc].name}`, type: "summon", loc, remaining });

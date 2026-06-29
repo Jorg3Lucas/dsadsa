@@ -9,7 +9,7 @@ import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getE
 import { getMsg } from "./lang.js";
 import { db } from "./state.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT, STATUS_NOW, COLOR_OCCUPIED, COLOR_HAS_QUEUE, COLOR_DEFAULT, COLOR_OPEN } from "./constants.js";
-import { getAntidemonRoomKeys, getAntidemonRoomName } from "./claim-core.js";
+import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys } from "./claim-core.js";
 
 // ==========================================
 // 🎨 RENDERING (Embeds & Buttons)
@@ -20,7 +20,7 @@ export function getEmbedColor(current, key) {
     if (current.ownerId) return COLOR_OCCUPIED;
     if (current.next) return COLOR_HAS_QUEUE;
     if ("antidemon" === current.type || "summon" === current.type) {
-        const props = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
+        const props = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
         let hasClaimed = props.some(p => current[p] && current[p].status.startsWith("🔴"));
         if (hasClaimed) return COLOR_OCCUPIED;
         let hasQueue = props.some(p => current[p] && current[p].nextId);
@@ -49,7 +49,7 @@ export function renderEmbed(key) {
     embed.setTimestamp();
 
     if ("antidemon" === current.type || "summon" === current.type) {
-        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
+        const summonProps = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
         for (let room of summonProps) {
             let rData = current[room];
@@ -288,7 +288,7 @@ export function renderButtons(key) {
     let coreRow = new t();
     
     if ("antidemon" === current.type || "summon" === current.type) {
-        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
+        const summonProps = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
         let anyClaimed = summonProps.some(p => current[p] && current[p].status === STATUS_CLAIMED);
         coreRow.addComponents(
             new n()
