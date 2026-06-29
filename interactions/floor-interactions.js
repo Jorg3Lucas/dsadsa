@@ -388,7 +388,8 @@ async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {});
     }
     if (hasActiveQueue(uid)) {
-        const hasPriority = ["left", "mid", "right"].some(rm => targetObj[rm].nextId === uid);
+        const antiRoomKeys = getAntidemonRoomKeys(panelKey);
+        const hasPriority = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].nextId === uid);
         if (!hasPriority) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {});
     }
     return await interaction.reply({

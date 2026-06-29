@@ -19,6 +19,7 @@ import { setupTicketPanel } from "../ticket-system.js";
 import { renderEmbed, renderButtons } from "../panel-render.js";
 import { refreshVisualPanel, resetPanelData } from "../panel-utils.js";
 import { STATUS_CLAIMED } from "../constants.js";
+import { getAntidemonRoomKeys } from "../claim-core.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -249,7 +250,8 @@ async function handleKick(msg) {
         if (!current || key.startsWith("_")) continue;
         let cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
         if ("antidemon" === current.type) {
-            for (let room of ["left", "mid", "right"]) {
+            const antiRoomKeys = getAntidemonRoomKeys(key);
+            for (let room of antiRoomKeys) {
                 STATUS_CLAIMED === current[room].status && current[room].ownerId && optionsList.push({
                     label: `${cleanedTitle} - ${room.toUpperCase()} Room`,
                     description: `${getMsg("system.kickCurrentLabel")} ${current[room].ownerName}`,
