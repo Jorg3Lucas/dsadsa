@@ -38,6 +38,9 @@ import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN, STATUS_KILLED, STATUS_KI
 
 const SUMMON_PROPS = ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"];
 
+// ⏳ Track death confirmation timeouts so they can be cancelled on button click
+const deathConfirmTimeouts = new Map();
+
 // ==========================================
 // 🎯 MAIN DISPATCH
 // ==========================================
@@ -52,6 +55,9 @@ export function canHandleFloorInteraction(interaction) {
 
     // Death mark: death-{key}-{prop}
     if ("death" === actionPrefix) return true;
+
+    // Death confirm/cancel: deathconfirm-{key}-{prop}, deathcancel-{key}-{prop}
+    if ("deathconfirm" === actionPrefix || "deathcancel" === actionPrefix) return true;
 
     // Floor actions: floor-{key}-{claim|next|cancel}
     if ("floor" === actionPrefix) return true;
@@ -72,6 +78,16 @@ export async function handleFloorInteraction(interaction, uid, uName) {
     // ==========================================
     if ("death" === actionPrefix) {
         return handleDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp);
+    }
+
+    // ==========================================
+    // ✅ DEATH CONFIRM / CANCEL (update existing death time)
+    // ==========================================
+    if ("deathconfirm" === actionPrefix) {
+        return handleDeathConfirm(interaction, uid, uName, targetObj, panelKey, specificProp);
+    }
+    if ("deathcancel" === actionPrefix) {
+        return handleDeathCancel(interaction, uid, uName, targetObj, panelKey, specificProp);
     }
 
     // ── All floor-level actions below ──
@@ -140,18 +156,51 @@ export async function handleFloorInteraction(interaction, uid, uName) {
 // ==========================================
 
 async function handleDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp) {
-    if (targetObj[specificProp].status.startsWith(STATUS_KILLED)) return await interaction.reply({
-        content: getMsg("rooms.deathTimerRunning"),
-        flags: 64
-    }).catch(() => {});
-
-    if (targetObj.ownerId !== uid) return await interaction.reply({
-        content: getMsg("system.accessDenied", { ownerName: targetObj.ownerName || getMsg("render.unknownUser") }),
-        flags: 64
-    }).catch(() => {});
-
     let currTimeStr = getFormattedTime12h(getLocalTime());
     let nowTs = getLocalTime().getTime();
+
+    // If boss is already marked as killed, ask for confirmation to update the time
+    if (targetObj[specificProp].status.startsWith(STATUS_KILLED)) {
+        let oldTimeStr = targetObj[specificProp].status.replace(STATUS_KILLED_PREFIX, "").trim();
+        const timeoutKey = `death-${panelKey}-${specificProp}`;
+
+        // Clear any stale timeout for this boss
+        if (deathConfirmTimeouts.has(timeoutKey)) {
+            clearTimeout(deathConfirmTimeouts.get(timeoutKey));
+            deathConfirmTimeouts.delete(timeoutKey);
+        }
+
+        await interaction.reply({
+            content: getMsg("rooms.deathUpdateConfirm", { oldTime: oldTimeStr, newTime: currTimeStr }),
+            components: [
+                new t().addComponents(
+                    new n()
+                        .setCustomId(`deathconfirm-${panelKey}-${specificProp}`)
+                        .setLabel("✅ Update")
+                        .setStyle(a.Success),
+                    new n()
+                        .setCustomId(`deathcancel-${panelKey}-${specificProp}`)
+                        .setLabel("❌ Cancel")
+                        .setStyle(a.Secondary)
+                )
+            ],
+            flags: 64
+        }).catch(() => {});
+
+        // Auto-expire after 30 seconds
+        const timeoutId = setTimeout(async () => {
+            try {
+                await interaction.editReply({
+                    content: getMsg("rooms.deathUpdateExpired"),
+                    components: []
+                });
+            } catch (e) {}
+            deathConfirmTimeouts.delete(timeoutKey);
+        }, 30000);
+
+        deathConfirmTimeouts.set(timeoutKey, timeoutId);
+        return;
+    }
 
     targetObj[specificProp].status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     targetObj[specificProp]._lastKilledAt = nowTs;
@@ -159,6 +208,52 @@ async function handleDeathMark(interaction, uid, uName, targetObj, panelKey, spe
     saveLocalStorage();
     await refreshVisualPanel(panelKey);
     return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(() => {});
+}
+
+// ==========================================
+// ✅ DEATH UPDATE CONFIRM HANDLER
+// ==========================================
+
+async function handleDeathConfirm(interaction, uid, uName, targetObj, panelKey, specificProp) {
+    // Clear the auto-expire timeout
+    const timeoutKey = `death-${panelKey}-${specificProp}`;
+    if (deathConfirmTimeouts.has(timeoutKey)) {
+        clearTimeout(deathConfirmTimeouts.get(timeoutKey));
+        deathConfirmTimeouts.delete(timeoutKey);
+    }
+
+    let currTimeStr = getFormattedTime12h(getLocalTime());
+    let nowTs = getLocalTime().getTime();
+
+    targetObj[specificProp].status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
+    targetObj[specificProp]._lastKilledAt = nowTs;
+    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr} (updated)`);
+    saveLocalStorage();
+    await refreshVisualPanel(panelKey);
+    return await interaction.update({
+        content: getMsg("rooms.deathUpdateConfirmed", { newTime: currTimeStr }),
+        components: [],
+        flags: 64
+    }).catch(() => {});
+}
+
+// ==========================================
+// ❌ DEATH UPDATE CANCEL HANDLER
+// ==========================================
+
+async function handleDeathCancel(interaction, uid, uName, targetObj, panelKey, specificProp) {
+    // Clear the auto-expire timeout
+    const timeoutKey = `death-${panelKey}-${specificProp}`;
+    if (deathConfirmTimeouts.has(timeoutKey)) {
+        clearTimeout(deathConfirmTimeouts.get(timeoutKey));
+        deathConfirmTimeouts.delete(timeoutKey);
+    }
+
+    return await interaction.update({
+        content: getMsg("rooms.deathUpdateCancelled"),
+        components: [],
+        flags: 64
+    }).catch(() => {});
 }
 
 // ==========================================
