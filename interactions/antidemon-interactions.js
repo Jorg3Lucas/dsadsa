@@ -90,8 +90,8 @@ async function handleAntiSlide(interaction, uid) {
     let roomsToCheck = [];
     const roomKeys = getAntidemonRoomKeys(pKey);
     if (roomKeys.length > 3) {
-        // 11/12: direct room keys, no combos
-        roomsToCheck = [configSelected];
+        // 11/12: support combo values (e.g. "v1l+v1m")
+        roomsToCheck = configSelected.includes("+") ? configSelected.split("+") : [configSelected];
     } else if ("mid-left" === configSelected) roomsToCheck = ["left", "mid"];
     else if ("mid-right" === configSelected) roomsToCheck = ["mid", "right"];
     else roomsToCheck = [configSelected];
@@ -153,7 +153,7 @@ async function handleAntiTicket(interaction, uid, uName) {
 
     const roomKeys = getAntidemonRoomKeys(pKey);
     if (roomKeys.length > 3) {
-        roomsToClaim = [configSelected];
+        roomsToClaim = configSelected.includes("+") ? configSelected.split("+") : [configSelected];
     } else if ("mid-left" === configSelected) roomsToClaim = ["left", "mid"];
     else if ("mid-right" === configSelected) roomsToClaim = ["mid", "right"];
     else roomsToClaim = [configSelected];
@@ -260,8 +260,11 @@ async function handleAntiNextSide(interaction, uid, uName) {
     const roomKeys = getAntidemonRoomKeys(pKey);
 
     if (roomKeys.length > 3) {
-        // 11/12: single room per choice
-        if (tryJoinQueue(choice)) joinedRooms.push(choice.toUpperCase());
+        // 11/12: support combo values (e.g. "v1l+v1m")
+        const roomsToJoin = choice.includes("+") ? choice.split("+") : [choice];
+        roomsToJoin.forEach(rm => {
+            if (tryJoinQueue(rm)) joinedRooms.push(rm.toUpperCase());
+        });
     } else if ("mid-left" === choice) {
         if (tryJoinQueue("left")) joinedRooms.push("LEFT");
         if (tryJoinQueue("mid")) joinedRooms.push("MID");
