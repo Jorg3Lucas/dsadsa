@@ -37,12 +37,13 @@ export async function handlePanelCommand(msg) {
 async function handleMS(msg, lowerContent) {
     let sub = lowerContent.replace("!ms", "").trim();
 
-    // MS11 / MS12 — Leaders, Fury, Frenzy only
+    // MS11 / MS12 — Leaders, Fury, Frenzy + Antidemon (single panel)
     if ("11" === sub || "12" === sub) {
         let list = [
             `${sub}squareleaders`,
             `${sub}squarefury`,
-            `${sub}squarefrenzy`
+            `${sub}squarefrenzy`,
+            `${sub}squareantidemon`
         ];
         db._panelMapping || (db._panelMapping = {});
         for (let item of list) {
