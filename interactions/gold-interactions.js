@@ -599,8 +599,7 @@ async function processBuyOrder(interaction, fixedAmount) {
             pixResult.qrCodeBase64
         );
 
-        // Build payment confirmation embed with QR Code
-        const pixFileName = `pix-qr-${order.orderId}.png`;
+        // Build payment confirmation embed with PIX code
         const confirmEmbed = new EmbedBuilder()
             .setColor(0x57F287)
             .setTitle('💳 Pagamento PIX')
@@ -613,22 +612,26 @@ async function processBuyOrder(interaction, fixedAmount) {
             `🌍 **Servidor:** ${server}\n\n` +
             `📌 **Instruções:**\n` +
             `1️⃣ Abra o app do seu banco\n` +
-            `2️⃣ Escaneie o QR Code abaixo ou use "Copia e Cola"\n` +
+            `2️⃣ Copie o código PIX abaixo ou clique em "Copiar Código PIX"\n` +
             `3️⃣ Confirme o pagamento\n\n` +
             `⏳ O PIX expira em **30 minutos**.\n` +
             `🔄 Após o pagamento, aguarde nossa equipe entrar em contato para entrega.`
             )
             .setTimestamp();
 
-        // Add QR Code as thumbnail (small, click to expand)
-        if (pixResult.qrCodeBase64) {
-            confirmEmbed.setThumbnail(`attachment://${pixFileName}`);
+        // Add PIX copy-paste code in the embed description
+        if (order.pixCopiaCola) {
+            confirmEmbed.addFields({
+                name: '📋 Código PIX (Copie e Cole)',
+                value: `\`\`\`\n${order.pixCopiaCola}\n\`\`\``,
+                inline: false
+            });
         }
 
         // Build action buttons
         const actionRow = new ActionRowBuilder();
 
-        // Button: show PIX code in modal
+        // Button: show PIX code in modal for easy copying
         actionRow.addComponents(
             new ButtonBuilder()
                 .setCustomId(`gold-show-pix-${order.orderId}`)
@@ -658,14 +661,10 @@ async function processBuyOrder(interaction, fixedAmount) {
                 .setStyle(ButtonStyle.Danger)
         );
 
-        const files = pixResult.qrCodeBase64
-            ? [{ attachment: Buffer.from(pixResult.qrCodeBase64, 'base64'), name: pixFileName }]
-            : [];
-
+        // No attachment — just text + buttons to avoid timeout
         await interaction.editReply({
             embeds: [confirmEmbed],
-            components: [actionRow],
-            files
+            components: [actionRow]
         });
 
         // Notify admin channel
