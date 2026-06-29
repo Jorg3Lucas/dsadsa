@@ -32,11 +32,12 @@ export function hasActiveClaim(uid) {
     return getActiveClaimInfo(uid).length > 0;
 }
 
-const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7", "ms11", "sp12"];
+const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7", "ms11"];
 
 // Returns room keys for a summon panel based on its key
 export function getSummonRoomKeys(panelKey) {
     if (panelKey === "11goblin") return ["sp11"];
+    if (panelKey === "12goblin") return ["sp12"];
     return SUMMON_PROPS_INTERNAL;
 }
 

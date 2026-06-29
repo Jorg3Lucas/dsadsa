@@ -174,25 +174,19 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // SP11: Red Boss only — separate from SP7-10 pattern
-    if (!db["11peak"]) {
-        db["11peak"] = {
-            type: "peak",
-            title: "Secret Peak 11F",
-            timeWindow: "",
-            next: null,
-            ownerId: null,
-            ownerName: null,
-            red: {
-                name: "🟥 Red",
-                status: STATUS_AVAILABLE,
-                cooldown: 180,
-                _freeSince: 0,
-                _lastKilledTimeStr: "",
-                schedules: [1, 7, 13, 19]
-            }
-        };
-    }
+    // SP11 / SP12: Red Boss only — separate from SP7-10 pattern
+    const spRedTemplate = (floor) => ({
+        type: "peak",
+        title: `Secret Peak ${floor}F`,
+        timeWindow: "", next: null, ownerId: null, ownerName: null,
+        red: {
+            name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180,
+            _freeSince: 0, _lastKilledTimeStr: "",
+            schedules: [1, 7, 13, 19]
+        }
+    });
+    if (!db["11peak"]) db["11peak"] = spRedTemplate("11");
+    if (!db["12peak"]) db["12peak"] = spRedTemplate("12");
 
     ["11squareleaders", "11squarefury", "11squarefrenzy", "12squareleaders", "12squarefury", "12squarefrenzy"].forEach(key => {
         if (!db[key]) {
@@ -261,28 +255,26 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // Initialize SP11 goblin panel (separate from main summon)
-    if (!db["11goblin"]) {
-        const summonTemplate = {
-            name: "⭐ SP 11F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+    // Initialize SP11/SP12 goblin panels (separate from main summon)
+    const goblinTemplate = (floor) => ({
+        type: "summon",
+        title: `⭐ SP ${floor}F (Goblin)`,
+        [`sp${floor}`]: {
+            name: `⭐ SP ${floor}F (Goblin)`, status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
             time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
-        };
-        db["11goblin"] = {
-            type: "summon",
-            title: "⭐ SP 11F (Goblin)",
-            sp11: { ...summonTemplate }
-        };
-    }
+        }
+    });
+    if (!db["11goblin"]) db["11goblin"] = goblinTemplate("11");
+    if (!db["12goblin"]) db["12goblin"] = goblinTemplate("12");
 
-    // Initialize summon panel (sp11 removed — moved to separate 11goblin panel)
+    // Initialize summon panel (sp11/sp12 removed — moved to separate goblin panels)
     db.summon || (db.summon = {
         type: "summon",
         title: "🌀 Summon Locations",
         sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
         sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
         sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-        ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-        sp12: { name: "⭐ SP 12F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+        ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
     });
 
     loadPunishmentsFromDisk();

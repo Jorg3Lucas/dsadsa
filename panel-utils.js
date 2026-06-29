@@ -102,13 +102,13 @@ export function resetPanelData(key) {
             sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
             sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
             sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-            ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-            sp12: { name: "⭐ SP 12F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+            ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
         };
-    } else if ("11peak" === key) {
+    } else if (key === "11peak" || key === "12peak") {
+        const floor = key === "11peak" ? "11" : "12";
         db[key] = {
             type: "peak",
-            title: "Secret Peak 11F",
+            title: `Secret Peak ${floor}F`,
             timeWindow: "", next: null, ownerId: null, ownerName: null,
             red: {
                 name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180,
@@ -116,12 +116,14 @@ export function resetPanelData(key) {
                 schedules: [1, 7, 13, 19]
             }
         };
-    } else if ("11goblin" === key) {
+    } else if (key === "11goblin" || key === "12goblin") {
+        const floor = key === "11goblin" ? "11" : "12";
+        const rm = `sp${floor}`;
         db[key] = {
             type: "summon",
-            title: "⭐ SP 11F (Goblin)",
-            sp11: {
-                name: "⭐ SP 11F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+            title: `⭐ SP ${floor}F (Goblin)`,
+            [rm]: {
+                name: `⭐ SP ${floor}F (Goblin)`, status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                 time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
             }
         };

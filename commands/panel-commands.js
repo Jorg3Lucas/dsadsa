@@ -113,9 +113,9 @@ async function handleMS(msg, lowerContent) {
 async function handleSP(msg, lowerContent) {
     let floorNum = lowerContent.replace("!sp", "").trim();
     
-    // SP11 — special handling: Red Boss only + goblin summon panel
-    if ("11" === floorNum) {
-        const keys = ["11peak", "11goblin"];
+    // SP11 / SP12 — special handling: Red Boss only + goblin summon panel
+    if ("11" === floorNum || "12" === floorNum) {
+        const keys = [`${floorNum}peak`, `${floorNum}goblin`];
         db._panelMapping || (db._panelMapping = {});
         for (let pKey of keys) {
             if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
