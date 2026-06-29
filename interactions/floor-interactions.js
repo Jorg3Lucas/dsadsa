@@ -18,7 +18,8 @@ import {
     freeAntidemonRoom,
     buildAntiClaimOptions,
     buildAntiQueueOptions,
-    buildActiveClaimMessage
+    buildActiveClaimMessage,
+    getAntidemonRoomKeys
 } from "../claim-core.js";
 import {
     EmbedBuilder as e,
@@ -393,7 +394,7 @@ async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
     return await interaction.reply({
         content: `👹 **${getMsg("rooms.antidemonMenuSelectClaim")}**`,
         components: [new t().addComponents(
-            new i().setCustomId(`antislide-${panelKey}`).setPlaceholder(getMsg("rooms.antidemonSelectPlaceholder")).addOptions(buildAntiClaimOptions(targetObj, uid))
+            new i().setCustomId(`antislide-${panelKey}`).setPlaceholder(getMsg("rooms.antidemonSelectPlaceholder")).addOptions(buildAntiClaimOptions(targetObj, uid, panelKey))
         )],
         flags: 64
     }).catch(() => {});
@@ -414,7 +415,7 @@ async function handleAntiNext(interaction, uid, uName, targetObj, panelKey) {
     return await interaction.reply({
         content: `⚔️ **${getMsg("rooms.antidemonMenuSelectNext")}**`,
         components: [new t().addComponents(
-            new i().setCustomId(`antinextside-${panelKey}`).setPlaceholder(getMsg("rooms.antidemonSelectPlaceholder")).addOptions(buildAntiQueueOptions(targetObj))
+            new i().setCustomId(`antinextside-${panelKey}`).setPlaceholder(getMsg("rooms.antidemonSelectPlaceholder")).addOptions(buildAntiQueueOptions(targetObj, panelKey))
         )],
         flags: 64
     }).catch(() => {});
@@ -426,14 +427,15 @@ async function handleAntiNext(interaction, uid, uName, targetObj, panelKey) {
 
 async function handleAntiCancel(interaction, uid, uName, targetObj, panelKey) {
     let isMod = interaction.member.permissions.has("ManageMessages");
-    let isOwner = targetObj.left.ownerId === uid || targetObj.mid.ownerId === uid || targetObj.right.ownerId === uid;
-    let isInQueue = targetObj.left.nextId === uid || targetObj.mid.nextId === uid || targetObj.right.nextId === uid;
+    const antiRoomKeys = getAntidemonRoomKeys(panelKey);
+    let isOwner = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].ownerId === uid);
+    let isInQueue = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].nextId === uid);
 
     if (isOwner || isInQueue || isMod) {
         let penalized = !1;
         let anyAction = !1;
 
-        ["left", "mid", "right"].forEach(rm => {
+        antiRoomKeys.forEach(rm => {
             if (targetObj[rm].ownerId === uid) {
                 anyAction = !0;
                 let currentLoggedName = targetObj[rm].ownerName || uName;

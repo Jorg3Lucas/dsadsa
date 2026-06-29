@@ -9,6 +9,7 @@ import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getE
 import { getMsg } from "./lang.js";
 import { db } from "./state.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT, STATUS_NOW, COLOR_OCCUPIED, COLOR_HAS_QUEUE, COLOR_DEFAULT, COLOR_OPEN } from "./constants.js";
+import { getAntidemonRoomKeys, getAntidemonRoomName } from "./claim-core.js";
 
 // ==========================================
 // 🎨 RENDERING (Embeds & Buttons)
@@ -19,7 +20,7 @@ export function getEmbedColor(current) {
     if (current.ownerId) return COLOR_OCCUPIED;
     if (current.next) return COLOR_HAS_QUEUE;
     if ("antidemon" === current.type || "summon" === current.type) {
-        const props = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : ["left", "mid", "right"];
+        const props = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
         let hasClaimed = props.some(p => current[p] && current[p].status.startsWith("🔴"));
         if (hasClaimed) return COLOR_OCCUPIED;
         let hasQueue = props.some(p => current[p] && current[p].nextId);
@@ -48,7 +49,7 @@ export function renderEmbed(key) {
     embed.setTimestamp();
 
     if ("antidemon" === current.type || "summon" === current.type) {
-        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : ["left", "mid", "right"];
+        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
         for (let room of summonProps) {
             let rData = current[room];
@@ -69,7 +70,7 @@ export function renderEmbed(key) {
                 }
             }
             let block = STATUS_CLAIMED === rData.status && rData.ownerName 
-                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n${rData.password ? `🔑 ${rData.password}` : ""}\n\`\`\`` 
+                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n${rData.password ? `🎮 PT Senha: ${rData.password}` : ""}\n\`\`\`` 
                 : rData.endLimit && rData.nextName 
                     ? `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\`\n${getEndLimitCountdown(rData.endLimit)}` 
                     : `\`\`\`yaml\n${STATUS_AVAILABLE}\n\`\`\``;
@@ -287,7 +288,7 @@ export function renderButtons(key) {
     let coreRow = new t();
     
     if ("antidemon" === current.type || "summon" === current.type) {
-        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : ["left", "mid", "right"];
+        const summonProps = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
         let anyClaimed = summonProps.some(p => current[p] && current[p].status === STATUS_CLAIMED);
         coreRow.addComponents(
             new n()
@@ -303,16 +304,17 @@ export function renderButtons(key) {
                 .setLabel(getMsg("buttons.cancelLabel"))
                 .setStyle(a.Danger)
         );
-        // Password buttons for antidemon rooms (one per claimed room)
+        // Party password buttons for antidemon rooms (one per claimed room)
         if ("antidemon" === current.type) {
             let pwdRow = new t();
-            ["left", "mid", "right"].forEach(rm => {
+            getAntidemonRoomKeys(key).forEach(rm => {
                 if (current[rm] && current[rm].status === STATUS_CLAIMED) {
+                    const hasPwd = current[rm].password;
                     pwdRow.addComponents(
                         new n()
                             .setCustomId(`antipwd-${key}-${rm}`)
-                            .setEmoji(current[rm].password ? "🔑" : "🔒")
-                            .setLabel(rm.toUpperCase())
+                            .setEmoji(hasPwd ? "🎮" : "🔒")
+                            .setLabel(`${hasPwd ? "PT" : "Set PT"} ${getAntidemonRoomName(key, rm)}`)
                             .setStyle(a.Secondary)
                     );
                 }

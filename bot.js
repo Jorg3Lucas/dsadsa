@@ -215,31 +215,30 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // Antidemon panels for MS11 and MS12: 1-1, 1-2, 1-3
+    // Antidemon panels for MS11 and MS12: single panel with all 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
     ["11", "12"].forEach(floor => {
-        const antiRoomTemplate = {
-            name: "LEFT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-            time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
-        };
-        const antiMidTemplate = {
-            name: "MID ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-            time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
-        };
-        const antiRightTemplate = {
-            name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-            time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
-        };
-
-        [1, 2, 3].forEach(ver => {
-            const key = `${floor}squareantidemon1${ver}`;
-            db[key] || (db[key] = {
-                type: "antidemon",
-                title: `Antidemon ${floor}F 1-${ver}`,
-                left: { ...antiRoomTemplate },
-                mid: { ...antiMidTemplate },
-                right: { ...antiRightTemplate }
+        const key = `${floor}squareantidemon`;
+        if (!db[key]) {
+            const rooms = {};
+            const names = ["1-1", "1-2", "1-3"];
+            const sides = [
+                { k: "l", n: "LEFT" },
+                { k: "m", n: "MID" },
+                { k: "r", n: "RIGHT" }
+            ];
+            names.forEach(ver => {
+                sides.forEach(side => {
+                    const rk = `v${ver.replace("1-", "")}${side.k}`;
+                    rooms[rk] = {
+                        name: `${ver} ${side.n}`,
+                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                        time: "", timeWindow: "", nextId: null, nextName: null,
+                        formattedTimeNext: "", endLimit: null, password: ""
+                    };
+                });
             });
-        });
+            db[key] = { type: "antidemon", title: `Antidemon ${floor}F`, ...rooms };
+        }
     });
 
     // Initialize summon panel

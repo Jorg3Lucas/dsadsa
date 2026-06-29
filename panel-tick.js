@@ -4,7 +4,7 @@ import { getMsg, reloadLanguage } from "./lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "./state.js";
 import { pushToDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
-import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom } from "./claim-core.js";
+import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom, getAntidemonRoomKeys } from "./claim-core.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX } from "./constants.js";
 
 // ==========================================
@@ -177,7 +177,7 @@ export function startTickInterval() {
             }
 
             if ("antidemon" === current.type || "summon" === current.type) {
-                const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : ["left", "mid", "right"];
+                const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
                 for (let room of roomList) {
                     let rData = current[room];
                     if (STATUS_CLAIMED === rData.status && rData.timeWindow) {
@@ -250,7 +250,7 @@ export function startTickInterval() {
             // Force refresh for countdown timers
             if (!panelUpdate) {
                 if ("antidemon" === current.type || "summon" === current.type) {
-                    const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : ["left", "mid", "right"];
+                    const roomList = "summon" === current.type ? ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"] : getAntidemonRoomKeys(key);
                     for (let room of roomList) {
                         let rData = current[room];
                         if ((STATUS_CLAIMED === rData.status && rData.timeWindow) || rData.endLimit) {

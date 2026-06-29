@@ -13,7 +13,8 @@ import {
     checkPunishment,
     applyFiveMinCooldown,
     freeAntidemonRoom,
-    buildActiveClaimMessage
+    buildActiveClaimMessage,
+    getAntidemonRoomKeys
 } from "../claim-core.js";
 import {
     ActionRowBuilder as t,
@@ -87,7 +88,11 @@ async function handleAntiSlide(interaction, uid) {
         configSelected = interaction.values[0];
 
     let roomsToCheck = [];
-    if ("mid-left" === configSelected) roomsToCheck = ["left", "mid"];
+    const roomKeys = getAntidemonRoomKeys(pKey);
+    if (roomKeys.length > 3) {
+        // 11/12: direct room keys, no combos
+        roomsToCheck = [configSelected];
+    } else if ("mid-left" === configSelected) roomsToCheck = ["left", "mid"];
     else if ("mid-right" === configSelected) roomsToCheck = ["mid", "right"];
     else roomsToCheck = [configSelected];
 
@@ -96,7 +101,7 @@ async function handleAntiSlide(interaction, uid) {
         return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
     }
     if (hasActiveQueue(uid)) {
-        const hasPriority = ["left", "mid", "right"].some(rm => targetFloor[rm].nextId === uid);
+        const hasPriority = getAntidemonRoomKeys(pKey).some(rm => targetFloor[rm] && targetFloor[rm].nextId === uid);
         if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
     }
 
@@ -135,7 +140,7 @@ async function handleAntiTicket(interaction, uid, uName) {
         return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
     }
     if (hasActiveQueue(uid)) {
-        const hasPriority = ["left", "mid", "right"].some(rm => targetFloor[rm].nextId === uid);
+        const hasPriority = getAntidemonRoomKeys(pKey).some(rm => targetFloor[rm] && targetFloor[rm].nextId === uid);
         if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
     }
 
@@ -146,7 +151,10 @@ async function handleAntiTicket(interaction, uid, uName) {
         rangeStr = `${getFormattedTime12h(startTime)} ~ ${getFormattedTime12h(endTime)}`,
         roomsToClaim = [];
 
-    if ("mid-left" === configSelected) roomsToClaim = ["left", "mid"];
+    const roomKeys = getAntidemonRoomKeys(pKey);
+    if (roomKeys.length > 3) {
+        roomsToClaim = [configSelected];
+    } else if ("mid-left" === configSelected) roomsToClaim = ["left", "mid"];
     else if ("mid-right" === configSelected) roomsToClaim = ["mid", "right"];
     else roomsToClaim = [configSelected];
 
@@ -232,7 +240,7 @@ async function handleAntiNextSide(interaction, uid, uName) {
     if (hasActiveQueue(uid)) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
 
     let tryJoinQueue = roomKey => {
-        if (targetFloor[roomKey].nextId) return !1;
+        if (!targetFloor[roomKey] || targetFloor[roomKey].nextId) return !1;
         // Guard: only allow queue for rooms that are currently claimed
         if (targetFloor[roomKey].status !== STATUS_CLAIMED) return !1;
         let baseTime = getLocalTime();
@@ -249,8 +257,12 @@ async function handleAntiNextSide(interaction, uid, uName) {
 
     let choice = interaction.values[0],
         joinedRooms = [];
+    const roomKeys = getAntidemonRoomKeys(pKey);
 
-    if ("mid-left" === choice) {
+    if (roomKeys.length > 3) {
+        // 11/12: single room per choice
+        if (tryJoinQueue(choice)) joinedRooms.push(choice.toUpperCase());
+    } else if ("mid-left" === choice) {
         if (tryJoinQueue("left")) joinedRooms.push("LEFT");
         if (tryJoinQueue("mid")) joinedRooms.push("MID");
     } else if ("mid-right" === choice) {
@@ -307,7 +319,7 @@ async function handleAntiPassword(interaction, uid, uName) {
 
     const modal = new m()
         .setCustomId(`antipwdmodal-${panelKey}-${room}`)
-        .setTitle(`🔑 Password — ${room.toUpperCase()}`)
+        .setTitle(`🎮 Party Password — ${room.toUpperCase()}`)
         .addComponents(
             new t().addComponents(
                 new ti()

@@ -66,12 +66,36 @@ export function resetPanelData(key) {
         let floor = isAnti[1];
         let version = isAnti[2] || "";
         let title = version ? `Antidemon ${floor}F ${version.slice(0,1)}-${version.slice(1)}` : `Antidemon ${floor}F`;
-        db[key] = {
-            type: "antidemon",            title: title,
-            left: { name: "LEFT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" },
-            mid: { name: "MID ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" },
-            right: { name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" }
-        };
+        
+        // MS11 and MS12: expanded panel with 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
+        if (floor === "11" || floor === "12") {
+            const rooms = {};
+            const names = ["1-1", "1-2", "1-3"];
+            const sides = [
+                { k: "l", n: "LEFT" },
+                { k: "m", n: "MID" },
+                { k: "r", n: "RIGHT" }
+            ];
+            names.forEach(ver => {
+                sides.forEach(side => {
+                    const rk = `v${ver.replace("1-", "")}${side.k}`;
+                    rooms[rk] = {
+                        name: `${ver} ${side.n}`,
+                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                        time: "", timeWindow: "", nextId: null, nextName: null,
+                        formattedTimeNext: "", endLimit: null, password: ""
+                    };
+                });
+            });
+            db[key] = { type: "antidemon", title: title, ...rooms };
+        } else {
+            db[key] = {
+                type: "antidemon",            title: title,
+                left: { name: "LEFT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" },
+                mid: { name: "MID ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" },
+                right: { name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" }
+            };
+        }
     } else if ("summon" === key) {
         db[key] = {
             type: "summon",            title: "🌀 Summon Locations",
