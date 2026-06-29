@@ -9,11 +9,19 @@ package-lock.json
 
 # Bot data files
 database.json
+database_ranking.json
+database_gold.json
 daily-logs.json
 punishments.json
 salary-poll-db.json
 google_credentials.json
+ranking_cache.json
 ranking_logs.txt
+tickets.json
+
+# Backups & logs
+backups/
+ticket-logs/
 
 # OS files
 .DS_Store
