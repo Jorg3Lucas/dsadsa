@@ -15,7 +15,7 @@ import { getAntidemonRoomKeys, getAntidemonRoomName } from "./claim-core.js";
 // 🎨 RENDERING (Embeds & Buttons)
 // ==========================================
 
-export function getEmbedColor(current) {
+export function getEmbedColor(current, key) {
     if (!current) return COLOR_DEFAULT;
     if (current.ownerId) return COLOR_OCCUPIED;
     if (current.next) return COLOR_HAS_QUEUE;
@@ -36,7 +36,7 @@ export function renderEmbed(key) {
     let current = db[key];
     if (!current) return new e().setTitle(getMsg("system.errorTitle"));
     
-    let embedColor = getEmbedColor(current),
+    let embedColor = getEmbedColor(current, key),
         now = getLocalTime();
     let embed = new e().setColor(embedColor);
     

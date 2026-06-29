@@ -23,9 +23,6 @@ export async function handlePanelCommand(msg) {
     if ("!summon" === lowerContent) {
         return handleSummon(msg);
     }
-    if (lowerContent.startsWith("!antidemon")) {
-        return handleAntidemon(msg, lowerContent);
-    }
 
     return false; // not handled
 }
@@ -118,34 +115,6 @@ async function handleSP(msg, lowerContent) {
     if (!defaultFloors.includes(floorNum)) return;
 
     let pKey = `${floorNum}peak`;
-    db._panelMapping || (db._panelMapping = {});
-
-    if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
-        try {
-            let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
-            oldMsg && await oldMsg.delete().catch(() => {});
-        } catch (C) {}
-    }
-
-    let pMsg = await msg.channel.send({
-        embeds: [renderEmbed(pKey)],
-        components: renderButtons(pKey)
-    });
-    lastMessages[pKey] = pMsg;
-    db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
-    saveLocalStorage();
-    try { await msg.delete() } catch (C) {}
-}
-
-// ==========================================
-// 👹 !ANTIDEMON COMMAND (MS11/MS12 single panel)
-// ==========================================
-
-async function handleAntidemon(msg, lowerContent) {
-    let floor = lowerContent.replace("!antidemon", "").trim();
-    if (floor !== "11" && floor !== "12") return;
-
-    let pKey = `${floor}squareantidemon`;
     db._panelMapping || (db._panelMapping = {});
 
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
