@@ -9,7 +9,7 @@ import { handlePanelCommand } from "./commands/panel-commands.js";
 import { handleSalaryCommand } from "./commands/salary-commands.js";
 import { canHandleAdminInteraction, handleAdminInteraction } from "./interactions/admin-interactions.js";
 import { canHandleTicketInteraction, handleTicketInteraction } from "./ticket-system.js";
-import { canHandleAntidemonInteraction, handleAntidemonInteraction } from "./interactions/antidemon-interactions.js";
+import { canHandleAntidemonInteraction, handleAntidemonInteraction, canHandleAntidemonModal, handleAntidemonModal } from "./interactions/antidemon-interactions.js";
 import { canHandleSummonInteraction, handleSummonInteraction } from "./interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "./interactions/floor-interactions.js";
 import { canHandleSalaryInteraction, handleSalaryInteraction } from "./interactions/salary-interactions.js";
@@ -73,6 +73,11 @@ export async function handleClaimInteractions(interaction) {
     // 7. Gold shop modal submits
     if (interaction.isModalSubmit() && interaction.customId.startsWith('gold-modal-')) {
         return await handleGoldModalSubmit(interaction);
+    }
+
+    // 7b. Antidemon password modal submits
+    if (canHandleAntidemonModal(interaction)) {
+        return await handleAntidemonModal(interaction);
     }
 
     // 8. Floor interactions (buttons: death, claim, cancel, next)

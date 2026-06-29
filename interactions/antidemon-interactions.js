@@ -19,7 +19,10 @@ import {
     ActionRowBuilder as t,
     StringSelectMenuBuilder as i,
     ButtonBuilder as n,
-    ButtonStyle as a
+    ButtonStyle as a,
+    ModalBuilder as m,
+    TextInputBuilder as ti,
+    TextInputStyle as tis
 } from "discord.js";
 import {
     getLocalTime,
@@ -36,7 +39,12 @@ export function canHandleAntidemonInteraction(interaction) {
     const cid = interaction.customId;
     return cid.startsWith("antislide-") ||
         cid.startsWith("antiticket-") ||
-        cid.startsWith("antinextside-");
+        cid.startsWith("antinextside-") ||
+        cid.startsWith("antipwd-");
+}
+
+export function canHandleAntidemonModal(interaction) {
+    return interaction.isModalSubmit() && interaction.customId.startsWith("antipwdmodal-");
 }
 
 export async function handleAntidemonInteraction(interaction, uid, uName) {
@@ -51,7 +59,18 @@ export async function handleAntidemonInteraction(interaction, uid, uName) {
     if (cid.startsWith("antinextside-")) {
         return handleAntiNextSide(interaction, uid, uName);
     }
+    if (cid.startsWith("antipwd-")) {
+        return handleAntiPassword(interaction, uid, uName);
+    }
 
+    return false;
+}
+
+export async function handleAntidemonModal(interaction) {
+    const cid = interaction.customId;
+    if (cid.startsWith("antipwdmodal-")) {
+        return handleAntiPasswordModal(interaction);
+    }
     return false;
 }
 
@@ -259,4 +278,100 @@ async function handleAntiNextSide(interaction, uid, uName) {
         components: [],
         flags: 64
     }).catch(() => {});
+}
+
+// ==========================================
+// 🔑 ANTIDEMON PASSWORD — Show Modal
+// ==========================================
+
+async function handleAntiPassword(interaction, uid, uName) {
+    if (!interaction.isButton()) return false;
+
+    const [_, panelKey, room] = interaction.customId.split("-");
+    // customId format: antipwd-{key}-{room}
+    const targetFloor = db[panelKey];
+
+    if (!targetFloor || !targetFloor[room]) {
+        return await interaction.reply({
+            content: getMsg("rooms.antidemonPasswordNotFound"),
+            flags: 64
+        }).catch(() => {});
+    }
+
+    if (targetFloor[room].ownerId !== uid) {
+        return await interaction.reply({
+            content: getMsg("rooms.antidemonPasswordNotOwner"),
+            flags: 64
+        }).catch(() => {});
+    }
+
+    const modal = new m()
+        .setCustomId(`antipwdmodal-${panelKey}-${room}`)
+        .setTitle(`🔑 Password — ${room.toUpperCase()}`)
+        .addComponents(
+            new t().addComponents(
+                new ti()
+                    .setCustomId("password")
+                    .setLabel(getMsg("rooms.antidemonPasswordInputLabel"))
+                    .setStyle(tis.Short)
+                    .setPlaceholder(getMsg("rooms.antidemonPasswordInputPlaceholder"))
+                    .setRequired(false)
+                    .setValue(targetFloor[room].password || "")
+            )
+        );
+
+    return await interaction.showModal(modal).catch(() => {});
+}
+
+// ==========================================
+// 🔑 ANTIDEMON PASSWORD MODAL — Save
+// ==========================================
+
+async function handleAntiPasswordModal(interaction) {
+    const cid = interaction.customId;
+    const parts = cid.split("-");
+    // customId format: antipwdmodal-{key}-{room}
+    const panelKey = parts[1];
+    const room = parts[2];
+    const targetFloor = db[panelKey];
+
+    if (!targetFloor || !targetFloor[room]) {
+        return await interaction.reply({
+            content: getMsg("rooms.antidemonPasswordNotFound"),
+            flags: 64
+        }).catch(() => {});
+    }
+
+    if (targetFloor[room].ownerId !== interaction.user.id) {
+        return await interaction.reply({
+            content: getMsg("rooms.antidemonPasswordNotOwner"),
+            flags: 64
+        }).catch(() => {});
+    }
+
+    const newPassword = interaction.fields.getTextInputValue("password").trim();
+    const oldPassword = targetFloor[room].password;
+
+    if (newPassword) {
+        targetFloor[room].password = newPassword;
+        saveLocalStorage();
+        await refreshVisualPanel(panelKey);
+        return await interaction.reply({
+            content: getMsg("rooms.antidemonPasswordSet", { room: room.toUpperCase(), password: newPassword }),
+            flags: 64
+        }).catch(() => {});
+    } else if (oldPassword) {
+        targetFloor[room].password = "";
+        saveLocalStorage();
+        await refreshVisualPanel(panelKey);
+        return await interaction.reply({
+            content: getMsg("rooms.antidemonPasswordCleared", { room: room.toUpperCase() }),
+            flags: 64
+        }).catch(() => {});
+    } else {
+        return await interaction.reply({
+            content: getMsg("rooms.antidemonPasswordNoChange"),
+            flags: 64
+        }).catch(() => {});
+    }
 }

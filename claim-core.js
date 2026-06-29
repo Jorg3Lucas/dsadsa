@@ -172,6 +172,7 @@ export function freeAntidemonRoom(floorObj, roomKey) {
     target.ownerName = null;
     target.time = "";
     target.timeWindow = "";
+    target.password = "";
     if (target.nextId) {
         let nid = target.nextId,
             nname = target.nextName;

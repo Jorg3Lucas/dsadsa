@@ -69,7 +69,7 @@ export function renderEmbed(key) {
                 }
             }
             let block = STATUS_CLAIMED === rData.status && rData.ownerName 
-                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n\`\`\`` 
+                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n${rData.password ? `🔑 ${rData.password}` : ""}\n\`\`\`` 
                 : rData.endLimit && rData.nextName 
                     ? `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\`\n${getEndLimitCountdown(rData.endLimit)}` 
                     : `\`\`\`yaml\n${STATUS_AVAILABLE}\n\`\`\``;
@@ -303,6 +303,22 @@ export function renderButtons(key) {
                 .setLabel(getMsg("buttons.cancelLabel"))
                 .setStyle(a.Danger)
         );
+        // Password buttons for antidemon rooms (one per claimed room)
+        if ("antidemon" === current.type) {
+            let pwdRow = new t();
+            ["left", "mid", "right"].forEach(rm => {
+                if (current[rm] && current[rm].status === STATUS_CLAIMED) {
+                    pwdRow.addComponents(
+                        new n()
+                            .setCustomId(`antipwd-${key}-${rm}`)
+                            .setEmoji(current[rm].password ? "🔑" : "🔒")
+                            .setLabel(rm.toUpperCase())
+                            .setStyle(a.Secondary)
+                    );
+                }
+            });
+            if (pwdRow.components.length > 0) componentsList.push(pwdRow);
+        }
     } else {
         coreRow.addComponents(
             new n()

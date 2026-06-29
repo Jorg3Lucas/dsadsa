@@ -111,7 +111,8 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                 nextId: null,
                 nextName: null,
                 formattedTimeNext: "",
-                endLimit: null
+                endLimit: null,
+                password: ""
             },
             mid: {
                 name: "MID ROOM",
@@ -123,7 +124,8 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                 nextId: null,
                 nextName: null,
                 formattedTimeNext: "",
-                endLimit: null
+                endLimit: null,
+                password: ""
             },
             right: {
                 name: "RIGHT ROOM",
@@ -135,7 +137,8 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                 nextId: null,
                 nextName: null,
                 formattedTimeNext: "",
-                endLimit: null
+                endLimit: null,
+                password: ""
             }
         });
 
@@ -143,15 +146,15 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         if (floor === "9" || floor === "10") {
             const antiRoomTemplate = {
                 name: "LEFT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
+                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
             };
             const antiMidTemplate = {
                 name: "MID ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
+                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
             };
             const antiRightTemplate = {
                 name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
+                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
             };
 
             db[`${floor}squareantidemon11`] || (db[`${floor}squareantidemon11`] = {
@@ -210,6 +213,33 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                 }
             };
         }
+    });
+
+    // Antidemon panels for MS11 and MS12: 1-1, 1-2, 1-3
+    ["11", "12"].forEach(floor => {
+        const antiRoomTemplate = {
+            name: "LEFT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+            time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
+        };
+        const antiMidTemplate = {
+            name: "MID ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+            time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
+        };
+        const antiRightTemplate = {
+            name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+            time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
+        };
+
+        [1, 2, 3].forEach(ver => {
+            const key = `${floor}squareantidemon1${ver}`;
+            db[key] || (db[key] = {
+                type: "antidemon",
+                title: `Antidemon ${floor}F 1-${ver}`,
+                left: { ...antiRoomTemplate },
+                mid: { ...antiMidTemplate },
+                right: { ...antiRightTemplate }
+            });
+        });
     });
 
     // Initialize summon panel
