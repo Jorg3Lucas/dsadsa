@@ -19,7 +19,7 @@ import { setupTicketPanel } from "../ticket-system.js";
 import { renderEmbed, renderButtons } from "../panel-render.js";
 import { refreshVisualPanel, resetPanelData } from "../panel-utils.js";
 import { STATUS_CLAIMED } from "../constants.js";
-import { getAntidemonRoomKeys } from "../claim-core.js";
+import { getAntidemonRoomKeys, getAntidemonRoomName } from "../claim-core.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -251,12 +251,39 @@ async function handleKick(msg) {
         let cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
         if ("antidemon" === current.type) {
             const antiRoomKeys = getAntidemonRoomKeys(key);
+            // Individual room options
             for (let room of antiRoomKeys) {
                 STATUS_CLAIMED === current[room].status && current[room].ownerId && optionsList.push({
                     label: `${cleanedTitle} - ${room.toUpperCase()} Room`,
                     description: `${getMsg("system.kickCurrentLabel")} ${current[room].ownerName}`,
                     value: `kick-${key}-${room}-${current[room].ownerId}`
                 });
+            }
+            // Combo options for 11/12 panels: same-version rooms with same owner
+            if (antiRoomKeys.length > 3) {
+                const versions = ["v1", "v2", "v3"];
+                for (const ver of versions) {
+                    const l = `${ver}l`, m = `${ver}m`, r = `${ver}r`;
+                    const lOwned = current[l] && current[l].status === STATUS_CLAIMED && current[l].ownerId;
+                    const mOwned = current[m] && current[m].status === STATUS_CLAIMED && current[m].ownerId;
+                    const rOwned = current[r] && current[r].status === STATUS_CLAIMED && current[r].ownerId;
+                    // LEFT + MID combo (same owner)
+                    if (lOwned && mOwned && current[l].ownerId === current[m].ownerId) {
+                        optionsList.push({
+                            label: `${cleanedTitle} - ${getAntidemonRoomName(key, l)} + ${getAntidemonRoomName(key, m)}`,
+                            description: `${getMsg("system.kickCurrentLabel")} ${current[l].ownerName}`,
+                            value: `kick-${key}-${l}+${m}-${current[l].ownerId}`
+                        });
+                    }
+                    // MID + RIGHT combo (same owner)
+                    if (mOwned && rOwned && current[m].ownerId === current[r].ownerId) {
+                        optionsList.push({
+                            label: `${cleanedTitle} - ${getAntidemonRoomName(key, m)} + ${getAntidemonRoomName(key, r)}`,
+                            description: `${getMsg("system.kickCurrentLabel")} ${current[m].ownerName}`,
+                            value: `kick-${key}-${m}+${r}-${current[m].ownerId}`
+                        });
+                    }
+                }
             }
         } else if ("summon" === current.type) {
             const summonProps = ["sp2", "sp4", "sp7", "ms11", "sp11", "sp12"];

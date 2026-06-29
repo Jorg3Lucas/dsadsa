@@ -100,26 +100,40 @@ async function handleAdminKickMenu(interaction, uid) {
         targetFloor = db[pKey];
 
     if (targetFloor) {
-        let finalUserLabel = getMsg("render.memberLabel");
         if ("floor" === roomType) {
-            finalUserLabel = targetFloor.ownerName || getMsg("render.memberLabel");
+            let finalUserLabel = targetFloor.ownerName || getMsg("render.memberLabel");
             pushToDailyLogs("CANCEL", finalUserLabel, targetFloor.title, getMsg("logs.adminRemove"));
             notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                 title: targetFloor.title,
                 reason: getMsg("logs.adminRemove")
             }));
             freeFloorAndActivateNextGracePeriod(targetFloor);
-        } else {
-            finalUserLabel = targetFloor[roomType].ownerName || getMsg("render.memberLabel");
-            pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - Room ${roomType.toUpperCase()}`, getMsg("logs.adminRemove"));
-            notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
-                title: `${targetFloor.title} - Room ${roomType.toUpperCase()}`,
-                reason: getMsg("logs.adminRemove")
-            }));
-            freeAntidemonRoom(targetFloor, roomType);
+            await refreshVisualPanel(pKey);
+            notifyUserDM(targetUid, getMsg("system.kickDMNotice", { title: targetFloor.title }));
+            return await interaction.update({
+                content: getMsg("system.kickSuccess"),
+                components: []
+            }).catch(() => {});
         }
+
+        // Support combo values (e.g. "v1l+v1m")
+        const roomsToFree = roomType.includes("+") ? roomType.split("+") : [roomType];
+        let freedLabels = [];
+        for (let rm of roomsToFree) {
+            if (targetFloor[rm]) {
+                let finalUserLabel = targetFloor[rm].ownerName || getMsg("render.memberLabel");
+                freedLabels.push(rm.toUpperCase());
+                pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - Room ${rm.toUpperCase()}`, getMsg("logs.adminRemove"));
+                notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
+                    title: `${targetFloor.title} - Room ${rm.toUpperCase()}`,
+                    reason: getMsg("logs.adminRemove")
+                }));
+                freeAntidemonRoom(targetFloor, rm);
+            }
+        }
+        let labelStr = freedLabels.join(" + ");
         await refreshVisualPanel(pKey);
-        notifyUserDM(targetUid, getMsg("system.kickDMNotice", { title: targetFloor.title }));
+        notifyUserDM(targetUid, getMsg("system.kickDMNotice", { title: `${targetFloor.title} - ${labelStr}` }));
         return await interaction.update({
             content: getMsg("system.kickSuccess"),
             components: []

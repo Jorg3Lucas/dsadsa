@@ -143,14 +143,17 @@ export function hasActiveQueue(uid) {
 }
 
 export function checkPunishment(uid) {
-    if (punishments[uid]) {
-        let rem = punishments[uid] - Date.now();
-        if (rem > 0) return getMsg("cooldowns.activeTimeout", {
-            minutes: Math.floor(rem / 6e4),
-            seconds: Math.floor(rem % 6e4 / 1e3)
-        });
-        delete punishments[uid];
-        saveLocalStorage();
+    let linkedIds = getAllLinkedIds(uid);
+    for (let linkedUid of linkedIds) {
+        if (punishments[linkedUid]) {
+            let rem = punishments[linkedUid] - Date.now();
+            if (rem > 0) return getMsg("cooldowns.activeTimeout", {
+                minutes: Math.floor(rem / 6e4),
+                seconds: Math.floor(rem % 6e4 / 1e3)
+            });
+            delete punishments[linkedUid];
+            saveLocalStorage();
+        }
     }
     return null;
 }
@@ -255,7 +258,17 @@ export function buildAntiClaimOptions(targetObj, uid, panelKey) {
             return targetObj[rm] && targetObj[rm].status !== STATUS_CLAIMED && !targetObj[rm].nextId;
         });
         
-        // Add same-version combos first (mid+left, mid+right per version)
+        // Add individual rooms (always shown)
+        available.forEach(rm => {
+            const emojiVal = hasPriority(rm) ? "🔵" : "👹";
+            opts.push({
+                label: getAntidemonRoomName(panelKey, rm),
+                value: rm,
+                emoji: emojiVal
+            });
+        });
+        
+        // Add same-version combos (mid+left, mid+right per version)
         const versions = ["v1", "v2", "v3"];
         for (const ver of versions) {
             const l = `${ver}l`, m = `${ver}m`, r = `${ver}r`;
@@ -274,30 +287,6 @@ export function buildAntiClaimOptions(targetObj, uid, panelKey) {
                 }
             }
         }
-        
-        // Add individual rooms
-        available.forEach(rm => {
-            // Skip rooms already covered by a combo
-            const ver = rm.slice(0, 2); // "v1", "v2", or "v3"
-            const side = rm.slice(2);    // "l", "m", or "r"
-            if (side === "m") {
-                // MID is already covered by both combos, skip
-                return;
-            }
-            if (side === "l" && available.includes(`${ver}m`)) {
-                // LEFT is covered by combo (LEFT+MID)
-                return;
-            }
-            if (side === "r" && available.includes(`${ver}m`)) {
-                // RIGHT is covered by combo (MID+RIGHT)
-                return;
-            }
-            opts.push({
-                label: getAntidemonRoomName(panelKey, rm),
-                value: rm,
-                emoji: "👹"
-            });
-        });
     }
     return opts;
 }
@@ -331,37 +320,28 @@ export function buildAntiQueueOptions(targetObj, panelKey) {
         const versions = ["v1", "v2", "v3"];
         for (const ver of versions) {
             const l = `${ver}l`, m = `${ver}m`, r = `${ver}r`;
-            // Individual rooms
+            
+            // Individual rooms (always shown if claimed and no queue)
             if (targetObj[l] && targetObj[l].status === STATUS_CLAIMED && !targetObj[l].nextId) {
-                const verMidAvail = targetObj[m] && targetObj[m].status === STATUS_CLAIMED && !targetObj[m].nextId;
-                if (!verMidAvail) {
-                    opts.push({ label: getAntidemonRoomName(panelKey, l), value: l, emoji: "👹" });
-                }
+                opts.push({ label: getAntidemonRoomName(panelKey, l), value: l, emoji: "👹" });
+            }
+            if (targetObj[m] && targetObj[m].status === STATUS_CLAIMED && !targetObj[m].nextId) {
+                opts.push({ label: getAntidemonRoomName(panelKey, m), value: m, emoji: "👹" });
             }
             if (targetObj[r] && targetObj[r].status === STATUS_CLAIMED && !targetObj[r].nextId) {
-                const verMidAvail = targetObj[m] && targetObj[m].status === STATUS_CLAIMED && !targetObj[m].nextId;
-                if (!verMidAvail) {
-                    opts.push({ label: getAntidemonRoomName(panelKey, r), value: r, emoji: "👹" });
-                }
+                opts.push({ label: getAntidemonRoomName(panelKey, r), value: r, emoji: "👹" });
             }
-            // MID + LEFT combo (only if same owner)
+            
+            // Combos (only if same owner)
             if (targetObj[l] && targetObj[l].status === STATUS_CLAIMED && !targetObj[l].nextId &&
                 targetObj[m] && targetObj[m].status === STATUS_CLAIMED && !targetObj[m].nextId &&
                 (!targetObj[m].ownerId || targetObj[m].ownerId === targetObj[l].ownerId)) {
                 opts.push({ label: `${getAntidemonRoomName(panelKey, l)} + ${getAntidemonRoomName(panelKey, m)}`, value: `${l}+${m}`, emoji: "👹" });
             }
-            // MID + RIGHT combo (only if same owner)
             if (targetObj[m] && targetObj[m].status === STATUS_CLAIMED && !targetObj[m].nextId &&
                 targetObj[r] && targetObj[r].status === STATUS_CLAIMED && !targetObj[r].nextId &&
                 (!targetObj[m].ownerId || targetObj[m].ownerId === targetObj[r].ownerId)) {
                 opts.push({ label: `${getAntidemonRoomName(panelKey, m)} + ${getAntidemonRoomName(panelKey, r)}`, value: `${m}+${r}`, emoji: "👹" });
-            }
-            // MID only (if not covered by combos)
-            if (targetObj[m] && targetObj[m].status === STATUS_CLAIMED && !targetObj[m].nextId) {
-                const alreadyInCombo = opts.some(o => o.value === `${l}+${m}` || o.value === `${m}+${r}`);
-                if (!alreadyInCombo) {
-                    opts.push({ label: getAntidemonRoomName(panelKey, m), value: m, emoji: "👹" });
-                }
             }
         }
     }
