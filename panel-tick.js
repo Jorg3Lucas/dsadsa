@@ -4,7 +4,7 @@ import { getMsg, reloadLanguage } from "./lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "./state.js";
 import { pushToDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
-import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom, getAntidemonRoomKeys, getSummonRoomKeys } from "./claim-core.js";
+import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom, getAntidemonRoomKeys, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX } from "./constants.js";
 
 // ==========================================
@@ -118,7 +118,106 @@ export function startTickInterval() {
                 }
             }
 
-            if ("antidemon" !== current.type && "fixed" !== current.type) {
+            if ("event_group" === current.type) {
+                // Handle schedule-type events (Red Boss) auto-respawn
+                const egEvents = getEventGroupKeys(current);
+                for (let ev of egEvents) {
+                    let evData = current[ev];
+                    if (evData.type === "schedule" && evData.schedules) {
+                        if (isRoomOpen(evData.schedules)) {
+                            if (evData.status && evData.status.startsWith(STATUS_KILLED) && now.getMinutes() === 0) {
+                                evData.status = STATUS_AVAILABLE;
+                                panelUpdate = !0;
+                                updateNeeded = !0;
+                                if (evData.ownerId) {
+                                    await notifyUserDM(evData.ownerId, getMsg("rooms.dmImmediateSpawnFixed", {
+                                        title: current.title,
+                                        boss: evData.name
+                                    })).catch(() => {});
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Handle fixed-type events (Fury/Frenzy/Random Event) auto-release
+                    if (evData.type === "fixed" && evData.schedules) {
+                        let minuteOffset = evData.scheduleMinutes || 0;
+                        if (isRoomOpen(evData.schedules, minuteOffset)) {
+                            "" === evData.timeWindow && (panelUpdate = !0, updateNeeded = !0);
+                        } else {
+                            let now = getLocalTime();
+                            let nextOpen = calculateNextOpening(evData.schedules, minuteOffset);
+                            let fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
+                            let insidePreWindow = now >= fiveMinBefore && now < nextOpen;
+                            if (!insidePreWindow && ("" !== evData.timeWindow || evData.ownerId)) {
+                                evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.autoClose"));
+                                await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
+                                    title: `${current.title} - ${evData.name}`,
+                                    reason: getMsg("logs.autoClose")
+                                })).catch(() => {});
+                                evData.ownerId = null;
+                                evData.ownerName = null;
+                                evData.timeWindow = "";
+                                if (evData._claimTimestamp) delete evData._claimTimestamp;
+                                panelUpdate = !0;
+                                updateNeeded = !0;
+                            }
+                        }
+                    }
+                    
+                    // Handle summon-type events (Goblin) time limit
+                    if (evData.type === "summon" && evData.timeWindow && evData.ownerId) {
+                        let limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
+                        if (limitTime && now >= limitTime) {
+                            evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
+                            await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
+                                title: `${current.title} - ${evData.name}`,
+                                reason: getMsg("logs.timeout")
+                            })).catch(() => {});
+                            evData.ownerId = null;
+                            evData.ownerName = null;
+                            evData.time = "";
+                            evData.timeWindow = "";
+                            if (evData.nextId) {
+                                let nid = evData.nextId, nname = evData.nextName;
+                                evData.nextId = null;
+                                evData.nextName = null;
+                                evData.formattedTimeNext = "";
+                                evData.ownerId = nid;
+                                evData.ownerName = nname;
+                                let grace = new Date(now.getTime() + 3e5);
+                                evData.timeWindow = `${getFormattedTime12h(now)} ~ ${getFormattedTime12h(grace)}`;
+                                notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
+                                    roomKey: evData.name,
+                                    title: current.title
+                                })).catch(() => {});
+                            } else {
+                                evData.endLimit = null;
+                            }
+                            panelUpdate = !0;
+                            updateNeeded = !0;
+                        }
+                    }
+                    
+                    // Handle summon queue endLimit
+                    if (evData.type === "summon" && evData.endLimit && evData.nextId) {
+                        let absenceLimit = parseStringToDate(evData.endLimit);
+                        if (absenceLimit && now >= absenceLimit) {
+                            await notifyUserDM(evData.nextId, getMsg("rooms.antidemonAbsenceDM", {
+                                roomKey: evData.name,
+                                title: current.title
+                            })).catch(() => {});
+                            evData.nextName && pushToDailyLogs("CLAIM_END", evData.nextName, `${current.title} - ${evData.name}`, getMsg("logs.absenceQueue"));
+                            evData.nextId = null;
+                            evData.nextName = null;
+                            evData.endLimit = null;
+                            evData.formattedTimeNext = "";
+                            panelUpdate = !0;
+                            updateNeeded = !0;
+                        }
+                    }
+                }
+            } else if ("antidemon" !== current.type && "fixed" !== current.type) {
                 for (let prop in current) {
                     if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) {
 
@@ -178,7 +277,62 @@ export function startTickInterval() {
                 }
             }
 
-            if ("antidemon" === current.type || "summon" === current.type) {
+            if ("event_group" === current.type) {
+                const egEvents = getEventGroupKeys(current);
+                for (let ev of egEvents) {
+                    let evData = current[ev];
+                    // Summon-type time limit
+                    if (evData.type === "summon" && evData.timeWindow && evData.ownerId) {
+                        let limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
+                        if (limitTime && now >= limitTime) {
+                            evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
+                            await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
+                                title: `${current.title} - ${evData.name}`,
+                                reason: getMsg("logs.timeout")
+                            })).catch(() => {});
+                            evData.ownerId = null;
+                            evData.ownerName = null;
+                            evData.time = "";
+                            evData.timeWindow = "";
+                            if (evData.nextId) {
+                                let nid = evData.nextId, nname = evData.nextName;
+                                evData.nextId = null;
+                                evData.nextName = null;
+                                evData.formattedTimeNext = "";
+                                evData.ownerId = nid;
+                                evData.ownerName = nname;
+                                let grace = new Date(now.getTime() + 3e5);
+                                evData.timeWindow = `${getFormattedTime12h(now)} ~ ${getFormattedTime12h(grace)}`;
+                                notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
+                                    roomKey: evData.name,
+                                    title: current.title
+                                })).catch(() => {});
+                            } else {
+                                evData.endLimit = null;
+                            }
+                            panelUpdate = !0;
+                            updateNeeded = !0;
+                        }
+                    }
+                    // Summon-type queue endLimit
+                    if (evData.type === "summon" && evData.endLimit && evData.nextId) {
+                        let absenceLimit = parseStringToDate(evData.endLimit);
+                        if (absenceLimit && now >= absenceLimit) {
+                            await notifyUserDM(evData.nextId, getMsg("rooms.antidemonAbsenceDM", {
+                                roomKey: evData.name,
+                                title: current.title
+                            })).catch(() => {});
+                            evData.nextName && pushToDailyLogs("CLAIM_END", evData.nextName, `${current.title} - ${evData.name}`, getMsg("logs.absenceQueue"));
+                            evData.nextId = null;
+                            evData.nextName = null;
+                            evData.endLimit = null;
+                            evData.formattedTimeNext = "";
+                            panelUpdate = !0;
+                            updateNeeded = !0;
+                        }
+                    }
+                }
+            } else if ("antidemon" === current.type || "summon" === current.type) {
                 const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                 for (let room of roomList) {
                     let rData = current[room];
@@ -251,7 +405,9 @@ export function startTickInterval() {
             }
             // Force refresh for countdown timers
             if (!panelUpdate) {
-                if ("antidemon" === current.type || "summon" === current.type) {
+                if ("event_group" === current.type) {
+                    panelUpdate = !0; // Countdown timers for schedule/fixed events change each tick
+                } else if ("antidemon" === current.type || "summon" === current.type) {
                     const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                     for (let room of roomList) {
                         let rData = current[room];

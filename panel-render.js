@@ -9,7 +9,7 @@ import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getE
 import { getMsg } from "./lang.js";
 import { db } from "./state.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT, STATUS_NOW, COLOR_OCCUPIED, COLOR_HAS_QUEUE, COLOR_DEFAULT, COLOR_OPEN } from "./constants.js";
-import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys } from "./claim-core.js";
+import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 
 // ==========================================
 // 🎨 RENDERING (Embeds & Buttons)
@@ -19,6 +19,13 @@ export function getEmbedColor(current, key) {
     if (!current) return COLOR_DEFAULT;
     if (current.ownerId) return COLOR_OCCUPIED;
     if (current.next) return COLOR_HAS_QUEUE;
+    if ("event_group" === current.type) {
+        const events = getEventGroupKeys(current);
+        let anyClaimed = events.some(e => current[e] && current[e].ownerId);
+        if (anyClaimed) return COLOR_OCCUPIED;
+        let anyQueued = events.some(e => current[e] && current[e].nextId);
+        if (anyQueued) return COLOR_HAS_QUEUE;
+    }
     if ("antidemon" === current.type || "summon" === current.type) {
         const props = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
         let hasClaimed = props.some(p => current[p] && current[p].status.startsWith("🔴"));
@@ -48,7 +55,100 @@ export function renderEmbed(key) {
     // Footer with update timestamp
     embed.setTimestamp();
 
-    if ("antidemon" === current.type || "summon" === current.type) {
+    if ("event_group" === current.type) {
+        const eventKeys = getEventGroupKeys(current);
+        embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
+        for (let ev of eventKeys) {
+            let evData = current[ev];
+            let block = "";
+            
+            if (evData.type === "schedule") {
+                // Schedule-based event (Red Boss) — show kill/respawn status
+                let displayStatus = evData.status;
+                if (displayStatus && displayStatus.startsWith(STATUS_KILLED)) {
+                    let killedTime;
+                    if (evData._lastKilledAt) {
+                        killedTime = new Date(evData._lastKilledAt);
+                    } else {
+                        let killedTimeStr = displayStatus.replace(STATUS_KILLED_PREFIX, "").trim();
+                        killedTime = parseStringToDate(killedTimeStr);
+                    }
+                    if (killedTime) {
+                        let schedules = evData.schedules || [];
+                        let nextSpawn = getNextScheduleAfter(killedTime, schedules);
+                        if (nextSpawn) {
+                            let remainingMs = nextSpawn.getTime() - now.getTime();
+                            if (remainingMs > 0) {
+                                let totalMins = Math.ceil(remainingMs / 6e4);
+                                let hrs = Math.floor(totalMins / 60);
+                                let mins = totalMins % 60;
+                                displayStatus = hrs > 0 ? `🔴 Respawn in ${hrs}h ${mins}m` : `🔴 Respawn in ${mins}m`;
+                            } else {
+                                displayStatus = STATUS_ANY_MOMENT;
+                            }
+                        }
+                    }
+                } else if (displayStatus === STATUS_AVAILABLE) {
+                    displayStatus = "🟢 Available";
+                }
+                block = `\`\`\`yaml\n${displayStatus || STATUS_AVAILABLE}\n\`\`\``;
+            } else if (evData.type === "summon") {
+                // Summon-type event (Goblin) — show owner/queue info
+                if (evData.ownerId && evData.ownerName) {
+                    let remainingClaimStr = "";
+                    if (evData.timeWindow) {
+                        let endTimeStr = evData.timeWindow.split(" ~ ")[1];
+                        let endTime = parseStringToDate(endTimeStr);
+                        if (endTime) {
+                            let remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
+                            if (remainingSecs > 0) {
+                                let mins = Math.floor(remainingSecs / 60);
+                                let secs = remainingSecs % 60;
+                                remainingClaimStr = `⏱️ ${mins}m ${secs}s`;
+                            } else {
+                                remainingClaimStr = "⏱️ Expiring...";
+                            }
+                        }
+                    }
+                    block = `\`\`\`md\n# 👑 ${evData.ownerName}\n${remainingClaimStr || ""}\n\`\`\``;
+                    if (evData.nextId && evData.nextName) {
+                        block += `\n\`\`\`md\n⏭️ ${evData.nextName}\n\`\`\``;
+                    }
+                } else {
+                    block = `\`\`\`yaml\n🟢 Available\n\`\`\``;
+                }
+            } else if (evData.type === "fixed") {
+                // Fixed event (Fury/Frenzy/Random Event) — show open/closed with countdown
+                let minuteOffset = evData.scheduleMinutes || 0;
+                if (isRoomOpen(evData.schedules, minuteOffset)) {
+                    let nowMinutes = now.getHours() * 60 + now.getMinutes();
+                    let endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
+                    let endOfEvent = new Date(now.getTime());
+                    endOfEvent.setHours(Math.floor(endMinute / 60) % 24, endMinute % 60, 0, 0);
+                    if (endOfEvent <= now) endOfEvent.setHours(endOfEvent.getHours() + 1);
+                    let closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
+                    let countdownStr = closeMins <= 0 ? "🟢 Open now" : `🟢 Closes in ${closeMins}m`;
+                    
+                    if (evData.ownerId && evData.ownerName) {
+                        block = `\`\`\`md\n# 👑 ${evData.ownerName}\n${countdownStr}\n\`\`\``;
+                    } else {
+                        block = `\`\`\`yaml\n${countdownStr}\n\`\`\``;
+                    }
+                } else {
+                    let nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
+                    let diffMs = nextOpenDate.getTime() - now.getTime();
+                    let diffMins = Math.floor(diffMs / 6e4);
+                    let countdownStr = diffMins < 60
+                        ? `Next in ${diffMins}m`
+                        : `Next in ${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
+                    block = `\`\`\`yaml\n🔴 ${countdownStr}\n\`\`\``;
+                }
+            } else {
+                block = `\`\`\`yaml\n${evData.status || STATUS_AVAILABLE}\n\`\`\``;
+            }
+            embed.addFields({ name: evData.name, value: block, inline: !0 });
+        }
+    } else if ("antidemon" === current.type || "summon" === current.type) {
         const summonProps = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
         for (let room of summonProps) {
@@ -260,7 +360,21 @@ export function renderButtons(key) {
     let current = db[key],
         componentsList = [];
     
-    if ("fixed" !== current.type && "antidemon" !== current.type && "summon" !== current.type) {
+    if ("event_group" === current.type) {
+        // Death mark buttons for schedule-type sub-events
+        const eventKeys = getEventGroupKeys(current);
+        const schedEvents = eventKeys.filter(ev => current[ev].type === "schedule");
+        if (schedEvents.length > 0) {
+            let row = new t();
+            schedEvents.forEach(ev => {
+                row.addComponents(new n()
+                    .setCustomId(`egdeath-${key}-${ev}`)
+                    .setEmoji("🟥")
+                    .setStyle(a.Secondary));
+            });
+            componentsList.push(row);
+        }
+    } else if ("fixed" !== current.type && "antidemon" !== current.type && "summon" !== current.type) {
         let row = new t();
         let hasProperties = !1;
         for (let prop in current) {
@@ -287,7 +401,40 @@ export function renderButtons(key) {
     // Core action buttons
     let coreRow = new t();
     
-    if ("antidemon" === current.type || "summon" === current.type) {
+    if ("event_group" === current.type) {
+        const eventKeys = getEventGroupKeys(current);
+        let anyClaimed = eventKeys.some(ev => current[ev] && current[ev].ownerId);
+        let anySummonQueue = eventKeys.some(ev => current[ev].type === "summon" && current[ev].nextId);
+        coreRow.addComponents(
+            new n()
+                .setCustomId(`floor-${key}-claim`)
+                .setLabel(getMsg("buttons.claimLabel"))
+                .setStyle(a.Success),
+            ...(anySummonQueue ? [new n()
+                .setCustomId(`floor-${key}-next`)
+                .setLabel(getMsg("buttons.nextLabel"))
+                .setStyle(a.Primary)] : []),
+            new n()
+                .setCustomId(`floor-${key}-cancel`)
+                .setLabel(getMsg("buttons.cancelLabel"))
+                .setStyle(a.Danger)
+        );
+        
+        // Password buttons for summon-type events that are claimed
+        let pwdRow = new t();
+        eventKeys.forEach(ev => {
+            if (current[ev].type === "summon" && current[ev].ownerId) {
+                pwdRow.addComponents(
+                    new n()
+                        .setCustomId(`egpwd-${key}-${ev}`)
+                        .setEmoji("🎮")
+                        .setLabel(`PT ${current[ev].name}`)
+                        .setStyle(a.Secondary)
+                );
+            }
+        });
+        if (pwdRow.components.length > 0) componentsList.push(pwdRow);
+    } else if ("antidemon" === current.type || "summon" === current.type) {
         const summonProps = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
         let anyClaimed = summonProps.some(p => current[p] && current[p].status === STATUS_CLAIMED);
         coreRow.addComponents(
@@ -304,7 +451,7 @@ export function renderButtons(key) {
                 .setLabel(getMsg("buttons.cancelLabel"))
                 .setStyle(a.Danger)
         );
-        // Party password buttons for antidemon rooms (one per claimed room)
+        // Party password buttons for antidemon rooms (one per claimed room, with improved labels)
         if ("antidemon" === current.type) {
             let pwdRow = new t();
             getAntidemonRoomKeys(key).forEach(rm => {

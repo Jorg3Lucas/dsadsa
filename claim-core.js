@@ -34,6 +34,13 @@ export function hasActiveClaim(uid) {
 
 const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7", "ms11"];
 
+// Returns sub-event keys for an event_group panel (excludes system properties)
+export function getEventGroupKeys(current) {
+    if (!current || "event_group" !== current.type) return [];
+    const sysProps = ["type", "title"];
+    return Object.keys(current).filter(k => !sysProps.includes(k));
+}
+
 // Returns room keys for a summon panel based on its key
 export function getSummonRoomKeys(panelKey) {
     if (panelKey === "11goblin") return ["sp11"];
@@ -92,7 +99,14 @@ export function getActiveClaimInfo(uid) {
         for (let key in db) {
             if (!db[key] || key.startsWith("_")) continue;
             let current = db[key];
-            if ("antidemon" === current.type) {
+            if ("event_group" === current.type) {
+                getEventGroupKeys(current).forEach(ev => {
+                    if (current[ev] && current[ev].ownerId === linkedUid) {
+                        let remaining = getTimeRemainingStr(current[ev].timeWindow);
+                        claims.push({ title: `${current.title} - ${current[ev].name}`, type: "event_group", event: ev, remaining });
+                    }
+                });
+            } else if ("antidemon" === current.type) {
                 getAntidemonRoomKeys(key).forEach(rm => {
                     if (current[rm] && current[rm].ownerId === linkedUid) {
                         let remaining = getTimeRemainingStr(current[rm].timeWindow);
@@ -135,7 +149,9 @@ export function hasActiveQueue(uid) {
         for (let key in db) {
             if (!db[key] || key.startsWith("_")) continue;
             let current = db[key];
-            if ("antidemon" === current.type) {
+            if ("event_group" === current.type) {
+                if (getEventGroupKeys(current).some(ev => current[ev] && current[ev].nextId === linkedUid)) return !0;
+            } else if ("antidemon" === current.type) {
                 const roomKeys = getAntidemonRoomKeys(key);
                 if (roomKeys.some(rm => current[rm] && current[rm].nextId === linkedUid)) return !0;
             } else {

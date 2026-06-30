@@ -34,12 +34,11 @@ export async function handlePanelCommand(msg) {
 async function handleMS(msg, lowerContent) {
     let sub = lowerContent.replace("!ms", "").trim();
 
-    // MS11 / MS12 — Leaders, Fury, Frenzy + Antidemon (single panel)
+    // MS11 / MS12 — Leaders, Events (Fury+Frenzy), Antidemon (single panel with versions)
     if ("11" === sub || "12" === sub) {
         let list = [
             `${sub}squareleaders`,
-            `${sub}squarefury`,
-            `${sub}squarefrenzy`,
+            `${sub}squareevents`,
             `${sub}squareantidemon`
         ];
         db._panelMapping || (db._panelMapping = {});
@@ -113,9 +112,13 @@ async function handleMS(msg, lowerContent) {
 async function handleSP(msg, lowerContent) {
     let floorNum = lowerContent.replace("!sp", "").trim();
     
-    // SP11 / SP12 — special handling: Red Boss only + goblin summon panel
+    // SP11 / SP12 — unified event_group panel (Red Boss + Goblin + Random Event for SP12)
     if ("11" === floorNum || "12" === floorNum) {
-        const keys = [`${floorNum}peak`, `${floorNum}goblin`];
+        // Send the unified panel (key is just the floor number)
+        const keys = [`${floorNum}`];
+        // Also send legacy panels if they exist (for data migration)
+        if (db[`${floorNum}peak`]) keys.push(`${floorNum}peak`);
+        if (db[`${floorNum}goblin`]) keys.push(`${floorNum}goblin`);
         db._panelMapping || (db._panelMapping = {});
         for (let pKey of keys) {
             if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {

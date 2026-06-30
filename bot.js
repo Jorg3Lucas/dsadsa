@@ -174,56 +174,60 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // SP11 / SP12: Red Boss only — separate from SP7-10 pattern
-    const spRedTemplate = (floor) => ({
-        type: "peak",
-        title: `Secret Peak ${floor}F`,
+    // SP11 / SP12 — Unified Event Group (Red Boss + Goblin Summon + Random Event for SP12)
+    // Keep legacy 11peak/12peak/11goblin/12goblin for existing data compatibility
+    const spLegacyRed = (floor) => ({
+        type: "peak", title: `Secret Peak ${floor}F`,
         timeWindow: "", next: null, ownerId: null, ownerName: null,
-        red: {
-            name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180,
-            _freeSince: 0, _lastKilledTimeStr: "",
-            schedules: [1, 7, 13, 19]
+        red: { name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "", schedules: [1, 7, 13, 19] }
+    });
+    if (!db["11peak"]) db["11peak"] = spLegacyRed("11");
+    if (!db["12peak"]) db["12peak"] = spLegacyRed("12");
+
+    if (!db["11goblin"]) db["11goblin"] = { type: "summon", title: "⭐ SP 11F (Goblin)", sp11: { name: "⭐ SP 11F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
+    if (!db["12goblin"]) db["12goblin"] = { type: "summon", title: "⭐ SP 12F (Goblin)", sp12: { name: "⭐ SP 12F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
+
+    // NEW unified panels: "11" and "12" as event_group (replaces peaks + goblins)
+    const spUnifiedEvents = {
+        red: { name: "🟥 Red Boss", type: "schedule", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [1, 7, 13, 19] },
+        goblin: { name: "⭐ Goblin", type: "summon", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+    };
+    if (!db["11"] && !db["11"].type) db["11"] = { type: "event_group", title: "Secret Peak 11F", ...JSON.parse(JSON.stringify(spUnifiedEvents)) };
+    if (!db["12"] && !db["12"].type) db["12"] = { type: "event_group", title: "Secret Peak 12F", ...JSON.parse(JSON.stringify(spUnifiedEvents)), randomevent: { name: "🎲 Random Event", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [3, 9, 15, 21] } };
+
+    // MS11 / MS12 — Leaders panel
+    ["11squareleaders", "12squareleaders"].forEach(key => {
+        if (!db[key]) {
+            db[key] = {
+                type: "normal",
+                title: key.includes("11") ? "Magic Square 11F - Leaders" : "Magic Square 12F - Leaders",
+                timeWindow: "", next: null, ownerId: null, ownerName: null,
+                boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
+                boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
+                boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" }
+            };
         }
     });
-    if (!db["11peak"]) db["11peak"] = spRedTemplate("11");
-    if (!db["12peak"]) db["12peak"] = spRedTemplate("12");
 
-    ["11squareleaders", "11squarefury", "11squarefrenzy", "12squareleaders", "12squarefury", "12squarefrenzy"].forEach(key => {
+    // MS11 / MS12 — Event Group (Fury + Frenzy in one panel)
+    ["11", "12"].forEach(floor => {
+        const key = `${floor}squareevents`;
         if (!db[key]) {
-            let isFury = key.includes("fury"),
-                isFrenzy = key.includes("frenzy");
             db[key] = {
-                type: isFury || isFrenzy ? "fixed" : "normal",
-                title: key.includes("11") ? `Magic Square 11F - ${isFury ? "Fury" : isFrenzy ? "Frenzy" : "Leaders"}` : `Magic Square 12F - ${isFury ? "Fury" : isFrenzy ? "Frenzy" : "Leaders"}`,
-                timeWindow: "",
-                next: null,
-                ownerId: null,
-                ownerName: null,
-                ...isFury || isFrenzy ? {
-                    schedules: isFury ? [0, 3, 6, 9, 12, 15, 18, 21] : [2, 5, 8, 11, 14, 17, 20, 23],
-                    ...isFury ? { scheduleMinutes: 30 } : {}
-                } : {
-                    boss1: {
-                        name: "1️⃣ Leader 1",
-                        status: STATUS_AVAILABLE,
-                        cooldown: 30,
-                        _freeSince: 0,
-                        _lastKilledTimeStr: ""
-                    },
-                    boss2: {
-                        name: "2️⃣ Leader 2",
-                        status: STATUS_AVAILABLE,
-                        cooldown: 60,
-                        _freeSince: 0,
-                        _lastKilledTimeStr: ""
-                    },
-                    boss3: {
-                        name: "3️⃣ Leader 3",
-                        status: STATUS_AVAILABLE,
-                        cooldown: 180,
-                        _freeSince: 0,
-                        _lastKilledTimeStr: ""
-                    }
+                type: "event_group",
+                title: `Magic Square ${floor}F - Events`,
+                fury: {
+                    name: "🔴 Fury",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    schedules: [0, 3, 6, 9, 12, 15, 18, 21],
+                    scheduleMinutes: 30
+                },
+                frenzy: {
+                    name: "🟣 Frenzy",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    schedules: [2, 5, 8, 11, 14, 17, 20, 23]
                 }
             };
         }
@@ -234,13 +238,13 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         const key = `${floor}squareantidemon`;
         if (!db[key]) {
             const rooms = {};
-            const names = ["1-1", "1-2", "1-3"];
+            const versions = ["1-1", "1-2", "1-3"];
             const sides = [
                 { k: "l", n: "LEFT" },
                 { k: "m", n: "MID" },
                 { k: "r", n: "RIGHT" }
             ];
-            names.forEach(ver => {
+            versions.forEach(ver => {
                 sides.forEach(side => {
                     const rk = `v${ver.replace("1-", "")}${side.k}`;
                     rooms[rk] = {
@@ -254,18 +258,6 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
             db[key] = { type: "antidemon", title: `Antidemon ${floor}F`, ...rooms };
         }
     });
-
-    // Initialize SP11/SP12 goblin panels (separate from main summon)
-    const goblinTemplate = (floor) => ({
-        type: "summon",
-        title: `⭐ SP ${floor}F (Goblin)`,
-        [`sp${floor}`]: {
-            name: `⭐ SP ${floor}F (Goblin)`, status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-            time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
-        }
-    });
-    if (!db["11goblin"]) db["11goblin"] = goblinTemplate("11");
-    if (!db["12goblin"]) db["12goblin"] = goblinTemplate("12");
 
     // Initialize summon panel (sp11/sp12 removed — moved to separate goblin panels)
     db.summon || (db.summon = {

@@ -4,7 +4,7 @@
 // Cancel, Next queue, Fixed type (Fury/Frenzy)
 // ==========================================
 
-import { getMsg } from "../lang.js";
+import { getMsg, getArray } from "../lang.js";
 import { db, saveLocalStorage } from "../state.js";
 import { refreshVisualPanel, notifyUserDM } from "../panel-utils.js";
 import { pushToDailyLogs } from "../daily-logs.js";
@@ -20,7 +20,9 @@ import {
     buildAntiQueueOptions,
     buildActiveClaimMessage,
     getAntidemonRoomKeys,
-    getSummonRoomKeys
+    getAntidemonRoomName,
+    getSummonRoomKeys,
+    getEventGroupKeys
 } from "../claim-core.js";
 import {
     EmbedBuilder as e,
@@ -43,17 +45,34 @@ import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN, STATUS_KILLED, STATUS_KI
 // ⏳ Track death confirmation timeouts so they can be cancelled on button click
 const deathConfirmTimeouts = new Map();
 
+// Track event group summon ticket selections (uid → { panelId, event })
+const egSummonCache = new Map();
+
 // ==========================================
 // 🎯 MAIN DISPATCH
 // ==========================================
 
 export function canHandleFloorInteraction(interaction) {
     const cid = interaction.customId;
+    
+    // Event group slide menus (select menus, not buttons)
+    if (interaction.isStringSelectMenu()) {
+        if (cid.startsWith("egslide-") || cid.startsWith("egticket-") || cid.startsWith("egnextside-")) return true;
+        // Antidemon 2-level menu: version selection first
+        if (cid.startsWith("antiversion-")) return true;
+        return false;
+    }
+    
     if (!interaction.isButton()) return false;
 
     const parts = cid.split("-");
     const actionPrefix = parts[0];
-    const specificProp = parts[2];
+
+    // Event group death marks: egdeath-{key}-{event}
+    // Event group death marks
+    if ("egdeath" === actionPrefix) return true;
+    if ("egdeathconfirm" === actionPrefix || "egdeathcancel" === actionPrefix) return true;
+    if ("egticket" === actionPrefix) return true;
 
     // Death mark: death-{key}-{prop}
     if ("death" === actionPrefix) return true;
@@ -68,6 +87,16 @@ export function canHandleFloorInteraction(interaction) {
 }
 
 export async function handleFloorInteraction(interaction, uid, uName) {
+    // Handle String Select Menus for event group and antidemon versions
+    if (interaction.isStringSelectMenu()) {
+        const cid = interaction.customId;
+        if (cid.startsWith("egslide-")) return handleEGSlide(interaction, uid, uName);
+        if (cid.startsWith("egticket-")) return handleEGTicket(interaction, uid, uName);
+        if (cid.startsWith("egnextside-")) return handleEGNextSide(interaction, uid, uName);
+        if (cid.startsWith("antiversion-")) return handleAntiVersionSlide(interaction, uid, uName);
+        return false;
+    }
+    
     if (!interaction.isButton()) return false;
 
     const [actionPrefix, panelKey, specificProp] = interaction.customId.split("-");
@@ -81,6 +110,13 @@ export async function handleFloorInteraction(interaction, uid, uName) {
     if ("death" === actionPrefix) {
         return handleDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp);
     }
+    
+    // ==========================================
+    // 💀 EVENT GROUP DEATH MARK (egdeath-{key}-{event})
+    // ==========================================
+    if ("egdeath" === actionPrefix) {
+        return handleEGDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp);
+    }
 
     // ==========================================
     // ✅ DEATH CONFIRM / CANCEL (update existing death time)
@@ -91,8 +127,33 @@ export async function handleFloorInteraction(interaction, uid, uName) {
     if ("deathcancel" === actionPrefix) {
         return handleDeathCancel(interaction, uid, uName, targetObj, panelKey, specificProp);
     }
+    
+    // ==========================================
+    // ✅ EVENT GROUP DEATH CONFIRM / CANCEL
+    // ==========================================
+    if ("egdeathconfirm" === actionPrefix) {
+        return handleEGDeathConfirm(interaction, uid, uName, targetObj, panelKey, specificProp);
+    }
+    if ("egdeathcancel" === actionPrefix) {
+        return handleEGDeathCancel(interaction, uid, uName, targetObj, panelKey, specificProp);
+    }
 
     // ── All floor-level actions below ──
+
+    // ==========================================
+    // 🎯 EVENT GROUP ACTIONS (claim, next, cancel)
+    // ==========================================
+    if ("event_group" === targetObj.type) {
+        if ("claim" === specificProp) {
+            return handleEventGroupClaim(interaction, uid, uName, targetObj, panelKey);
+        }
+        if ("next" === specificProp) {
+            return handleEventGroupNext(interaction, uid, uName, targetObj, panelKey);
+        }
+        if ("cancel" === specificProp) {
+            return handleEventGroupCancel(interaction, uid, uName, targetObj, panelKey);
+        }
+    }
 
     // ==========================================
     // 🌀 SUMMON SPECIFIC ACTIONS (claim, next, cancel)
@@ -259,6 +320,514 @@ async function handleDeathCancel(interaction, uid, uName, targetObj, panelKey, s
 }
 
 // ==========================================
+// ✅ EVENT GROUP DEATH CONFIRM / CANCEL
+// ==========================================
+
+async function handleEGDeathConfirm(interaction, uid, uName, targetObj, panelKey, specificProp) {
+    let evData = targetObj[specificProp];
+    if (!evData) return await interaction.update({ content: getMsg("rooms.noActiveClaimsFeedback"), components: [], flags: 64 }).catch(() => {});
+    
+    let currTimeStr = getFormattedTime12h(getLocalTime());
+    let nowTs = getLocalTime().getTime();
+    
+    evData.status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
+    evData._lastKilledAt = nowTs;
+    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${evData.name}`, `Killed at ${currTimeStr} (updated)`);
+    saveLocalStorage();
+    await refreshVisualPanel(panelKey);
+    return await interaction.update({
+        content: getMsg("rooms.deathUpdateConfirmed", { newTime: currTimeStr }),
+        components: [], flags: 64
+    }).catch(() => {});
+}
+
+async function handleEGDeathCancel(interaction, uid, uName, targetObj, panelKey, specificProp) {
+    return await interaction.update({
+        content: getMsg("rooms.deathUpdateCancelled"),
+        components: [], flags: 64
+    }).catch(() => {});
+}
+
+// ==========================================
+// 💀 EVENT GROUP DEATH MARK (schedule-type events like Red Boss)
+// ==========================================
+
+async function handleEGDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp) {
+    let evData = targetObj[specificProp];
+    if (!evData) return await interaction.reply({ content: getMsg("rooms.noActiveClaimsFeedback"), flags: 64 }).catch(() => {});
+    
+    let currTimeStr = getFormattedTime12h(getLocalTime());
+    let nowTs = getLocalTime().getTime();
+    
+    if (evData.status && evData.status.startsWith(STATUS_KILLED)) {
+        // Ask for confirmation to update
+        let oldTimeStr = evData.status.replace(STATUS_KILLED_PREFIX, "").trim();
+        await interaction.reply({
+            content: getMsg("rooms.deathUpdateConfirm", { oldTime: oldTimeStr, newTime: currTimeStr }),
+            components: [
+                new t().addComponents(
+                    new n().setCustomId(`egdeathconfirm-${panelKey}-${specificProp}`).setLabel("✅ Update").setStyle(a.Success),
+                    new n().setCustomId(`egdeathcancel-${panelKey}-${specificProp}`).setLabel("❌ Cancel").setStyle(a.Secondary)
+                )
+            ],
+            flags: 64
+        }).catch(() => {});
+        return;
+    }
+    
+    evData.status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
+    evData._lastKilledAt = nowTs;
+    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${evData.name}`, `Killed at ${currTimeStr}`);
+    saveLocalStorage();
+    await refreshVisualPanel(panelKey);
+    return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(() => {});
+}
+
+// ==========================================
+// 🎯 EVENT GROUP CLAIM (via select menu)
+// ==========================================
+
+async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKey) {
+    let pStr = checkPunishment(uid);
+    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
+    if (hasActiveClaim(uid)) {
+        const claimMsg = buildActiveClaimMessage(uid);
+        return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {});
+    }
+    
+    const eventKeys = getEventGroupKeys(targetObj);
+    
+    // For summon-type events, check if user has priority queue
+    if (hasActiveQueue(uid)) {
+        const hasPriority = eventKeys.some(ev => targetObj[ev] && targetObj[ev].nextId === uid);
+        if (!hasPriority) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {});
+    }
+    
+    // Build available options based on event type
+    let now = getLocalTime();
+    const options = [];
+    
+    for (let ev of eventKeys) {
+        let evData = targetObj[ev];
+        if (evData.ownerId) continue; // Already claimed
+        
+        if (evData.type === "schedule") {
+            // Schedule-type event (Red Boss) — must be available (not killed) to claim
+            if (!evData.status || evData.status === STATUS_AVAILABLE) {
+                options.push({ label: `🟥 ${evData.name}`, value: ev, emoji: "🟥" });
+            }
+        } else if (evData.type === "fixed") {
+            // Fixed-type event (Fury/Frenzy/Random) — check if in pre-window
+            let minuteOffset = evData.scheduleMinutes || 0;
+            let eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+            let fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
+            if (now >= fiveMinBefore) {
+                options.push({ label: evData.name, value: ev, emoji: "🔴" });
+            }
+        } else if (evData.type === "summon") {
+            // Summon-type event (Goblin) — check if available or user has priority queue
+            const hasPriority = evData.nextId === uid;
+            if (!evData.ownerId && (hasPriority || (!evData.nextId && evData.status !== STATUS_CLAIMED))) {
+                options.push({ label: evData.name, value: ev, emoji: "⭐" });
+            }
+        }
+    }
+    
+    if (options.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {});
+    
+    return await interaction.reply({
+        content: `🎯 **${getMsg("rooms.summonMenuSelectClaim")}**`,
+        components: [new t().addComponents(
+            new i().setCustomId(`egslide-${panelKey}`).setPlaceholder("Choose an event...").addOptions(options)
+        )],
+        flags: 64
+    }).catch(() => {});
+}
+
+// ==========================================
+// ⏭️ EVENT GROUP NEXT QUEUE (summon-type only)
+// ==========================================
+
+async function handleEventGroupNext(interaction, uid, uName, targetObj, panelKey) {
+    let pStr = checkPunishment(uid);
+    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
+    if (hasActiveClaim(uid)) {
+        const claimMsg = buildActiveClaimMessage(uid);
+        return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {});
+    }
+    if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {});
+    
+    const eventKeys = getEventGroupKeys(targetObj);
+    const summonEvents = eventKeys.filter(ev => targetObj[ev].type === "summon" && targetObj[ev].ownerId && !targetObj[ev].nextId);
+    
+    const queueOpts = summonEvents.map(ev => ({
+        label: targetObj[ev].name,
+        value: ev,
+        emoji: "⭐"
+    }));
+    
+    if (queueOpts.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {});
+    
+    return await interaction.reply({
+        content: `⭐ **${getMsg("rooms.summonMenuSelectNext")}**`,
+        components: [new t().addComponents(
+            new i().setCustomId(`egnextside-${panelKey}`).setPlaceholder("Choose an event...").addOptions(queueOpts)
+        )],
+        flags: 64
+    }).catch(() => {});
+}
+
+// ==========================================
+// 🚪 EVENT GROUP CANCEL
+// ==========================================
+
+async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelKey) {
+    let isMod = interaction.member.permissions.has("ManageMessages");
+    const eventKeys = getEventGroupKeys(targetObj);
+    let isOwner = eventKeys.some(ev => targetObj[ev] && targetObj[ev].ownerId === uid);
+    let isInQueue = eventKeys.some(ev => targetObj[ev] && targetObj[ev].nextId === uid);
+    
+    if (isOwner || isInQueue || isMod) {
+        let penalized = !1;
+        let anyAction = !1;
+        
+        for (let ev of eventKeys) {
+            let evData = targetObj[ev];
+            if (evData.ownerId === uid) {
+                anyAction = !0;
+                let currentLoggedName = evData.ownerName || uName;
+                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${evData.name}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
+                notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
+                    title: `${targetObj.title} - ${evData.name}`,
+                    reason: isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel")
+                }));
+                
+                // Reset based on event type
+                if (evData.type === "summon") {
+                    evData.status = STATUS_AVAILABLE;
+                    evData.ownerId = null;
+                    evData.ownerName = null;
+                    evData.time = "";
+                    evData.timeWindow = "";
+                    if (evData.nextId) {
+                        let nid = evData.nextId, nname = evData.nextName;
+                        evData.nextId = null;
+                        evData.nextName = null;
+                        evData.formattedTimeNext = "";
+                        evData.ownerId = nid;
+                        evData.ownerName = nname;
+                        let grace = new Date(getLocalTime().getTime() + 3e5);
+                        evData.timeWindow = `${getFormattedTime12h(new Date())} ~ ${getFormattedTime12h(grace)}`;
+                        evData.status = STATUS_OPEN;
+                        notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
+                            roomKey: evData.name,
+                            title: targetObj.title
+                        })).catch(() => {});
+                    }
+                } else {
+                    // Schedule and fixed: just clear owner
+                    evData.ownerId = null;
+                    evData.ownerName = null;
+                    evData.timeWindow = "";
+                    if (evData._claimTimestamp) delete evData._claimTimestamp;
+                }
+                
+                isMod || penalized || (applyFiveMinCooldown(uid), penalized = !0);
+            }
+            if (evData.nextId === uid) {
+                anyAction = !0;
+                let currentLoggedName = evData.nextName || uName;
+                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${evData.name} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
+                notifyUserDM(evData.nextId, getMsg("rooms.dmRemovedNotice", {
+                    title: `${targetObj.title} - ${evData.name} (Queue)`,
+                    reason: isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel")
+                }));
+                evData.nextId = null;
+                evData.nextName = null;
+                evData.endLimit = null;
+                evData.formattedTimeNext = "";
+            }
+        }
+        
+        saveLocalStorage();
+        await refreshVisualPanel(panelKey);
+        return await interaction.reply({
+            content: anyAction
+                ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))
+                : getMsg("rooms.noActiveClaimsFeedback"),
+            flags: 64
+        }).catch(() => {});
+    }
+    return await interaction.reply({ content: getMsg("rooms.noActiveClaimsFeedback"), flags: 64 }).catch(() => {});
+}
+
+// ==========================================
+// 🎯 EVENT GROUP SLIDE — Selection handler
+// ==========================================
+
+async function handleEGSlide(interaction, uid, uName) {
+    let pStr = checkPunishment(uid);
+    if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
+    
+    if (hasActiveClaim(uid)) {
+        const claimMsg = buildActiveClaimMessage(uid);
+        return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
+    }
+    
+    let pKey = interaction.customId.replace("egslide-", ""),
+        targetFloor = db[pKey],
+        selectedEvent = interaction.values[0];
+    
+    if (!targetFloor || !targetFloor[selectedEvent]) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
+    
+    let evData = targetFloor[selectedEvent];
+    
+    // Race condition guard
+    if (evData.ownerId) {
+        return await interaction.update({
+            content: getMsg("rooms.slotAlreadyClaimed", { room: evData.name, ownerName: evData.ownerName || getMsg("render.unknownUser") }),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+    
+    if (evData.type === "schedule") {
+        // Schedule-type (Red Boss) — just claim it
+        let now = getLocalTime();
+        evData.ownerId = uid;
+        evData.ownerName = uName;
+        evData._claimTimestamp = now.getTime();
+        
+        pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, "Claimed Red Boss");
+        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: "" }));
+        saveLocalStorage();
+        await refreshVisualPanel(pKey);
+        return await interaction.update({
+            content: `🏆 ${evData.name} claimed!`,
+            components: [], flags: 64
+        }).catch(() => {});
+    } else if (evData.type === "fixed") {
+        // Fixed-type (Fury/Frenzy/Random Event) — claim with 1 hour window
+        let now = getLocalTime();
+        let minuteOffset = evData.scheduleMinutes || 0;
+        let eventStart;
+        
+        if (isRoomOpen(evData.schedules, minuteOffset)) {
+            let nowMinutes = now.getHours() * 60 + now.getMinutes();
+            let foundHour = null;
+            for (const h of evData.schedules) {
+                let startMin = h * 60 + minuteOffset;
+                let endMin = startMin + 60;
+                if (nowMinutes >= startMin && nowMinutes < endMin) { foundHour = h; break; }
+            }
+            if (foundHour !== null) {
+                eventStart = new Date(now.getTime());
+                eventStart.setHours(foundHour, minuteOffset, 0, 0);
+            } else {
+                eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+            }
+        } else {
+            eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+        }
+        
+        let eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
+        let windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
+        
+        evData.ownerId = uid;
+        evData.ownerName = uName;
+        evData.timeWindow = windowStr;
+        evData._claimTimestamp = now.getTime();
+        
+        pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
+        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
+        saveLocalStorage();
+        await refreshVisualPanel(pKey);
+        return await interaction.update({
+            content: `🏆 ${evData.name} secured!`,
+            components: [], flags: 64
+        }).catch(() => {});
+    } else if (evData.type === "summon") {
+        // Summon-type (Goblin) — show ticket selection
+        egSummonCache.set(uid, { panelId: pKey, event: selectedEvent });
+        
+        return await interaction.update({
+            content: `🎫 **${getMsg("rooms.antidemonPromptSelection")}**`,
+            components: [new t().addComponents(
+                new i()
+                    .setCustomId(`egticket-${pKey}`)
+                    .setPlaceholder(getMsg("rooms.antidemonTicketPlaceholder"))
+                    .addOptions(getArray("tickets").map(e => ({ label: e.label, value: e.value, emoji: "🎫" })))
+            )],
+            flags: 64
+        }).catch(() => {});
+    }
+    
+    return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
+}
+
+// ==========================================
+// ⏭️ EVENT GROUP NEXT SLIDE
+// ==========================================
+
+async function handleEGNextSide(interaction, uid, uName) {
+    let pStr = checkPunishment(uid);
+    if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
+    
+    if (hasActiveClaim(uid)) {
+        const claimMsg = buildActiveClaimMessage(uid);
+        return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
+    }
+    if (hasActiveQueue(uid)) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
+    
+    let pKey = interaction.customId.replace("egnextside-", ""),
+        targetFloor = db[pKey],
+        selectedEvent = interaction.values[0];
+    
+    if (!targetFloor || !targetFloor[selectedEvent]) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
+    
+    let evData = targetFloor[selectedEvent];
+    if (evData.nextId) return await interaction.update({
+        content: getMsg("rooms.antidemonQueueLocked"),
+        components: [], flags: 64
+    }).catch(() => {});
+    
+    if (!evData.ownerId) return await interaction.update({
+        content: getMsg("rooms.antidemonQueueLocked"),
+        components: [], flags: 64
+    }).catch(() => {});
+    
+    let baseTime = getLocalTime();
+    if (evData.timeWindow) {
+        let calcLimit = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
+        calcLimit && (baseTime = calcLimit);
+    }
+    
+    evData.nextId = uid;
+    evData.nextName = uName;
+    evData.formattedTimeNext = getFormattedTime12h(baseTime);
+    evData.endLimit = null;
+    
+    pushToDailyLogs("QUEUE_JOIN", uName, `${targetFloor.title} - ${evData.name}`, getMsg("render.joinedAsNext"));
+    notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - ${evData.name}` }));
+    
+    saveLocalStorage();
+    await refreshVisualPanel(pKey);
+    return await interaction.update({
+        content: getMsg("rooms.summonQueueSuccessEphemeral"),
+        components: [], flags: 64
+    }).catch(() => {});
+}
+
+// ==========================================
+// 🎟️ EVENT GROUP TICKET (summon-type ticket selection)
+// ==========================================
+
+async function handleEGTicket(interaction, uid, uName) {
+    let pStr = checkPunishment(uid);
+    if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
+    
+    let pKey = interaction.customId.replace("egticket-", ""),
+        targetFloor = db[pKey],
+        cacheEntry = egSummonCache.get(uid);
+    
+    if (!cacheEntry || cacheEntry.panelId !== pKey) {
+        return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
+    }
+    
+    if (hasActiveClaim(uid)) {
+        const claimMsg = buildActiveClaimMessage(uid);
+        return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
+    }
+    if (hasActiveQueue(uid)) {
+        const eventKeys = getEventGroupKeys(targetFloor);
+        const hasPriority = eventKeys.some(ev => targetFloor[ev] && targetFloor[ev].nextId === uid);
+        if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
+    }
+    
+    let selectedEvent = cacheEntry.event,
+        evData = targetFloor[selectedEvent],
+        calcMinutes = 30 * parseInt(interaction.values[0]),
+        startTime = getLocalTime(),
+        endTime = new Date(startTime.getTime() + 6e4 * calcMinutes),
+        rangeStr = `${getFormattedTime12h(startTime)} ~ ${getFormattedTime12h(endTime)}`;
+    
+    if (!evData || evData.ownerId) {
+        egSummonCache.delete(uid);
+        return await interaction.update({
+            content: getMsg("rooms.slotAlreadyClaimed", { room: evData?.name || "", ownerName: evData?.ownerName || getMsg("render.unknownUser") }),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+    
+    // Clear any existing queue for this user in this event
+    if (evData.nextId === uid) {
+        evData.nextId = null;
+        evData.nextName = null;
+        evData.endLimit = null;
+        evData.formattedTimeNext = "";
+    }
+    
+    evData.status = STATUS_CLAIMED;
+    evData.ownerId = uid;
+    evData.ownerName = uName;
+    evData.time = `${getFormattedTime12h(startTime)}\nto  ${getFormattedTime12h(endTime)}`;
+    evData.timeWindow = rangeStr;
+    
+    pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `Total Ticket: ${calcMinutes} min until ${getFormattedTime12h(endTime)}`);
+    notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} (${evData.name})`, window: rangeStr }));
+    
+    egSummonCache.delete(uid);
+    saveLocalStorage();
+    await refreshVisualPanel(pKey);
+    return await interaction.update({
+        content: getMsg("rooms.summonClaimSuccessEphemeral"),
+        components: [], flags: 64
+    }).catch(() => {});
+}
+
+// ==========================================
+// 🏛️ ANTIDEMON VERSION SLIDE (2-level menu for MS11/12)
+// ==========================================
+
+async function handleAntiVersionSlide(interaction, uid, uName) {
+    // User selected a version (1-1, 1-2, 1-3) — now show rooms for that version
+    let pKey = interaction.customId.replace("antiversion-", ""),
+        targetFloor = db[pKey],
+        selectedVersion = interaction.values[0]; // e.g. "v1", "v2", "v3"
+    
+    if (!targetFloor) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
+    
+    const roomKeys = getAntidemonRoomKeys(pKey);
+    const versionRooms = roomKeys.filter(rk => rk.startsWith(selectedVersion));
+    
+    // Build room options for this version
+    const roomOpts = [];
+    for (let rk of versionRooms) {
+        let rData = targetFloor[rk];
+        if (!rData.ownerId && (!rData.nextId || rData.nextId === uid)) {
+            roomOpts.push({ label: rData.name, value: rk, emoji: "👹" });
+        }
+    }
+    
+    // Add combo options
+    if (roomOpts.some(o => o.value.endsWith("l")) && roomOpts.some(o => o.value.endsWith("m"))) {
+        roomOpts.push({ label: `${getAntidemonRoomName(pKey, selectedVersion+"l")} + ${getAntidemonRoomName(pKey, selectedVersion+"m")}`, value: `${selectedVersion}l+${selectedVersion}m`, emoji: "🔵" });
+    }
+    if (roomOpts.some(o => o.value.endsWith("m")) && roomOpts.some(o => o.value.endsWith("r"))) {
+        roomOpts.push({ label: `${getAntidemonRoomName(pKey, selectedVersion+"m")} + ${getAntidemonRoomName(pKey, selectedVersion+"r")}`, value: `${selectedVersion}m+${selectedVersion}r`, emoji: "🔵" });
+    }
+    
+    if (roomOpts.length === 0) return await interaction.update({ content: getMsg("rooms.antidemonQueueLocked"), components: [], flags: 64 }).catch(() => {});
+    
+    return await interaction.update({
+        content: `👹 **${getMsg("rooms.antidemonMenuSelectClaim")}**`,
+        components: [new t().addComponents(
+            new i().setCustomId(`antislide-${pKey}`).setPlaceholder(getMsg("rooms.antidemonSelectPlaceholder")).addOptions(roomOpts)
+        )],
+        flags: 64
+    }).catch(() => {});
+}
+
+// ==========================================
 // 🌀 SUMMON CLAIM (via select menu)
 // ==========================================
 
@@ -396,6 +965,34 @@ async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
         const hasPriority = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].nextId === uid);
         if (!hasPriority) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {});
     }
+    
+    // MS11/12 antidemon: show version selection first (2-level menu)
+    const roomKeys = getAntidemonRoomKeys(panelKey);
+    if (roomKeys.length > 3) {
+        // Show version selection (1-1, 1-2, 1-3)
+        const versionOpts = [];
+        const versions = ["v1", "v2", "v3"];
+        versions.forEach(v => {
+            const roomsInVer = roomKeys.filter(rk => rk.startsWith(v));
+            const anyFree = roomsInVer.some(rk => targetObj[rk] && !targetObj[rk].ownerId);
+            if (anyFree) {
+                const verName = v === "v1" ? "1-1" : v === "v2" ? "1-2" : "1-3";
+                versionOpts.push({ label: `🏛️ Version ${verName}`, value: v, emoji: "🏛️" });
+            }
+        });
+        
+        if (versionOpts.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {});
+        
+        return await interaction.reply({
+            content: `👹 **Select a version to claim:**`,
+            components: [new t().addComponents(
+                new i().setCustomId(`antiversion-${panelKey}`).setPlaceholder("Choose a version...").addOptions(versionOpts)
+            )],
+            flags: 64
+        }).catch(() => {});
+    }
+    
+    // MS7-10: show all rooms directly
     return await interaction.reply({
         content: `👹 **${getMsg("rooms.antidemonMenuSelectClaim")}**`,
         components: [new t().addComponents(

@@ -104,6 +104,33 @@ export function resetPanelData(key) {
             sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
             ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
         };
+    } else if (key === "11" || key === "12") {
+        // Unified SP event_group (Red Boss + Goblin + Random Event for SP12)
+        const floor = key;
+        db[key] = {
+            type: "event_group",
+            title: `Secret Peak ${floor}F`,
+            red: {
+                name: "🟥 Red Boss", type: "schedule",
+                status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                timeWindow: "", _claimTimestamp: null,
+                schedules: [1, 7, 13, 19]
+            },
+            goblin: {
+                name: "⭐ Goblin", type: "summon",
+                status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                time: "", timeWindow: "", nextId: null, nextName: null,
+                formattedTimeNext: "", endLimit: null
+            },
+            ...(key === "12" ? {
+                randomevent: {
+                    name: "🎲 Random Event", type: "fixed",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    schedules: [3, 9, 15, 21]
+                }
+            } : {})
+        };
     } else if (key === "11peak" || key === "12peak") {
         const floor = key === "11peak" ? "11" : "12";
         db[key] = {
@@ -129,20 +156,36 @@ export function resetPanelData(key) {
         };
     } else if (is11or12) {
         let num = is11or12[1], type = is11or12[2];
-        let isFury = "fury" === type, isFrenzy = "frenzy" === type;
-        db[key] = {
-            type: isFury || isFrenzy ? "fixed" : "normal",
-            title: `11` === num ? `Magic Square 11F - ${isFury ? "Fury" : isFrenzy ? "Frenzy" : "Leaders"}` : `Magic Square 12F - ${isFury ? "Fury" : isFrenzy ? "Frenzy" : "Leaders"}`,
-            timeWindow: "", next: null, ownerId: null, ownerName: null,
-            ...isFury || isFrenzy ? {
-                schedules: isFury ? [0, 3, 6, 9, 12, 15, 18, 21] : [2, 5, 8, 11, 14, 17, 20, 23],
-                ...isFury ? { scheduleMinutes: 30 } : {}
-            } : {
+        const isLeaders = "leaders" === type;
+        const isEvents = "events" === type;
+        if (isLeaders) {
+            db[key] = {
+                type: "normal",
+                title: `11` === num ? "Magic Square 11F - Leaders" : "Magic Square 12F - Leaders",
+                timeWindow: "", next: null, ownerId: null, ownerName: null,
                 boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
                 boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
                 boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" }
-            }
-        };
+            };
+        } else if (isEvents) {
+            db[key] = {
+                type: "event_group",
+                title: `Magic Square ${num}F - Events`,
+                fury: {
+                    name: "🔴 Fury", type: "fixed",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    schedules: [0, 3, 6, 9, 12, 15, 18, 21],
+                    scheduleMinutes: 30
+                },
+                frenzy: {
+                    name: "🟣 Frenzy", type: "fixed",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    schedules: [2, 5, 8, 11, 14, 17, 20, 23]
+                }
+            };
+        }
     }
     
     // Restore panel mapping if existed

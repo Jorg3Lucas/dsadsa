@@ -19,7 +19,7 @@ import { setupTicketPanel } from "../ticket-system.js";
 import { renderEmbed, renderButtons } from "../panel-render.js";
 import { refreshVisualPanel, resetPanelData } from "../panel-utils.js";
 import { STATUS_CLAIMED } from "../constants.js";
-import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys } from "../claim-core.js";
+import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "../claim-core.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -249,7 +249,19 @@ async function handleKick(msg) {
         let current = db[key];
         if (!current || key.startsWith("_")) continue;
         let cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
-        if ("antidemon" === current.type) {
+        if ("event_group" === current.type) {
+            const egKeys = getEventGroupKeys(current);
+            for (let ev of egKeys) {
+                let evData = current[ev];
+                if (evData.ownerId) {
+                    optionsList.push({
+                        label: `${cleanedTitle} - ${evData.name}`,
+                        description: `${getMsg("system.kickCurrentLabel")} ${evData.ownerName}`,
+                        value: `kick-${key}-${ev}-${evData.ownerId}`
+                    });
+                }
+            }
+        } else if ("antidemon" === current.type) {
             const antiRoomKeys = getAntidemonRoomKeys(key);
             // Individual room options
             for (let room of antiRoomKeys) {

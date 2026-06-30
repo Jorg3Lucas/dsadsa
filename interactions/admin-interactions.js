@@ -8,7 +8,9 @@ import { db, dailyLogs } from "../state.js";
 import { saveDailyLogs } from "../daily-logs.js";
 import { refreshVisualPanel, resetPanelData, notifyUserDM } from "../panel-utils.js";
 import { pushToDailyLogs } from "../daily-logs.js";
+import { getFormattedTime12h } from "../time-utils.js";
 import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom } from "../claim-core.js";
+import { saveLocalStorage } from "../state.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -100,7 +102,51 @@ async function handleAdminKickMenu(interaction, uid) {
         targetFloor = db[pKey];
 
     if (targetFloor) {
-        if ("floor" === roomType) {
+        if ("event_group" === targetFloor.type) {
+            // event_group kick: roomType is the sub-event key (e.g. "red", "goblin")
+            let evData = targetFloor[roomType];
+            if (evData && evData.ownerId) {
+                let finalUserLabel = evData.ownerName || getMsg("render.memberLabel");
+                pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - ${evData.name}`, getMsg("logs.adminRemove"));
+                notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
+                    title: `${targetFloor.title} - ${evData.name}`,
+                    reason: getMsg("logs.adminRemove")
+                }));
+                
+                // Reset based on event type
+                if (evData.type === "summon") {
+                    evData.ownerId = null;
+                    evData.ownerName = null;
+                    evData.time = "";
+                    evData.timeWindow = "";
+                    if (evData.nextId) {
+                        let nid = evData.nextId, nname = evData.nextName;
+                        evData.nextId = null;
+                        evData.nextName = null;
+                        evData.formattedTimeNext = "";
+                        evData.ownerId = nid;
+                        evData.ownerName = nname;
+                        let grace = new Date(Date.now() + 3e5);
+                        evData.timeWindow = `${getFormattedTime12h(new Date())} ~ ${getFormattedTime12h(grace)}`;
+                        evData.status = "🟢 Open";
+                    }
+                } else {
+                    // schedule/fixed: just clear
+                    evData.ownerId = null;
+                    evData.ownerName = null;
+                    evData.timeWindow = "";
+                    if (evData._claimTimestamp) delete evData._claimTimestamp;
+                }
+                
+                saveLocalStorage();
+                await refreshVisualPanel(pKey);
+                notifyUserDM(targetUid, getMsg("system.kickDMNotice", { title: `${targetFloor.title} - ${evData.name}` }));
+                return await interaction.update({
+                    content: getMsg("system.kickSuccess"),
+                    components: []
+                }).catch(() => {});
+            }
+        } else if ("floor" === roomType) {
             let finalUserLabel = targetFloor.ownerName || getMsg("render.memberLabel");
             pushToDailyLogs("CANCEL", finalUserLabel, targetFloor.title, getMsg("logs.adminRemove"));
             notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
@@ -116,7 +162,7 @@ async function handleAdminKickMenu(interaction, uid) {
             }).catch(() => {});
         }
 
-        // Support combo values (e.g. "v1l+v1m")
+        // Support combo values (e.g. "v1l+v1m") — for antidemon/summon rooms
         const roomsToFree = roomType.includes("+") ? roomType.split("+") : [roomType];
         let freedLabels = [];
         for (let rm of roomsToFree) {
