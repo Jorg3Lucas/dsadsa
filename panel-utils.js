@@ -474,6 +474,45 @@ export function migrateMS1112() {
         // Else: already 9-room format, no change needed
     }
 
+    // === 4. Backfill type:"fixed" and schedules on existing MS11/MS12 events panels ===
+    // Fixes existing DB entries that were created without these properties
+    for (let floor of ["11", "12"]) {
+        const key = `${floor}squareevents`;
+        const panel = db[key];
+        if (panel && panel.type === "event_group") {
+            let changed = false;
+            for (const ev of ["fury", "frenzy"]) {
+                const sub = panel[ev];
+                if (sub) {
+                    if (!sub.type) {
+                        sub.type = "fixed";
+                        changed = true;
+                    }
+                    if (!sub.schedules) {
+                        sub.schedules = ev === "fury"
+                            ? [0, 3, 6, 9, 12, 15, 18, 21]
+                            : [2, 5, 8, 11, 14, 17, 20, 23];
+                        if (ev === "fury" && !sub.scheduleMinutes) sub.scheduleMinutes = 30;
+                        changed = true;
+                    }
+                    // Clean up any stale ownerId that might cause false "already taken"
+                    if (sub.ownerId && !sub.ownerName && sub.status === STATUS_AVAILABLE) {
+                        sub.ownerId = null;
+                        changed = true;
+                    }
+                    if (sub.ownerId === "") {
+                        sub.ownerId = null;
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) {
+                migrated++;
+                logEvent(`Backfilled type/schedules on ${key} sub-events.`);
+            }
+        }
+    }
+
     if (migrated > 0) {
         saveLocalStorage();
         logEvent(`MS11/MS12 migration complete: ${migrated} panel(s) created/updated.`);

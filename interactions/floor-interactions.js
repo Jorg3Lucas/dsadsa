@@ -63,6 +63,9 @@ export function canHandleFloorInteraction(interaction) {
         return false;
     }
     
+    // Individual fixed-event claim buttons (Fury/Frenzy/Random Event)
+    if (cid.startsWith("egfixclaim-")) return true;
+    
     if (!interaction.isButton()) return false;
 
     const parts = cid.split("-");
@@ -91,6 +94,7 @@ export async function handleFloorInteraction(interaction, uid, uName) {
     if (interaction.isStringSelectMenu()) {
         const cid = interaction.customId;
         if (cid.startsWith("egslide-")) return handleEGSlide(interaction, uid, uName);
+        if (cid.startsWith("egfixclaim-")) return handleEGFixClaim(interaction, uid, uName);
         if (cid.startsWith("egticket-")) return handleEGTicket(interaction, uid, uName);
         if (cid.startsWith("egnextside-")) return handleEGNextSide(interaction, uid, uName);
         if (cid.startsWith("antiversion-")) return handleAntiVersionSlide(interaction, uid, uName);
@@ -404,25 +408,20 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
     }
     
     // Build available options based on event type
+    // Fixed-type events (Fury/Frenzy/Random Event) have their own individual buttons,
+    // so they are excluded from the generic select menu.
     let now = getLocalTime();
     const options = [];
     
     for (let ev of eventKeys) {
         let evData = targetObj[ev];
         if (evData.ownerId) continue; // Already claimed
+        if (evData.type === "fixed") continue; // Has individual claim button
         
         if (evData.type === "schedule") {
             // Schedule-type event (Red Boss) — must be available (not killed) to claim
             if (!evData.status || evData.status === STATUS_AVAILABLE) {
                 options.push({ label: `🟥 ${evData.name}`, value: ev, emoji: "🟥" });
-            }
-        } else if (evData.type === "fixed") {
-            // Fixed-type event (Fury/Frenzy/Random) — check if in pre-window
-            let minuteOffset = evData.scheduleMinutes || 0;
-            let eventStart = calculateNextOpening(evData.schedules, minuteOffset);
-            let fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
-            if (now >= fiveMinBefore) {
-                options.push({ label: evData.name, value: ev, emoji: "🔴" });
             }
         } else if (evData.type === "summon") {
             // Summon-type event (Goblin) — check if available or user has priority queue
@@ -559,6 +558,83 @@ async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelK
         }).catch(() => {});
     }
     return await interaction.reply({ content: getMsg("rooms.noActiveClaimsFeedback"), flags: 64 }).catch(() => {});
+}
+
+// ==========================================
+// 🎯 EVENT GROUP FIXED CLAIM — Direct button handler (Fury/Frenzy/Random Event)
+// ==========================================
+
+async function handleEGFixClaim(interaction, uid, uName) {
+    let [, panelKey, eventName] = interaction.customId.split("-");
+    let targetFloor = db[panelKey];
+    if (!targetFloor || !targetFloor[eventName]) return await interaction.reply({ content: getMsg("rooms.antidemonTimeoutCache"), flags: 64 }).catch(() => {});
+
+    let pStr = checkPunishment(uid);
+    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
+    if (hasActiveClaim(uid)) {
+        const claimMsg = buildActiveClaimMessage(uid);
+        return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {});
+    }
+
+    let evData = targetFloor[eventName];
+    // Race condition guard
+    if (evData.ownerId) {
+        return await interaction.reply({
+            content: getMsg("rooms.slotAlreadyClaimed", { room: evData.name, ownerName: evData.ownerName || getMsg("render.unknownUser") }),
+            flags: 64
+        }).catch(() => {});
+    }
+
+    let now = getLocalTime();
+    let minuteOffset = evData.scheduleMinutes || 0;
+    let eventStart;
+
+    if (isRoomOpen(evData.schedules, minuteOffset)) {
+        // Event is currently open — use current event start
+        let nowMinutes = now.getHours() * 60 + now.getMinutes();
+        let foundHour = null;
+        for (const h of evData.schedules) {
+            let startMin = h * 60 + minuteOffset;
+            let endMin = startMin + 60;
+            if (nowMinutes >= startMin && nowMinutes < endMin) { foundHour = h; break; }
+        }
+        if (foundHour !== null) {
+            eventStart = new Date(now.getTime());
+            eventStart.setHours(foundHour, minuteOffset, 0, 0);
+        } else {
+            eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+        }
+    } else {
+        // Event not yet open — 5 min pre-window check
+        eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+        let fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
+        if (now < fiveMinBefore) {
+            let diffMs = eventStart.getTime() - now.getTime();
+            let diffMins = Math.ceil(diffMs / 6e4);
+            return await interaction.reply({
+                content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
+                flags: 64
+            }).catch(() => {});
+        }
+    }
+
+    let eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
+    let windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
+
+    evData.ownerId = uid;
+    evData.ownerName = uName;
+    evData.timeWindow = windowStr;
+    evData._claimTimestamp = now.getTime();
+
+    pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
+    notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
+
+    saveLocalStorage();
+    await refreshVisualPanel(panelKey);
+    return await interaction.reply({
+        content: getMsg("rooms.eventClaimedFixed", { title: evData.name }),
+        flags: 64
+    }).catch(() => {});
 }
 
 // ==========================================

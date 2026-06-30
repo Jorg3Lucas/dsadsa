@@ -375,6 +375,21 @@ export function renderButtons(key) {
             });
             componentsList.push(row);
         }
+        
+        // Individual claim buttons for fixed-type events (Fury/Frenzy/Random Event)
+        const fixedEvents = eventKeys.filter(ev => current[ev].type === "fixed");
+        if (fixedEvents.length > 0) {
+            let fixedRow = new t();
+            fixedEvents.forEach(ev => {
+                const isClaimed = !!current[ev].ownerId;
+                fixedRow.addComponents(new n()
+                    .setCustomId(`egfixclaim-${key}-${ev}`)
+                    .setLabel(isClaimed ? `👑 ${current[ev].ownerName || "Claimed"}` : current[ev].name)
+                    .setDisabled(isClaimed)
+                    .setStyle(isClaimed ? a.Secondary : a.Success));
+            });
+            componentsList.push(fixedRow);
+        }
     } else if ("fixed" !== current.type && "antidemon" !== current.type && "summon" !== current.type) {
         let row = new t();
         let hasProperties = !1;
@@ -406,11 +421,13 @@ export function renderButtons(key) {
         const eventKeys = getEventGroupKeys(current);
         let anyClaimed = eventKeys.some(ev => current[ev] && current[ev].ownerId);
         let anySummonQueue = eventKeys.some(ev => current[ev].type === "summon" && current[ev].nextId);
+        // Only show generic Claim button if there are non-fixed events (fixed events have individual buttons)
+        const hasNonFixedEvents = eventKeys.some(ev => current[ev] && current[ev].type !== "fixed");
         coreRow.addComponents(
-            new n()
+            ...(hasNonFixedEvents ? [new n()
                 .setCustomId(`floor-${key}-claim`)
                 .setLabel(getMsg("buttons.claimLabel"))
-                .setStyle(a.Success),
+                .setStyle(a.Success)] : []),
             ...(anySummonQueue ? [new n()
                 .setCustomId(`floor-${key}-next`)
                 .setLabel(getMsg("buttons.nextLabel"))
