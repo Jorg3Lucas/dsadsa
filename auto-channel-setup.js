@@ -40,14 +40,14 @@ const CATEGORY_CONFIG = {
     "1511063558224613396": {
         name: "11F",
         channels: [
-            { name: "🔸┃sp11", panels: ["11", "11peak", "11goblin"] },
+            { name: "🔸┃sp11", panels: ["11"] },
             { name: "🔹┃ms11", panels: ["11squareleaders", "11squareevents", "11squareantidemon"] }
         ]
     },
     "1511063661458751708": {
         name: "12F",
         channels: [
-            { name: "🔸┃sp12", panels: ["12", "12peak", "12goblin"] },
+            { name: "🔸┃sp12", panels: ["12"] },
             { name: "🔹┃ms12", panels: ["12squareleaders", "12squareevents", "12squareantidemon"] }
         ]
     },

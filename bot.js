@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "./state.js";
-import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migrateMS1112, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
+import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migrateMS1112, migrateSPLegacyToUnified, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
 import { startTickInterval } from "./panel-tick.js";
 import { STATUS_AVAILABLE } from "./constants.js";
 
@@ -175,19 +175,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     });
 
     // SP11 / SP12 — Unified Event Group (Red Boss + Goblin Summon + Random Event for SP12)
-    // Keep legacy 11peak/12peak/11goblin/12goblin for existing data compatibility
-    const spLegacyRed = (floor) => ({
-        type: "peak", title: `Secret Peak ${floor}F`,
-        timeWindow: "", next: null, ownerId: null, ownerName: null,
-        red: { name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "", schedules: [1, 7, 13, 19] }
-    });
-    if (!db["11peak"]) db["11peak"] = spLegacyRed("11");
-    if (!db["12peak"]) db["12peak"] = spLegacyRed("12");
-
-    if (!db["11goblin"]) db["11goblin"] = { type: "summon", title: "⭐ SP 11F (Goblin)", sp11: { name: "⭐ SP 11F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-    if (!db["12goblin"]) db["12goblin"] = { type: "summon", title: "⭐ SP 12F (Goblin)", sp12: { name: "⭐ SP 12F (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-
-    // NEW unified panels: "11" and "12" as event_group (replaces peaks + goblins)
+    // Legacy panels (11peak/12peak/11goblin/12goblin) are migrated via migrateSPLegacyToUnified()
     const spUnifiedEvents = {
         red: { name: "🟥 Red Boss", type: "schedule", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [1, 7, 13, 19] },
         goblin: { name: "⭐ Goblin", type: "summon", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
@@ -275,6 +263,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     migrateNamesCleanEmojis();
     migrateLastKilledAt();
     migrateMS1112();
+    migrateSPLegacyToUnified();
 
     // Force-refresh all panels to fix any incorrect respawn timers on existing displays
     for (let key in db) {

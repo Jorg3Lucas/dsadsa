@@ -131,29 +131,6 @@ export function resetPanelData(key) {
                 }
             } : {})
         };
-    } else if (key === "11peak" || key === "12peak") {
-        const floor = key === "11peak" ? "11" : "12";
-        db[key] = {
-            type: "peak",
-            title: `Secret Peak ${floor}F`,
-            timeWindow: "", next: null, ownerId: null, ownerName: null,
-            red: {
-                name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180,
-                _freeSince: 0, _lastKilledTimeStr: "",
-                schedules: [1, 7, 13, 19]
-            }
-        };
-    } else if (key === "11goblin" || key === "12goblin") {
-        const floor = key === "11goblin" ? "11" : "12";
-        const rm = `sp${floor}`;
-        db[key] = {
-            type: "summon",
-            title: `⭐ SP ${floor}F (Goblin)`,
-            [rm]: {
-                name: `⭐ SP ${floor}F (Goblin)`, status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null
-            }
-        };
     } else if (is11or12) {
         let num = is11or12[1], type = is11or12[2];
         const isLeaders = "leaders" === type;
@@ -286,6 +263,83 @@ export function migrateBossCooldowns() {
 // ==========================================
 // 🔄 MIGRATION: Backfill _lastKilledAt timestamp for existing entries
 // ==========================================
+
+// ==========================================
+// 🔄 MIGRATION: Migrate SP11/SP12 legacy panels to unified format
+// Transfers claims from 11peak/12peak/11goblin/12goblin into
+// the unified "11"/"12" event_group panels, then removes legacy.
+// ==========================================
+
+export function migrateSPLegacyToUnified() {
+    let migrated = 0;
+    const legacyMap = [
+        { legacy: "11peak", unified: "11", targetEvent: "red", fromProp: "red" },
+        { legacy: "12peak", unified: "12", targetEvent: "red", fromProp: "red" },
+        { legacy: "11goblin", unified: "11", targetEvent: "goblin", fromProp: "sp11" },
+        { legacy: "12goblin", unified: "12", targetEvent: "goblin", fromProp: "sp12" }
+    ];
+
+    for (const entry of legacyMap) {
+        const legacyPanel = db[entry.legacy];
+        const unifiedPanel = db[entry.unified];
+        if (!legacyPanel || !unifiedPanel) continue;
+
+        const src = legacyPanel[entry.fromProp];
+        const dst = unifiedPanel[entry.targetEvent];
+        if (!src || !dst) continue;
+
+        let changed = false;
+
+        // Red Boss (schedule-type) — migrate killed status
+        if (entry.targetEvent === "red") {
+            if (src.status && src.status.startsWith(STATUS_KILLED)) {
+                dst.status = src.status;
+                if (src._lastKilledAt) dst._lastKilledAt = src._lastKilledAt;
+                if (src._freeSince) dst._freeSince = src._freeSince;
+                if (src._lastKilledTimeStr) dst._lastKilledTimeStr = src._lastKilledTimeStr;
+                changed = true;
+            }
+            if (src.ownerId) {
+                dst.ownerId = src.ownerId;
+                dst.ownerName = src.ownerName || "";
+                if (legacyPanel._claimTimestamp) dst._claimTimestamp = legacyPanel._claimTimestamp;
+                changed = true;
+            }
+        }
+
+        // Goblin (summon-type) — migrate owner/queue
+        if (entry.targetEvent === "goblin") {
+            if (src.ownerId) {
+                dst.status = src.status;
+                dst.ownerId = src.ownerId;
+                dst.ownerName = src.ownerName;
+                dst.time = src.time || "";
+                dst.timeWindow = src.timeWindow || "";
+                dst.nextId = src.nextId || null;
+                dst.nextName = src.nextName || null;
+                dst.formattedTimeNext = src.formattedTimeNext || "";
+                dst.endLimit = src.endLimit || null;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            migrated++;
+            logEvent(`Migrated claims from ${entry.legacy} → ${entry.unified}.${entry.targetEvent}`);
+        }
+
+        // Remove legacy panel from DB
+        delete db[entry.legacy];
+        delete lastMessages[entry.legacy];
+        if (db._panelMapping) delete db._panelMapping[entry.legacy];
+        logEvent(`Removed legacy panel ${entry.legacy} from DB.`);
+    }
+
+    if (migrated > 0) {
+        saveLocalStorage();
+        logEvent(`SP legacy migration complete: ${migrated} claim(s) transferred.`);
+    }
+}
 
 // ==========================================
 // 🔄 MIGRATION: Ensure MS11/MS12 panels exist with correct structure

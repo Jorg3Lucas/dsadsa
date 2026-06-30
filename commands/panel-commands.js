@@ -114,26 +114,20 @@ async function handleSP(msg, lowerContent) {
     
     // SP11 / SP12 — unified event_group panel (Red Boss + Goblin + Random Event for SP12)
     if ("11" === floorNum || "12" === floorNum) {
-        // Send the unified panel (key is just the floor number)
-        const keys = [`${floorNum}`];
-        // Also send legacy panels if they exist (for data migration)
-        if (db[`${floorNum}peak`]) keys.push(`${floorNum}peak`);
-        if (db[`${floorNum}goblin`]) keys.push(`${floorNum}goblin`);
+        const pKey = floorNum;
         db._panelMapping || (db._panelMapping = {});
-        for (let pKey of keys) {
-            if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
-                try {
-                    let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
-                    oldMsg && await oldMsg.delete().catch(() => {});
-                } catch (C) {}
-            }
-            let pMsg = await msg.channel.send({
-                embeds: [renderEmbed(pKey)],
-                components: renderButtons(pKey)
-            });
-            lastMessages[pKey] = pMsg;
-            db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
+        if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
+            try {
+                let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
+                oldMsg && await oldMsg.delete().catch(() => {});
+            } catch (C) {}
         }
+        let pMsg = await msg.channel.send({
+            embeds: [renderEmbed(pKey)],
+            components: renderButtons(pKey)
+        });
+        lastMessages[pKey] = pMsg;
+        db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
         saveLocalStorage();
         try { await msg.delete() } catch (C) {}
         return;
