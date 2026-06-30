@@ -205,14 +205,14 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                 type: "event_group",
                 title: `Magic Square ${floor}F - Events`,
                 fury: {
-                    name: "🔴 Fury",
+                    name: "🔴 Fury", type: "fixed",
                     status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                     timeWindow: "", _claimTimestamp: null,
                     schedules: [0, 3, 6, 9, 12, 15, 18, 21],
                     scheduleMinutes: 30
                 },
                 frenzy: {
-                    name: "🟣 Frenzy",
+                    name: "🟣 Frenzy", type: "fixed",
                     status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                     timeWindow: "", _claimTimestamp: null,
                     schedules: [2, 5, 8, 11, 14, 17, 20, 23]
