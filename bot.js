@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "./state.js";
-import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
+import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migrateMS1112, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
 import { startTickInterval } from "./panel-tick.js";
 import { STATUS_AVAILABLE } from "./constants.js";
 
@@ -274,6 +274,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     migrateBossCooldowns();
     migrateNamesCleanEmojis();
     migrateLastKilledAt();
+    migrateMS1112();
 
     // Force-refresh all panels to fix any incorrect respawn timers on existing displays
     for (let key in db) {

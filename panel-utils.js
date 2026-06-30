@@ -40,7 +40,7 @@ export function resetPanelData(key) {
     let isPeak = key.match(/^(\d+)peak$/),
         isNormal = key.match(/^(\d+)squarenormal$/),
         isAnti = key.match(/^(\d+)squareantidemon(\d+)?$/),
-        is11or12 = key.match(/^(11|12)square(leaders|fury|frenzy)$/);
+        is11or12 = key.match(/^(11|12)square(leaders|fury|frenzy|events)$/);
     
     if (isPeak) {
         let floor = isPeak[1];
@@ -286,6 +286,154 @@ export function migrateBossCooldowns() {
 // ==========================================
 // 🔄 MIGRATION: Backfill _lastKilledAt timestamp for existing entries
 // ==========================================
+
+// ==========================================
+// 🔄 MIGRATION: Ensure MS11/MS12 panels exist with correct structure
+// (Creates missing panels, converts old 3-room antidemon to 9-room format)
+// ==========================================
+
+export function migrateMS1112() {
+    let migrated = 0;
+
+    // === 1. Leaders panels (boss1/boss2/boss3) ===
+    for (let floor of ["11", "12"]) {
+        const key = `${floor}squareleaders`;
+        if (!db[key]) {
+            db[key] = {
+                type: "normal",
+                title: `Magic Square ${floor}F - Leaders`,
+                timeWindow: "", next: null, ownerId: null, ownerName: null,
+                boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
+                boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
+                boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" }
+            };
+            migrated++;
+            logEvent(`Created missing MS${floor} leaders panel.`);
+        }
+    }
+
+    // === 2. Event panels (Fury + Frenzy event_group) ===
+    for (let floor of ["11", "12"]) {
+        const key = `${floor}squareevents`;
+        if (!db[key]) {
+            db[key] = {
+                type: "event_group",
+                title: `Magic Square ${floor}F - Events`,
+                fury: {
+                    name: "🔴 Fury", type: "fixed",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    schedules: [0, 3, 6, 9, 12, 15, 18, 21],
+                    scheduleMinutes: 30
+                },
+                frenzy: {
+                    name: "🟣 Frenzy", type: "fixed",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    schedules: [2, 5, 8, 11, 14, 17, 20, 23]
+                }
+            };
+            migrated++;
+            logEvent(`Created missing MS${floor} events panel.`);
+        }
+    }
+
+    // === 3. Antidemon panels (9-room format for MS11/MS12) ===
+    for (let floor of ["11", "12"]) {
+        const key = `${floor}squareantidemon`;
+        const existing = db[key];
+
+        if (!existing) {
+            // Panel doesn't exist — create fresh
+            const rooms = {};
+            const versions = ["1-1", "1-2", "1-3"];
+            const sides = [
+                { k: "l", n: "LEFT" },
+                { k: "m", n: "MID" },
+                { k: "r", n: "RIGHT" }
+            ];
+            versions.forEach(ver => {
+                sides.forEach(side => {
+                    const rk = `v${ver.replace("1-", "")}${side.k}`;
+                    rooms[rk] = {
+                        name: `${ver} ${side.n}`,
+                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                        time: "", timeWindow: "", nextId: null, nextName: null,
+                        formattedTimeNext: "", endLimit: null, password: ""
+                    };
+                });
+            });
+            db[key] = { type: "antidemon", title: `Antidemon ${floor}F`, ...rooms };
+            migrated++;
+            logEvent(`Created missing MS${floor} antidemon panel (9 rooms).`);
+        } else if (existing.left && typeof existing.left === "object" && existing.left.name) {
+            // Old format (left/mid/right) — convert to 9-room format preserving claims
+            const oldRooms = { left: existing.left, mid: existing.mid, right: existing.right };
+
+            const rooms = {};
+            const versions = ["1-1", "1-2", "1-3"];
+            const sides = [
+                { k: "l", n: "LEFT" },
+                { k: "m", n: "MID" },
+                { k: "r", n: "RIGHT" }
+            ];
+
+            // Only populate version 1-1 (v1l/v1m/v1r) with old claims to avoid duplication.
+            // Versions 1-2 and 1-3 get fresh empty rooms.
+            versions.forEach((ver, vi) => {
+                sides.forEach(side => {
+                    const rk = `v${ver.replace("1-", "")}${side.k}`;
+                    const name = `${ver} ${side.n}`;
+                    if (vi === 0) {
+                        // Version 1-1 only: preserve old claim data
+                        const oldRoom = oldRooms[side.k === "l" ? "left" : side.k === "m" ? "mid" : "right"];
+                        if (oldRoom && oldRoom.ownerId) {
+                            rooms[rk] = {
+                                name,
+                                status: oldRoom.status || STATUS_AVAILABLE,
+                                ownerId: oldRoom.ownerId,
+                                ownerName: oldRoom.ownerName,
+                                time: oldRoom.time || "",
+                                timeWindow: oldRoom.timeWindow || "",
+                                nextId: oldRoom.nextId || null,
+                                nextName: oldRoom.nextName || null,
+                                formattedTimeNext: oldRoom.formattedTimeNext || "",
+                                endLimit: oldRoom.endLimit || null,
+                                password: oldRoom.password || ""
+                            };
+                            return;
+                        }
+                    }
+                    rooms[rk] = {
+                        name,
+                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                        time: "", timeWindow: "", nextId: null, nextName: null,
+                        formattedTimeNext: "", endLimit: null, password: ""
+                    };
+                });
+            });
+
+            db[key] = { type: "antidemon", title: existing.title || `Antidemon ${floor}F`, ...rooms };
+            migrated++;
+            logEvent(`Migrated MS${floor} antidemon from 3-room to 9-room format, preserving claims.`);
+        }
+        // Else: already 9-room format, no change needed
+    }
+
+    // === 4. Clean up old legacy panels (11squarefury, 11squarefrenzy, etc.) if they exist ===
+    // These are now replaced by 11squareevents / 12squareevents (event_group type)
+    // We don't delete them to avoid data loss — just log they exist
+    for (let key of ["11squarefury", "11squarefrenzy", "12squarefury", "12squarefrenzy"]) {
+        if (db[key]) {
+            logEvent(`Legacy panel ${key} found (now replaced by ${key.replace(/fury|frenzy/, "events")}). No data deleted.`);
+        }
+    }
+
+    if (migrated > 0) {
+        saveLocalStorage();
+        logEvent(`MS11/MS12 migration complete: ${migrated} panel(s) created/updated.`);
+    }
+}
 
 export function migrateLastKilledAt() {
     let migrated = 0;
