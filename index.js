@@ -152,6 +152,16 @@ client.once('ready', async () => {
 
     initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb);
 
+    // Auto-setup channels after panels are initialized
+    setTimeout(async () => {
+        try {
+            const { setupAllChannels } = await import('./auto-channel-setup.js');
+            await setupAllChannels(client, DISCORD_SERVER_ID);
+        } catch (err) {
+            console.error('❌ [Auto Setup] Error:', err.message);
+        }
+    }, 5000);
+
     // Initialize Temp Voice system
     initTempVoiceSystem(client);
 

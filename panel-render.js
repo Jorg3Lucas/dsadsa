@@ -359,6 +359,7 @@ export function renderEmbed(key) {
 export function renderButtons(key) {
     let current = db[key],
         componentsList = [];
+    if (!current) return componentsList;
     
     if ("event_group" === current.type) {
         // Death mark buttons for schedule-type sub-events

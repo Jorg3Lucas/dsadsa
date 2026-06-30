@@ -192,8 +192,8 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         red: { name: "🟥 Red Boss", type: "schedule", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [1, 7, 13, 19] },
         goblin: { name: "⭐ Goblin", type: "summon", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
     };
-    if (!db["11"] && !db["11"].type) db["11"] = { type: "event_group", title: "Secret Peak 11F", ...JSON.parse(JSON.stringify(spUnifiedEvents)) };
-    if (!db["12"] && !db["12"].type) db["12"] = { type: "event_group", title: "Secret Peak 12F", ...JSON.parse(JSON.stringify(spUnifiedEvents)), randomevent: { name: "🎲 Random Event", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [3, 9, 15, 21] } };
+    if (!db["11"] || !db["11"].type) db["11"] = { type: "event_group", title: "Secret Peak 11F", ...JSON.parse(JSON.stringify(spUnifiedEvents)) };
+    if (!db["12"] || !db["12"].type) db["12"] = { type: "event_group", title: "Secret Peak 12F", ...JSON.parse(JSON.stringify(spUnifiedEvents)), randomevent: { name: "🎲 Random Event", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [3, 9, 15, 21] } };
 
     // MS11 / MS12 — Leaders panel
     ["11squareleaders", "12squareleaders"].forEach(key => {
