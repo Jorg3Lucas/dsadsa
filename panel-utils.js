@@ -40,7 +40,7 @@ export function resetPanelData(key) {
     let isPeak = key.match(/^(\d+)peak$/),
         isNormal = key.match(/^(\d+)squarenormal$/),
         isAnti = key.match(/^(\d+)squareantidemon(\d+)?$/),
-        is11or12 = key.match(/^(11|12)square(leaders|fury|frenzy|events)$/);
+        is11or12 = key.match(/^(11|12)square(leaders|events)$/);
     
     if (isPeak) {
         let floor = isPeak[1];
@@ -472,15 +472,6 @@ export function migrateMS1112() {
             logEvent(`Migrated MS${floor} antidemon from 3-room to 9-room format, preserving claims.`);
         }
         // Else: already 9-room format, no change needed
-    }
-
-    // === 4. Clean up old legacy panels (11squarefury, 11squarefrenzy, etc.) if they exist ===
-    // These are now replaced by 11squareevents / 12squareevents (event_group type)
-    // We don't delete them to avoid data loss — just log they exist
-    for (let key of ["11squarefury", "11squarefrenzy", "12squarefury", "12squarefrenzy"]) {
-        if (db[key]) {
-            logEvent(`Legacy panel ${key} found (now replaced by ${key.replace(/fury|frenzy/, "events")}). No data deleted.`);
-        }
     }
 
     if (migrated > 0) {
