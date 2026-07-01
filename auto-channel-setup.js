@@ -16,7 +16,7 @@ const CATEGORY_CONFIG = {
             { name: "🔹┃ms7", panels: ["7squarenormal", "7squareantidemon"] }
         ]
     },
-    "1511993588534349936": {
+    "1499858702814150758": {
         name: "8F",
         channels: [
             { name: "🔸┃sp8", panels: ["8peak"] },
@@ -40,15 +40,15 @@ const CATEGORY_CONFIG = {
     "1511063558224613396": {
         name: "11F",
         channels: [
-            { name: "🔸┃sp11", panels: ["11"] },
-            { name: "🔹┃ms11", panels: ["11squareleaders", "11squareevents", "11squareantidemon"] }
+            { name: "🔸┃sp11", panels: ["11peak", "11goblin"] },
+            { name: "🔹┃ms11", panels: ["11squareleaders", "11squareevents", "11squareantidemon", "11msgoblin"] }
         ]
     },
     "1511063661458751708": {
         name: "12F",
         channels: [
-            { name: "🔸┃sp12", panels: ["12"] },
-            { name: "🔹┃ms12", panels: ["12squareleaders", "12squareevents", "12squareantidemon"] }
+            { name: "🔸┃sp12", panels: ["12peak", "12randomevent", "12goblin"] },
+            { name: "🔹┃ms12", panels: ["12squareleaders", "12squareevents", "12squareantidemon", "12msgoblin"] }
         ]
     },
     "1512360620127817898": {
@@ -87,6 +87,11 @@ export async function setupAllChannels(client, guildId) {
         const category = guild.channels.cache.get(catId);
         if (!category) {
             console.error(`❌ [Auto Setup] Category ${catConfig.name} (${catId}) not found.`);
+            continue;
+        }
+        // Verify it's actually a category channel (type 4)
+        if (category.type !== 4) {
+            console.error(`❌ [Auto Setup] ${catConfig.name} (${catId}) is not a category (type=${category.type}). Use a valid category ID.`);
             continue;
         }
 

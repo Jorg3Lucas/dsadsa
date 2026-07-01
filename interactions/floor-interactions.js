@@ -94,7 +94,6 @@ export async function handleFloorInteraction(interaction, uid, uName) {
     if (interaction.isStringSelectMenu()) {
         const cid = interaction.customId;
         if (cid.startsWith("egslide-")) return handleEGSlide(interaction, uid, uName);
-        if (cid.startsWith("egfixclaim-")) return handleEGFixClaim(interaction, uid, uName);
         if (cid.startsWith("egticket-")) return handleEGTicket(interaction, uid, uName);
         if (cid.startsWith("egnextside-")) return handleEGNextSide(interaction, uid, uName);
         if (cid.startsWith("antiversion-")) return handleAntiVersionSlide(interaction, uid, uName);
@@ -102,6 +101,11 @@ export async function handleFloorInteraction(interaction, uid, uName) {
     }
     
     if (!interaction.isButton()) return false;
+
+    // Individual fixed-event claim buttons (Fury/Frenzy/Random Event)
+    if (interaction.customId.startsWith("egfixclaim-")) {
+        return handleEGFixClaim(interaction, uid, uName);
+    }
 
     const [actionPrefix, panelKey, specificProp] = interaction.customId.split("-");
     const targetObj = db[panelKey];
@@ -416,13 +420,16 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
     for (let ev of eventKeys) {
         let evData = targetObj[ev];
         if (evData.ownerId) continue; // Already claimed
-        if (evData.type === "fixed") continue; // Has individual claim button
         
         if (evData.type === "schedule") {
             // Schedule-type event (Red Boss) — must be available (not killed) to claim
             if (!evData.status || evData.status === STATUS_AVAILABLE) {
                 options.push({ label: `🟥 ${evData.name}`, value: ev, emoji: "🟥" });
             }
+        } else if (evData.type === "fixed") {
+            // Only randomevent uses the generic menu (fury/frenzy have individual buttons)
+            if (ev !== "randomevent") continue;
+            options.push({ label: evData.name, value: ev, emoji: "🔴" });
         } else if (evData.type === "summon") {
             // Summon-type event (Goblin) — check if available or user has priority queue
             const hasPriority = evData.nextId === uid;

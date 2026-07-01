@@ -63,8 +63,16 @@ export function renderEmbed(key) {
             let block = "";
             
             if (evData.type === "schedule") {
-                // Schedule-based event (Red Boss) — show kill/respawn status
+                // Schedule-based event (Red Boss)
+                // Block 1: claim owner or available
+                // Block 2: respawn timer (same format as regular SP peaks)
                 let displayStatus = evData.status;
+                
+                let claimLine = evData.ownerId && evData.ownerName
+                    ? `👑 ${evData.ownerName}`
+                    : "🟢 Available";
+                
+                let timerLine = "";
                 if (displayStatus && displayStatus.startsWith(STATUS_KILLED)) {
                     let killedTime;
                     if (evData._lastKilledAt) {
@@ -82,20 +90,22 @@ export function renderEmbed(key) {
                                 let totalMins = Math.ceil(remainingMs / 6e4);
                                 let hrs = Math.floor(totalMins / 60);
                                 let mins = totalMins % 60;
-                                displayStatus = hrs > 0 ? `🔴 Respawn in ${hrs}h ${mins}m` : `🔴 Respawn in ${mins}m`;
+                                timerLine = hrs > 0
+                                    ? `🔴 Respawn in ${hrs}h ${mins}m`
+                                    : `🔴 Respawn in ${mins}m`;
                             } else {
-                                displayStatus = STATUS_ANY_MOMENT;
+                                timerLine = "🟢 Any moment";
                             }
                         }
                     }
-                } else if (displayStatus === STATUS_AVAILABLE) {
-                    displayStatus = "🟢 Available";
                 }
-                block = `\`\`\`yaml\n${displayStatus || STATUS_AVAILABLE}\n\`\`\``;
+                
+                block = `\`\`\`yaml\n${claimLine}\n\`\`\``;
+                if (timerLine) block += `\n\`\`\`yaml\n${timerLine}\n\`\`\``;
             } else if (evData.type === "summon") {
                 // Summon-type event (Goblin) — show owner/queue info
                 if (evData.ownerId && evData.ownerName) {
-                    let remainingClaimStr = "";
+                    let timerLine = "";
                     if (evData.timeWindow) {
                         let endTimeStr = evData.timeWindow.split(" ~ ")[1];
                         let endTime = parseStringToDate(endTimeStr);
@@ -104,13 +114,14 @@ export function renderEmbed(key) {
                             if (remainingSecs > 0) {
                                 let mins = Math.floor(remainingSecs / 60);
                                 let secs = remainingSecs % 60;
-                                remainingClaimStr = `⏱️ ${mins}m ${secs}s`;
+                                timerLine = `⏱️ Remaining: ${mins}m ${secs}s`;
                             } else {
-                                remainingClaimStr = "⏱️ Expiring...";
+                                timerLine = "⏱️ Expiring...";
                             }
                         }
                     }
-                    block = `\`\`\`md\n# 👑 ${evData.ownerName}\n${remainingClaimStr || ""}\n\`\`\``;
+                    block = `\`\`\`md\n# 👑 ${evData.ownerName}\n\`\`\``;
+                    if (timerLine) block += `\n\`\`\`yaml\n${timerLine}\n\`\`\``;
                     if (evData.nextId && evData.nextName) {
                         block += `\n\`\`\`md\n⏭️ ${evData.nextName}\n\`\`\``;
                     }
@@ -119,7 +130,10 @@ export function renderEmbed(key) {
                 }
             } else if (evData.type === "fixed") {
                 // Fixed event (Fury/Frenzy/Random Event) — show open/closed with countdown
+                // Format: status line, "Next in:" label, timer value — separate lines
                 let minuteOffset = evData.scheduleMinutes || 0;
+                let statusLine, timerLabel, timerValue;
+                
                 if (isRoomOpen(evData.schedules, minuteOffset)) {
                     let nowMinutes = now.getHours() * 60 + now.getMinutes();
                     let endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
@@ -127,33 +141,81 @@ export function renderEmbed(key) {
                     endOfEvent.setHours(Math.floor(endMinute / 60) % 24, endMinute % 60, 0, 0);
                     if (endOfEvent <= now) endOfEvent.setHours(endOfEvent.getHours() + 1);
                     let closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
-                    let countdownStr = closeMins <= 0 ? "🟢 Open now" : `🟢 Closes in ${closeMins}m`;
                     
                     if (evData.ownerId && evData.ownerName) {
-                        block = `\`\`\`md\n# 👑 ${evData.ownerName}\n${countdownStr}\n\`\`\``;
+                        statusLine = `👑 ${evData.ownerName}`;
                     } else {
-                        block = `\`\`\`yaml\n${countdownStr}\n\`\`\``;
+                        statusLine = "🟢 Open now";
                     }
+                    timerLabel = "Closes in:";
+                    timerValue = closeMins <= 0 ? "Expiring..." : `${closeMins}m`;
                 } else {
                     let nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
                     let diffMs = nextOpenDate.getTime() - now.getTime();
                     let diffMins = Math.floor(diffMs / 6e4);
-                    let countdownStr = diffMins < 60
-                        ? `Next in ${diffMins}m`
-                        : `Next in ${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
-                    block = `\`\`\`yaml\n🔴 ${countdownStr}\n\`\`\``;
+                    
+                    statusLine = "🔴 Closed";
+                    timerLabel = "Next in:";
+                    timerValue = diffMins < 60
+                        ? `${diffMins}m`
+                        : `${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
                 }
+                
+                block = `\`\`\`yaml\n${statusLine}\n\`\`\`\n\`\`\`yaml\n${timerLabel} ${timerValue}\n\`\`\``;
             } else {
                 block = `\`\`\`yaml\n${evData.status || STATUS_AVAILABLE}\n\`\`\``;
             }
             embed.addFields({ name: evData.name, value: block, inline: !0 });
         }
-    } else if ("antidemon" === current.type || "summon" === current.type) {
-        const summonProps = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
+    } else if ("summon" === current.type) {
+        // 🌀 SUMMON PANEL — Standard code-block layout (consistent with antidemon)
+        const summonProps = getSummonRoomKeys(key);
+        const isSingle = summonProps.length === 1;
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
-        for (let room of summonProps) {
+        for (let loc of summonProps) {
+            let rData = current[loc];
+            let block = "";
+            
+            if (STATUS_CLAIMED === rData.status && rData.ownerName) {
+                let timerStr = "";
+                if (rData.timeWindow) {
+                    let endTimeStr = rData.timeWindow.split(" ~ ")[1];
+                    let endTime = parseStringToDate(endTimeStr);
+                    if (endTime) {
+                        let remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
+                        if (remainingSecs > 0) {
+                            let mins = Math.floor(remainingSecs / 60);
+                            let secs = remainingSecs % 60;
+                            timerStr = `⏱️ ${mins}m ${secs}s`;
+                        } else {
+                            timerStr = "⏱️ Expiring...";
+                        }
+                    }
+                }
+                block = `\`\`\`md\n# 👑 ${rData.ownerName}\n${timerStr || ""}\n\`\`\``;
+                if (rData.nextId && rData.nextName) {
+                    block += `\n\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\``;
+                }
+            } else if (rData.nextId && rData.nextName && rData.endLimit) {
+                // Grace period
+                block = `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\`\n${getEndLimitCountdown(rData.endLimit)}`;
+            } else if (rData.nextName) {
+                block = `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\``;
+            } else {
+                block = `\`\`\`yaml\n${STATUS_AVAILABLE}\n\`\`\``;
+            }
+            
+            embed.addFields({
+                name: isSingle ? `\u200B` : rData.name,
+                value: block,
+                inline: !isSingle
+            });
+        }
+    } else if ("antidemon" === current.type) {
+        const antiRoomKeys = getAntidemonRoomKeys(key);
+        embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
+        for (let room of antiRoomKeys) {
             let rData = current[room];
-            // Calculate remaining claim time for claimed rooms
             let remainingClaimStr = "";
             if (STATUS_CLAIMED === rData.status && rData.timeWindow) {
                 let endTimeStr = rData.timeWindow.split(" ~ ")[1];
@@ -174,8 +236,6 @@ export function renderEmbed(key) {
                 : rData.endLimit && rData.nextName 
                     ? `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\`\n${getEndLimitCountdown(rData.endLimit)}` 
                     : `\`\`\`yaml\n${STATUS_AVAILABLE}\n\`\`\``;
-            
-            // Show queue info below claimed rooms too — in code block
             if (STATUS_CLAIMED === rData.status && rData.nextName) {
                 block += `\n\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\``;
             } else if (rData.nextName && !rData.endLimit) {
@@ -248,7 +308,7 @@ export function renderEmbed(key) {
             }
         } else {
             for (let prop in current) {
-                if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) {
+                if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp", "scheduleMinutes"].includes(prop)) {
                     let displayStatus = current[prop].status;
 
                     // Show countdown for killed bosses instead of static time
@@ -362,34 +422,54 @@ export function renderButtons(key) {
     if (!current) return componentsList;
     
     if ("event_group" === current.type) {
-        // Death mark buttons for schedule-type sub-events
+        // All event_group buttons combined into minimum rows (Discord max 5 per row)
         const eventKeys = getEventGroupKeys(current);
+        const hasNonFixedEvents = eventKeys.some(ev => current[ev] && current[ev].type !== "fixed");
         const schedEvents = eventKeys.filter(ev => current[ev].type === "schedule");
-        if (schedEvents.length > 0) {
-            let row = new t();
-            schedEvents.forEach(ev => {
-                row.addComponents(new n()
-                    .setCustomId(`egdeath-${key}-${ev}`)
-                    .setEmoji("🟥")
-                    .setStyle(a.Secondary));
-            });
-            componentsList.push(row);
-        }
-        
-        // Individual claim buttons for fixed-type events (Fury/Frenzy/Random Event)
         const fixedEvents = eventKeys.filter(ev => current[ev].type === "fixed");
-        if (fixedEvents.length > 0) {
-            let fixedRow = new t();
-            fixedEvents.forEach(ev => {
-                const isClaimed = !!current[ev].ownerId;
-                fixedRow.addComponents(new n()
-                    .setCustomId(`egfixclaim-${key}-${ev}`)
-                    .setLabel(isClaimed ? `👑 ${current[ev].ownerName || "Claimed"}` : current[ev].name)
-                    .setDisabled(isClaimed)
-                    .setStyle(isClaimed ? a.Secondary : a.Success));
-            });
-            componentsList.push(fixedRow);
+        let anySummonQueue = eventKeys.some(ev => current[ev].type === "summon" && current[ev].nextId);
+        
+        // Build one combined row (all fit within 5-button limit)
+        let mainRow = new t();
+        
+        // 1. Death mark buttons for schedule events
+        schedEvents.forEach(ev => {
+            mainRow.addComponents(new n()
+                .setCustomId(`egdeath-${key}-${ev}`)
+                .setEmoji("🟥")
+                .setStyle(a.Secondary));
+        });
+        
+        // 2. Individual claim buttons for fixed events (Fury/Frenzy only, not Random Event)
+        fixedEvents.filter(ev => ev !== "randomevent").forEach(ev => {
+            const isClaimed = !!current[ev].ownerId;
+            mainRow.addComponents(new n()
+                .setCustomId(`egfixclaim-${key}-${ev}`)
+                .setLabel(isClaimed ? `👑 ${current[ev].ownerName || "Claimed"}` : current[ev].name)
+                .setDisabled(isClaimed)
+                .setStyle(isClaimed ? a.Secondary : a.Success));
+        });
+        
+        // 3. Core action buttons
+        if (hasNonFixedEvents) {
+            mainRow.addComponents(new n()
+                .setCustomId(`floor-${key}-claim`)
+                .setLabel(getMsg("buttons.claimLabel"))
+                .setStyle(a.Success));
         }
+        if (anySummonQueue) {
+            mainRow.addComponents(new n()
+                .setCustomId(`floor-${key}-next`)
+                .setLabel(getMsg("buttons.nextLabel"))
+                .setStyle(a.Primary));
+        }
+        mainRow.addComponents(new n()
+            .setCustomId(`floor-${key}-cancel`)
+            .setLabel(getMsg("buttons.cancelLabel"))
+            .setStyle(a.Danger));
+        
+        if (mainRow.components.length > 0) componentsList.push(mainRow);
+        
     } else if ("fixed" !== current.type && "antidemon" !== current.type && "summon" !== current.type) {
         let row = new t();
         let hasProperties = !1;
@@ -418,40 +498,7 @@ export function renderButtons(key) {
     let coreRow = new t();
     
     if ("event_group" === current.type) {
-        const eventKeys = getEventGroupKeys(current);
-        let anyClaimed = eventKeys.some(ev => current[ev] && current[ev].ownerId);
-        let anySummonQueue = eventKeys.some(ev => current[ev].type === "summon" && current[ev].nextId);
-        // Only show generic Claim button if there are non-fixed events (fixed events have individual buttons)
-        const hasNonFixedEvents = eventKeys.some(ev => current[ev] && current[ev].type !== "fixed");
-        coreRow.addComponents(
-            ...(hasNonFixedEvents ? [new n()
-                .setCustomId(`floor-${key}-claim`)
-                .setLabel(getMsg("buttons.claimLabel"))
-                .setStyle(a.Success)] : []),
-            ...(anySummonQueue ? [new n()
-                .setCustomId(`floor-${key}-next`)
-                .setLabel(getMsg("buttons.nextLabel"))
-                .setStyle(a.Primary)] : []),
-            new n()
-                .setCustomId(`floor-${key}-cancel`)
-                .setLabel(getMsg("buttons.cancelLabel"))
-                .setStyle(a.Danger)
-        );
-        
-        // Password buttons for summon-type events that are claimed
-        let pwdRow = new t();
-        eventKeys.forEach(ev => {
-            if (current[ev].type === "summon" && current[ev].ownerId) {
-                pwdRow.addComponents(
-                    new n()
-                        .setCustomId(`egpwd-${key}-${ev}`)
-                        .setEmoji("🎮")
-                        .setLabel(`PT ${current[ev].name}`)
-                        .setStyle(a.Secondary)
-                );
-            }
-        });
-        if (pwdRow.components.length > 0) componentsList.push(pwdRow);
+        // Already handled above in combined row
     } else if ("antidemon" === current.type || "summon" === current.type) {
         const summonProps = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
         let anyClaimed = summonProps.some(p => current[p] && current[p].status === STATUS_CLAIMED);
@@ -501,6 +548,6 @@ export function renderButtons(key) {
         // Magic Square / normal floors don't use the Next queue button
     }
     
-    componentsList.push(coreRow);
+    if (coreRow.components.length > 0) componentsList.push(coreRow);
     return componentsList;
 }

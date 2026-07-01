@@ -32,7 +32,7 @@ export function hasActiveClaim(uid) {
     return getActiveClaimInfo(uid).length > 0;
 }
 
-const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7", "ms11"];
+const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7"];
 
 // Returns sub-event keys for an event_group panel (excludes system properties)
 export function getEventGroupKeys(current) {
@@ -43,6 +43,12 @@ export function getEventGroupKeys(current) {
 
 // Returns room keys for a summon panel based on its key
 export function getSummonRoomKeys(panelKey) {
+    // Individual goblin panels (each has its own single room)
+    if (panelKey === "11goblin") return ["sp11"];
+    if (panelKey === "12goblin") return ["sp12"];
+    if (panelKey === "11msgoblin") return ["ms11"];
+    if (panelKey === "12msgoblin") return ["ms12"];
+    // Combined summon panel uses the default rooms
     return SUMMON_PROPS_INTERNAL;
 }
 

@@ -34,12 +34,13 @@ export async function handlePanelCommand(msg) {
 async function handleMS(msg, lowerContent) {
     let sub = lowerContent.replace("!ms", "").trim();
 
-    // MS11 / MS12 — Leaders, Events (Fury+Frenzy), Antidemon (single panel with versions)
+    // MS11 / MS12 — Leaders, Events (Fury+Frenzy), Antidemon, Goblin
     if ("11" === sub || "12" === sub) {
         let list = [
             `${sub}squareleaders`,
             `${sub}squareevents`,
-            `${sub}squareantidemon`
+            `${sub}squareantidemon`,
+            `${sub}msgoblin`
         ];
         db._panelMapping || (db._panelMapping = {});
         for (let item of list) {
@@ -112,9 +113,9 @@ async function handleMS(msg, lowerContent) {
 async function handleSP(msg, lowerContent) {
     let floorNum = lowerContent.replace("!sp", "").trim();
     
-    // SP11 / SP12 — unified event_group panel (Red Boss + Goblin + Random Event for SP12)
+    // SP11 / SP12 — same as regular SP peaks (7-10)
     if ("11" === floorNum || "12" === floorNum) {
-        const pKey = floorNum;
+        let pKey = `${floorNum}peak`;
         db._panelMapping || (db._panelMapping = {});
         if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
             try {
@@ -128,6 +129,39 @@ async function handleSP(msg, lowerContent) {
         });
         lastMessages[pKey] = pMsg;
         db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
+        
+        // SP12 also deploys the Random Event panel in the same channel
+        if (floorNum === "12") {
+            const rKey = "12randomevent";
+            if (db._panelMapping[rKey] && db._panelMapping[rKey].channelId === msg.channel.id) {
+                try {
+                    let oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
+                    oldRMsg && await oldRMsg.delete().catch(() => {});
+                } catch (C) {}
+            }
+            let rMsg = await msg.channel.send({
+                embeds: [renderEmbed(rKey)],
+                components: renderButtons(rKey)
+            });
+            lastMessages[rKey] = rMsg;
+            db._panelMapping[rKey] = { channelId: msg.channel.id, messageId: rMsg.id };
+        }
+        
+        // Deploy goblin panel in the same channel for SP11 and SP12
+        const gKey = `${floorNum}goblin`;
+        if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
+            try {
+                let oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
+                oldGMsg && await oldGMsg.delete().catch(() => {});
+            } catch (C) {}
+        }
+        let gMsg = await msg.channel.send({
+            embeds: [renderEmbed(gKey)],
+            components: renderButtons(gKey)
+        });
+        lastMessages[gKey] = gMsg;
+        db._panelMapping[gKey] = { channelId: msg.channel.id, messageId: gMsg.id };
+        
         saveLocalStorage();
         try { await msg.delete() } catch (C) {}
         return;

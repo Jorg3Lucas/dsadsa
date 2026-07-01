@@ -44,13 +44,19 @@ export function resetPanelData(key) {
     
     if (isPeak) {
         let floor = isPeak[1];
+        // SP11 and SP12 don't have Plant/Ore
+        const hasPlantOre = floor !== "11" && floor !== "12";
+        // SP11/SP12 Red Boss uses custom schedules (1, 7, 13, 19) instead of global (every 3h)
+        const sp11or12 = floor === "11" || floor === "12";
         db[key] = {
             type: "peak",            title: `Secret Peak ${floor}F`, timeWindow: "", next: null, ownerId: null, ownerName: null,
             left: { name: "⬅️ Left", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-            red: { name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" },
+            red: { name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "", ...(sp11or12 ? { schedules: [1, 7, 13, 19] } : {}) },
             right: { name: "➡️ Right", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-            plant: { name: "🌱 Plant", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-            ore: { name: "⛏️ Ore", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" }
+            ...(hasPlantOre ? {
+                plant: { name: "🌱 Plant", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
+                ore: { name: "⛏️ Ore", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" }
+            } : {})
         };
     } else if (isNormal) {
         let floor = isNormal[1];
@@ -96,40 +102,33 @@ export function resetPanelData(key) {
                 right: { name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" }
             };
         }
+    } else if (key === "12randomevent") {
+        db[key] = {
+            type: "fixed",
+            title: "🎲 Random Event (SP12)",
+            status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+            timeWindow: "", _claimTimestamp: null,
+            schedules: [3, 9, 15, 21],
+            scheduleMinutes: 0
+        };
+    } else if (key === "11goblin") {
+        db[key] = { type: "summon", title: "⭐ SP 11F Goblin",
+            sp11: { name: "⭐ SP 11F Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
+    } else if (key === "12goblin") {
+        db[key] = { type: "summon", title: "⭐ SP 12F Goblin",
+            sp12: { name: "⭐ SP 12F Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
+    } else if (key === "11msgoblin") {
+        db[key] = { type: "summon", title: "👹 MS 11 Goblin",
+            ms11: { name: "👹 MS 11 Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
+    } else if (key === "12msgoblin") {
+        db[key] = { type: "summon", title: "👹 MS 12 Goblin",
+            ms12: { name: "👹 MS 12 Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
     } else if ("summon" === key) {
         db[key] = {
             type: "summon",            title: "🌀 Summon Locations",
             sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
             sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-            sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-            ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
-        };
-    } else if (key === "11" || key === "12") {
-        // Unified SP event_group (Red Boss + Goblin + Random Event for SP12)
-        const floor = key;
-        db[key] = {
-            type: "event_group",
-            title: `Secret Peak ${floor}F`,
-            red: {
-                name: "🟥 Red Boss", type: "schedule",
-                status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                timeWindow: "", _claimTimestamp: null,
-                schedules: [1, 7, 13, 19]
-            },
-            goblin: {
-                name: "⭐ Goblin", type: "summon",
-                status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null,
-                formattedTimeNext: "", endLimit: null
-            },
-            ...(key === "12" ? {
-                randomevent: {
-                    name: "🎲 Random Event", type: "fixed",
-                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                    timeWindow: "", _claimTimestamp: null,
-                    schedules: [3, 9, 15, 21]
-                }
-            } : {})
+            sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
         };
     } else if (is11or12) {
         let num = is11or12[1], type = is11or12[2];
@@ -265,79 +264,78 @@ export function migrateBossCooldowns() {
 // ==========================================
 
 // ==========================================
-// 🔄 MIGRATION: Migrate SP11/SP12 legacy panels to unified format
-// Transfers claims from 11peak/12peak/11goblin/12goblin into
-// the unified "11"/"12" event_group panels, then removes legacy.
+// 🔄 MIGRATION: Convert SP11/SP12 from old event_group format to peak format
+// Old DB may have "11"/"12" as event_group type (Red Boss + Goblin + Random Event).
+// New format uses "11peak"/"12peak" as peak type (like SP7-SP10) with left/red/right/plant/ore.
 // ==========================================
 
 export function migrateSPLegacyToUnified() {
     let migrated = 0;
-    const legacyMap = [
-        { legacy: "11peak", unified: "11", targetEvent: "red", fromProp: "red" },
-        { legacy: "12peak", unified: "12", targetEvent: "red", fromProp: "red" },
-        { legacy: "11goblin", unified: "11", targetEvent: "goblin", fromProp: "sp11" },
-        { legacy: "12goblin", unified: "12", targetEvent: "goblin", fromProp: "sp12" }
-    ];
 
-    for (const entry of legacyMap) {
-        const legacyPanel = db[entry.legacy];
-        const unifiedPanel = db[entry.unified];
-        if (!legacyPanel || !unifiedPanel) continue;
+    // Phase 1 (removed): Legacy goblin panels (11goblin/12goblin) are now valid individual panels, keep them.
 
-        const src = legacyPanel[entry.fromProp];
-        const dst = unifiedPanel[entry.targetEvent];
-        if (!src || !dst) continue;
+    // Phase 2: Migrate old unified event_group "11"/"12" → "11peak"/"12peak" peak type
+    [
+        { oldKey: "11", newKey: "11peak" },
+        { oldKey: "12", newKey: "12peak" }
+    ].forEach(({ oldKey, newKey }) => {
+        const oldPanel = db[oldKey];
+        const newPanel = db[newKey];
+
+        // Skip if old panel doesn't exist or is already a peak type
+        if (!oldPanel || oldPanel.type === "peak") return;
+        // Skip if new peak panel doesn't exist (shouldn't happen after init)
+        if (!newPanel || newPanel.type !== "peak") return;
 
         let changed = false;
 
-        // Red Boss (schedule-type) — migrate killed status
-        if (entry.targetEvent === "red") {
-            if (src.status && src.status.startsWith(STATUS_KILLED)) {
-                dst.status = src.status;
-                if (src._lastKilledAt) dst._lastKilledAt = src._lastKilledAt;
-                if (src._freeSince) dst._freeSince = src._freeSince;
-                if (src._lastKilledTimeStr) dst._lastKilledTimeStr = src._lastKilledTimeStr;
-                changed = true;
-            }
-            if (src.ownerId) {
-                dst.ownerId = src.ownerId;
-                dst.ownerName = src.ownerName || "";
-                if (legacyPanel._claimTimestamp) dst._claimTimestamp = legacyPanel._claimTimestamp;
-                changed = true;
-            }
-        }
-
-        // Goblin (summon-type) — migrate owner/queue
-        if (entry.targetEvent === "goblin") {
-            if (src.ownerId) {
-                dst.status = src.status;
-                dst.ownerId = src.ownerId;
-                dst.ownerName = src.ownerName;
-                dst.time = src.time || "";
-                dst.timeWindow = src.timeWindow || "";
-                dst.nextId = src.nextId || null;
-                dst.nextName = src.nextName || null;
-                dst.formattedTimeNext = src.formattedTimeNext || "";
-                dst.endLimit = src.endLimit || null;
+        // Migrate Red Boss kill status from old.red to new.red
+        const oldRed = oldPanel.red;
+        const newRed = newPanel.red;
+        if (oldRed && newRed) {
+            if (oldRed.status && oldRed.status.startsWith(STATUS_KILLED)) {
+                newRed.status = oldRed.status;
+                if (oldRed._lastKilledAt) newRed._lastKilledAt = oldRed._lastKilledAt;
+                if (oldRed._freeSince) newRed._freeSince = oldRed._freeSince;
+                if (oldRed._lastKilledTimeStr) newRed._lastKilledTimeStr = oldRed._lastKilledTimeStr;
                 changed = true;
             }
         }
 
         if (changed) {
             migrated++;
-            logEvent(`Migrated claims from ${entry.legacy} → ${entry.unified}.${entry.targetEvent}`);
+            logEvent(`Migrated Red Boss data from ${oldKey} → ${newKey}.`);
         }
 
-        // Remove legacy panel from DB
-        delete db[entry.legacy];
-        delete lastMessages[entry.legacy];
-        if (db._panelMapping) delete db._panelMapping[entry.legacy];
-        logEvent(`Removed legacy panel ${entry.legacy} from DB.`);
-    }
+        // Remove old panel
+        delete db[oldKey];
+        delete lastMessages[oldKey];
+        if (db._panelMapping) delete db._panelMapping[oldKey];
+        logEvent(`Removed old event_group panel ${oldKey} from DB.`);
+    });
+
+    // Phase 3: Clean up any leftover old peak keys that shouldn't be there
+    ["11peak", "12peak"].forEach(key => {
+        if (db[key] && db[key].type === "peak") {
+            // SP11/SP12 only have left/red/right (no plant/ore)
+            const p = db[key];
+            const requiredRooms = ["left", "red", "right"];
+            let needsFix = false;
+            for (const room of requiredRooms) {
+                if (!p[room] || typeof p[room] !== "object") {
+                    needsFix = true;
+                    break;
+                }
+            }
+            // Ensure plant/ore are removed if present
+            if (p.plant) delete p.plant;
+            if (p.ore) delete p.ore;
+        }
+    });
 
     if (migrated > 0) {
         saveLocalStorage();
-        logEvent(`SP legacy migration complete: ${migrated} claim(s) transferred.`);
+        logEvent(`SP peak migration complete: ${migrated} panel(s) converted.`);
     }
 }
 
@@ -516,6 +514,26 @@ export function migrateMS1112() {
     if (migrated > 0) {
         saveLocalStorage();
         logEvent(`MS11/MS12 migration complete: ${migrated} panel(s) created/updated.`);
+    }
+
+    // === 5. Clean up old ms11 from the combined summon panel (moved to its own panel) ===
+    if (db.summon && db.summon.ms11) {
+        delete db.summon.ms11;
+        migrated++;
+        logEvent(`Removed ms11 from combined summon panel (now in its own panel).`);
+    }
+    // === 6. Fix duplicate summon panel init — if db.summon was wrongly set as type "fixed" (Random Event), restore it ===
+    if (db.summon && db.summon.type === "fixed") {
+        // This was a bug from a previous code version that initialized db.summon as Random Event
+        db.summon = {
+            type: "summon",
+            title: "🌀 Summon Locations",
+            sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+            sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+            sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+        };
+        migrated++;
+        logEvent(`Fixed db.summon: was wrongly set as Random Event, restored to Summon panel.`);
     }
 }
 

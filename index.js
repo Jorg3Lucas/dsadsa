@@ -25,7 +25,7 @@ import {
     initSalaryCron
 } from './salary-poll.js';
 import { handleGoldSlashCommand } from './commands/gold-commands.js';
-import { initGoldShop } from './gold-shop.js';
+import { initGoldShop, startExpiredOrdersCheck, startQrCodeCleanup, startGoldDailyReport, startPaymentPolling } from './gold-shop.js';
 import { initMercadoPago, checkGoldEnvVars } from './mercadopago.js';
 import { startWebhookServer } from './webhook-server.js';
 
@@ -38,7 +38,10 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates
-    ]
+    ],
+    rest: {
+        timeout: 60000
+    }
 });
 
 const dbClaimPath = path.resolve('./database.json');
@@ -175,6 +178,10 @@ client.once('ready', async () => {
     // Initialize Gold Shop system
     const { buildGoldPanelEmbed, buildGoldPanelButtons } = await import('./interactions/gold-interactions.js');
     initGoldShop();
+    startExpiredOrdersCheck(client);
+    startQrCodeCleanup();
+    startGoldDailyReport(client);
+    startPaymentPolling(client);
     initMercadoPago();
     checkGoldEnvVars();
 
@@ -248,7 +255,7 @@ client.on('interactionCreate', async (interaction) => {
             }
 
             // Gold shop slash commands
-            const goldCommands = ['shop', 'orders', 'order', 'goldadmin'];
+            const goldCommands = ['shop', 'orders', 'order', 'goldshop', 'goldadmin'];
             if (goldCommands.includes(interaction.commandName)) {
                 return await handleGoldSlashCommand(interaction);
             }

@@ -174,14 +174,20 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // SP11 / SP12 — Unified Event Group (Red Boss + Goblin Summon + Random Event for SP12)
-    // Legacy panels (11peak/12peak/11goblin/12goblin) are migrated via migrateSPLegacyToUnified()
-    const spUnifiedEvents = {
-        red: { name: "🟥 Red Boss", type: "schedule", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [1, 7, 13, 19] },
-        goblin: { name: "⭐ Goblin", type: "summon", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
-    };
-    if (!db["11"] || !db["11"].type) db["11"] = { type: "event_group", title: "Secret Peak 11F", ...JSON.parse(JSON.stringify(spUnifiedEvents)) };
-    if (!db["12"] || !db["12"].type) db["12"] = { type: "event_group", title: "Secret Peak 12F", ...JSON.parse(JSON.stringify(spUnifiedEvents)), randomevent: { name: "🎲 Random Event", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, schedules: [3, 9, 15, 21] } };
+    // SP11 / SP12 — Peak panels (only Left, Red, Right — no Plant/Ore)
+    ["11", "12"].forEach(floor => {
+        const peakKey = `${floor}peak`;
+        if (!db[peakKey] || !db[peakKey].type) {
+            db[peakKey] = {
+                type: "peak",
+                title: `Secret Peak ${floor}F`,
+                timeWindow: "", next: null, ownerId: null, ownerName: null,
+                left: { name: "⬅️ Left", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
+                red: { name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "", schedules: [1, 7, 13, 19] },
+                right: { name: "➡️ Right", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" }
+            };
+        }
+    });
 
     // MS11 / MS12 — Leaders panel
     ["11squareleaders", "12squareleaders"].forEach(key => {
@@ -247,14 +253,37 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // Initialize summon panel (sp11/sp12 removed — moved to separate goblin panels)
+    // SP12 — Random Event panel (fixed schedule event, separate from the peak panel)
+    db["12randomevent"] || (db["12randomevent"] = {
+        type: "fixed",
+        title: "🎲 Random Event (SP12)",
+        status: STATUS_AVAILABLE,
+        ownerId: null,
+        ownerName: null,
+        timeWindow: "",
+        _claimTimestamp: null,
+        schedules: [3, 9, 15, 21],
+        scheduleMinutes: 0
+    });
+
+    // Individual goblin panels for SP11, SP12, MS11, MS12
+    const goblinTemplate = (label, roomKey) => ({
+        type: "summon",
+        title: label,
+        [roomKey]: { name: label, status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+    });
+    db["11goblin"] || (db["11goblin"] = JSON.parse(JSON.stringify(goblinTemplate("⭐ SP 11F Goblin", "sp11"))));
+    db["12goblin"] || (db["12goblin"] = JSON.parse(JSON.stringify(goblinTemplate("⭐ SP 12F Goblin", "sp12"))));
+    db["11msgoblin"] || (db["11msgoblin"] = JSON.parse(JSON.stringify(goblinTemplate("👹 MS 11 Goblin", "ms11"))));
+    db["12msgoblin"] || (db["12msgoblin"] = JSON.parse(JSON.stringify(goblinTemplate("👹 MS 12 Goblin", "ms12"))));
+
+    // Combined summon panel (SP2, SP4, SP7 only — MS11 moved to its own panel)
     db.summon || (db.summon = {
         type: "summon",
         title: "🌀 Summon Locations",
         sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
         sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-        sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-        ms11: { name: "👹 MS 11 (Goblin)", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+        sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
     });
 
     loadPunishmentsFromDisk();

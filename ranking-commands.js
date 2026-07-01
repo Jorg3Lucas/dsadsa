@@ -85,6 +85,11 @@ export async function registerMir4SlashCommands(guild) {
                 options: [{ type: 3, name: 'id', description: 'ID do pedido (ex: GOLD-000001)', required: true }]
             },
             {
+                name: 'goldshop',
+                description: '🏪 [Admin] Criar painel fixo da Gold Shop neste canal',
+                default_member_permissions: PermissionFlagsBits.ManageMessages.toString()
+            },
+            {
                 name: 'goldadmin',
                 description: '👑 [Admin] Gerenciar loja de gold',
                 default_member_permissions: PermissionFlagsBits.ManageMessages.toString(),
@@ -92,8 +97,7 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 1, name: 'stats', description: 'Ver estatísticas da loja' },
                     { type: 1, name: 'pedidos', description: 'Ver pedidos pendentes de entrega' },
                     { type: 1, name: 'entregar', description: 'Marcar um pedido como entregue', options: [{ type: 3, name: 'id', description: 'ID do pedido', required: true }] },
-                    { type: 1, name: 'cancelar', description: 'Cancelar um pedido', options: [{ type: 3, name: 'id', description: 'ID do pedido', required: true }, { type: 3, name: 'motivo', description: 'Motivo do cancelamento', required: false }] },
-                    { type: 1, name: 'produtos', description: 'Gerenciar produtos da loja' }
+                    { type: 1, name: 'cancelar', description: 'Cancelar um pedido', options: [{ type: 3, name: 'id', description: 'ID do pedido', required: true }, { type: 3, name: 'motivo', description: 'Motivo do cancelamento', required: false }] }
                 ]
             }
         ]);

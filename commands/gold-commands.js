@@ -5,7 +5,7 @@
 
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as goldShop from '../gold-shop.js';
-import { getOrderStatusEmoji, buildOrderEmbed, buildCatalogEmbed, buildCatalogButtons } from '../interactions/gold-interactions.js';
+import { getOrderStatusEmoji, buildOrderEmbed, buildGoldPanelEmbed, buildGoldPanelButtons } from '../interactions/gold-interactions.js';
 
 // ==========================================
 // 📝 COMMAND DEFINITIONS
@@ -29,6 +29,9 @@ export async function handleGoldSlashCommand(interaction) {
     if (commandName === 'order') {
         return handleOrderDetails(interaction);
     }
+    if (commandName === 'goldshop') {
+        return handleGoldShopSlash(interaction);
+    }
     if (commandName === 'goldadmin') {
         return handleGoldAdmin(interaction);
     }
@@ -37,14 +40,14 @@ export async function handleGoldSlashCommand(interaction) {
 }
 
 // ==========================================
-// 🛒 /shop - Browse catalog
+// 🛒 /shop - Show gold shop panel
 // ==========================================
 
 async function handleShop(interaction) {
     await interaction.deferReply({ flags: 64 });
 
-    const embed = buildCatalogEmbed();
-    const components = buildCatalogButtons();
+    const embed = buildGoldPanelEmbed();
+    const components = buildGoldPanelButtons();
 
     await interaction.editReply({
         embeds: [embed],
@@ -145,6 +148,52 @@ async function handleOrderDetails(interaction) {
 }
 
 // ==========================================
+// 🏪 /goldshop - Create persistent gold panel
+// ==========================================
+
+async function handleGoldShopSlash(interaction) {
+    // Check admin permission
+    if (!interaction.member.permissions.has('ManageMessages')) {
+        return interaction.reply({
+            content: '❌ Você precisa da permissão **Gerenciar Mensagens** para usar este comando.',
+            flags: 64
+        });
+    }
+
+    await interaction.deferReply({ flags: 64 });
+
+    try {
+        const embed = buildGoldPanelEmbed();
+        const components = buildGoldPanelButtons();
+
+        // Delete existing gold panel in this channel if it exists
+        const existing = goldShop.getPanelRef();
+        if (existing && existing.channelId === interaction.channelId) {
+            try {
+                const oldMsg = await interaction.channel.messages.fetch(existing.messageId).catch(() => null);
+                if (oldMsg) await oldMsg.delete();
+            } catch { /* message may have been deleted */ }
+        }
+
+        // Send the panel as a regular (visible to all) message in the channel
+        const sent = await interaction.channel.send({ embeds: [embed], components });
+        goldShop.savePanelRef(interaction.channelId, sent.id);
+
+        await interaction.editReply({
+            content: '✅ **Painel Gold Shop criado com sucesso!**\n\nO painel foi fixado neste canal. Todos podem ver e comprar gold.\n\n💡 Use `/goldadmin` para gerenciar a loja.'
+        });
+
+        console.log(`🏪 Gold Shop panel created via /goldshop in channel ${interaction.channelId}`);
+    } catch (error) {
+        console.error('❌ Error creating gold shop panel via /goldshop:', error);
+        await interaction.editReply({
+            content: '❌ Erro ao criar painel gold shop. Verifique os logs.',
+            flags: 64
+        });
+    }
+}
+
+// ==========================================
 // 👑 /goldadmin - Admin commands
 // ==========================================
 
@@ -176,9 +225,7 @@ async function handleGoldAdmin(interaction) {
     if (subcommand === 'cancelar') {
         return handleAdminCancel(interaction);
     }
-    if (subcommand === 'produtos') {
-        return handleAdminProducts(interaction);
-    }
+
 }
 
 async function handleAdminStats(interaction) {
@@ -194,7 +241,6 @@ async function handleAdminStats(interaction) {
             { name: '💰 Aguardando Entrega', value: String(stats.paid), inline: true },
             { name: '✅ Entregues', value: String(stats.delivered), inline: true },
             { name: '❌ Cancelados', value: String(stats.cancelled), inline: true },
-            { name: '🏪 Produtos Ativos', value: String(stats.activeProducts), inline: true },
             { name: '💰 Receita Total', value: `R$ ${stats.totalRevenue.toFixed(2)}`, inline: false },
             { name: '💛 Gold Vendido', value: `${(stats.totalGoldSold / 1000000).toFixed(2)}M`, inline: false }
         );
@@ -338,36 +384,4 @@ async function handleAdminCancel(interaction) {
     } catch { /* DM might be closed */ }
 }
 
-async function handleAdminProducts(interaction) {
-    const products = goldShop.getAllProducts();
 
-    const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle('🏪 Gerenciar Produtos')
-        .setDescription('Clique em um produto para ativar/desativar.')
-        .setTimestamp();
-
-    for (const product of products) {
-        const status = product.active ? '✅ Ativo' : '❌ Inativo';
-        embed.addFields({
-            name: `${product.name} - R$ ${product.price.toFixed(2)}`,
-            value: `💛 ${(product.amount / 1000000).toFixed(1)}M Gold | ${status}`,
-            inline: false
-        });
-    }
-
-    const components = products.map(product =>
-        new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`gold-toggle-${product.id}`)
-                .setLabel(`${product.active ? '❌ Desativar' : '✅ Ativar'} ${product.name}`)
-                .setStyle(product.active ? ButtonStyle.Danger : ButtonStyle.Success)
-        )
-    );
-
-    await interaction.editReply({
-        embeds: [embed],
-        components,
-        flags: 64
-    });
-}

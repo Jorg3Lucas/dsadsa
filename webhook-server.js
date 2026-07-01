@@ -5,6 +5,9 @@
 // ==========================================
 
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import axios from 'axios';
 import { extractWebhookPaymentId, getPayment } from './mercadopago.js';
 import * as goldShop from './gold-shop.js';
 import { EmbedBuilder } from 'discord.js';
@@ -15,6 +18,49 @@ const PUBLIC_URL = process.env.WEBHOOK_PUBLIC_URL || `http://${process.env.HOST_
 
 let serverInstance = null;
 let discordClient = null;
+let cachedBaseUrl = null;
+
+/**
+ * Get the server's public base URL for serving QR code images.
+ * Discovers the public IP automatically on first call (cached indefinitely).
+ * Falls back to env vars or localhost if discovery fails.
+ */
+export async function getServerBaseUrl() {
+    if (cachedBaseUrl) return cachedBaseUrl;
+
+    // 1. Use explicit config if available
+    if (process.env.WEBHOOK_PUBLIC_URL) {
+        cachedBaseUrl = process.env.WEBHOOK_PUBLIC_URL;
+        return cachedBaseUrl;
+    }
+    if (process.env.HOST_IP) {
+        cachedBaseUrl = `http://${process.env.HOST_IP}:${PORT}`;
+        return cachedBaseUrl;
+    }
+
+    // 2. Auto-discover public IP via ipify
+    try {
+        const resp = await axios.get('https://api.ipify.org?format=json', { timeout: 5000 });
+        if (resp.data?.ip) {
+            cachedBaseUrl = `http://${resp.data.ip}:${PORT}`;
+            console.log(`🌐 Auto-discovered public IP: ${resp.data.ip}`);
+            return cachedBaseUrl;
+        }
+    } catch (err) {
+        console.warn('⚠️ Could not auto-discover public IP:', err.message);
+    }
+
+    // 3. Final fallback — won't work from Discord but prevents crash
+    cachedBaseUrl = `http://localhost:${PORT}`;
+    console.warn('⚠️ Using localhost as fallback — QR thumbnails will not be visible from Discord.');
+    console.warn('   Set WEBHOOK_PUBLIC_URL or HOST_IP in .env for proper QR code display.');
+    return cachedBaseUrl;
+}
+
+/** Invalidate cached base URL (e.g., on IP change) */
+export function resetServerBaseUrl() {
+    cachedBaseUrl = null;
+}
 
 /**
  * Start the webhook HTTP server
@@ -38,6 +84,17 @@ export function startWebhookServer(client) {
     app.get('/health', (req, res) => {
         res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
+
+    // ==========================================
+    // 🖼️ QR CODE IMAGES
+    // Serve QR code PNG files saved by the Gold Shop
+    // ==========================================
+    const qrDir = path.resolve('./qr-codes');
+    if (!fs.existsSync(qrDir)) {
+        fs.mkdirSync(qrDir, { recursive: true });
+        console.log('📁 QR codes directory created at', qrDir);
+    }
+    app.use('/qr', express.static(qrDir));
 
     // ==========================================
     // 🔔 MERCADO PAGO WEBHOOK
@@ -64,6 +121,12 @@ export function startWebhookServer(client) {
         console.log(`🔔 Webhook server listening on port ${PORT}`);
         console.log(`📌 Webhook URL: ${PUBLIC_URL}/webhook/mercadopago`);
         console.log(`📌 Health check: ${PUBLIC_URL}/health`);
+        console.log(`📸 QR code URL: ${PUBLIC_URL}/qr/pix-qr-EXEMPLO.png`);
+
+        // Pre-warm the IP discovery (non-blocking)
+        getServerBaseUrl().then(url => {
+            console.log(`📸 QR codes will be served at: ${url}/qr/`);
+        }).catch(() => {});
     });
 
     return app;
@@ -146,15 +209,14 @@ async function processWebhook(body) {
     goldShop.markOrderAsPaid(orderId);
     console.log(`✅ Order ${orderId} marked as paid automatically via webhook!`);
 
-    // 7. Send Discord notifications
-    await notifyPaymentConfirmed(order, orderId, paymentId);
-
-    // 8. Notify admin channel
-    await notifyAdminChannel(order, orderId);
+    // 7. Send notifications (reuse shared functions from gold-shop)
+    await goldShop.sendPaymentConfirmationDm(discordClient, order, orderId, paymentId);
+    await goldShop.sendPaymentToAdminChannel(discordClient, order, orderId);
 }
 
 /**
  * Send DM to user confirming payment
+ * DEPRECATED: Use goldShop.sendPaymentConfirmationDm instead
  */
 async function notifyPaymentConfirmed(order, orderId, paymentId) {
     if (!discordClient) return;
@@ -186,6 +248,7 @@ async function notifyPaymentConfirmed(order, orderId, paymentId) {
 
 /**
  * Send notification to admin channel
+ * DEPRECATED: Use goldShop.sendPaymentToAdminChannel instead
  */
 async function notifyAdminChannel(order, orderId) {
     if (!discordClient) return;
@@ -223,5 +286,7 @@ async function notifyAdminChannel(order, orderId) {
 export default {
     startWebhookServer,
     stopWebhookServer,
-    getWebhookUrl
+    getWebhookUrl,
+    getServerBaseUrl,
+    resetServerBaseUrl
 };
