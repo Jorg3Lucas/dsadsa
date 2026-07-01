@@ -74,7 +74,7 @@ export async function handleAdminCommand(msg) {
 
 async function handleGoldShopPanel(msg) {
     if (!msg.member || !msg.member.permissions.has("ManageMessages")) {
-        return msg.reply({ content: "❌ Você precisa da permissão Gerenciar Mensagens." }).catch(() => {});
+        return msg.reply({ content: "❌ You need the Manage Messages permission." }).catch(() => {});
     }
 
     try {
@@ -101,7 +101,7 @@ async function handleGoldShopPanel(msg) {
         console.log(`🏪 Gold Shop panel created in channel ${msg.channel.id}`);
     } catch (error) {
         console.error('❌ Error creating gold shop panel:', error);
-        await msg.reply({ content: '❌ Erro ao criar painel gold shop.' }).catch(() => {});
+        await msg.reply({ content: '❌ Error creating gold shop panel.' }).catch(() => {});
     }
 }
 

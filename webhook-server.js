@@ -233,8 +233,8 @@ async function notifyPaymentConfirmed(order, orderId, paymentId) {
                     `💰 **Valor:** R$ ${order.price.toFixed(2)}\\n` +
                     `💳 **Pagamento:** Confirmado via PIX\\n` +
                     `🆔 **Transação:** ${paymentId}\\n\\n` +
-                    `⏳ **Próximo passo:** Nossa equipe fará a entrega no jogo em breve!\\n` +
-                    `📌 Você será notificado quando o gold for entregue.`
+                    `⏳ **Next step:** Our team will deliver in-game soon!\\n` +
+                    `📌 You'll be notified when the gold is delivered.`
                 )
                 .setTimestamp();
 
@@ -262,7 +262,7 @@ async function notifyAdminChannel(order, orderId) {
 
         const adminEmbed = new EmbedBuilder()
             .setColor(0x57F287)
-            .setTitle('💳 Pagamento Confirmado — Automático!')
+            .setTitle('💳 Payment Confirmed — Auto!')
             .setDescription(
                 `📋 **Pedido:** ${orderId}\\n` +
                 `👤 **Cliente:** <@${order.userId}> (${order.userName})\\n` +

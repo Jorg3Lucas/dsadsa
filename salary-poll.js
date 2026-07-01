@@ -857,9 +857,9 @@ export async function resetVotesToDefault() {
     saveSalaryState();
     console.log(`✅ [Salary Poll] Reset ${voteCount} vote(s) to 100% Darksteel / 0% stones.`);
     logEvent(`Salary votes reset to default (${voteCount} members) — 100% DS`);
-    // NOTE: exportVotesToSheets() NÃO é chamado aqui porque a planilha já foi exportada
-    // na Quarta-feira (closePoll) com os dados CORRETOS. Esse reset é apenas para
-    // preparar o estado local para a próxima enquete.
+    // NOTE: exportVotesToSheets() is NOT called here because the sheet was already exported
+    // on Wednesday (closePoll) with the CORRECT data. This reset is only to
+    // prepare the local state for the next poll.
 }
 
 

@@ -26,10 +26,10 @@ export function getOrderStatusEmoji(status) {
 
 export function getOrderStatusText(status) {
     const map = {
-        'pending': 'Aguardando Pagamento',
-        'paid': 'Pago - Aguardando Entrega',
-        'delivered': 'Entregue',
-        'cancelled': 'Cancelado'
+        'pending': 'Awaiting Payment',
+        'paid': 'Paid - Awaiting Delivery',
+        'delivered': 'Delivered',
+        'cancelled': 'Cancelled'
     };
     return map[status] || status;
 }
@@ -91,8 +91,7 @@ export function buildOrderEmbed(order) {
     }
 
     if (order.notes) {
-        embed.addFields({
-            name: '📝 Observações',
+        embed.addFields(                        { name: '📝 Notes',
             value: order.notes,
             inline: false
         });
@@ -100,8 +99,7 @@ export function buildOrderEmbed(order) {
 
     // Show PIX info if pending
     if (order.status === 'pending' && order.pixCopiaCola) {
-        embed.addFields({
-            name: '📋 Código PIX (Copiar e Colar)',
+        embed.addFields({                    name: '📋 PIX Code (Copy & Paste)',
             value: `\`\`\`\n${order.pixCopiaCola}\n\`\`\``,
             inline: false
         });
@@ -152,29 +150,28 @@ export function buildGoldPanelEmbed() {
     const tBody = pricing.map((p) => `${p.label} \n> **${p.price}** / ${p.per}`).join('\n\n');
 
     const stockBar = stock > 0
-        ? `🟢 **${stock.toLocaleString()} gold** disponíveis`
-        : '🔴 **Estoque esgotado** — aguarde reposição';
+                        : '🔴 **Out of stock** — awaiting restock';
 
     const embed = new EmbedBuilder()
         .setColor(0xFFD700)
         .setTitle('✨ Gold Shop — MIR4')
         .setDescription(
-            `### ⚡ Compre Gold com PIX!\n\n` +
-            `📦 **Estoque:** ${stockBar}\n\n` +
+            `### ⚡ Buy Gold with PIX!\n\n` +
+            `📦 **Stock:** ${stockBar}\n\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `### 📊 Tabela de Preços\n` +
-            `*(por unidade de 1.053 gold)*\n\n` +
+            `### 📊 Price Table\n` +
+            `*(per unit of 1,053 gold)*\n\n` +
             `${tBody}\n\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `💎 **Quanto mais gold, menor o preço por unidade!**\n` +
-            `🔹 Pagamento via **PIX** (Mercado Pago)\n` +
-            `🔹 Entrega **rápida** após confirmação\n` +
-            `🔹 Suporte via ticket caso tenha dúvidas`
+            `💎 **The more gold, the lower the price per unit!**\n` +
+            `🔹 Payment via **PIX** (Mercado Pago)\n` +
+            `🔹 **Fast delivery** after confirmation\n` +
+            `🔹 Support via ticket if you have questions`
         )
         .setTimestamp();
 
     embed.setFooter({
-        text: stock > 0 ? `💛 ${stock.toLocaleString()} gold em estoque` : '⚠️ Estoque vazio — aguarde reposição'
+        text: stock > 0 ? `💛 ${stock.toLocaleString()} gold in stock` : '⚠️ Empty stock — awaiting restock'
     });
 
     return embed;
@@ -189,7 +186,7 @@ export function buildGoldPanelButtons() {
     const buyRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('gold-buy-custom')
-            .setLabel(`💛 Comprar Gold${stock > 0 ? ` (${stock.toLocaleString()} disp.)` : ''}`)
+            .setLabel(`💛 Buy Gold${stock > 0 ? ` (${stock.toLocaleString()} avail.)` : ''}`)
             .setStyle(stock > 0 ? ButtonStyle.Success : ButtonStyle.Secondary)
             .setDisabled(stock <= 0)
     );
@@ -228,7 +225,7 @@ export function buildGoldPanelButtons() {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('gold-my-orders')
-                .setLabel('📋 Meus Pedidos')
+                .setLabel('📋 My Orders')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('gold-admin-menu')

@@ -123,7 +123,7 @@ export function createDynamicOrder(userId, userName, goldAmount, price, characte
  */
 export function updateOrderPayment(orderId, paymentId, qrCode, qrCodeBase64) {
     const order = goldDb.orders[orderId];
-    if (!order) throw new Error('Pedido não encontrado.');
+    if (!order) throw new Error('Order not found.');
 
     order.paymentId = paymentId;
     order.pixQrCode = qrCodeBase64;
@@ -137,7 +137,7 @@ export function updateOrderPayment(orderId, paymentId, qrCode, qrCodeBase64) {
 /** Mark an order as paid */
 export function markOrderAsPaid(orderId) {
     const order = goldDb.orders[orderId];
-    if (!order) throw new Error('Pedido não encontrado.');
+    if (!order) throw new Error('Order not found.');
     if (order.status !== 'pending') return order;
 
     order.status = 'paid';
@@ -150,9 +150,9 @@ export function markOrderAsPaid(orderId) {
 /** Mark an order as delivered */
 export function markOrderAsDelivered(orderId, deliveredBy) {
     const order = goldDb.orders[orderId];
-    if (!order) throw new Error('Pedido não encontrado.');
+    if (!order) throw new Error('Order not found.');
     if (order.status !== 'paid') {
-        throw new Error('O pedido precisa ser pago antes de ser entregue.');
+        throw new Error('Order must be paid before delivery.');
     }
 
     order.status = 'delivered';
@@ -166,9 +166,9 @@ export function markOrderAsDelivered(orderId, deliveredBy) {
 /** Cancel an order */
 export function cancelOrder(orderId, reason = 'Cancelado pelo admin') {
     const order = goldDb.orders[orderId];
-    if (!order) throw new Error('Pedido não encontrado.');
+    if (!order) throw new Error('Order not found.');
     if (order.status === 'delivered') {
-        throw new Error('Não é possível cancelar um pedido já entregue.');
+        throw new Error('Cannot cancel a delivered order.');
     }
 
     order.status = 'cancelled';
@@ -213,7 +213,7 @@ export function getAllOrders() {
 /** Update order notes */
 export function updateOrderNotes(orderId, notes) {
     const order = goldDb.orders[orderId];
-    if (!order) throw new Error('Pedido não encontrado.');
+    if (!order) throw new Error('Order not found.');
     order.notes = notes;
     goldDb.orders[orderId] = order;
     saveGoldDatabase();
@@ -225,7 +225,7 @@ export function updateOrderNotes(orderId, notes) {
 // ==========================================
 
 // 1 "k" no jogo = 1053 gold
-// Tiers usam múltiplos de GOLD_UNIT:
+// Tiers use multiples of GOLD_UNIT:
 //   ≤ 5k (5×1053 = 5265 gold):  R$ 18,00 / 1053
 //   ≤ 10k (10×1053 = 10530 gold): R$ 17,00 / 1053
 //   > 10k:                        R$ 16,50 / 1053
@@ -244,7 +244,7 @@ export function getGoldStock() {
 
 /** Set gold stock (admin) */
 export function setGoldStock(amount) {
-    if (amount < 0) throw new Error('Estoque não pode ser negativo.');
+    if (amount < 0) throw new Error('Stock cannot be negative.');
     goldDb.goldStock = Math.floor(amount);
     saveGoldDatabase();
     return goldDb.goldStock;
@@ -253,7 +253,7 @@ export function setGoldStock(amount) {
 /** Deduct gold from stock after delivery */
 export function deductStock(amount) {
     const current = getGoldStock();
-    if (current < amount) throw new Error('Estoque insuficiente.');
+    if (current < amount) throw new Error('Insufficient stock.');
     goldDb.goldStock = current - amount;
     saveGoldDatabase();
     return goldDb.goldStock;
@@ -268,12 +268,12 @@ export function deductStock(amount) {
  */
 export function calculatePrice(goldAmount) {
     if (goldAmount < GOLD_UNIT) {
-        throw new Error(`Mínimo de ${GOLD_UNIT.toLocaleString()} gold por compra.`);
+        throw new Error(`Minimum of ${GOLD_UNIT.toLocaleString()} gold per purchase.`);
     }
 
     const stock = getGoldStock();
     if (goldAmount > stock) {
-        throw new Error(`Estoque insuficiente. Disponível: ${stock.toLocaleString()} gold.`);
+        throw new Error(`Insufficient stock. Available: ${stock.toLocaleString()} gold.`);
     }
 
     const tier = PRICE_TIERS.find(t => goldAmount < t.maxGold);
@@ -286,10 +286,10 @@ export function calculatePrice(goldAmount) {
     const tenK = 10 * GOLD_UNIT;
 
     const tierLabel = goldAmount < fiveK
-        ? '💵 R$ 18,00/un (< 5k)'
+        ? '💵 R$ 18.00/unit (< 5k)'
         : goldAmount < tenK
-            ? '💰 R$ 17,00/un (5k-10k)'
-            : '💎 R$ 16,50/un (> 10k)';
+            ? '💰 R$ 17.00/unit (5k-10k)'
+            : '💎 R$ 16.50/unit (> 10k)';
 
     return { goldAmount, units: parseFloat(units.toFixed(2)), pricePerUnit, totalPrice, tierLabel };
 }
@@ -301,7 +301,7 @@ export function getPricingInfo() {
     return [
         { label: `💵 Até 5k (${fiveK.toLocaleString()} gold)`, price: 'R$ 18,00', per: '1k (1053 gold)' },
         { label: `💰 De 5k a 10k (${fiveK.toLocaleString()} a ${tenK.toLocaleString()} gold)`, price: 'R$ 17,00', per: '1k (1053 gold)' },
-        { label: '💎 Acima de 10k (10.530+ gold)', price: 'R$ 16,50', per: '1k (1053 gold)' }
+        { label: '💎 Above 10k (10,530+ gold)', price: 'R$ 16.50', per: '1k (1053 gold)' }
     ];
 }
 
@@ -376,18 +376,18 @@ async function checkExpiredOrders(client) {
         const expiresAt = new Date(order.paymentExpiresAt).getTime();
         if (now >= expiresAt) {
             try {
-                cancelOrder(orderId, '⏰ PIX expirado');
+                cancelOrder(orderId, '⏰ PIX expired');
                 expiredCount++;
 
                 if (client && order.userId) {
                     try {
                         const user = await client.users.fetch(order.userId);
                         await user.send({
-                            content: `⏰ **Pedido ${orderId} — PIX Expirado**\n\n` +
-                                     `O prazo de pagamento do seu pedido expirou.\n` +
+                            content: `⏰ **Order ${orderId} — PIX Expired**\n\n` +
+                                     `Your payment deadline has expired.\n` +
                                      `💛 **Gold:** ${order.goldAmount.toLocaleString()}\n` +
-                                     `💰 **Valor:** R$ ${order.price.toFixed(2)}\n\n` +
-                                     `Você pode criar um novo pedido a qualquer momento na loja! 🛒`
+                                     `💰 **Amount:** R$ ${order.price.toFixed(2)}\n\n` +
+                                     `You can create a new order anytime in the shop! 🛒`
                         });
                     } catch { /* DM may be closed */ }
                 }

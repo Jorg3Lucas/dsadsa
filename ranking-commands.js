@@ -73,31 +73,31 @@ export async function registerMir4SlashCommands(guild) {
             // ── Gold Shop commands ──
             {
                 name: 'shop',
-                description: '🛒 Ver a loja de Gold do MIR4'
+                description: '🛒 View the MIR4 Gold Shop'
             },
             {
                 name: 'orders',
-                description: '📋 Ver seus pedidos de Gold'
+                description: '📋 View your Gold orders'
             },
             {
                 name: 'order',
-                description: '🔍 Ver detalhes de um pedido',
-                options: [{ type: 3, name: 'id', description: 'ID do pedido (ex: GOLD-000001)', required: true }]
+                description: '🔍 View order details',
+                options: [{ type: 3, name: 'id', description: 'Order ID (e.g., GOLD-000001)', required: true }]
             },
             {
                 name: 'goldshop',
-                description: '🏪 [Admin] Criar painel fixo da Gold Shop neste canal',
+                description: '🏪 [Admin] Create fixed Gold Shop panel in this channel',
                 default_member_permissions: PermissionFlagsBits.ManageMessages.toString()
             },
             {
                 name: 'goldadmin',
-                description: '👑 [Admin] Gerenciar loja de gold',
+                description: '👑 [Admin] Manage Gold Shop',
                 default_member_permissions: PermissionFlagsBits.ManageMessages.toString(),
                 options: [
-                    { type: 1, name: 'stats', description: 'Ver estatísticas da loja' },
-                    { type: 1, name: 'pedidos', description: 'Ver pedidos pendentes de entrega' },
-                    { type: 1, name: 'entregar', description: 'Marcar um pedido como entregue', options: [{ type: 3, name: 'id', description: 'ID do pedido', required: true }] },
-                    { type: 1, name: 'cancelar', description: 'Cancelar um pedido', options: [{ type: 3, name: 'id', description: 'ID do pedido', required: true }, { type: 3, name: 'motivo', description: 'Motivo do cancelamento', required: false }] }
+                    { type: 1, name: 'stats', description: 'View shop statistics' },
+                    { type: 1, name: 'pedidos', description: 'View pending delivery orders' },
+                    { type: 1, name: 'entregar', description: 'Mark order as delivered', options: [{ type: 3, name: 'id', description: 'Order ID', required: true }] },
+                    { type: 1, name: 'cancelar', description: 'Cancel an order', options: [{ type: 3, name: 'id', description: 'Order ID', required: true }, { type: 3, name: 'motivo', description: 'Cancellation reason', required: false }] }
                 ]
             }
         ]);

@@ -67,7 +67,7 @@ async function handleMyOrders(interaction) {
 
     if (orders.length === 0) {
         return interaction.editReply({
-            content: '📭 Você ainda não fez nenhum pedido. Use `/shop` para comprar Gold!',
+            content: '📭 You haven\'t placed any orders yet. Use `/shop` to buy Gold!',
             flags: 64
         });
     }
@@ -78,7 +78,7 @@ async function handleMyOrders(interaction) {
     const embed = new EmbedBuilder()
         .setColor(0xFEE75C)
         .setTitle('📋 Meus Pedidos')
-        .setDescription(`Você tem **${orders.length}** pedido(s) no total.`)
+        .setDescription(`You have **${orders.length}** order(s) in total.`)
         .setTimestamp();
 
     for (const order of recentOrders) {
@@ -99,7 +99,7 @@ async function handleMyOrders(interaction) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('gold-shop-back')
-                .setLabel('🛒 Voltar à Loja')
+                .setLabel('🛒 Back to Shop')
                 .setStyle(ButtonStyle.Secondary)
         )
     ];
@@ -123,7 +123,7 @@ async function handleOrderDetails(interaction) {
 
     if (!order) {
         return interaction.editReply({
-            content: '❌ Pedido não encontrado. Verifique o ID e tente novamente.',
+            content: '❌ Order not found. Check the ID and try again.',
             flags: 64
         });
     }
@@ -134,7 +134,7 @@ async function handleOrderDetails(interaction) {
 
     if (order.userId !== interaction.user.id && !isAdmin) {
         return interaction.editReply({
-            content: '❌ Este pedido não pertence a você.',
+            content: '❌ This order doesn\'t belong to you.',
             flags: 64
         });
     }
@@ -155,7 +155,7 @@ async function handleGoldShopSlash(interaction) {
     // Check admin permission
     if (!interaction.member.permissions.has('ManageMessages')) {
         return interaction.reply({
-            content: '❌ Você precisa da permissão **Gerenciar Mensagens** para usar este comando.',
+            content: '❌ You need the **Manage Messages** permission to use this command.',
             flags: 64
         });
     }
@@ -206,7 +206,7 @@ async function handleGoldAdmin(interaction) {
 
     if (!isAdmin) {
         return interaction.reply({
-            content: '❌ Você não tem permissão para usar este comando.',
+            content: '❌ You don\'t have permission to use this command.',
             flags: 64
         });
     }
@@ -233,7 +233,7 @@ async function handleAdminStats(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('📊 Estatísticas da Gold Shop')
+        .setTitle('📊 Gold Shop Statistics')
         .setTimestamp()
         .addFields(
             { name: '📦 Total de Pedidos', value: String(stats.totalOrders), inline: true },
@@ -298,14 +298,14 @@ async function handleAdminDeliver(interaction) {
 
     if (!order) {
         return interaction.editReply({
-            content: '❌ Pedido não encontrado.',
+            content: '❌ Order not found.',
             flags: 64
         });
     }
 
     if (order.status !== 'paid') {
         return interaction.editReply({
-            content: `❌ Este pedido está como **${order.status}**. Só é possível entregar pedidos pagos.`,
+            content: `❌ This order is **${order.status}**. Only paid orders can be delivered.`,
             flags: 64
         });
     }
@@ -356,14 +356,14 @@ async function handleAdminCancel(interaction) {
 
     if (!order) {
         return interaction.editReply({
-            content: '❌ Pedido não encontrado.',
+            content: '❌ Order not found.',
             flags: 64
         });
     }
 
     if (order.status === 'delivered') {
         return interaction.editReply({
-            content: '❌ Não é possível cancelar um pedido já entregue.',
+            content: '❌ Cannot cancel a delivered order.',
             flags: 64
         });
     }
@@ -379,7 +379,7 @@ async function handleAdminCancel(interaction) {
     try {
         const user = await interaction.client.users.fetch(cancelled.userId);
         await user.send({
-            content: `❌ Seu pedido **${orderId}** (${cancelled.productName}) foi cancelado.\n📝 Motivo: ${reason}\n\n💳 Se você já pagou, solicite o reembolso em um ticket de suporte.`
+            content: `❌ Your order **${orderId}** (${cancelled.productName}) was cancelled.\n📝 Reason: ${reason}\n\n💳 If you already paid, request a refund in a support ticket.`
         });
     } catch { /* DM might be closed */ }
 }

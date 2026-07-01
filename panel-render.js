@@ -232,7 +232,7 @@ export function renderEmbed(key) {
                 }
             }
             let block = STATUS_CLAIMED === rData.status && rData.ownerName 
-                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n${rData.password ? `🎮 PT Senha: ${rData.password}` : ""}\n\`\`\`` 
+                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n${rData.password ? `🎮 PT Password: ${rData.password}` : ""}\n\`\`\`` 
                 : rData.endLimit && rData.nextName 
                     ? `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\`\n${getEndLimitCountdown(rData.endLimit)}` 
                     : `\`\`\`yaml\n${STATUS_AVAILABLE}\n\`\`\``;

@@ -13,21 +13,21 @@ let paymentClient = null;
  */
 export function checkGoldEnvVars() {
     const required = [
-        { key: 'MERCADO_PAGO_ACCESS_TOKEN', desc: 'Token de acesso do Mercado Pago (pagamentos PIX)' },
-        { key: 'GOLD_ADMIN_ROLE_ID', desc: 'ID do cargo de administrador da loja' },
-        { key: 'GOLD_ADMIN_CHANNEL_ID', desc: 'ID do canal para notificações de pedidos' }
+        { key: 'MERCADO_PAGO_ACCESS_TOKEN', desc: 'Mercado Pago access token (PIX payments)' },
+        { key: 'GOLD_ADMIN_ROLE_ID', desc: 'Shop admin role ID' },
+        { key: 'GOLD_ADMIN_CHANNEL_ID', desc: 'Channel ID for order notifications' }
     ];
 
     let missing = false;
     for (const env of required) {
         if (!process.env[env.key]) {
-            console.warn(`⚠️  Variável de ambiente faltando: ${env.key} — ${env.desc}`);
+            console.warn(`⚠️  Missing environment variable: ${env.key} — ${env.desc}`);
             missing = true;
         }
     }
 
     if (missing) {
-        console.log('📌 Configure essas variáveis no arquivo .env para ativar a Gold Shop.');
+        console.log('📌 Set these variables in .env to enable the Gold Shop.');
     }
     return missing;
 }
@@ -38,7 +38,7 @@ export function initMercadoPago() {
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
     if (!accessToken) {
-        console.error("❌ MERCADO_PAGO_ACCESS_TOKEN não configurado.");
+        console.error("❌ MERCADO_PAGO_ACCESS_TOKEN not configured.");
         return false;
     }
 
@@ -56,7 +56,7 @@ export function initMercadoPago() {
 
         return true;
     } catch (err) {
-        console.error("❌ Erro ao iniciar Mercado Pago:", err);
+        console.error("❌ Error initializing Mercado Pago:", err);
         return false;
     }
 }
@@ -73,7 +73,7 @@ export async function createPixPayment(
 ) {
 
     if (!paymentClient) {
-        throw new Error("Mercado Pago não inicializado.");
+        throw new Error("Mercado Pago not initialized.");
     }
 
     const body = {
@@ -128,14 +128,14 @@ export async function createPixPayment(
         if (!qr) {
             console.error(result);
             throw new Error(
-                "Mercado Pago não retornou o código PIX."
+                "Mercado Pago did not return the PIX code."
             );
         }
 
         if (!qrBase64) {
             console.error(result);
             throw new Error(
-                "Mercado Pago não retornou o QR Code."
+                "Mercado Pago did not return the QR Code."
             );
         }
 
@@ -179,7 +179,7 @@ export async function createPixPayment(
 export async function getPayment(paymentId) {
 
     if (!paymentClient) {
-        throw new Error("Mercado Pago não inicializado.");
+        throw new Error("Mercado Pago not initialized.");
     }
 
     const payment = await paymentClient.get({
