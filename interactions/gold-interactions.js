@@ -751,7 +751,7 @@ async function handleAdminMenu(interaction) {
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('👑 Admin - Gold Shop')
-        .setDescription('Painel de administração da Gold Shop.')
+        .setDescription('Gold Shop administration panel.')
         .addFields(
             { name: '💛 Estoque', value: `${stock.toLocaleString()} gold`, inline: true },
             { name: '📊 Estatísticas', value: `📦 ${stats.totalOrders} pedidos | 💰 ${stats.paid} aguardando | ✅ ${stats.delivered} entregues`, inline: false }
@@ -762,19 +762,19 @@ async function handleAdminMenu(interaction) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('gold-set-stock')
-                .setLabel('💛 Gerenciar Estoque')
+                .setLabel('💛 Manage Stock')
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('gold-stats')
-                .setLabel('📊 Estatísticas')
+                .setLabel('📊 Statistics')
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('gold-pending-orders')
-                .setLabel('📋 Pedidos')
+                .setLabel('📋 Orders')
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('gold-shop-back')
-                .setLabel('🔙 Voltar')
+                .setLabel('🔙 Back')
                 .setStyle(ButtonStyle.Danger)
         )
     ];
@@ -799,15 +799,15 @@ async function handleAdminStatsButton(interaction) {
     const stock = goldShop.getGoldStock();
     const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('📊 Estatísticas da Gold Shop')
+        .setTitle('📊 Gold Shop Statistics')
         .addFields(
-            { name: '💛 Estoque Atual', value: `${stock.toLocaleString()} gold`, inline: true },
-            { name: '📦 Total de Pedidos', value: String(stats.totalOrders), inline: true },
-            { name: '⏳ Pendentes', value: String(stats.pending), inline: true },
-            { name: '💰 Aguardando Entrega', value: String(stats.paid), inline: true },
-            { name: '✅ Entregues', value: String(stats.delivered), inline: true },
-            { name: '❌ Cancelados', value: String(stats.cancelled), inline: true },
-            { name: '📊 Receita Total', value: `R$ ${stats.totalRevenue.toFixed(2)}`, inline: false }
+            { name: '💛 Current Stock', value: `${stock.toLocaleString()} gold`, inline: true },
+            { name: '📦 Total Orders', value: String(stats.totalOrders), inline: true },
+            { name: '⏳ Pending', value: String(stats.pending), inline: true },
+            { name: '💰 Awaiting Delivery', value: String(stats.paid), inline: true },
+            { name: '✅ Delivered', value: String(stats.delivered), inline: true },
+            { name: '❌ Cancelled', value: String(stats.cancelled), inline: true },
+            { name: '📊 Total Revenue', value: `R$ ${stats.totalRevenue.toFixed(2)}`, inline: false }
         )
         .setTimestamp();
 
@@ -940,14 +940,14 @@ async function handleRefreshPanel(interaction) {
 async function handleHowToOpenDm(interaction) {
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('📬 Como abrir sua DM')
+        .setTitle('📬 How to open your DM')
         .setDescription(
-            'Para receber seu produto, você precisa ter as **mensagens diretas** abertas neste servidor.\n\n' +
-            '**Passo a passo:**\n' +
-            '1️⃣ Clique com botão direito no servidor na lista à esquerda\n' +
-            '2️⃣ Vá em **"Configurações de Privacidade"**\n' +
-            '3️⃣ Ative a opção **"Permitir mensagens diretas de membros do servidor"**\n\n' +
-            '✅ Depois disso, você poderá receber sua entrega por DM!'
+            'To receive your product, you need to have **Direct Messages** enabled in this server.\n\n' +
+            '**Step by step:**\n' +
+            '1️⃣ Right-click on the server in the left sidebar\n' +
+            '2️⃣ Go to **Privacy Settings**\n' +
+            '3️⃣ Enable **Allow direct messages from server members**\n\n' +
+            '✅ After that, you\'ll be able to receive your delivery via DM!'
         )
         .setTimestamp();
 

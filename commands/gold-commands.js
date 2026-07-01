@@ -77,7 +77,7 @@ async function handleMyOrders(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setTitle('📋 Meus Pedidos')
+        .setTitle('📋 My Orders')
         .setDescription(`You have **${orders.length}** order(s) in total.`)
         .setTimestamp();
 
@@ -92,7 +92,7 @@ async function handleMyOrders(interaction) {
     }
 
     if (orders.length > 10) {
-        embed.setFooter({ text: `Mostrando os 10 mais recentes de ${orders.length} pedidos.` });
+        embed.setFooter({ text: `Showing 10 most recent out of ${orders.length} orders.` });
     }
 
     const components = [
@@ -180,14 +180,14 @@ async function handleGoldShopSlash(interaction) {
         goldShop.savePanelRef(interaction.channelId, sent.id);
 
         await interaction.editReply({
-            content: '✅ **Painel Gold Shop criado com sucesso!**\n\nO painel foi fixado neste canal. Todos podem ver e comprar gold.\n\n💡 Use `/goldadmin` para gerenciar a loja.'
+            content: '✅ **Gold Shop panel created successfully!**\n\nThe panel was pinned to this channel. Everyone can view and buy gold.\n\n💡 Use `/goldadmin` to manage the shop.'
         });
 
         console.log(`🏪 Gold Shop panel created via /goldshop in channel ${interaction.channelId}`);
     } catch (error) {
         console.error('❌ Error creating gold shop panel via /goldshop:', error);
         await interaction.editReply({
-            content: '❌ Erro ao criar painel gold shop. Verifique os logs.',
+            content: '❌ Error creating gold shop panel. Check the logs.',
             flags: 64
         });
     }
@@ -236,13 +236,13 @@ async function handleAdminStats(interaction) {
         .setTitle('📊 Gold Shop Statistics')
         .setTimestamp()
         .addFields(
-            { name: '📦 Total de Pedidos', value: String(stats.totalOrders), inline: true },
-            { name: '⏳ Pendentes', value: String(stats.pending), inline: true },
-            { name: '💰 Aguardando Entrega', value: String(stats.paid), inline: true },
-            { name: '✅ Entregues', value: String(stats.delivered), inline: true },
-            { name: '❌ Cancelados', value: String(stats.cancelled), inline: true },
-            { name: '💰 Receita Total', value: `R$ ${stats.totalRevenue.toFixed(2)}`, inline: false },
-            { name: '💛 Gold Vendido', value: `${(stats.totalGoldSold / 1000000).toFixed(2)}M`, inline: false }
+            { name: '📦 Total Orders', value: String(stats.totalOrders), inline: true },
+            { name: '⏳ Pending', value: String(stats.pending), inline: true },
+            { name: '💰 Awaiting Delivery', value: String(stats.paid), inline: true },
+            { name: '✅ Delivered', value: String(stats.delivered), inline: true },
+            { name: '❌ Cancelled', value: String(stats.cancelled), inline: true },
+            { name: '💰 Total Revenue', value: `R$ ${stats.totalRevenue.toFixed(2)}`, inline: false },
+            { name: '💛 Gold Sold', value: `${(stats.totalGoldSold / 1000000).toFixed(2)}M`, inline: false }
         );
 
     await interaction.editReply({
@@ -256,22 +256,22 @@ async function handleAdminPendingOrders(interaction) {
 
     if (pendingOrders.length === 0) {
         return interaction.editReply({
-            content: '✅ Nenhum pedido aguardando entrega!',
+            content: '✅ No orders awaiting delivery!',
             flags: 64
         });
     }
 
     const embed = new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setTitle('📋 Pedidos Aguardando Entrega')
-        .setDescription(`**${pendingOrders.length}** pedido(s) pago(s) aguardando entrega.`)
+        .setTitle('📋 Orders Awaiting Delivery')
+        .setDescription(`**${pendingOrders.length}** paid order(s) awaiting delivery.`)
         .setTimestamp();
 
     for (const order of pendingOrders) {
         const paidAt = new Date(order.paidAt).toLocaleString('pt-BR');
         embed.addFields({
             name: `💰 ${order.orderId} - ${order.productName}`,
-            value: `👤 <@${order.userId}>\n🎮 Personagem: ${order.characterName}\n📅 Pago em: ${paidAt}`,
+            value: `👤 <@${order.userId}>\n🎮 Character: ${order.characterName}\n📅 Paid on: ${paidAt}`,
             inline: false
         });
     }
@@ -280,7 +280,7 @@ async function handleAdminPendingOrders(interaction) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`gold-deliver-${order.orderId}`)
-                .setLabel(`✅ Entregar ${order.orderId}`)
+                .setLabel(`✅ Deliver ${order.orderId}`)
                 .setStyle(ButtonStyle.Success)
         )
     ).slice(0, 5); // Max 5 rows
@@ -314,13 +314,13 @@ async function handleAdminDeliver(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('✅ Pedido Entregue!')
-        .setDescription(`O pedido **${orderId}** foi marcado como entregue.`)
+        .setTitle('✅ Order Delivered!')
+        .setDescription(`Order **${orderId}** has been marked as delivered.`)
         .addFields(
-            { name: '👤 Cliente', value: `<@${delivered.userId}>`, inline: true },
-            { name: '💛 Produto', value: delivered.productName, inline: true },
-            { name: '🎮 Personagem', value: delivered.characterName, inline: true },
-            { name: '👑 Entregue por', value: interaction.user.tag, inline: false }
+            { name: '👤 Client', value: `<@${delivered.userId}>`, inline: true },
+            { name: '💛 Product', value: delivered.productName, inline: true },
+            { name: '🎮 Character', value: delivered.characterName, inline: true },
+            { name: '👑 Delivered by', value: interaction.user.tag, inline: false }
         )
         .setTimestamp();
 
@@ -334,14 +334,14 @@ async function handleAdminDeliver(interaction) {
         const user = await interaction.client.users.fetch(delivered.userId);
         const dmEmbed = new EmbedBuilder()
             .setColor(0x57F287)
-            .setTitle('✅ Gold Entregue!')
-            .setDescription(`Seu pedido **${orderId}** foi entregue!`)
+            .setTitle('✅ Gold Delivered!')
+            .setDescription(`Your order **${orderId}** has been delivered!`)
             .addFields(
-                { name: '💛 Produto', value: delivered.productName, inline: true },
-                { name: '🎮 Personagem', value: delivered.characterName, inline: true },
+                { name: '💛 Product', value: delivered.productName, inline: true },
+                { name: '🎮 Character', value: delivered.characterName, inline: true },
                 { name: '💰 Total', value: `R$ ${delivered.price.toFixed(2)}`, inline: true }
             )
-            .setFooter({ text: 'Obrigado pela compra! Volte sempre 🙏' })
+            .setFooter({ text: 'Thank you for your purchase! Come back anytime 🙏' })
             .setTimestamp();
 
         await user.send({ embeds: [dmEmbed] });
@@ -371,7 +371,7 @@ async function handleAdminCancel(interaction) {
     const cancelled = goldShop.cancelOrder(orderId, reason);
 
     await interaction.editReply({
-        content: `✅ Pedido **${orderId}** cancelado.\n📝 Motivo: ${reason}`,
+        content: `✅ Order **${orderId}** cancelled.\n📝 Reason: ${reason}`,
         flags: 64
     });
 
