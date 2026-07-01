@@ -55,21 +55,21 @@ export function buildOrderEmbed(order) {
 
     const embed = new EmbedBuilder()
         .setColor(colors[order.status] || 0x5865F2)
-        .setTitle(`${statusEmoji} Pedido ${order.orderId}`)
+        .setTitle(`${statusEmoji} Order ${order.orderId}`)
         .setDescription(`> ${order.productName}`)
         .setTimestamp()
         .addFields(
             { name: '💛 Gold', value: `\`${(order.goldAmount / 1000000).toFixed(2)}M\``, inline: true },
-            { name: '💰 Valor', value: `\`R$ ${order.price.toFixed(2)}\``, inline: true },
+            { name: '💰 Amount', value: `\`R$ ${order.price.toFixed(2)}\``, inline: true },
             { name: '📌 Status', value: `**${statusEmoji} ${statusText}**`, inline: false },
-            { name: '🎮 Personagem', value: `\`${order.characterName}\``, inline: true },
-            { name: '🌍 Servidor', value: `\`${order.server}\``, inline: true },
-            { name: '📅 Criado em', value: new Date(order.createdAt).toLocaleString('pt-BR'), inline: false }
+            { name: '🎮 Character', value: `\`${order.characterName}\``, inline: true },
+            { name: '🌍 Server', value: `\`${order.server}\``, inline: true },
+            { name: '📅 Created at', value: new Date(order.createdAt).toLocaleString('pt-BR'), inline: false }
         );
 
     if (order.paidAt) {
         embed.addFields({
-            name: '💳 Pago em',
+            name: '💳 Paid at',
             value: new Date(order.paidAt).toLocaleString('pt-BR'),
             inline: true
         });
@@ -77,13 +77,13 @@ export function buildOrderEmbed(order) {
 
     if (order.deliveredAt) {
         embed.addFields({
-            name: '✅ Entregue em',
+            name: '✅ Delivered at',
             value: new Date(order.deliveredAt).toLocaleString('pt-BR'),
             inline: true
         });
         if (order.deliveredBy) {
             embed.addFields({
-                name: '👑 Entregue por',
+                name: '👑 Delivered by',
                 value: order.deliveredBy,
                 inline: true
             });
@@ -118,14 +118,14 @@ export function buildOrderEmbed(order) {
             const filled = Math.round((remaining / totalSecs) * barLen);
             const bar = '🟩'.repeat(filled) + '⬜'.repeat(barLen - filled);
             embed.addFields({
-                name: '⏳ PIX Expira em',
+                name: '⏳ PIX Expires in',
                 value: `${bar}\n\`${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s\``,
                 inline: false
             });
         } else {
             embed.addFields({
-                name: '⏳ PIX Expirado',
-                value: '> O QR Code PIX expirou. Crie um novo pedido.',
+                name: '⏳ PIX Expired',
+                value: '> The QR Code PIX has expired. Create a new order.',
                 inline: false
             });
         }
@@ -150,7 +150,8 @@ export function buildGoldPanelEmbed() {
     const tBody = pricing.map((p) => `${p.label} \n> **${p.price}** / ${p.per}`).join('\n\n');
 
     const stockBar = stock > 0
-                        : '🔴 **Out of stock** — awaiting restock';
+        ? `🟢 **${stock.toLocaleString()} gold** available`
+        : '🔴 **Out of stock** — awaiting restock';
 
     const embed = new EmbedBuilder()
         .setColor(0xFFD700)
@@ -311,22 +312,22 @@ export async function handleGoldInteraction(interaction) {
 async function handleBuyCustom(interaction) {
     const stock = goldShop.getGoldStock();
     if (stock <= 0) {
-        return interaction.reply({ content: '❌ Estoque vazio no momento. Aguarde reposição.', flags: 64 });
+        return interaction.reply({ content: '❌ Currently out of stock. Please wait for restock.', flags: 64 });
     }
 
     const mpReady = !!process.env.MERCADO_PAGO_ACCESS_TOKEN;
     if (!mpReady) {
-        return interaction.reply({ content: '❌ Sistema de pagamento não configurado.', flags: 64 });
+        return interaction.reply({ content: '❌ Payment system not configured.', flags: 64 });
     }
 
     const modal = new ModalBuilder()
         .setCustomId('gold-modal-buy-custom')
-        .setTitle('💛 Comprar Gold');
+        .setTitle('💛 Buy Gold');
 
     const goldInput = new TextInputBuilder()
         .setCustomId('gold-amount')
-        .setLabel(`Qtd gold (Mín: ${goldShop.GOLD_UNIT}, Disp: ${stock})`)
-        .setPlaceholder(`Ex: ${goldShop.GOLD_UNIT}`)
+        .setLabel(`Gold amount (Min: ${goldShop.GOLD_UNIT}, Avail: ${stock})`)
+        .setPlaceholder(`E.g.: ${goldShop.GOLD_UNIT}`)
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
@@ -344,17 +345,17 @@ async function handleBuyCustom(interaction) {
 async function handleQuickBuy(interaction) {
     const amount = parseInt(interaction.customId.replace('gold-quick-', ''), 10);
     if (isNaN(amount) || amount <= 0) {
-        return interaction.reply({ content: '❌ Quantidade inválida.', flags: 64 });
+        return interaction.reply({ content: '❌ Invalid amount.', flags: 64 });
     }
 
     const stock = goldShop.getGoldStock();
     if (amount > stock) {
-        return interaction.reply({ content: `❌ Estoque insuficiente. Disponível: ${stock.toLocaleString()} gold.`, flags: 64 });
+        return interaction.reply({ content: `❌ Insufficient stock. Available: ${stock.toLocaleString()} gold.`, flags: 64 });
     }
 
     const mpReady = !!process.env.MERCADO_PAGO_ACCESS_TOKEN;
     if (!mpReady) {
-        return interaction.reply({ content: '❌ Sistema de pagamento não configurado.', flags: 64 });
+        return interaction.reply({ content: '❌ Payment system not configured.', flags: 64 });
     }
 
     // Process directly — no modal needed since amount is pre-defined
@@ -410,7 +411,7 @@ async function processBuyOrder(interaction, fixedAmount) {
         const amountStr = interaction.fields.getTextInputValue('gold-amount').trim().replace(/\./g, '').replace(/,/g, '');
         goldAmount = parseInt(amountStr, 10);
         if (isNaN(goldAmount) || goldAmount <= 0) {
-            return interaction.reply({ content: '❌ Quantidade de gold inválida.', flags: 64 });
+            return interaction.reply({ content: '❌ Invalid gold amount.', flags: 64 });
         }
     }
 
@@ -436,7 +437,7 @@ async function processBuyOrder(interaction, fixedAmount) {
             pricing.totalPrice,
             characterName,
             server,
-            `${pricing.tierLabel} | ${pricing.units} unidade(s) de ${goldShop.GOLD_UNIT}`
+            `${pricing.tierLabel} | ${pricing.units} unit(s) of ${goldShop.GOLD_UNIT}`
         );
 
         // Initialize Mercado Pago if needed
@@ -463,20 +464,20 @@ async function processBuyOrder(interaction, fixedAmount) {
         // ====================================================
         const embedSucesso = new EmbedBuilder()
             .setColor(0x2ECC71)
-            .setTitle('✅ Pedido Gerado com Sucesso!')
+            .setTitle('✅ Order Created Successfully!')
             .setDescription(
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `### 💳 Pagamento PIX\n\n` +
-                `💵 **Valor:** \`R$ ${pricing.totalPrice.toFixed(2)}\`\n` +
-                `🔹 Pague via **QR Code** ou **Copia e Cola**\n\n` +
+                `### 💳 PIX Payment\n\n` +
+                `💵 **Amount:** \`R$ ${pricing.totalPrice.toFixed(2)}\`\n` +
+                `🔹 Pay via **QR Code** or **Copy & Paste**\n\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `### ⏰ Prazo\n\n` +
-                `> **Este pedido expira em 30 minutos!**\n` +
-                `> Após o prazo, o PIX será cancelado automaticamente.\n\n` +
+                `### ⏰ Deadline\n\n` +
+                `> **This order expires in 30 minutes!**\n` +
+                `> After the deadline, the PIX will be automatically cancelled.\n\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `### 📬 Entrega\n\n` +
-                `> 🟢 **Mantenha sua DM aberta** para receber o produto!\n` +
-                `> 📩 Você será notificado assim que o pagamento for confirmado.`
+                `### 📬 Delivery\n\n` +
+                `> 🟢 **Keep your DM open** to receive the product!\n` +
+                `> 📩 You will be notified as soon as the payment is confirmed.`
             );
 
         // ====================================================
@@ -484,19 +485,19 @@ async function processBuyOrder(interaction, fixedAmount) {
         // ====================================================
         const embedInfo = new EmbedBuilder()
             .setColor(0x111214)
-            .setTitle('⭐ Informações do Pedido')
+            .setTitle('⭐ Order Information')
             .setDescription(
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `> **🆔 ${order.orderId}**\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `### 📦 Produto\n` +
+                `### 📦 Product\n` +
                 `> 💛 **${pricing.goldAmount.toLocaleString()} Gold**\n` +
                 `> 📊 ${pricing.tierLabel}\n\n` +
-                `### 💰 Resumo\n`
+                `### 💰 Summary\n`
             )
             .addFields(
                 { name: '💵 Subtotal', value: `\`R$ ${pricing.totalPrice.toFixed(2)}\``, inline: true },
-                { name: '🛒 Valor Total', value: `\`R$ ${pricing.totalPrice.toFixed(2)}\``, inline: true }
+                { name: '🛒 Total', value: `\`R$ ${pricing.totalPrice.toFixed(2)}\``, inline: true }
             );
 
         // ====================================================
@@ -505,19 +506,19 @@ async function processBuyOrder(interaction, fixedAmount) {
         const botoes = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`gold-show-pix-${order.orderId}`)
-                .setLabel('PIX Copia e cola')
+                .setLabel('📋 PIX Copy & Paste')
                 .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId('gold-how-to-open-dm')
-                .setLabel('Como abrir a DM')
+                .setLabel('📬 How to open DM')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
-                .setLabel('Pagar pelo site')
+                .setLabel('🌐 Pay via website')
                 .setURL(pixResult.ticketUrl || 'https://www.mercadopago.com.br/ajuda/pix')
                 .setStyle(ButtonStyle.Link),
             new ButtonBuilder()
                 .setCustomId(`gold-cancel-order-${order.orderId}`)
-                .setLabel('Cancelar')
+                .setLabel('❌ Cancel')
                 .setStyle(ButtonStyle.Danger)
         );
 
@@ -564,16 +565,16 @@ async function processBuyOrder(interaction, fixedAmount) {
                 if (adminChannel) {
                     const adminEmbed = new EmbedBuilder()
                         .setColor(0xFEE75C)
-                        .setTitle('🆕 Novo Pedido!')
+                        .setTitle('🆕 New Order!')
                         .setDescription(
-                            `📋 **Pedido:** ${order.orderId}\n` +
-                            `👤 **Cliente:** <@${interaction.user.id}> (${interaction.user.tag})\n` +
+                            `📋 **Order:** ${order.orderId}\n` +
+                            `👤 **Client:** <@${interaction.user.id}> (${interaction.user.tag})\n` +
                             `💛 **Gold:** ${pricing.goldAmount.toLocaleString()}\n` +
-                            `💰 **Valor:** R$ ${pricing.totalPrice.toFixed(2)}\n` +
+                            `💰 **Amount:** R$ ${pricing.totalPrice.toFixed(2)}\n` +
                             `📊 **Tier:** ${pricing.tierLabel}\n` +
-                            `🎮 **Personagem:** ${characterName}\n` +
-                            `🌍 **Servidor:** ${server}\n` +
-                            `📅 **Data:** ${new Date().toLocaleString('pt-BR')}`
+                            `🎮 **Character:** ${characterName}\n` +
+                            `🌍 **Server:** ${server}\n` +
+                            `📅 **Date:** ${new Date().toLocaleString('pt-BR')}`
                         )
                         .setTimestamp();
 
@@ -601,8 +602,8 @@ async function processBuyOrder(interaction, fixedAmount) {
         // Try to send error feedback — handle AbortError separately
         try {
             const errorMsg = error.name === 'AbortError'
-                ? '❌ Tempo limite excedido. O pedido foi criado! Use /orders para ver seus pedidos e copiar o código PIX.'
-                : `❌ Erro ao criar pedido: ${error.message}`;
+                ? '❌ Time limit exceeded. The order was created! Use /orders to view your orders and copy the PIX code.'
+                : `❌ Error creating order: ${error.message}`;
 
             if (deferred) {
                 await interaction.editReply({ content: errorMsg, flags: 64 });
@@ -624,15 +625,15 @@ async function handleMyOrdersButton(interaction) {
 
     if (orders.length === 0) {
         return interaction.editReply({
-            content: '📭 Você ainda não fez nenhum pedido.',
+            content: '📭 You haven\'t placed any orders yet.',
             flags: 64
         });
     }
 
     const embed = new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setTitle('📋 Meus Pedidos')
-        .setDescription(`Total: **${orders.length}** pedido(s)`)
+        .setTitle('📋 My Orders')
+        .setDescription(`Total: **${orders.length}** order(s)`)
         .setTimestamp();
 
     for (const order of orders.slice(0, 10)) {
@@ -651,7 +652,7 @@ async function handleMyOrdersButton(interaction) {
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('gold-shop-back')
-                    .setLabel('🛒 Voltar à Loja')
+                    .setLabel('🛒 Back to Shop')
                     .setStyle(ButtonStyle.Secondary)
             )
         ],
@@ -685,7 +686,7 @@ async function handleDeliverButton(interaction) {
 
     if (!isAdmin) {
         return interaction.reply({
-            content: '❌ Você não tem permissão para isso.',
+            content: '❌ You don\'t have permission for this.',
             flags: 64
         });
     }
@@ -695,7 +696,7 @@ async function handleDeliverButton(interaction) {
 
     if (!order) {
         return interaction.update({
-            content: '❌ Pedido não encontrado.',
+            content: '❌ Order not found.',
             components: [],
             flags: 64
         });
@@ -703,7 +704,7 @@ async function handleDeliverButton(interaction) {
 
     if (order.status !== 'paid') {
         return interaction.reply({
-            content: `❌ Este pedido está como **${order.status}**.`,
+            content: `❌ This order is currently **${order.status}**.`,
             flags: 64
         });
     }
@@ -716,7 +717,7 @@ async function handleDeliverButton(interaction) {
     }
 
     await interaction.update({
-        content: `✅ Pedido **${orderId}** marcado como entregue!\n💛 -${order.goldAmount.toLocaleString()} gold do estoque.`,
+        content: `✅ Order **${orderId}** marked as delivered!\n💛 -${order.goldAmount.toLocaleString()} gold from stock.`,
         components: [],
         flags: 64
     });
@@ -725,7 +726,7 @@ async function handleDeliverButton(interaction) {
     try {
         const user = await interaction.client.users.fetch(order.userId);
         await user.send({
-            content: `✅ **Pedido ${orderId} Entregue!**\n\n💛 ${order.productName} para o personagem **${order.characterName}** foi entregue com sucesso!\n\n💰 **Valor:** R$ ${order.price.toFixed(2)}\n👑 **Entregue por:** ${interaction.user.tag}\n\nObrigado pela preferência! 🙏`
+            content: `✅ **Order ${orderId} Delivered!**\n\n💛 ${order.productName} for character **${order.characterName}** has been successfully delivered!\n\n💰 **Amount:** R$ ${order.price.toFixed(2)}\n👑 **Delivered by:** ${interaction.user.tag}\n\nThank you for your purchase! 🙏`
         });
     } catch { /* DM might fail */ }
 }
@@ -740,7 +741,7 @@ async function handleAdminMenu(interaction) {
 
     if (!isAdmin) {
         return interaction.reply({
-            content: '❌ Você não tem permissão de administrador.',
+            content: '❌ You don\'t have admin permission.',
             flags: 64
         });
     }
@@ -753,8 +754,8 @@ async function handleAdminMenu(interaction) {
         .setTitle('👑 Admin - Gold Shop')
         .setDescription('Gold Shop administration panel.')
         .addFields(
-            { name: '💛 Estoque', value: `${stock.toLocaleString()} gold`, inline: true },
-            { name: '📊 Estatísticas', value: `📦 ${stats.totalOrders} pedidos | 💰 ${stats.paid} aguardando | ✅ ${stats.delivered} entregues`, inline: false }
+            { name: '💛 Stock', value: `${stock.toLocaleString()} gold`, inline: true },
+            { name: '📊 Statistics', value: `📦 ${stats.totalOrders} orders | 💰 ${stats.paid} awaiting | ✅ ${stats.delivered} delivered`, inline: false }
         )
         .setTimestamp();
 
@@ -793,7 +794,7 @@ async function handleAdminMenu(interaction) {
 async function handleAdminStatsButton(interaction) {
     const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
                     interaction.member.permissions.has('ManageMessages');
-    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+    if (!isAdmin) return interaction.reply({ content: '❌ No permission.', flags: 64 });
 
     const stats = goldShop.getShopStats();
     const stock = goldShop.getGoldStock();
@@ -821,18 +822,21 @@ async function handleAdminStatsButton(interaction) {
 async function handleSetStock(interaction) {
     const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
                     interaction.member.permissions.has('ManageMessages');
-    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+    if (!isAdmin)return interaction.reply({
+            content: '❌ No permission.',
+            flags: 64
+        });
 
     const currentStock = goldShop.getGoldStock();
 
     const modal = new ModalBuilder()
         .setCustomId('gold-modal-set-stock')
-        .setTitle('💛 Gerenciar Estoque');
+        .setTitle('💛 Manage Stock');
 
     const stockInput = new TextInputBuilder()
         .setCustomId('gold-stock-amount')
-        .setLabel('Quantidade total de gold disponível')        
-        .setPlaceholder(`Atual: ${currentStock.toLocaleString()}`)
+        .setLabel('Total amount of gold available')        
+        .setPlaceholder(`Current: ${currentStock.toLocaleString()}`)
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
@@ -843,19 +847,19 @@ async function handleSetStock(interaction) {
 async function handleSetStockModal(interaction) {
     const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
                     interaction.member.permissions.has('ManageMessages');
-    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+    if (!isAdmin) return interaction.reply({ content: '❌ No permission.', flags: 64 });
 
     const amountStr = interaction.fields.getTextInputValue('gold-stock-amount').trim().replace(/\./g, '').replace(/,/g, '');
     const amount = parseInt(amountStr, 10);
 
     if (isNaN(amount) || amount < 0) {
-        return interaction.reply({ content: '❌ Valor inválido.', flags: 64 });
+        return interaction.reply({ content: '❌ Invalid value.', flags: 64 });
     }
 
     goldShop.setGoldStock(amount);
 
     await interaction.reply({
-        content: `✅ Estoque atualizado para **${amount.toLocaleString()} gold**!\n🔄 Use **Atualizar Painel** para refletir no painel público.`,
+        content: `✅ Stock updated to **${amount.toLocaleString()} gold**!\n🔄 Use **Refresh Panel** to update the public panel.`,
         flags: 64
     });
 }
@@ -867,18 +871,18 @@ async function handleSetStockModal(interaction) {
 async function handleAdminPendingButton(interaction) {
     const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
                     interaction.member.permissions.has('ManageMessages');
-    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+    if (!isAdmin) return interaction.reply({ content: '❌ No permission.', flags: 64 });
 
     const pendingOrders = goldShop.getPendingOrders();
 
     if (pendingOrders.length === 0) {
-        return interaction.reply({ content: '✅ Nenhum pedido aguardando entrega!', flags: 64 });
+        return interaction.reply({ content: '✅ No orders awaiting delivery!', flags: 64 });
     }
 
     const embed = new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setTitle('📋 Pedidos Aguardando Entrega')
-        .setDescription(`**${pendingOrders.length}** pedido(s) pago(s) aguardando entrega.`)
+        .setTitle('📋 Orders Awaiting Delivery')
+        .setDescription(`**${pendingOrders.length}** paid order(s) awaiting delivery.`)
         .setTimestamp();
 
     for (const order of pendingOrders.slice(0, 5)) {
@@ -893,7 +897,7 @@ async function handleAdminPendingButton(interaction) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`gold-deliver-${order.orderId}`)
-                .setLabel(`✅ Entregar ${order.orderId}`)
+                .setLabel(`✅ Deliver ${order.orderId}`)
                 .setStyle(ButtonStyle.Success)
         )
     );
@@ -908,28 +912,28 @@ async function handleAdminPendingButton(interaction) {
 async function handleRefreshPanel(interaction) {
     const isAdmin = interaction.member.roles.cache.has(process.env.GOLD_ADMIN_ROLE_ID || '') ||
                     interaction.member.permissions.has('ManageMessages');
-    if (!isAdmin) return interaction.reply({ content: '❌ Sem permissão.', flags: 64 });
+    if (!isAdmin) return interaction.reply({ content: '❌ No permission.', flags: 64 });
 
     const panelRef = goldShop.getPanelRef();
     if (!panelRef) {
-        return interaction.reply({ content: '❌ Nenhum painel gold encontrado. Use `!goldshop` para criar um.', flags: 64 });
+        return interaction.reply({ content: '❌ No gold panel found. Use `!goldshop` to create one.', flags: 64 });
     }
 
     await interaction.deferReply({ flags: 64 });
 
     try {
         const channel = await interaction.client.channels.fetch(panelRef.channelId);
-        if (!channel) throw new Error('Canal não encontrado');
+        if (!channel) throw new Error('Channel not found');
 
         const msg = await channel.messages.fetch(panelRef.messageId);
-        if (!msg) throw new Error('Mensagem não encontrada');
+        if (!msg) throw new Error('Message not found');
 
         await msg.edit({ embeds: [buildGoldPanelEmbed()], components: buildGoldPanelButtons() });
 
-        await interaction.editReply({ content: '✅ Painel gold shop atualizado com sucesso!', flags: 64 });
+        await interaction.editReply({ content: '✅ Gold shop panel updated successfully!', flags: 64 });
     } catch (err) {
         goldShop.clearPanelRef();
-        await interaction.editReply({ content: `❌ Erro ao atualizar painel: ${err.message}. Use \`!goldshop\` para recriar.`, flags: 64 });
+        await interaction.editReply({ content: `❌ Error updating panel: ${err.message}. Use \`!goldshop\` to recreate.`, flags: 64 });
     }
 }
 
@@ -965,11 +969,11 @@ async function handleShowPixCode(interaction) {
     const orderId = interaction.customId.replace('gold-show-pix-', '');
     const order = goldShop.getOrder(orderId);
     if (!order || !order.pixCopiaCola) {
-        return interaction.reply({ content: '❌ Código PIX não encontrado para este pedido.', flags: 64 });
+        return interaction.reply({ content: '❌ PIX code not found for this order.', flags: 64 });
     }
 
     if (order.userId !== interaction.user.id) {
-        return interaction.reply({ content: '❌ Este pedido não pertence a você.', flags: 64 });
+        return interaction.reply({ content: '❌ This order does not belong to you.', flags: 64 });
     }
 
     const modal = new ModalBuilder()
@@ -978,7 +982,7 @@ async function handleShowPixCode(interaction) {
 
     const pixInput = new TextInputBuilder()
         .setCustomId('gold-pix-code')
-        .setLabel('📋 Código PIX (Copie e Cole no app do banco)')
+        .setLabel('📋 PIX Code (Copy & Paste into banking app)')
         .setValue(order.pixCopiaCola)
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false);
@@ -997,7 +1001,7 @@ async function handleRefreshOrder(interaction) {
 
     if (!order) {
         return interaction.reply({
-            content: '❌ Pedido não encontrado.',
+            content: '❌ Order not found.',
             flags: 64
         });
     }
@@ -1005,7 +1009,7 @@ async function handleRefreshOrder(interaction) {
     // Only the order owner can refresh
     if (order.userId !== interaction.user.id) {
         return interaction.reply({
-            content: '❌ Este pedido não pertence a você.',
+            content: '❌ This order does not belong to you.',
             flags: 64
         });
     }
@@ -1021,11 +1025,11 @@ async function handleRefreshOrder(interaction) {
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId(`gold-refresh-order-${order.orderId}`)
-                        .setLabel('🔄 Atualizar Status')
+                        .setLabel('🔄 Refresh Status')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId(`gold-cancel-order-${order.orderId}`)
-                        .setLabel('❌ Cancelar Pedido')
+                        .setLabel('❌ Cancel Order')
                         .setStyle(ButtonStyle.Danger)
                 )
             ]
@@ -1044,29 +1048,29 @@ async function handleCancelOrderButton(interaction) {
 
     if (!order) {
         return interaction.reply({
-            content: '❌ Pedido não encontrado.',
+            content: '❌ Order not found.',
             flags: 64
         });
     }
 
     if (order.userId !== interaction.user.id) {
         return interaction.reply({
-            content: '❌ Este pedido não pertence a você.',
+            content: '❌ This order does not belong to you.',
             flags: 64
         });
     }
 
     if (order.status !== 'pending') {
         return interaction.reply({
-            content: `❌ Não é possível cancelar um pedido com status **${order.status}**.`,
+            content: `❌ Cannot cancel an order with status **${order.status}**.`,
             flags: 64
         });
     }
 
-    goldShop.cancelOrder(orderId, 'Cancelado pelo comprador');
+    goldShop.cancelOrder(orderId, 'Cancelled by buyer');
 
     await interaction.update({
-        content: `✅ Pedido **${orderId}** cancelado com sucesso!`,
+        content: `✅ Order **${orderId}** cancelled successfully!`,
         components: [],
         flags: 64
     });

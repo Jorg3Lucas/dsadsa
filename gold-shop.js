@@ -164,7 +164,7 @@ export function markOrderAsDelivered(orderId, deliveredBy) {
 }
 
 /** Cancel an order */
-export function cancelOrder(orderId, reason = 'Cancelado pelo admin') {
+export function cancelOrder(orderId, reason = 'Cancelled by admin') {
     const order = goldDb.orders[orderId];
     if (!order) throw new Error('Order not found.');
     if (order.status === 'delivered') {
@@ -224,7 +224,7 @@ export function updateOrderNotes(orderId, notes) {
 // 💰 GOLD STOCK & PRICING
 // ==========================================
 
-// 1 "k" no jogo = 1053 gold
+// 1 "k" in game = 1053 gold
 // Tiers use multiples of GOLD_UNIT:
 //   ≤ 5k (5×1053 = 5265 gold):  R$ 18,00 / 1053
 //   ≤ 10k (10×1053 = 10530 gold): R$ 17,00 / 1053
@@ -299,7 +299,7 @@ export function getPricingInfo() {
     const fiveK = 5 * GOLD_UNIT;
     const tenK = 10 * GOLD_UNIT;
     return [
-        { label: `💵 Até 5k (${fiveK.toLocaleString()} gold)`, price: 'R$ 18,00', per: '1k (1053 gold)' },
+        { label: `💵 Up to 5k (${fiveK.toLocaleString()} gold)`, price: 'R$ 18,00', per: '1k (1053 gold)' },
         { label: `💰 De 5k a 10k (${fiveK.toLocaleString()} a ${tenK.toLocaleString()} gold)`, price: 'R$ 17,00', per: '1k (1053 gold)' },
         { label: '💎 Above 10k (10,530+ gold)', price: 'R$ 16.50', per: '1k (1053 gold)' }
     ];
@@ -483,21 +483,21 @@ export async function sendDailySalesReport(client) {
 
         const embed = new EmbedBuilder()
             .setColor(0xFFD700)
-            .setTitle('📊 Resumo Diário — Gold Shop')
+            .setTitle('📊 Daily Report — Gold Shop')
             .setDescription(`📅 **${today}**`)
             .addFields(
-                { name: '━━━ 📦 Hoje ━━━', value: '\u200B', inline: false },
-                { name: '💛 Gold Vendido', value: `${(stats.goldSoldToday / 1000000).toFixed(2)}M`, inline: true },
-                { name: '💰 Faturamento', value: `R$ ${stats.revenueToday.toFixed(2)}`, inline: true },
-                { name: '✅ Entregues', value: String(stats.deliveredCount), inline: true },
-                { name: '⏳ Aguardando Entrega', value: String(stats.paidCount), inline: true },
-                { name: '📦 Pedidos Hoje', value: String(stats.totalToday), inline: true },
-                { name: '❌ Cancelados Hoje', value: String(stats.cancelledToday), inline: true },
-                { name: '━━━ 📊 Totais Gerais ━━━', value: '\u200B', inline: false },
-                { name: '💛 Total Vendido', value: `${(stats.totalGoldSold / 1000000).toFixed(2)}M`, inline: true },
-                { name: '💰 Receita Total', value: `R$ ${stats.totalRevenue.toFixed(2)}`, inline: true },
-                { name: '📦 Total Pedidos', value: String(stats.totalOrders), inline: true },
-                { name: '💛 Estoque Atual', value: `${stats.goldStock.toLocaleString()} gold`, inline: true }
+                { name: '━━━ 📦 Today ━━━', value: '\u200B', inline: false },
+                { name: '💛 Gold Sold', value: `${(stats.goldSoldToday / 1000000).toFixed(2)}M`, inline: true },
+                { name: '💰 Revenue', value: `R$ ${stats.revenueToday.toFixed(2)}`, inline: true },
+                { name: '✅ Delivered', value: String(stats.deliveredCount), inline: true },
+                { name: '⏳ Awaiting Delivery', value: String(stats.paidCount), inline: true },
+                { name: '📦 Orders Today', value: String(stats.totalToday), inline: true },
+                { name: '❌ Cancelled Today', value: String(stats.cancelledToday), inline: true },
+                { name: '━━━ 📊 Overall Totals ━━━', value: '\u200B', inline: false },
+                { name: '💛 Total Sold', value: `${(stats.totalGoldSold / 1000000).toFixed(2)}M`, inline: true },
+                { name: '💰 Total Revenue', value: `R$ ${stats.totalRevenue.toFixed(2)}`, inline: true },
+                { name: '📦 Total Orders', value: String(stats.totalOrders), inline: true },
+                { name: '💛 Current Stock', value: `${stats.goldStock.toLocaleString()} gold`, inline: true }
             )
             .setTimestamp();
 
@@ -640,15 +640,15 @@ export async function sendPaymentConfirmationDm(client, order, orderId, paymentI
         if (user) {
             const dmEmbed = new EmbedBuilder()
                 .setColor(0x57F287)
-                .setTitle('✅ Pagamento Confirmado!')
+                .setTitle('✅ Payment Confirmed!')
                 .setDescription(
-                    `📋 **Pedido:** ${orderId}\\n` +
-                    `💛 **Produto:** ${order.productName}\\n` +
-                    `💰 **Valor:** R$ ${order.price.toFixed(2)}\\n` +
-                    `💳 **Pagamento:** Confirmado via PIX\\n` +
-                    `🆔 **Transação:** ${paymentId || order.paymentId || 'N/A'}\\n\\n` +
-                    `⏳ **Próximo passo:** Nossa equipe fará a entrega no jogo em breve!\\n` +
-                    `📌 Você será notificado quando o gold for entregue.`
+                    `📋 **Order:** ${orderId}\\n` +
+                    `💛 **Product:** ${order.productName}\\n` +
+                    `💰 **Amount:** R$ ${order.price.toFixed(2)}\\n` +
+                    `💳 **Payment:** Confirmed via PIX\\n` +
+                    `🆔 **Transaction:** ${paymentId || order.paymentId || 'N/A'}\\n\\n` +
+                    `⏳ **Next step:** Our team will deliver in-game soon!\\n` +
+                    `📌 You will be notified when the gold is delivered.`
                 )
                 .setTimestamp();
 
@@ -675,17 +675,17 @@ export async function sendPaymentToAdminChannel(client, order, orderId) {
 
         const adminEmbed = new EmbedBuilder()
             .setColor(0x57F287)
-            .setTitle('💳 Pagamento Confirmado!')
+            .setTitle('💳 Payment Confirmed!')
             .setDescription(
-                `📋 **Pedido:** ${orderId}\\n` +
-                `👤 **Cliente:** <@${order.userId}> (${order.userName})\\n` +
+                `📋 **Order:** ${orderId}\\n` +
+                `👤 **Client:** <@${order.userId}> (${order.userName})\\n` +
                 `💛 **Gold:** ${order.goldAmount.toLocaleString()}\\n` +
-                `💰 **Valor:** R$ ${order.price.toFixed(2)}\\n` +
-                `🎮 **Personagem:** ${order.characterName}\\n` +
-                `🌍 **Servidor:** ${order.server}\\n` +
-                `✅ **Status:** Pago — Aguardando Entrega\\n` +
-                `📅 **Confirmado em:** ${new Date().toLocaleString('pt-BR')}\\n\\n` +
-                `🔜 Use o painel 👑 Admin > 📋 Pedidos para entregar o gold.`
+                `💰 **Amount:** R$ ${order.price.toFixed(2)}\\n` +
+                `🎮 **Character:** ${order.characterName}\\n` +
+                `🌍 **Server:** ${order.server}\\n` +
+                `✅ **Status:** Paid — Awaiting Delivery\\n` +
+                `📅 **Confirmed at:** ${new Date().toLocaleString('pt-BR')}\\n\\n` +
+                `🔜 Use the 👑 Admin > 📋 Orders panel to deliver the gold.`
             )
             .setTimestamp();
 

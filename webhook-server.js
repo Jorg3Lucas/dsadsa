@@ -226,13 +226,13 @@ async function notifyPaymentConfirmed(order, orderId, paymentId) {
         if (user) {
             const dmEmbed = new EmbedBuilder()
                 .setColor(0x57F287)
-                .setTitle('✅ Pagamento Confirmado!')
+                .setTitle('✅ Payment Confirmed!')
                 .setDescription(
-                    `📋 **Pedido:** ${orderId}\\n` +
-                    `💛 **Produto:** ${order.productName}\\n` +
-                    `💰 **Valor:** R$ ${order.price.toFixed(2)}\\n` +
-                    `💳 **Pagamento:** Confirmado via PIX\\n` +
-                    `🆔 **Transação:** ${paymentId}\\n\\n` +
+                    `📋 **Order:** ${orderId}\\n` +
+                    `💛 **Product:** ${order.productName}\\n` +
+                    `💰 **Amount:** R$ ${order.price.toFixed(2)}\\n` +
+                    `💳 **Payment:** Confirmed via PIX\\n` +
+                    `🆔 **Transaction:** ${paymentId}\\n\\n` +
                     `⏳ **Next step:** Our team will deliver in-game soon!\\n` +
                     `📌 You'll be notified when the gold is delivered.`
                 )
@@ -264,15 +264,15 @@ async function notifyAdminChannel(order, orderId) {
             .setColor(0x57F287)
             .setTitle('💳 Payment Confirmed — Auto!')
             .setDescription(
-                `📋 **Pedido:** ${orderId}\\n` +
-                `👤 **Cliente:** <@${order.userId}> (${order.userName})\\n` +
+                `📋 **Order:** ${orderId}\\n` +
+                `👤 **Client:** <@${order.userId}> (${order.userName})\\n` +
                 `💛 **Gold:** ${order.goldAmount.toLocaleString()}\\n` +
-                `💰 **Valor:** R$ ${order.price.toFixed(2)}\\n` +
-                `🎮 **Personagem:** ${order.characterName}\\n` +
-                `🌍 **Servidor:** ${order.server}\\n` +
-                `✅ **Status:** Pago — Aguardando Entrega\\n` +
-                `📅 **Confirmado em:** ${new Date().toLocaleString('pt-BR')}\\n\\n` +
-                `🔜 Use o painel 👑 Admin > 📋 Pedidos para entregar o gold.`
+                `💰 **Amount:** R$ ${order.price.toFixed(2)}\\n` +
+                `🎮 **Character:** ${order.characterName}\\n` +
+                `🌍 **Server:** ${order.server}\\n` +
+                `✅ **Status:** Paid — Awaiting Delivery\\n` +
+                `📅 **Confirmed at:** ${new Date().toLocaleString('pt-BR')}\\n\\n` +
+                `🔜 Use the 👑 Admin > 📋 Orders panel to deliver the gold.`
             )
             .setTimestamp();
 
