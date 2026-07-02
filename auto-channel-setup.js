@@ -72,7 +72,8 @@ function buildCategoryConfig() {
 
             config[catId] = {
                 name: `${floorKey} (${server.name})`,
-                channels: layout
+                channels: layout,
+                serverId: serverId  // Store server ID for key prefixing
             };
 
             console.log(`📁 [Auto Setup] Server "${server.name}" → ${floorKey}: category ${catId}`);
@@ -121,6 +122,9 @@ export async function setupAllChannels(client, guildId) {
             console.error(`❌ [Auto Setup] ${catConfig.name} (${catId}) is not a category (type=${category.type}). Use a valid category ID.`);
             continue;
         }
+        
+        // Determine which server this category belongs to
+        const catServerId = catConfig.serverId || null;
 
         // ── Delete all existing text channels in this category ──
         const existingChannels = guild.channels.cache.filter(
@@ -159,31 +163,33 @@ export async function setupAllChannels(client, guildId) {
 
             // ── Send panel messages ──
             for (const panelKey of chanDef.panels) {
-                if (!db[panelKey]) {
-                    console.warn(`⚠️ [Auto Setup] Panel ${panelKey} not in DB, skipping.`);
+                // Use server-prefixed key
+                const fullKey = catServerId ? `${catServerId}_${panelKey}` : panelKey;
+                if (!db[fullKey]) {
+                    console.warn(`⚠️ [Auto Setup] Panel ${fullKey} not in DB, skipping.`);
                     continue;
                 }
                 try {
                     const sent = await newChannel.send({
-                        embeds: [renderEmbed(panelKey)],
-                        components: renderButtons(panelKey)
+                        embeds: [renderEmbed(fullKey)],
+                        components: renderButtons(fullKey)
                     });
-                    lastMessages[panelKey] = sent;
+                    lastMessages[fullKey] = sent;
                     if (!db._panelMapping) db._panelMapping = {};
-                    db._panelMapping[panelKey] = {
+                    db._panelMapping[fullKey] = {
                         channelId: newChannel.id,
                         messageId: sent.id
                     };
                     // Store ALL instances for multi-server panel refresh support
                     if (!db._panelInstances) db._panelInstances = {};
-                    if (!db._panelInstances[panelKey]) db._panelInstances[panelKey] = [];
-                    db._panelInstances[panelKey].push({
+                    if (!db._panelInstances[fullKey]) db._panelInstances[fullKey] = [];
+                    db._panelInstances[fullKey].push({
                         channelId: newChannel.id,
                         messageId: sent.id
                     });
-                    console.log(`📋 [Auto Setup] Panel ${panelKey} sent to #${chanDef.name} (instance #${db._panelInstances[panelKey].length}).`);
+                    console.log(`📋 [Auto Setup] Panel ${fullKey} sent to #${chanDef.name} (instance #${db._panelInstances[fullKey].length}).`);
                 } catch (err) {
-                    console.error(`❌ [Auto Setup] Failed to send ${panelKey} in #${chanDef.name}: ${err.message}`);
+                    console.error(`❌ [Auto Setup] Failed to send ${fullKey} in #${chanDef.name}: ${err.message}`);
                 }
             }
         }

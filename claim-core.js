@@ -3,6 +3,7 @@ import { db, rankingDb, punishments, saveLocalStorage, savePunishmentsToDisk, lo
 import { notifyUserDM } from "./panel-utils.js";
 import { getMsg } from "./lang.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN } from "./constants.js";
+import { stripPrefix } from "./claim-resolver.js";
 
 // ==========================================
 // 🧠 CLAIM / QUEUE / PUNISHMENT LOGIC
@@ -43,11 +44,13 @@ export function getEventGroupKeys(current) {
 
 // Returns room keys for a summon panel based on its key
 export function getSummonRoomKeys(panelKey) {
+    // Strip server prefix for pattern matching
+    const baseKey = stripPrefix(panelKey);
     // Individual goblin panels (each has its own single room)
-    if (panelKey === "11goblin") return ["sp11"];
-    if (panelKey === "12goblin") return ["sp12"];
-    if (panelKey === "11msgoblin") return ["ms11"];
-    if (panelKey === "12msgoblin") return ["ms12"];
+    if (baseKey === "11goblin") return ["sp11"];
+    if (baseKey === "12goblin") return ["sp12"];
+    if (baseKey === "11msgoblin") return ["ms11"];
+    if (baseKey === "12msgoblin") return ["ms12"];
     // Combined summon panel uses the default rooms
     return SUMMON_PROPS_INTERNAL;
 }

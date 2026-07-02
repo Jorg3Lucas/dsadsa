@@ -6,6 +6,33 @@
 import { getMsg } from "../lang.js";
 import { db, lastMessages, defaultFloors, saveLocalStorage } from "../state.js";
 import { renderEmbed, renderButtons } from "../panel-render.js";
+import { getAllServerKeys } from "../claim-resolver.js";
+
+// ==========================================
+// 🔧 Helper: resolve panel key for current channel
+// ==========================================
+
+function resolvePanelKey(baseKey, channel) {
+    const keys = getAllServerKeys(baseKey);
+    if (keys.length <= 1) return baseKey; // No multi-server config, use legacy
+    
+    // Try to match by channel's parent category to find the correct server
+    if (channel?.parentId) {
+        // We can't easily reverse-map category ID to server prefix here,
+        // but we can check which prefixed key has a mapping in this channel
+        for (const k of keys) {
+            const mapping = db._panelMapping?.[k];
+            if (mapping && mapping.channelId === channel.id) return k;
+        }
+    }
+    
+    // Fallback: return the first prefixed key that exists in db
+    for (const k of keys) {
+        if (db[k]) return k;
+    }
+    // Fallback to first server's key
+    return keys[0];
+}
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -43,7 +70,8 @@ async function handleMS(msg, lowerContent) {
             `${sub}msgoblin`
         ];
         db._panelMapping || (db._panelMapping = {});
-        for (let item of list) {
+        for (let rawItem of list) {
+            const item = resolvePanelKey(rawItem, msg);
             if (db._panelMapping[item] && db._panelMapping[item].channelId === msg.channel.id) {
                 try {
                     let oldMsg = await msg.channel.messages.fetch(db._panelMapping[item].messageId).catch(() => null);
@@ -69,14 +97,14 @@ async function handleMS(msg, lowerContent) {
     // MS7 - MS10
     if (!defaultFloors.includes(sub)) return;
 
-    let norm = `${sub}squarenormal`;
+    let norm = resolvePanelKey(`${sub}squarenormal`, msg);
 
     // MS9 and MS10 have two antidemon panels (1-1 and 1-2)
     let antiKeys;
     if (sub === "9" || sub === "10") {
-        antiKeys = [`${sub}squareantidemon11`, `${sub}squareantidemon12`];
+        antiKeys = [resolvePanelKey(`${sub}squareantidemon11`, msg), resolvePanelKey(`${sub}squareantidemon12`, msg)];
     } else {
-        antiKeys = [`${sub}squareantidemon`];
+        antiKeys = [resolvePanelKey(`${sub}squareantidemon`, msg)];
     }
 
     db._panelMapping || (db._panelMapping = {});
@@ -117,6 +145,8 @@ async function handleMS(msg, lowerContent) {
     try { await msg.delete() } catch (L) {}
 }
 
+
+
 // ==========================================
 // 🗻 !SP COMMAND (Secret Peak panels)
 // ==========================================
@@ -126,7 +156,7 @@ async function handleSP(msg, lowerContent) {
     
     // SP11 / SP12 — same as regular SP peaks (7-10)
     if ("11" === floorNum || "12" === floorNum) {
-        let pKey = `${floorNum}peak`;
+        let pKey = resolvePanelKey(`${floorNum}peak`, msg);
         db._panelMapping || (db._panelMapping = {});
         if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
             try {
@@ -146,7 +176,7 @@ async function handleSP(msg, lowerContent) {
     
     // SP12 also deploys the Random Event panel in the same channel
     if (floorNum === "12") {
-        const rKey = "12randomevent";
+        const rKey = resolvePanelKey("12randomevent", msg);
         if (db._panelMapping[rKey] && db._panelMapping[rKey].channelId === msg.channel.id) {
             try {
                 let oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
@@ -163,8 +193,7 @@ async function handleSP(msg, lowerContent) {
         db._panelInstances[rKey].push({ channelId: msg.channel.id, messageId: rMsg.id });
     }
     
-    // Deploy goblin panel in the same channel for SP11 and SP12
-    const gKey = `${floorNum}goblin`;
+    // Deploy goblin panel in the same channel for SP11 and SP12        const gKey = resolvePanelKey(`${floorNum}goblin`, msg);
     if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
         try {
             let oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
@@ -187,7 +216,7 @@ async function handleSP(msg, lowerContent) {
 
     if (!defaultFloors.includes(floorNum)) return;
 
-    let pKey = `${floorNum}peak`;
+    let pKey = resolvePanelKey(`${floorNum}peak`, msg);
     db._panelMapping || (db._panelMapping = {});
 
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
@@ -215,7 +244,7 @@ async function handleSP(msg, lowerContent) {
 // ==========================================
 
 async function handleSummon(msg) {
-    let pKey = "summon";
+    let pKey = resolvePanelKey("summon", msg);
     db._panelMapping || (db._panelMapping = {});
 
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {

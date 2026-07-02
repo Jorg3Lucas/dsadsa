@@ -3,6 +3,7 @@ import { getMsg } from "./lang.js";
 import { db, client, saveLocalStorage, logEvent, lastMessages } from "./state.js";
 import { renderEmbed, renderButtons, getEmbedColor } from "./panel-render.js";
 import { STATUS_AVAILABLE, STATUS_KILLED, STATUS_KILLED_PREFIX } from "./constants.js";
+import { stripPrefix, getActiveServerIds } from "./claim-resolver.js";
 
 // ==========================================
 // 📡 PANEL UPDATE & NOTIFICATIONS
@@ -66,11 +67,14 @@ export function resetPanelData(key) {
     let oldMapping = db._panelMapping ? db._panelMapping[key] : null;
     delete db[key];
     
+    // Use base key (strip server prefix) for structure detection
+    const baseKey = stripPrefix(key);
+    
     // Re-initialize using the same logic as initClaimSystem
-    let isPeak = key.match(/^(\d+)peak$/),
-        isNormal = key.match(/^(\d+)squarenormal$/),
-        isAnti = key.match(/^(\d+)squareantidemon(\d+)?$/),
-        is11or12 = key.match(/^(11|12)square(leaders|events)$/);
+    let isPeak = baseKey.match(/^(\d+)peak$/),
+        isNormal = baseKey.match(/^(\d+)squarenormal$/),
+        isAnti = baseKey.match(/^(\d+)squareantidemon(\d+)?$/),
+        is11or12 = baseKey.match(/^(11|12)square(leaders|events)$/);
     
     if (isPeak) {
         let floor = isPeak[1];
@@ -132,7 +136,7 @@ export function resetPanelData(key) {
                 right: { name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" }
             };
         }
-    } else if (key === "12randomevent") {
+    } else if (baseKey === "12randomevent") {
         db[key] = {
             type: "fixed",
             title: "🎲 Random Event (SP12)",
@@ -141,19 +145,19 @@ export function resetPanelData(key) {
             schedules: [3, 9, 15, 21],
             scheduleMinutes: 0
         };
-    } else if (key === "11goblin") {
+    } else if (baseKey === "11goblin") {
         db[key] = { type: "summon", title: "⭐ SP 11F Goblin",
             sp11: { name: "⭐ SP 11F Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-    } else if (key === "12goblin") {
+    } else if (baseKey === "12goblin") {
         db[key] = { type: "summon", title: "⭐ SP 12F Goblin",
             sp12: { name: "⭐ SP 12F Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-    } else if (key === "11msgoblin") {
+    } else if (baseKey === "11msgoblin") {
         db[key] = { type: "summon", title: "👹 MS 11 Goblin",
             ms11: { name: "👹 MS 11 Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-    } else if (key === "12msgoblin") {
+    } else if (baseKey === "12msgoblin") {
         db[key] = { type: "summon", title: "👹 MS 12 Goblin",
             ms12: { name: "👹 MS 12 Goblin", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-    } else if ("summon" === key) {
+    } else if ("summon" === baseKey) {
         db[key] = {
             type: "summon",            title: "🌀 Summon Locations",
             sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
@@ -305,10 +309,26 @@ export function migrateSPLegacyToUnified() {
     // Phase 1 (removed): Legacy goblin panels (11goblin/12goblin) are now valid individual panels, keep them.
 
     // Phase 2: Migrate old unified event_group "11"/"12" → "11peak"/"12peak" peak type
-    [
+    // Check both bare keys and server-prefixed keys
+    const peakPairs = [
         { oldKey: "11", newKey: "11peak" },
         { oldKey: "12", newKey: "12peak" }
-    ].forEach(({ oldKey, newKey }) => {
+    ];
+    
+    // First, handle bare keys (legacy)
+    peakPairs.forEach(({ oldKey, newKey }) => {
+        migratePeakPair(oldKey, newKey);
+    });
+    
+    // Then, handle server-prefixed keys
+    const serverIds = getActiveServerIds();
+    for (const sid of serverIds) {
+        peakPairs.forEach(({ oldKey, newKey }) => {
+            migratePeakPair(`${sid}_${oldKey}`, `${sid}_${newKey}`);
+        });
+    }
+    
+    function migratePeakPair(oldKey, newKey) {
         const oldPanel = db[oldKey];
         const newPanel = db[newKey];
 
@@ -342,24 +362,22 @@ export function migrateSPLegacyToUnified() {
         delete lastMessages[oldKey];
         if (db._panelMapping) delete db._panelMapping[oldKey];
         logEvent(`Removed old event_group panel ${oldKey} from DB.`);
-    });
+    }
 
     // Phase 3: Clean up any leftover old peak keys that shouldn't be there
-    ["11peak", "12peak"].forEach(key => {
+    const cleanPeak = (key) => {
         if (db[key] && db[key].type === "peak") {
             // SP11/SP12 only have left/red/right (no plant/ore)
             const p = db[key];
-            const requiredRooms = ["left", "red", "right"];
-            let needsFix = false;
-            for (const room of requiredRooms) {
-                if (!p[room] || typeof p[room] !== "object") {
-                    needsFix = true;
-                    break;
-                }
-            }
             // Ensure plant/ore are removed if present
             if (p.plant) delete p.plant;
             if (p.ore) delete p.ore;
+        }
+    };
+    ["11peak", "12peak"].forEach(key => {
+        cleanPeak(key);
+        for (const sid of serverIds) {
+            cleanPeak(`${sid}_${key}`);
         }
     });
 
@@ -376,167 +394,179 @@ export function migrateSPLegacyToUnified() {
 
 export function migrateMS1112() {
     let migrated = 0;
+    const serverIds = getActiveServerIds();
+    
+    // Helper: generate both bare and prefixed key variants
+    function* eachKey(baseKey) {
+        yield baseKey;
+        for (const sid of serverIds) {
+            yield `${sid}_${baseKey}`;
+        }
+    }
 
     // === 1. Leaders panels (boss1/boss2/boss3) ===
     for (let floor of ["11", "12"]) {
-        const key = `${floor}squareleaders`;
-        if (!db[key]) {
-            db[key] = {
-                type: "normal",
-                title: `Magic Square ${floor}F - Leaders`,
-                timeWindow: "", next: null, ownerId: null, ownerName: null,
-                boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
-                boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-                boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" }
-            };
-            migrated++;
-            logEvent(`Created missing MS${floor} leaders panel.`);
+        for (const key of eachKey(`${floor}squareleaders`)) {
+            if (!db[key]) {
+                db[key] = {
+                    type: "normal",
+                    title: `Magic Square ${floor}F - Leaders`,
+                    timeWindow: "", next: null, ownerId: null, ownerName: null,
+                    boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
+                    boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
+                    boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" }
+                };
+                migrated++;
+                logEvent(`Created missing MS${floor} leaders panel: ${key}`);
+            }
         }
     }
 
     // === 2. Event panels (Fury + Frenzy event_group) ===
     for (let floor of ["11", "12"]) {
-        const key = `${floor}squareevents`;
-        if (!db[key]) {
-            db[key] = {
-                type: "event_group",
-                title: `Magic Square ${floor}F - Events`,
-                fury: {
-                    name: "🔴 Fury", type: "fixed",
-                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                    timeWindow: "", _claimTimestamp: null,
-                    schedules: [0, 3, 6, 9, 12, 15, 18, 21],
-                    scheduleMinutes: 30
-                },
-                frenzy: {
-                    name: "🟣 Frenzy", type: "fixed",
-                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                    timeWindow: "", _claimTimestamp: null,
-                    schedules: [2, 5, 8, 11, 14, 17, 20, 23]
-                }
-            };
-            migrated++;
-            logEvent(`Created missing MS${floor} events panel.`);
+        for (const key of eachKey(`${floor}squareevents`)) {
+            if (!db[key]) {
+                db[key] = {
+                    type: "event_group",
+                    title: `Magic Square ${floor}F - Events`,
+                    fury: {
+                        name: "🔴 Fury", type: "fixed",
+                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                        timeWindow: "", _claimTimestamp: null,
+                        schedules: [0, 3, 6, 9, 12, 15, 18, 21],
+                        scheduleMinutes: 30
+                    },
+                    frenzy: {
+                        name: "🟣 Frenzy", type: "fixed",
+                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                        timeWindow: "", _claimTimestamp: null,
+                        schedules: [2, 5, 8, 11, 14, 17, 20, 23]
+                    }
+                };
+                migrated++;
+                logEvent(`Created missing MS${floor} events panel: ${key}`);
+            }
         }
     }
 
     // === 3. Antidemon panels (9-room format for MS11/MS12) ===
     for (let floor of ["11", "12"]) {
-        const key = `${floor}squareantidemon`;
-        const existing = db[key];
+        for (const key of eachKey(`${floor}squareantidemon`)) {
+            const existing = db[key];
 
-        if (!existing) {
-            // Panel doesn't exist — create fresh
-            const rooms = {};
-            const versions = ["1-1", "1-2", "1-3"];
-            const sides = [
-                { k: "l", n: "LEFT" },
-                { k: "m", n: "MID" },
-                { k: "r", n: "RIGHT" }
-            ];
-            versions.forEach(ver => {
-                sides.forEach(side => {
-                    const rk = `v${ver.replace("1-", "")}${side.k}`;
-                    rooms[rk] = {
-                        name: `${ver} ${side.n}`,
-                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                        time: "", timeWindow: "", nextId: null, nextName: null,
-                        formattedTimeNext: "", endLimit: null, password: ""
-                    };
+            if (!existing) {
+                // Panel doesn't exist — create fresh
+                const rooms = {};
+                const versions = ["1-1", "1-2", "1-3"];
+                const sides = [
+                    { k: "l", n: "LEFT" },
+                    { k: "m", n: "MID" },
+                    { k: "r", n: "RIGHT" }
+                ];
+                versions.forEach(ver => {
+                    sides.forEach(side => {
+                        const rk = `v${ver.replace("1-", "")}${side.k}`;
+                        rooms[rk] = {
+                            name: `${ver} ${side.n}`,
+                            status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                            time: "", timeWindow: "", nextId: null, nextName: null,
+                            formattedTimeNext: "", endLimit: null, password: ""
+                        };
+                    });
                 });
-            });
-            db[key] = { type: "antidemon", title: `Antidemon ${floor}F`, ...rooms };
-            migrated++;
-            logEvent(`Created missing MS${floor} antidemon panel (9 rooms).`);
-        } else if (existing.left && typeof existing.left === "object" && existing.left.name) {
-            // Old format (left/mid/right) — convert to 9-room format preserving claims
-            const oldRooms = { left: existing.left, mid: existing.mid, right: existing.right };
+                db[key] = { type: "antidemon", title: `Antidemon ${floor}F`, ...rooms };
+                migrated++;
+                logEvent(`Created missing MS${floor} antidemon panel (9 rooms): ${key}`);
+            } else if (existing.left && typeof existing.left === "object" && existing.left.name) {
+                // Old format (left/mid/right) — convert to 9-room format preserving claims
+                const oldRooms = { left: existing.left, mid: existing.mid, right: existing.right };
 
-            const rooms = {};
-            const versions = ["1-1", "1-2", "1-3"];
-            const sides = [
-                { k: "l", n: "LEFT" },
-                { k: "m", n: "MID" },
-                { k: "r", n: "RIGHT" }
-            ];
+                const rooms = {};
+                const versions = ["1-1", "1-2", "1-3"];
+                const sides = [
+                    { k: "l", n: "LEFT" },
+                    { k: "m", n: "MID" },
+                    { k: "r", n: "RIGHT" }
+                ];
 
-            // Only populate version 1-1 (v1l/v1m/v1r) with old claims to avoid duplication.
-            // Versions 1-2 and 1-3 get fresh empty rooms.
-            versions.forEach((ver, vi) => {
-                sides.forEach(side => {
-                    const rk = `v${ver.replace("1-", "")}${side.k}`;
-                    const name = `${ver} ${side.n}`;
-                    if (vi === 0) {
-                        // Version 1-1 only: preserve old claim data
-                        const oldRoom = oldRooms[side.k === "l" ? "left" : side.k === "m" ? "mid" : "right"];
-                        if (oldRoom && oldRoom.ownerId) {
-                            rooms[rk] = {
-                                name,
-                                status: oldRoom.status || STATUS_AVAILABLE,
-                                ownerId: oldRoom.ownerId,
-                                ownerName: oldRoom.ownerName,
-                                time: oldRoom.time || "",
-                                timeWindow: oldRoom.timeWindow || "",
-                                nextId: oldRoom.nextId || null,
-                                nextName: oldRoom.nextName || null,
-                                formattedTimeNext: oldRoom.formattedTimeNext || "",
-                                endLimit: oldRoom.endLimit || null,
-                                password: oldRoom.password || ""
-                            };
-                            return;
+                // Only populate version 1-1 (v1l/v1m/v1r) with old claims to avoid duplication.
+                // Versions 1-2 and 1-3 get fresh empty rooms.
+                versions.forEach((ver, vi) => {
+                    sides.forEach(side => {
+                        const rk = `v${ver.replace("1-", "")}${side.k}`;
+                        const name = `${ver} ${side.n}`;
+                        if (vi === 0) {
+                            // Version 1-1 only: preserve old claim data
+                            const oldRoom = oldRooms[side.k === "l" ? "left" : side.k === "m" ? "mid" : "right"];
+                            if (oldRoom && oldRoom.ownerId) {
+                                rooms[rk] = {
+                                    name,
+                                    status: oldRoom.status || STATUS_AVAILABLE,
+                                    ownerId: oldRoom.ownerId,
+                                    ownerName: oldRoom.ownerName,
+                                    time: oldRoom.time || "",
+                                    timeWindow: oldRoom.timeWindow || "",
+                                    nextId: oldRoom.nextId || null,
+                                    nextName: oldRoom.nextName || null,
+                                    formattedTimeNext: oldRoom.formattedTimeNext || "",
+                                    endLimit: oldRoom.endLimit || null,
+                                    password: oldRoom.password || ""
+                                };
+                                return;
+                            }
                         }
-                    }
-                    rooms[rk] = {
-                        name,
-                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                        time: "", timeWindow: "", nextId: null, nextName: null,
-                        formattedTimeNext: "", endLimit: null, password: ""
-                    };
+                        rooms[rk] = {
+                            name,
+                            status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                            time: "", timeWindow: "", nextId: null, nextName: null,
+                            formattedTimeNext: "", endLimit: null, password: ""
+                        };
+                    });
                 });
-            });
 
-            db[key] = { type: "antidemon", title: existing.title || `Antidemon ${floor}F`, ...rooms };
-            migrated++;
-            logEvent(`Migrated MS${floor} antidemon from 3-room to 9-room format, preserving claims.`);
+                db[key] = { type: "antidemon", title: existing.title || `Antidemon ${floor}F`, ...rooms };
+                migrated++;
+                logEvent(`Migrated MS${floor} antidemon from 3-room to 9-room format: ${key}`);
+            }
+            // Else: already 9-room format, no change needed
         }
-        // Else: already 9-room format, no change needed
     }
 
     // === 4. Backfill type:"fixed" and schedules on existing MS11/MS12 events panels ===
     // Fixes existing DB entries that were created without these properties
     for (let floor of ["11", "12"]) {
-        const key = `${floor}squareevents`;
-        const panel = db[key];
-        if (panel && panel.type === "event_group") {
-            let changed = false;
-            for (const ev of ["fury", "frenzy"]) {
-                const sub = panel[ev];
-                if (sub) {
-                    if (!sub.type) {
-                        sub.type = "fixed";
-                        changed = true;
-                    }
-                    if (!sub.schedules) {
-                        sub.schedules = ev === "fury"
-                            ? [0, 3, 6, 9, 12, 15, 18, 21]
-                            : [2, 5, 8, 11, 14, 17, 20, 23];
-                        if (ev === "fury" && !sub.scheduleMinutes) sub.scheduleMinutes = 30;
-                        changed = true;
-                    }
-                    // Clean up any stale ownerId that might cause false "already taken"
-                    if (sub.ownerId && !sub.ownerName && sub.status === STATUS_AVAILABLE) {
-                        sub.ownerId = null;
-                        changed = true;
-                    }
-                    if (sub.ownerId === "") {
-                        sub.ownerId = null;
-                        changed = true;
+        for (const key of eachKey(`${floor}squareevents`)) {
+            const panel = db[key];
+            if (panel && panel.type === "event_group") {
+                let changed = false;
+                for (const ev of ["fury", "frenzy"]) {
+                    const sub = panel[ev];
+                    if (sub) {
+                        if (!sub.type) {
+                            sub.type = "fixed";
+                            changed = true;
+                        }
+                        if (!sub.schedules) {
+                            sub.schedules = ev === "fury"
+                                ? [0, 3, 6, 9, 12, 15, 18, 21]
+                                : [2, 5, 8, 11, 14, 17, 20, 23];
+                            if (ev === "fury" && !sub.scheduleMinutes) sub.scheduleMinutes = 30;
+                            changed = true;
+                        }
+                        if (sub.ownerId && !sub.ownerName && sub.status === STATUS_AVAILABLE) {
+                            sub.ownerId = null;
+                            changed = true;
+                        }
+                        if (sub.ownerId === "") {
+                            sub.ownerId = null;
+                            changed = true;
+                        }
                     }
                 }
-            }
-            if (changed) {
-                migrated++;
-                logEvent(`Backfilled type/schedules on ${key} sub-events.`);
+                if (changed) {
+                    migrated++;
+                    logEvent(`Backfilled type/schedules on ${key} sub-events.`);
+                }
             }
         }
     }
@@ -547,23 +577,38 @@ export function migrateMS1112() {
     }
 
     // === 5. Clean up old ms11 from the combined summon panel (moved to its own panel) ===
-    if (db.summon && db.summon.ms11) {
-        delete db.summon.ms11;
-        migrated++;
-        logEvent(`Removed ms11 from combined summon panel (now in its own panel).`);
+    // Check both bare summon key and prefixed variants
+    const checkSummon = (key) => {
+        if (db[key] && db[key].ms11) {
+            delete db[key].ms11;
+            migrated++;
+            logEvent(`Removed ms11 from summon panel: ${key}`);
+        }
+    };
+    checkSummon("summon");
+    for (const sid of serverIds) {
+        checkSummon(`${sid}_summon`);
     }
-    // === 6. Fix duplicate summon panel init — if db.summon was wrongly set as type "fixed" (Random Event), restore it ===
-    if (db.summon && db.summon.type === "fixed") {
-        // This was a bug from a previous code version that initialized db.summon as Random Event
-        db.summon = {
-            type: "summon",
-            title: "🌀 Summon Locations",
-            sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-            sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
-            sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
-        };
-        migrated++;
-        logEvent(`Fixed db.summon: was wrongly set as Random Event, restored to Summon panel.`);
+
+    // === 6. Fix duplicate summon panel init — if summon was wrongly set as type "fixed" (Random Event), restore it ===
+    const fixSummonType = (key) => {
+        if (db[key] && db[key].type === "fixed") {
+            db[key] = {
+                type: "summon",
+                title: db[key].title && db[key].title.includes("Summon")
+                    ? db[key].title
+                    : (stripPrefix(key) === "summon" ? "🌀 Summon Locations" : db[key].title),
+                sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+                sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null },
+                sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
+            };
+            migrated++;
+            logEvent(`Fixed ${key}: was wrongly set as Random Event, restored to Summon panel.`);
+        }
+    };
+    fixSummonType("summon");
+    for (const sid of serverIds) {
+        fixSummonType(`${sid}_summon`);
     }
 }
 
