@@ -14,7 +14,7 @@ import {
 import { execSync, exec } from "child_process";
 import { getMsg } from "../lang.js";
 import { db, dailyLogs } from "../state.js";
-import { saveDailyLogs, dispatchDailyLogs } from "../daily-logs.js";
+import { saveDailyLogs, dispatchDailyLogs, getLogsChannelIds, getEventChannelIds } from "../daily-logs.js";
 import { setupTicketPanel } from "../ticket-system.js";
 import { refreshVisualPanel, resetPanelData } from "../panel-utils.js";
 import { renderEmbed, renderButtons } from "../panel-render.js";
@@ -77,6 +77,11 @@ async function handleSetLogs(msg) {
     if (msg.member.permissions.has("ManageGuild")) {
         dailyLogs.configChannelId = msg.channel.id;
         saveDailyLogs();
+        // Also update all server configs
+        const { getActiveServerIds, getServer, setServerConfig } = await import("../server-config.js");
+        for (const serverId of getActiveServerIds()) {
+            setServerConfig(serverId, "channels.logs", msg.channel.id);
+        }
         return msg.reply({ content: getMsg("logs.setupSuccess") }).catch(() => {});
     }
     return msg.reply({ content: getMsg("logs.setupError") }).catch(() => {});
@@ -90,6 +95,11 @@ async function handleSetBossChannel(msg) {
     if (msg.member.permissions.has("ManageGuild")) {
         dailyLogs.bossSpawnChannelId = msg.channel.id;
         saveDailyLogs();
+        // Also update all server configs
+        const { getActiveServerIds, setServerConfig } = await import("../server-config.js");
+        for (const serverId of getActiveServerIds()) {
+            setServerConfig(serverId, "channels.bossSpawn", msg.channel.id);
+        }
         return msg.reply({ content: "✅ Boss spawn notifications will be sent to this channel." }).catch(() => {});
     }
     return msg.reply({ content: "❌ You need the Manage Server permission to configure this." }).catch(() => {});
@@ -103,6 +113,11 @@ async function handleSetEventChannel(msg) {
     if (msg.member.permissions.has("ManageGuild")) {
         dailyLogs.scheduledEventChannelId = msg.channel.id;
         saveDailyLogs();
+        // Also update all server configs
+        const { getActiveServerIds, setServerConfig } = await import("../server-config.js");
+        for (const serverId of getActiveServerIds()) {
+            setServerConfig(serverId, "channels.event", msg.channel.id);
+        }
         return msg.reply({ content: "✅ Event alerts (Red Boss, Leader 3, Purgatory, etc.) will be sent to this channel with @everyone." }).catch(() => {});
     }
     return msg.reply({ content: "❌ You need the Manage Server permission to configure this." }).catch(() => {});
@@ -116,12 +131,13 @@ async function handleTestEvent(msg) {
     if (!msg.member.permissions.has("ManageMessages")) {
         return msg.reply({ content: "❌ You need the Manage Messages permission to use this." }).catch(() => {});
     }
-    if (!dailyLogs.scheduledEventChannelId) {
-        return msg.reply({ content: "❌ No event channel configured. Use `!seteventchannel` first." }).catch(() => {});
+    const eventChannelIds = getEventChannelIds();
+    if (eventChannelIds.length === 0) {
+        return msg.reply({ content: "❌ No event channel configured. Use `!seteventchannel` or !setup to configure." }).catch(() => {});
     }
-    const targetChannel = msg.guild.channels.cache.get(dailyLogs.scheduledEventChannelId);
+    const targetChannel = msg.guild.channels.cache.get(eventChannelIds[0]);
     if (!targetChannel) {
-        return msg.reply({ content: "❌ Configured channel not found. Re-configure with `!seteventchannel`." }).catch(() => {});
+        return msg.reply({ content: "❌ Configured channel not found. Re-configure with `!seteventchannel` or !setup." }).catch(() => {});
     }
     const testEmbed = new e()
         .setTitle("🚨 Event Alert! 🚨")
@@ -165,9 +181,10 @@ async function handleTestEvent(msg) {
 
 async function handleLogs(msg) {
     if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("logs.modRequired") }).catch(() => {});
-    if (!dailyLogs.configChannelId) return msg.reply({ content: getMsg("logs.noChannel") }).catch(() => {});
+    const logChannelIds = getLogsChannelIds();
+    if (logChannelIds.length === 0) return msg.reply({ content: getMsg("logs.noChannel") }).catch(() => {});
     if (!await dispatchDailyLogs(!0)) return msg.reply({ content: getMsg("logs.dispatchError") }).catch(() => {});
-    if (msg.channel.id !== dailyLogs.configChannelId) return msg.reply({ content: getMsg("logs.dispatchSuccess") }).catch(() => {});
+    if (!logChannelIds.includes(msg.channel.id)) return msg.reply({ content: getMsg("logs.dispatchSuccess") }).catch(() => {});
     try { await msg.delete() } catch (r) {}
 }
 

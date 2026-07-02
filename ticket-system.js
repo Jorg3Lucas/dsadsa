@@ -11,6 +11,7 @@ import fs from "fs";
 import path from "path";
 import { dailyLogs, client } from "./state.js";
 import { runBackup } from "./auto-backup.js";
+import { getLogsChannelIds } from "./daily-logs.js";
 
 const ticketsPath = path.resolve("./tickets.json");
 const STAFF_ROLE_ID = "1503934006431973488";
@@ -638,72 +639,79 @@ async function saveTicketLog(channel, ticketOwnerId) {
 
 async function sendLogToChannel(filePath, channel, totalMessages, ticketOwnerId) {
     try {
-        if (!dailyLogs.configChannelId) return;
+        const channelIds = getLogsChannelIds();
+        if (channelIds.length === 0) return;
 
-        const client = channel.client;
-        if (!client) return;
+        const botClient = channel.client;
+        if (!botClient) return;
 
-        const logChannel = await client.channels.fetch(dailyLogs.configChannelId).catch(() => null);
-        if (!logChannel) return;
-
-        // Read file content
-        const fileContent = fs.readFileSync(filePath, "utf8");
-        const fileName = path.basename(filePath);
-        const buffer = Buffer.from(fileContent, "utf8");
-
-        console.log(`📎 Sending ticket log: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB)`);
-
-        const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
-        if (!token) throw new Error("No bot token found");
-
-        const boundary = "----ticketBot" + Math.random().toString(36).slice(2);
-        const parts = [];
-
-        // File part
-        parts.push(Buffer.from(
-            `--${boundary}\r\n` +
-            `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"\r\n` +
-            `Content-Type: text/plain; charset=utf-8\r\n\r\n`
-        ));
-        parts.push(buffer);
-        parts.push(Buffer.from("\r\n"));
-
-        // Summary embed part
-        const summaryEmbed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle("🎫 Ticket Closed")
-            .addFields(
-                { name: "Channel", value: `#${channel.name}`, inline: true },
-                { name: "Category", value: channel.parent?.name || "N/A", inline: true },
-                { name: "Messages", value: `${totalMessages}`, inline: true },
-                { name: "Owner", value: ticketOwnerId ? `<@${ticketOwnerId}>` : "Unknown", inline: false }
-            )
-            .setTimestamp();
-
-        parts.push(Buffer.from(
-            `--${boundary}\r\n` +
-            `Content-Disposition: form-data; name="payload_json"\r\n` +
-            `Content-Type: application/json\r\n\r\n` +
-            `${JSON.stringify({ embeds: [summaryEmbed.toJSON()] })}\r\n`
-        ));
-        parts.push(Buffer.from(`--${boundary}--\r\n`));
-
-        const body = Buffer.concat(parts);
-
-        await axios.post(
-            `https://discord.com/api/v10/channels/${logChannel.id}/messages`,
-            body,
-            {
-                headers: {
-                    Authorization: `Bot ${token}`,
-                    "Content-Type": `multipart/form-data; boundary=${boundary}`,
-                    "Content-Length": String(Buffer.byteLength(body))
-                },
-                maxBodyLength: Infinity
+        // Send to all configured log channels
+        for (const logChannelId of channelIds) {
+            const logChannel = await botClient.channels.fetch(logChannelId).catch(() => null);
+            if (!logChannel) {
+                console.warn(`⚠️ [Tickets] Log channel ${logChannelId} not found, skipping.`);
+                continue;
             }
-        );
 
-        console.log(`✅ Ticket log sent: ${fileName} -> #${logChannel.name}`);
+            // Read file content
+            const fileContent = fs.readFileSync(filePath, "utf8");
+            const fileName = path.basename(filePath);
+            const buffer = Buffer.from(fileContent, "utf8");
+
+            console.log(`📎 Sending ticket log: ${fileName} to #${logChannel.name} (${(buffer.length / 1024).toFixed(1)} KB)`);
+
+            const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
+            if (!token) throw new Error("No bot token found");
+
+            const boundary = "----ticketBot" + Math.random().toString(36).slice(2);
+            const parts = [];
+
+            // File part
+            parts.push(Buffer.from(
+                `--${boundary}\r\n` +
+                `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"\r\n` +
+                `Content-Type: text/plain; charset=utf-8\r\n\r\n`
+            ));
+            parts.push(buffer);
+            parts.push(Buffer.from("\r\n"));
+
+            // Summary embed part
+            const summaryEmbed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle("🎫 Ticket Closed")
+                .addFields(
+                    { name: "Channel", value: `#${channel.name}`, inline: true },
+                    { name: "Category", value: channel.parent?.name || "N/A", inline: true },
+                    { name: "Messages", value: `${totalMessages}`, inline: true },
+                    { name: "Owner", value: ticketOwnerId ? `<@${ticketOwnerId}>` : "Unknown", inline: false }
+                )
+                .setTimestamp();
+
+            parts.push(Buffer.from(
+                `--${boundary}\r\n` +
+                `Content-Disposition: form-data; name="payload_json"\r\n` +
+                `Content-Type: application/json\r\n\r\n` +
+                `${JSON.stringify({ embeds: [summaryEmbed.toJSON()] })}\r\n`
+            ));
+            parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+            const body = Buffer.concat(parts);
+
+            await axios.post(
+                `https://discord.com/api/v10/channels/${logChannel.id}/messages`,
+                body,
+                {
+                    headers: {
+                        Authorization: `Bot ${token}`,
+                        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                        "Content-Length": String(Buffer.byteLength(body))
+                    },
+                    maxBodyLength: Infinity
+                }
+            );
+
+            console.log(`✅ Ticket log sent: ${fileName} -> #${logChannel.name}`);
+        }
     } catch (err) {
         console.error("❌ [Tickets] Error sending log to channel:", err.message);
     }

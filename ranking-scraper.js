@@ -1,6 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { HOFGAMER_CLAN_URLS } from './ranking-constants.js';
+import { HOFGAMER_CLAN_URLS, getRankingServerConfig } from './ranking-constants.js';
 import { saveRankingCache, getLocalRankingCache } from './ranking-cache.js';
 import { getMsg } from './lang.js';
 import { fetchWithBrowser, closeBrowser } from './hofgamer-scraper.js';
@@ -9,19 +9,37 @@ import { fetchWithBrowser, closeBrowser } from './hofgamer-scraper.js';
 // 🌐 WEB SCRAPING (MIR4 Official Ranking)
 // ==========================================
 
-export async function fetchMir4RankingData(forceRefresh = false) {
+/**
+ * Fetch ranking data from the MIR4 official website.
+ * If serverId is provided, uses the configured URL for that server.
+ */
+export async function fetchMir4RankingData(forceRefresh = false, serverId) {
     if (!forceRefresh) {
-        const localCache = getLocalRankingCache();
+        const localCache = getLocalRankingCache(serverId);
         if (localCache && Object.keys(localCache).length > 0) return localCache;
     }
 
+    // Get the ranking URL: use per-server config if available, else fallback to default
+    let baseUrl;
+    if (serverId) {
+        const srvConfig = getRankingServerConfig(serverId);
+        if (srvConfig && srvConfig.rankingUrl) {
+            baseUrl = srvConfig.rankingUrl;
+            console.log(`[Ranking] Using configured URL for ${srvConfig.name}`);
+        }
+    }
+    if (!baseUrl) {
+        baseUrl = 'https://forum.mir4global.com/rank?ranktype=1&worldgroupid=3&worldid=611&classtype=&searchname=';
+        console.log('[Ranking] Using default URL (no per-server config)');
+    }
+
     const rankingMap = {};
-    const baseUrl = 'https://forum.mir4global.com/rank?ranktype=1&worldgroupid=3&worldid=611&classtype=&searchname=';
+    const urlPrefix = baseUrl.includes('?') ? baseUrl + '&page=' : baseUrl + '?page=';
     console.log(getMsg('ranking.logs.fetchStart'));
     
     for (let page = 1; page <= 10; page++) {
         try {
-            const { data } = await axios.get(`${baseUrl}&page=${page}`, {
+            const { data } = await axios.get(`${urlPrefix}${page}`, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
                 timeout: 30000 
             });
@@ -39,11 +57,15 @@ export async function fetchMir4RankingData(forceRefresh = false) {
             await new Promise(resolve => setTimeout(resolve, 2500));
         } catch (err) { console.error(getMsg('ranking.logs.fetchPageError', { page, error: err.message })); }
     }
-    if (Object.keys(rankingMap).length === 0) return getLocalRankingCache() || {};
-    saveRankingCache(rankingMap);
+    if (Object.keys(rankingMap).length === 0) return getLocalRankingCache(serverId) || {};
+    saveRankingCache(rankingMap, serverId);
     return rankingMap;
 }
 
+/**
+ * Fetch clan power data from hofgamer.com.
+ * Uses HOFGAMER_CLAN_URLS merged from all server configs.
+ */
 export async function fetchClanPowerData(logEvent) {
     const powerMap = {};
     try {

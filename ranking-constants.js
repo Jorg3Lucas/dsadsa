@@ -1,27 +1,99 @@
 // ==========================================
-// 🔧 CONSTANTS
+// 🔧 CONSTANTS — Dynamic (loaded from server-config.js)
 // ==========================================
+
+import { getServerList, getServer, getConfig } from './server-config.js';
 
 export let confirmationCache = {};
 
-export const DISCORD_SERVER_ID = '1432320162278670440';
+// ─── These are populated from server-config on module load ───
 
-export const CLAN_ROLES = {
-    "浪人・AEON・": "1503933709756141620",
-    "浪人・MMM・": "1503933709756141620",
-    "浪人・Kitty・": "1503933844909326478",
-    "・URSUS・": "1503933886260969472"
-};
+export let DISCORD_SERVER_ID = '';
+export let CLAN_ROLES = {};
+export let CLAN_POWER_ROLE = '';
+export let CLAN_POWER_THRESHOLD = 400000;
+export let HOFGAMER_CLAN_URLS = {};
 
-export const CLAN_POWER_ROLE = "1503934305922191450"; // 10F (400K+)
-export const CLAN_POWER_THRESHOLD = 400000;
+// All clan role IDs across all configured servers (deduplicated)
+let _allRoleIds = new Set();
 
-export const HOFGAMER_CLAN_URLS = {
-    "浪人・AEON・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBAEON%E3%83%BB",
-    "浪人・MMM・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBMMM%E3%83%BB",
-    "・URSUS・": "https://www.hofgamer.com/clan/detail/?clan=%E3%83%BBURSUS%E3%83%BB",
-    "浪人・Kitty・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBKitty%E3%83%BB"
-};
+/**
+ * Reload all server-specific constants from server-config.js.
+ * Should be called after !setup changes are saved.
+ */
+export function reloadRankingConstants() {
+    const config = getConfig();
+    DISCORD_SERVER_ID = config.discordServerId || '';
+
+    // Merge CLAN_ROLES and HOFGAMER_URLS from all configured servers
+    const mergedRoles = {};
+    const mergedUrls = {};
+    _allRoleIds = new Set();
+
+    for (const [srvId, srv] of Object.entries(config.servers || {})) {
+        if (!srv.enabled) continue;
+
+        // Merge clan roles
+        if (srv.clanRoles) {
+            for (const [clan, roleId] of Object.entries(srv.clanRoles)) {
+                mergedRoles[clan] = roleId;
+                _allRoleIds.add(roleId);
+            }
+        }
+
+        // Merge HoFgamer URLs
+        if (srv.hofgamerUrls) {
+            for (const [clan, url] of Object.entries(srv.hofgamerUrls)) {
+                mergedUrls[clan] = url;
+            }
+        }
+
+        // Set power role from first server that has one configured
+        if (!CLAN_POWER_ROLE && srv.clanPowerRole) {
+            CLAN_POWER_ROLE = srv.clanPowerRole;
+        }
+        if (srv.clanPowerThreshold) {
+            CLAN_POWER_THRESHOLD = srv.clanPowerThreshold;
+        }
+    }
+
+    CLAN_ROLES = mergedRoles;
+    HOFGAMER_CLAN_URLS = mergedUrls;
+
+    console.log(`✅ [Ranking Constants] Reloaded: ${Object.keys(CLAN_ROLES).length} clan roles, ${Object.keys(HOFGAMER_CLAN_URLS).length} HoF URLs`);
+}
+
+/**
+ * Get all unique role IDs from all configured servers.
+ */
+export function getAllClanRoleIds() {
+    return [..._allRoleIds];
+}
+
+/**
+ * Get the list of active server IDs for the sync engine.
+ */
+export function getActiveServers() {
+    return getServerList();
+}
+
+/**
+ * Get specific server config for ranking operations.
+ */
+export function getRankingServerConfig(serverId) {
+    const srv = getServer(serverId);
+    if (!srv || !srv.enabled) return null;
+    return {
+        id: srv.id,
+        name: srv.name,
+        rankingUrl: srv.rankingUrl || '',
+        clanRoles: srv.clanRoles || {},
+        clanPowerRole: srv.clanPowerRole || '',
+        clanPowerThreshold: srv.clanPowerThreshold || 400000,
+        hofgamerUrls: srv.hofgamerUrls || {}
+    };
+}
+
 
 // Normalize a name for fuzzy matching by stripping only decorative/symbol characters.
 // Does NOT strip CJK characters that are part of the actual name (e.g. "すぐる", "黑暗").

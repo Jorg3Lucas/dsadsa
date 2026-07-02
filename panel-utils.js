@@ -9,6 +9,7 @@ import { STATUS_AVAILABLE, STATUS_KILLED, STATUS_KILLED_PREFIX } from "./constan
 // ==========================================
 
 export async function refreshVisualPanel(key) {
+    // 1. Update the primary reference (backward compat)
     let cachedMsg = lastMessages[key];
     if (cachedMsg) try {
         await cachedMsg.edit({
@@ -17,6 +18,35 @@ export async function refreshVisualPanel(key) {
         })
     } catch (n) {
         delete lastMessages[key]
+    }
+    
+    // 2. Update ALL panel instances (multi-server support)
+    const instances = db._panelInstances?.[key];
+    if (instances && instances.length > 0) {
+        for (let i = instances.length - 1; i >= 0; i--) {
+            const inst = instances[i];
+            // Skip if this is the same message as lastMessages[key] (already updated)
+            if (cachedMsg && inst.channelId === cachedMsg.channel?.id && inst.messageId === cachedMsg.id) continue;
+            
+            const channel = await client.channels.fetch(inst.channelId).catch(() => null);
+            if (!channel) {
+                instances.splice(i, 1);
+                continue;
+            }
+            const msg = await channel.messages.fetch(inst.messageId).catch(() => null);
+            if (!msg) {
+                instances.splice(i, 1);
+                continue;
+            }
+            try {
+                await msg.edit({
+                    embeds: [renderEmbed(key)],
+                    components: renderButtons(key)
+                });
+            } catch (n) {
+                instances.splice(i, 1);
+            }
+        }
     }
 }
 
@@ -587,28 +617,89 @@ export function migrateLastKilledAt() {
 export async function processAutoRecoveryOnBoot() {
     logEvent("Starting automatic panel recovery and chat cleanup...");
     db._panelMapping || (db._panelMapping = {});
+    
+    // Collect all unique channel+message pairs to restore
+    const restoreQueue = [];
+    
+    // 1. Legacy _panelMapping entries
     for (let key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        let mapping = db._panelMapping[key];
-        if (mapping && mapping.channelId && mapping.messageId) try {
-            let channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+        const mapping = db._panelMapping[key];
+        if (mapping && mapping.channelId && mapping.messageId) {
+            restoreQueue.push({ key, ...mapping });
+        }
+    }
+    
+    // 2. Multi-server _panelInstances entries (avoid duplicates with _panelMapping)
+    for (let key in (db._panelInstances || {})) {
+        const instances = db._panelInstances[key];
+        if (!instances || !Array.isArray(instances)) continue;
+        for (const inst of instances) {
+            if (inst && inst.channelId && inst.messageId) {
+                // Skip if already in queue from _panelMapping
+                const isDuplicate = restoreQueue.some(
+                    q => q.key === key && q.channelId === inst.channelId && q.messageId === inst.messageId
+                );
+                if (!isDuplicate) {
+                    restoreQueue.push({ key, ...inst });
+                }
+            }
+        }
+    }
+    
+    // Restore each panel message (delete old, send new)
+    for (const entry of restoreQueue) {
+        const { key, channelId, messageId } = entry;
+        if (!db[key] || key.startsWith("_")) continue;
+        try {
+            const channel = await client.channels.fetch(channelId).catch(() => null);
             if (!channel) continue;
+            
+            // Delete old message
             try {
-                let msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
-                msg && await msg.delete().catch(() => {});
+                const oldMsg = await channel.messages.fetch(messageId).catch(() => null);
+                if (oldMsg) await oldMsg.delete().catch(() => {});
             } catch (i) {}
-            let newMsg = await channel.send({
+            
+            // Send new panel message
+            const newMsg = await channel.send({
                 embeds: [renderEmbed(key)],
                 components: renderButtons(key)
             }).catch(() => null);
-            newMsg && (lastMessages[key] = newMsg, db._panelMapping[key] = {
-                channelId: channel.id,
-                messageId: newMsg.id
-            });
+            
+            if (newMsg) {
+                // Update _panelMapping (primary reference)
+                if (!db._panelMapping[key] || db._panelMapping[key].channelId === channelId) {
+                    db._panelMapping[key] = {
+                        channelId: channel.id,
+                        messageId: newMsg.id
+                    };
+                    lastMessages[key] = newMsg;
+                }
+                
+                // Update _panelInstances (multi-server)
+                if (db._panelInstances && db._panelInstances[key]) {
+                    const idx = db._panelInstances[key].findIndex(
+                        i => i.channelId === channelId && i.messageId === messageId
+                    );
+                    if (idx !== -1) {
+                        db._panelInstances[key][idx] = {
+                            channelId: channel.id,
+                            messageId: newMsg.id
+                        };
+                    } else {
+                        db._panelInstances[key].push({
+                            channelId: channel.id,
+                            messageId: newMsg.id
+                        });
+                    }
+                }
+            }
         } catch (s) {
             logEvent(`Failed to restore panel ${key}: ${s.message}`);
             console.error(`[Panel Restore Error] ${key}:`, s);
         }
     }
+    
     saveLocalStorage();
 }

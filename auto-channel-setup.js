@@ -2,64 +2,85 @@
 // 🏗️ AUTO CHANNEL SETUP
 // Deletes all channels in floor categories and
 // recreates them with panel embeds on boot.
+// Uses per-server category configuration from server-config.js
 // ==========================================
 
 import { db, lastMessages, saveLocalStorage } from "./state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
+import { getActiveServerIds, getServer } from "./server-config.js";
 
-// ── Category definitions ──
-const CATEGORY_CONFIG = {
-    "1499858717456334878": {
-        name: "7F",
-        channels: [
-            { name: "🔸┃sp7", panels: ["7peak"] },
-            { name: "🔹┃ms7", panels: ["7squarenormal", "7squareantidemon"] }
-        ]
-    },
-    "1499858702814150758": {
-        name: "8F",
-        channels: [
-            { name: "🔸┃sp8", panels: ["8peak"] },
-            { name: "🔹┃ms8", panels: ["8squarenormal", "8squareantidemon"] }
-        ]
-    },
-    "1499858660678041753": {
-        name: "9F",
-        channels: [
-            { name: "🔸┃sp9", panels: ["9peak"] },
-            { name: "🔹┃ms9", panels: ["9squarenormal", "9squareantidemon11", "9squareantidemon12"] }
-        ]
-    },
-    "1499857572453421159": {
-        name: "10F",
-        channels: [
-            { name: "🔸┃sp10", panels: ["10peak"] },
-            { name: "🔹┃ms10", panels: ["10squarenormal", "10squareantidemon11", "10squareantidemon12"] }
-        ]
-    },
-    "1511063558224613396": {
-        name: "11F",
-        channels: [
-            { name: "🔸┃sp11", panels: ["11peak", "11goblin"] },
-            { name: "🔹┃ms11", panels: ["11squareleaders", "11squareevents", "11squareantidemon", "11msgoblin"] }
-        ]
-    },
-    "1511063661458751708": {
-        name: "12F",
-        channels: [
-            { name: "🔸┃sp12", panels: ["12peak", "12randomevent", "12goblin"] },
-            { name: "🔹┃ms12", panels: ["12squareleaders", "12squareevents", "12squareantidemon", "12msgoblin"] }
-        ]
-    },
-    "1512360620127817898": {
-        name: "Summons",
-        channels: [
-            { name: "🌀┃summons", panels: ["summon"] }
-        ]
-    }
+// ── Static channel layout per floor type ──
+// (Same for all in-game servers, only category IDs differ)
+const FLOOR_CHANNEL_LAYOUT = {
+    '7F': [
+        { name: "🔸┃sp7", panels: ["7peak"] },
+        { name: "🔹┃ms7", panels: ["7squarenormal", "7squareantidemon"] }
+    ],
+    '8F': [
+        { name: "🔸┃sp8", panels: ["8peak"] },
+        { name: "🔹┃ms8", panels: ["8squarenormal", "8squareantidemon"] }
+    ],
+    '9F': [
+        { name: "🔸┃sp9", panels: ["9peak"] },
+        { name: "🔹┃ms9", panels: ["9squarenormal", "9squareantidemon11", "9squareantidemon12"] }
+    ],
+    '10F': [
+        { name: "🔸┃sp10", panels: ["10peak"] },
+        { name: "🔹┃ms10", panels: ["10squarenormal", "10squareantidemon11", "10squareantidemon12"] }
+    ],
+    '11F': [
+        { name: "🔸┃sp11", panels: ["11peak", "11goblin"] },
+        { name: "🔹┃ms11", panels: ["11squareleaders", "11squareevents", "11squareantidemon", "11msgoblin"] }
+    ],
+    '12F': [
+        { name: "🔸┃sp12", panels: ["12peak", "12randomevent", "12goblin"] },
+        { name: "🔹┃ms12", panels: ["12squareleaders", "12squareevents", "12squareantidemon", "12msgoblin"] }
+    ],
+    'Summons': [
+        { name: "🌀┃summons", panels: ["summon"] }
+    ]
 };
 
 let _setupDone = false;
+
+// ==========================================
+// 🔧 BUILD CATEGORY CONFIG FROM SERVER CONFIG
+// ==========================================
+
+function buildCategoryConfig() {
+    const config = {};
+    const serverIds = getActiveServerIds();
+
+    for (const serverId of serverIds) {
+        const server = getServer(serverId);
+        if (!server) continue;
+
+        for (const [floorKey, catId] of Object.entries(server.categories || {})) {
+            if (!catId) continue;
+
+            const layout = FLOOR_CHANNEL_LAYOUT[floorKey];
+            if (!layout) {
+                console.warn(`⚠️ [Auto Setup] Unknown floor "${floorKey}" for server ${server.name}, skipping.`);
+                continue;
+            }
+
+            // If the same category ID is used by another server, skip to avoid duplication
+            if (config[catId]) {
+                console.warn(`⚠️ [Auto Setup] Category ${catId} already configured (${config[catId].name}), skipping duplicate for ${server.name}/${floorKey}.`);
+                continue;
+            }
+
+            config[catId] = {
+                name: `${floorKey} (${server.name})`,
+                channels: layout
+            };
+
+            console.log(`📁 [Auto Setup] Server "${server.name}" → ${floorKey}: category ${catId}`);
+        }
+    }
+
+    return config;
+}
 
 // ==========================================
 // 🚀 MAIN SETUP ENTRY POINT
@@ -77,7 +98,13 @@ export async function setupAllChannels(client, guildId) {
         return;
     }
 
-    console.log("🏗️ [Auto Setup] Starting channel setup...");
+    const CATEGORY_CONFIG = buildCategoryConfig();
+    if (Object.keys(CATEGORY_CONFIG).length === 0) {
+        console.warn("⚠️ [Auto Setup] No categories configured. Use !setup to configure servers first.");
+        return;
+    }
+
+    console.log(`🏗️ [Auto Setup] Starting channel setup for ${Object.keys(CATEGORY_CONFIG).length} categories...`);
 
     // Clear stale panel mapping so processAutoRecoveryOnBoot doesn't try to use old channels
     db._panelMapping = {};
@@ -147,7 +174,14 @@ export async function setupAllChannels(client, guildId) {
                         channelId: newChannel.id,
                         messageId: sent.id
                     };
-                    console.log(`📋 [Auto Setup] Panel ${panelKey} sent to #${chanDef.name}.`);
+                    // Store ALL instances for multi-server panel refresh support
+                    if (!db._panelInstances) db._panelInstances = {};
+                    if (!db._panelInstances[panelKey]) db._panelInstances[panelKey] = [];
+                    db._panelInstances[panelKey].push({
+                        channelId: newChannel.id,
+                        messageId: sent.id
+                    });
+                    console.log(`📋 [Auto Setup] Panel ${panelKey} sent to #${chanDef.name} (instance #${db._panelInstances[panelKey].length}).`);
                 } catch (err) {
                     console.error(`❌ [Auto Setup] Failed to send ${panelKey} in #${chanDef.name}: ${err.message}`);
                 }

@@ -4,7 +4,7 @@
 // ==========================================
 
 import { EmbedBuilder } from "discord.js";
-import { client, dailyLogs, bossSpawnAlertCache } from "./state.js";
+import { client, bossSpawnAlertCache } from "./state.js";
 import { getLocalTime, redBossSchedules, leader3Schedules } from "./time-utils.js";
 
 // ─── Boss schedule entries ───────────────────────────────
@@ -132,37 +132,47 @@ export { bossSpawns };
 // ─── Send notification ───────────────────────────────────
 
 export async function sendBossSpawnAlerts() {
-  if (!dailyLogs.bossSpawnChannelId) return;
-
-  const channel = await client.channels.fetch(dailyLogs.bossSpawnChannelId).catch(() => null);
-  if (!channel) return;
+  // Resolve channels from server config (with fallback to legacy)
+  const { getBossSpawnChannelIds } = await import('./daily-logs.js');
+  const channelIds = getBossSpawnChannelIds();
+  if (channelIds.length === 0) return;
 
   const alerts = getUpcomingSpawnAlerts();
   if (alerts.length === 0) return;
 
-  for (const alert of alerts) {
-    const { entry, spawnTime, cacheKey } = alert;
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Boss Spawning Soon! ⚔️")
+    .setColor("#ff4444")
+    .setDescription(`Multiple bosses are spawning in **5 minutes**!`)
+    .setTimestamp();
 
+  for (const alert of alerts) {
+    const { entry, spawnTime } = alert;
     const spawnHour12 = spawnTime.h % 12 || 12;
     const amPm = spawnTime.h < 12 ? "AM" : "PM";
     const timeStr = `${spawnHour12}:${String(spawnTime.m).padStart(2, "0")} ${amPm}`;
+    embed.addFields({
+      name: `⚔️ ${entry.boss}`,
+      value: `📍 ${entry.map} (${entry.world} L${entry.layer})\n⏰ ${timeStr}`,
+      inline: true
+    });
+  }
 
-    const embed = new EmbedBuilder()
-      .setTitle("🛡️ Boss Spawning Soon! ⚔️")
-      .setColor("#ff4444")
-      .setDescription(
-        `**${entry.boss}** at **${entry.map}** (${entry.world} Layer ${entry.layer})\n\n` +
-        `⏰ **Spawning in 5 minutes** — ${timeStr} (Server Time)\n\n` +
-        `Prepare yourselves and **don't forget to do the mission!** 💪`
-      )
-      .setTimestamp();
-
+  // Send to all configured channels
+  for (const channelId of channelIds) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      console.warn(`⚠️ [Boss Spawn Alert] Channel ${channelId} not found, skipping.`);
+      continue;
+    }
     try {
       await channel.send({ embeds: [embed] });
-      bossSpawnAlertCache[cacheKey] = true;
-      console.log(`✅ [Boss Spawn Alert] Sent: ${entry.boss} at ${entry.map} (${timeStr})`);
+      for (const alert of alerts) {
+        bossSpawnAlertCache[alert.cacheKey] = true;
+      }
+      console.log(`✅ [Boss Spawn Alert] Sent ${alerts.length} alert(s) to #${channel.name}`);
     } catch (err) {
-      console.error(`❌ [Boss Spawn Alert] Failed to send: ${err.message}`);
+      console.error(`❌ [Boss Spawn Alert] Failed to send to ${channelId}: ${err.message}`);
     }
   }
 }
@@ -251,10 +261,10 @@ function getUpcomingScheduledAlerts() {
 }
 
 export async function sendScheduledEventAlerts() {
-  if (!dailyLogs.scheduledEventChannelId) return;
-
-  const channel = await client.channels.fetch(dailyLogs.scheduledEventChannelId).catch(() => null);
-  if (!channel) return;
+  // Resolve channels from server config (with fallback to legacy)
+  const { getEventChannelIds } = await import('./daily-logs.js');
+  const channelIds = getEventChannelIds();
+  if (channelIds.length === 0) return;
 
   const alerts = getUpcomingScheduledAlerts();
   if (alerts.length === 0) return;
@@ -280,13 +290,21 @@ export async function sendScheduledEventAlerts() {
     .setDescription(description)
     .setTimestamp();
 
-  try {
-    await channel.send({ content: "@everyone", embeds: [embed] });
-    for (const alert of alerts) {
-      scheduledEventAlertCache[alert.cacheKey] = true;
+  // Send to all configured channels
+  for (const channelId of channelIds) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      console.warn(`⚠️ [Event Alert] Channel ${channelId} not found, skipping.`);
+      continue;
     }
-    console.log(`✅ [Event Alert] Sent: ${eventNames.join(", ")} at ${timeStr}`);
-  } catch (err) {
-    console.error(`❌ [Event Alert] Failed to send: ${err.message}`);
+    try {
+      await channel.send({ content: "@everyone", embeds: [embed] });
+      for (const alert of alerts) {
+        scheduledEventAlertCache[alert.cacheKey] = true;
+      }
+      console.log(`✅ [Event Alert] Sent: ${eventNames.join(", ")} at ${timeStr} to #${channel.name}`);
+    } catch (err) {
+      console.error(`❌ [Event Alert] Failed to send to ${channelId}: ${err.message}`);
+    }
   }
 }

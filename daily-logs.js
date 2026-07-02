@@ -5,6 +5,7 @@ import { getMsg } from "./lang.js";
 import { dailyLogs, dailyLogsPath, client } from "./state.js";
 import fs from "fs";
 import { runBackup } from "./auto-backup.js";
+import { getActiveServerIds, getServer } from "./server-config.js";
 
 // ==========================================
 // 📝 DAILY LOGS SYSTEM
@@ -182,17 +183,87 @@ function buildReportText(queueData, dateStr, isForced) {
     return lines.join("\n");
 }
 
+// ══════════════════════════════════════════════════════
+// 🔌 CHANNEL RESOLVERS (from server-config.js)
+// ══════════════════════════════════════════════════════
+
+/**
+ * Get all configured daily-logs channel IDs from all active in-game servers.
+ * Falls back to the legacy dailyLogs.configChannelId if no server config found.
+ */
+export function getLogsChannelIds() {
+    const ids = [];
+    const serverIds = getActiveServerIds();
+    for (const serverId of serverIds) {
+        const server = getServer(serverId);
+        const channelId = server?.channels?.logs;
+        if (channelId && !ids.includes(channelId)) {
+            ids.push(channelId);
+        }
+    }
+    // Fallback to legacy config
+    if (ids.length === 0 && dailyLogs.configChannelId) {
+        ids.push(dailyLogs.configChannelId);
+    }
+    return ids;
+}
+
+/**
+ * Get all configured boss-spawn channel IDs from all active in-game servers.
+ * Falls back to the legacy dailyLogs.bossSpawnChannelId.
+ */
+export function getBossSpawnChannelIds() {
+    const ids = [];
+    const serverIds = getActiveServerIds();
+    for (const serverId of serverIds) {
+        const server = getServer(serverId);
+        const channelId = server?.channels?.bossSpawn;
+        if (channelId && !ids.includes(channelId)) {
+            ids.push(channelId);
+        }
+    }
+    // Fallback to legacy config
+    if (ids.length === 0 && dailyLogs.bossSpawnChannelId) {
+        ids.push(dailyLogs.bossSpawnChannelId);
+    }
+    return ids;
+}
+
+/**
+ * Get all configured event-alert channel IDs from all active in-game servers.
+ * Falls back to the legacy dailyLogs.scheduledEventChannelId.
+ */
+export function getEventChannelIds() {
+    const ids = [];
+    const serverIds = getActiveServerIds();
+    for (const serverId of serverIds) {
+        const server = getServer(serverId);
+        const channelId = server?.channels?.event;
+        if (channelId && !ids.includes(channelId)) {
+            ids.push(channelId);
+        }
+    }
+    // Fallback to legacy config
+    if (ids.length === 0 && dailyLogs.scheduledEventChannelId) {
+        ids.push(dailyLogs.scheduledEventChannelId);
+    }
+    return ids;
+}
+
+// ══════════════════════════════════════════════════════
+// 📤 DISPATCH TO ALL CONFIGURED CHANNELS
+// ══════════════════════════════════════════════════════
+
 // ─── public dispatch ─────────────────────────────────────
 
 /**
- * Dispatch accumulated logs as a structured text file to the configured channel.
+ * Dispatch accumulated logs as a structured text file to ALL configured log channels.
  * @param {boolean} isForced - If true, logs are NOT cleared after sending (manual !logs command).
  * @returns {Promise<boolean>}
  */
 export async function dispatchDailyLogs(isForced = false) {
-    if (!dailyLogs.configChannelId) return false;
-    const channel = await client.channels.fetch(dailyLogs.configChannelId).catch(() => null);
-    if (!channel) return false;
+    const channelIds = getLogsChannelIds();
+    if (channelIds.length === 0) return false;
 
     let queueData = dailyLogs.queue || [];
     const now = getLocalTime();
@@ -200,96 +271,108 @@ export async function dispatchDailyLogs(isForced = false) {
         day: "2-digit", month: "2-digit", year: "numeric"
     });
 
-    // Empty queue — send a minimal embed
-    if (queueData.length === 0) {
-        const embed = new EmbedBuilder()
-            .setTitle(getMsg("logs.title", { date: dateStr }))
-            .setColor(isForced ? "#0099ff" : "#2b2d31")
-            .setDescription(getMsg("logs.noActivity"))
-            .setTimestamp();
-        await channel.send({ embeds: [embed] }).catch(() => {});
-        return true;
-    }
+    // Build the report once, send to all channels
+    const fileContent = queueData.length > 0
+        ? buildReportText(
+            queueData.map(entry => migrateEntry(entry, dateStr)).filter(Boolean),
+            dateStr,
+            isForced
+          )
+        : null;
 
-    // Migrate any legacy string entries
-    queueData = queueData
-        .map(entry => migrateEntry(entry, dateStr))
-        .filter(Boolean);
-
-    // Build & send the report file
-    const fileContent = buildReportText(queueData, dateStr, isForced);
     const safeDate = dateStr.replace(/\//g, "-");
     const fileName = `claim-report-${safeDate}${isForced ? "-manual" : ""}.txt`;
 
-    // Quick-summary embed
-    const totals = {
+    const totals = queueData.length > 0 ? {
         CLAIM_START: queueData.filter(e => e.type === "CLAIM_START").length,
         CLAIM_END:   queueData.filter(e => e.type === "CLAIM_END").length,
         CANCEL:      queueData.filter(e => e.type === "CANCEL").length,
         QUEUE_JOIN:  queueData.filter(e => e.type === "QUEUE_JOIN").length
-    };
-    const totalEvents = Object.values(totals).reduce((a, b) => a + b, 0);
+    } : null;
+    const totalEvents = totals ? Object.values(totals).reduce((a, b) => a + b, 0) : 0;
 
-    const buffer = Buffer.from(fileContent, "utf8");
-    console.log(`📎 Preparing claim report: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB, ${queueData.length} events)`);
+    const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
 
-    // ── Send via REST API multipart (bypasses discord.js AttachmentBuilder) ──
-    try {
-        const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
-        if (!token) throw new Error("No bot token found");
+    for (const channelId of channelIds) {
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel) {
+            console.warn(`⚠️ [Daily Logs] Channel ${channelId} not found, skipping.`);
+            continue;
+        }
 
-        const boundary = "----bufferBot" + Math.random().toString(36).slice(2);
-        const parts = [];
-
-        // File part
-        parts.push(Buffer.from(
-            `--${boundary}\r\n` +
-            `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"\r\n` +
-            `Content-Type: text/plain; charset=utf-8\r\n\r\n`
-        ));
-        parts.push(buffer);
-        parts.push(Buffer.from("\r\n"));
-
-        // Summary embed part
-        const summaryEmbed = new EmbedBuilder()
-            .setTitle(getMsg("logs.title", { date: dateStr }))
-            .setColor(isForced ? "#0099ff" : "#2b2d31")
-            .setDescription(
-                `📄 **Full report attached** — \`${fileName}\`\n\n` +
-                `🟢 Claims: **${totals.CLAIM_START}**\n` +
-                `🔴 Ended: **${totals.CLAIM_END}**\n` +
-                `🟠 Canceled: **${totals.CANCEL}**\n` +
-                `🟨 Queues: **${totals.QUEUE_JOIN}**\n\n` +
-                `📊 **Total: ${totalEvents} events**`
-            )
-            .setTimestamp();
-
-        parts.push(Buffer.from(
-            `--${boundary}\r\n` +
-            `Content-Disposition: form-data; name="payload_json"\r\n` +
-            `Content-Type: application/json\r\n\r\n` +
-            `${JSON.stringify({ embeds: [summaryEmbed.toJSON()] })}\r\n`
-        ));
-        parts.push(Buffer.from(`--${boundary}--\r\n`));
-
-        const body = Buffer.concat(parts);
-
-        await axios.post(
-            `https://discord.com/api/v10/channels/${channel.id}/messages`,
-            body,
-            {
-                headers: {
-                    Authorization: `Bot ${token}`,
-                    "Content-Type": `multipart/form-data; boundary=${boundary}`,
-                    "Content-Length": String(Buffer.byteLength(body))
-                },
-                maxBodyLength: Infinity
+        // Empty queue — send a minimal embed
+        if (queueData.length === 0) {
+            const embed = new EmbedBuilder()
+                .setTitle(getMsg("logs.title", { date: dateStr }))
+                .setColor(isForced ? "#0099ff" : "#2b2d31")
+                .setDescription(getMsg("logs.noActivity"))
+                .setTimestamp();
+            try {
+                await channel.send({ embeds: [embed] }).catch(() => {});
+            } catch (err) {
+                console.error(`❌ [Daily Logs] Failed to send empty report to ${channelId}:`, err.message);
             }
-        );
-        console.log(`✅ Claim report sent: ${fileName}`);
-    } catch (err) {
-        console.error("❌ Failed to send claim report:", err.message);
-        return false;
+            continue;
+        }
+
+        const buffer = Buffer.from(fileContent, "utf8");
+
+        // ── Send via REST API multipart ──
+        try {
+            if (!token) throw new Error("No bot token found");
+
+            const boundary = "----bufferBot" + Math.random().toString(36).slice(2);
+            const parts = [];
+
+            // File part
+            parts.push(Buffer.from(
+                `--${boundary}\r\n` +
+                `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"\r\n` +
+                `Content-Type: text/plain; charset=utf-8\r\n\r\n`
+            ));
+            parts.push(buffer);
+            parts.push(Buffer.from("\r\n"));
+
+            // Summary embed part
+            const summaryEmbed = new EmbedBuilder()
+                .setTitle(getMsg("logs.title", { date: dateStr }))
+                .setColor(isForced ? "#0099ff" : "#2b2d31")
+                .setDescription(
+                    `📄 **Full report attached** — \`${fileName}\`\n\n` +
+                    `🟢 Claims: **${totals.CLAIM_START}**\n` +
+                    `🔴 Ended: **${totals.CLAIM_END}**\n` +
+                    `🟠 Canceled: **${totals.CANCEL}**\n` +
+                    `🟨 Queues: **${totals.QUEUE_JOIN}**\n\n` +
+                    `📊 **Total: ${totalEvents} events**`
+                )
+                .setTimestamp();
+
+            parts.push(Buffer.from(
+                `--${boundary}\r\n` +
+                `Content-Disposition: form-data; name="payload_json"\r\n` +
+                `Content-Type: application/json\r\n\r\n` +
+                `${JSON.stringify({ embeds: [summaryEmbed.toJSON()] })}\r\n`
+            ));
+            parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+            const body = Buffer.concat(parts);
+
+            await axios.post(
+                `https://discord.com/api/v10/channels/${channel.id}/messages`,
+                body,
+                {
+                    headers: {
+                        Authorization: `Bot ${token}`,
+                        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                        "Content-Length": String(Buffer.byteLength(body))
+                    },
+                    maxBodyLength: Infinity
+                }
+            );
+            console.log(`✅ [Daily Logs] Report sent to #${channel.name}: ${fileName}`);
+        } catch (err) {
+            console.error(`❌ [Daily Logs] Failed to send report to ${channelId}:`, err.message);
+        }
     }
 
     // Clear the queue after dispatch (unless forced/manual)
@@ -297,5 +380,5 @@ export async function dispatchDailyLogs(isForced = false) {
         dailyLogs.queue = [];
         saveDailyLogs();
     }
-    return true;
+    return channelIds.length > 0;
 }

@@ -11,6 +11,8 @@ import {
     handleClaimMessages,
     handleClaimInteractions
 } from './bot.js';
+import { loadServerConfig } from './server-config.js';
+import { DISCORD_SERVER_ID, reloadRankingConstants } from './ranking-constants.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
 import { initTempVoiceSystem } from './temp-voice.js';
 import { loadTicketState, initTicketSystem } from './ticket-system.js';
@@ -24,9 +26,6 @@ import {
     loadSalaryState,
     initSalaryCron
 } from './salary-poll.js';
-
-
-const DISCORD_SERVER_ID = '1432320162278670440';
 
 const client = new Client({
     intents: [
@@ -130,6 +129,10 @@ function loadLocalStorageRanking() {
 client.once('ready', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
+    // Load server configuration and initialize ranking constants
+    loadServerConfig();
+    reloadRankingConstants();
+
     loadLocalStorageRanking();
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
 
@@ -172,6 +175,7 @@ client.once('ready', async () => {
     loadSalaryState();
     initSalaryCron();
 
+    console.log(`🏁 Bot fully initialized. ${DISCORD_SERVER_ID ? `Discord Server: ${DISCORD_SERVER_ID}` : 'No Discord server configured - use !setup'}`);
 });
 
 // ==========================================

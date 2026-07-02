@@ -1,4 +1,4 @@
-import { DISCORD_SERVER_ID, CLAN_ROLES, CLAN_POWER_ROLE, CLAN_POWER_THRESHOLD, normalizeForMatch } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, CLAN_ROLES, CLAN_POWER_ROLE, CLAN_POWER_THRESHOLD, normalizeForMatch, getActiveServers, getAllClanRoleIds } from './ranking-constants.js';
 import { fetchMir4RankingData, fetchClanPowerData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getMsg } from './lang.js';
 
@@ -6,10 +6,31 @@ import { getMsg } from './lang.js';
 // 🔄 SYNCHRONIZATION ENGINE
 // ==========================================
 
-export async function runDailySynchronization(client, db, saveLocalStorage, logEvent, forceRefresh = false) {
+/**
+ * Run synchronization for all configured in-game servers.
+ * If a specific serverId is provided, only sync that one.
+ */
+export async function runDailySynchronization(client, db, saveLocalStorage, logEvent, forceRefresh = false, serverId) {
+    const activeServers = serverId ? [{ id: serverId }] : getActiveServers();
+
+    if (activeServers.length === 0) {
+        logEvent('⚠️ No servers configured. Use !setup to add servers.');
+        return;
+    }
+
+    for (const srv of activeServers) {
+        logEvent(`[Sync] Starting sync for ${srv.name || srv.id}...`);
+        await syncSingleServer(client, db, saveLocalStorage, logEvent, forceRefresh, srv.id);
+    }
+}
+
+/**
+ * Sync a single in-game server.
+ */
+async function syncSingleServer(client, db, saveLocalStorage, logEvent, forceRefresh, serverId) {
     logEvent(getMsg('ranking.logs.syncStart'));
     try {
-        const currentRanking = await fetchMir4RankingData(forceRefresh); 
+        const currentRanking = await fetchMir4RankingData(forceRefresh, serverId);
         const activeGuild = client.guilds.cache.get(DISCORD_SERVER_ID);
         if (!activeGuild) return;
 
@@ -28,6 +49,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             }
             if (!db.users[id].pilotIds) db.users[id].pilotIds = [];
         }
+
+        const allRoleIds = getAllClanRoleIds();
 
         // 1. PILOT AUTO-LINK
         for (const [memberId, member] of members) {
@@ -58,7 +81,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (memberId !== registeredOwnerId && (!ownerData.pilotIds || !ownerData.pilotIds.includes(memberId))) {
                     logEvent(getMsg('ranking.logs.imposterDetected', { username: member.user.username, nickname: ownerData.nickname }));
                     await member.setNickname(member.user.username).catch(() => {});
-                    for (const roleId of Object.values(CLAN_ROLES)) {
+                    for (const roleId of allRoleIds) {
                         if (member.roles.cache.has(roleId)) await member.roles.remove(roleId).catch(() => {});
                     }
                     continue; 
@@ -185,8 +208,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         }
 
         saveLocalStorage();
-        logEvent(getMsg('ranking.logs.syncComplete'));
+        logEvent(`✅ [Sync] ${serverId || 'default'} sync complete.`);
     } catch (error) { 
-        logEvent(getMsg('ranking.logs.syncError', { error: error.message }));
+        logEvent(`❌ [Sync] ${serverId || 'default'} error: ${error.message}`);
     }
 }
+
+
