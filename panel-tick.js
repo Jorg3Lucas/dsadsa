@@ -336,6 +336,7 @@ export function startTickInterval() {
                 const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                 for (let room of roomList) {
                     let rData = current[room];
+                    if (!rData) continue; // Guard: room may not exist in this panel
                     if (STATUS_CLAIMED === rData.status && rData.timeWindow) {
                         let limitTime = parseStringToDate(rData.timeWindow.split(" ~ ")[1]);
                         if (limitTime && now >= limitTime) {
@@ -411,6 +412,7 @@ export function startTickInterval() {
                     const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                     for (let room of roomList) {
                         let rData = current[room];
+                        if (!rData) continue; // Guard: room may not exist
                         if ((STATUS_CLAIMED === rData.status && rData.timeWindow) || rData.endLimit) {
                             panelUpdate = !0;
                             break;
