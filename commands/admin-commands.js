@@ -22,6 +22,8 @@ import { STATUS_CLAIMED } from "../constants.js";
 import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "../claim-core.js";
 import { handleSetupCommand } from "./server-setup.js";
 import { registerMir4SlashCommands } from "../ranking_sync.js";
+import { getConfig, getServer, getActiveServerIds } from "../server-config.js";
+import { getSalaryState } from "../salary-poll.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -68,6 +70,9 @@ export async function handleAdminCommand(msg) {
     }
     if ("!deploy" === lowerContent) {
         return handleDeployCommands(msg);
+    }
+    if ("!status" === lowerContent) {
+        return handleStatus(msg);
     }
 
     return false; // not handled
@@ -378,6 +383,84 @@ async function handleDeployCommands(msg) {
     } catch (err) {
         await msg.channel.send({ content: `❌ Failed to register slash commands: ${err.message}` }).catch(() => {});
     }
+}
+
+// ==========================================
+// 📊 STATUS — Show configured servers & system info
+// ==========================================
+
+async function handleStatus(msg) {
+    const config = getConfig();
+    const serverIds = getActiveServerIds();
+    const guildName = msg.guild?.name || "—";
+
+    const embed = new e()
+        .setTitle("📊 System Status")
+        .setColor("#57F287")
+        .setDescription(
+            `**Discord Server:** ${guildName}${config.discordServerId ? ` (\`${config.discordServerId}\`)` : " — ❌ Not configured"}\n` +
+            `**In-Game Servers:** ${serverIds.length} active (${Object.keys(config.servers).length} total)\n` +
+            `**Panel Count:** ${Object.keys(db).filter(k => !k.startsWith("_")).length}\n`
+        )
+        .setTimestamp();
+
+    if (serverIds.length === 0) {
+        embed.addFields({
+            name: "⚠️ No Servers Configured",
+            value: "Use `!setup` to configure your first in-game server.",
+            inline: false
+        });
+    }
+
+    for (const serverId of serverIds) {
+        const srv = getServer(serverId);
+        if (!srv) continue;
+
+        // Count categories configured
+        const cats = Object.entries(srv.categories || {}).filter(([, v]) => v);
+        // Count channels configured
+        const chans = Object.entries(srv.channels || {}).filter(([, v]) => v);
+        // Count clan roles
+        const clanRoles = Object.keys(srv.clanRoles || {});
+        // Count panels in DB for this server
+        const panelCount = Object.keys(db).filter(k => k.startsWith(`${serverId}_`)).length;
+
+        // Try to get salary state
+        let salaryStatus = "❌ Not configured";
+        try {
+            const salState = getSalaryState(serverId);
+            if (salState.channelId) {
+                salaryStatus = salState.status === "open" ? "🟢 Open" : salState.status === "closed" ? "🔴 Closed" : "⚪ Idle";
+                salaryStatus += ` (${Object.keys(salState.votes).length} votes)`;
+            }
+        } catch (e) {}
+
+        let desc = `**Name:** ${srv.name}\n` +
+            `**Status:** ${srv.enabled ? "🟢 Active" : "🔴 Disabled"}\n` +
+            `**Categories:** ${cats.length} configured\n` +
+            `**Channels:** ${chans.length} configured\n` +
+            `**Clan Roles:** ${clanRoles.length}\n` +
+            `**Panels in DB:** ${panelCount}\n` +
+            `**Salary Poll:** ${salaryStatus}\n`;
+
+        if (srv.rankingUrl) {
+            desc += `**Ranking URL:** [Link](${srv.rankingUrl})\n`;
+        }
+        if (srv.clanPowerRole) {
+            desc += `**Clan Power Role:** <@&${srv.clanPowerRole}> (≥ ${srv.clanPowerThreshold?.toLocaleString() || "400,000"} power)\n`;
+        }
+        if (srv.staffRoleId) {
+            desc += `**Staff Role:** <@&${srv.staffRoleId}>\n`;
+        }
+
+        embed.addFields({
+            name: `🆔 ${serverId.toUpperCase()}`,
+            value: desc,
+            inline: false
+        });
+    }
+
+    return msg.reply({ embeds: [embed] }).catch(() => {});
 }
 
 // ==========================================

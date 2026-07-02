@@ -3,6 +3,9 @@
 // Weekly poll for members to choose salary composition
 // Monday 12:30 BRT — open poll
 // Wednesday 13:00 BRT — close poll & export to Google Sheets
+//
+// Multi-server: each in-game server (EU013, EU021) has its own
+// independent salary state, channel, spreadsheet, and votes.
 // ==========================================
 
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
@@ -14,11 +17,7 @@ import { getMsg } from "./lang.js";
 import { client, saveLocalStorage, logEvent, rankingDb } from "./state.js";
 import { getLocalTime } from "./time-utils.js";
 import { runBackup } from "./auto-backup.js";
-
-// ─── File paths ──────────────────────────────
-
-const SALARY_DB_PATH = path.resolve("./salary-poll-db.json");
-const GOOGLE_CREDENTIALS_PATH = path.resolve("./google_credentials.json");
+import { getActiveServerIds, getServerDataFiles } from "./server-config.js";
 
 // ─── Default spreadsheet ─────────────────────
 
@@ -37,9 +36,9 @@ const STONE_EMOJIS = {
     purple: "🟣"
 };
 
-// ─── State ───────────────────────────────────
+// ─── Default state shape ─────────────────────
 
-let salaryState = {
+const DEFAULT_STATE = {
     channelId: null,
     spreadsheetId: null,
     messageId: null,
@@ -50,29 +49,44 @@ let salaryState = {
     votes: {} // { discordUserId: { yellowPercent, purplePercent, dsPercent, userName, updatedAt } }
 };
 
-// ─── Voting session cache ────────────────────
+// ─── Per-server state map ────────────────────
 
-let voteSessionCache = {}; // { userId: { yellowPercent: null, purplePercent: null } }
+let serverStates = {};
 
+// ─── Voting session cache (per user, not per server) ────
 
-// ─── Save / Load ─────────────────────────────
+let voteSessionCache = {}; // { userId: { yellowPercent: null, purplePercent: null, serverId: null } }
 
-export function saveSalaryState() {
+// ─── Save / Load per-server state ────────────
+
+function getStatePath(serverId) {
+    return getServerDataFiles(serverId).salaryDb;
+}
+
+export function getServerState(serverId) {
+    if (!serverStates[serverId]) {
+        serverStates[serverId] = { ...JSON.parse(JSON.stringify(DEFAULT_STATE)) };
+    }
+    return serverStates[serverId];
+}
+
+function saveServerState(serverId) {
     try {
+        const statePath = getStatePath(serverId);
         // Backup before overwriting
-        runBackup(["./salary-poll-db.json"]);
-
-        fs.writeFileSync(SALARY_DB_PATH, JSON.stringify(salaryState, null, 2));
+        runBackup([statePath]);
+        fs.writeFileSync(statePath, JSON.stringify(serverStates[serverId], null, 2));
     } catch (err) {
-        console.error("❌ [Salary Poll] Error saving state:", err.message);
+        console.error(`❌ [Salary Poll] Error saving state for ${serverId}:`, err.message);
     }
 }
 
-export function loadSalaryState() {
+function loadServerState(serverId) {
     try {
-        if (fs.existsSync(SALARY_DB_PATH)) {
-            const data = JSON.parse(fs.readFileSync(SALARY_DB_PATH, "utf8"));
-            salaryState = {
+        const statePath = getStatePath(serverId);
+        if (fs.existsSync(statePath)) {
+            const data = JSON.parse(fs.readFileSync(statePath, "utf8"));
+            serverStates[serverId] = {
                 channelId: data.channelId || null,
                 spreadsheetId: data.spreadsheetId || null,
                 messageId: data.messageId || null,
@@ -82,24 +96,42 @@ export function loadSalaryState() {
                 pollClosesAt: data.pollClosesAt || null,
                 votes: data.votes || {}
             };
-            console.log("✅ [Salary Poll] State loaded successfully.");
+            console.log(`✅ [Salary Poll] State loaded for ${serverId}.`);
         } else {
-            console.log("📝 [Salary Poll] New state file created.");
-            saveSalaryState();
+            serverStates[serverId] = { ...JSON.parse(JSON.stringify(DEFAULT_STATE)) };
+            saveServerState(serverId);
+            console.log(`📝 [Salary Poll] New state file created for ${serverId}.`);
         }
     } catch (err) {
-        console.error("❌ [Salary Poll] Error loading state:", err.message);
+        console.error(`❌ [Salary Poll] Error loading state for ${serverId}:`, err.message);
+        serverStates[serverId] = { ...JSON.parse(JSON.stringify(DEFAULT_STATE)) };
     }
 }
 
-export function setSalaryChannelId(channelId) {
-    salaryState.channelId = channelId;
-    saveSalaryState();
+export function loadAllSalaryStates() {
+    const serverIds = getActiveServerIds();
+    if (serverIds.length === 0) {
+        console.log("⚠️ [Salary Poll] No servers configured. Salary poll will not be available.");
+        return;
+    }
+    for (const serverId of serverIds) {
+        loadServerState(serverId);
+    }
+    console.log(`✅ [Salary Poll] Loaded states for ${serverIds.length} server(s).`);
 }
 
-export function setSalarySpreadsheetId(spreadsheetId) {
-    salaryState.spreadsheetId = spreadsheetId;
-    saveSalaryState();
+// ─── Setters (per-server) ────────────────────
+
+export function setSalaryChannelId(serverId, channelId) {
+    const state = getServerState(serverId);
+    state.channelId = channelId;
+    saveServerState(serverId);
+}
+
+export function setSalarySpreadsheetId(serverId, spreadsheetId) {
+    const state = getServerState(serverId);
+    state.spreadsheetId = spreadsheetId;
+    saveServerState(serverId);
 }
 
 // ─── Helpers ─────────────────────────────────
@@ -107,10 +139,6 @@ export function setSalarySpreadsheetId(spreadsheetId) {
 /** Normalize a name for comparison: lowercase, trim, strip decorative Unicode chars */
 function normalizeName(name) {
     if (!name) return "";
-    // Strip decorative/special Unicode character ranges commonly used in Discord/IGN names.
-    // These blocks contain symbols, box-drawing, geometric shapes, dingbats, etc.
-    // that should not interfere with name matching.
-    // Preserves letters (including CJK/Hangul), digits, spaces, and basic ASCII punctuation.
     const decorative = /[\u2000-\u206F\u2100-\u27BF\u2B00-\u2BFF\u3000-\u303F\uFE30-\uFE6F\uFF00-\uFFEF\u30FB\u30FC]/g;
     return name
         .toLowerCase()
@@ -122,7 +150,6 @@ function normalizeName(name) {
 
 function getCurrentWeekKey() {
     const now = getLocalTime();
-    // Get the Monday of this week in Brazil time
     const monday = new Date(now);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
     monday.setHours(0, 0, 0, 0);
@@ -158,19 +185,18 @@ function formatDate(date) {
 
 // ─── Build Poll Embed ────────────────────────
 
-function buildPollEmbed() {
-    const isOpen = salaryState.status === "open";
+function buildPollEmbed(serverId) {
+    const state = getServerState(serverId);
+    const isOpen = state.status === "open";
     const weekRange = getFormattedWeekRange();
 
-    // Count current votes summary
-    const voteCount = Object.keys(salaryState.votes).length;
-    
-    // Aggregate stats
+    const voteCount = Object.keys(state.votes).length;
+
     const yellowCounts = { 0: 0, 25: 0, 50: 0, 75: 0, 100: 0 };
     const purpleCounts = { 0: 0, 25: 0, 50: 0, 75: 0, 100: 0 };
     let totalYellow = 0, totalPurple = 0;
 
-    for (const v of Object.values(salaryState.votes)) {
+    for (const v of Object.values(state.votes)) {
         if (yellowCounts[v.yellowPercent] !== undefined) yellowCounts[v.yellowPercent]++;
         if (purpleCounts[v.purplePercent] !== undefined) purpleCounts[v.purplePercent]++;
         totalYellow += v.yellowPercent;
@@ -181,17 +207,17 @@ function buildPollEmbed() {
     const avgPurple = voteCount > 0 ? (totalPurple / voteCount) : 0;
     const avgDS = 100 - avgYellow - avgPurple;
 
-    // Build bar visualization
     const bar = (pct, maxLen = 15) => {
         const filled = Math.round((pct / 100) * maxLen);
         return "█".repeat(filled) + "░".repeat(maxLen - filled);
     };
 
     const embed = new EmbedBuilder()
-        .setTitle("📊 Weekly Salary Poll")
+        .setTitle(`📊 Weekly Salary Poll — ${serverId.toUpperCase()}`)
         .setColor(isOpen ? "#57F287" : "#2b2d31")
         .setDescription(
             `**Week:** ${weekRange}\n` +
+            `**Server:** ${serverId.toUpperCase()}\n` +
             `**Status:** ${isOpen ? "🟢 Open" : "🔴 Closed"}\n` +
             `**Voters:** ${voteCount} member(s)\n\n` +
             (isOpen
@@ -203,7 +229,6 @@ function buildPollEmbed() {
         )
         .setTimestamp();
 
-    // Add stats when there are votes
     if (voteCount > 0) {
         embed.addFields(
             {
@@ -229,11 +254,12 @@ function buildPollEmbed() {
 
 // ─── Build Actions ───────────────────────────
 
-function buildPollActions() {
-    if (salaryState.status !== "open") return [];
+function buildPollActions(serverId) {
+    const state = getServerState(serverId);
+    if (state.status !== "open") return [];
 
     const voteBtn = new ButtonBuilder()
-        .setCustomId("salary_vote")
+        .setCustomId(`${serverId}_salary_vote`)
         .setLabel("✏️ Vote / Change Vote")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("🗳️");
@@ -243,111 +269,105 @@ function buildPollActions() {
 
 // ─── Create or Update Poll Message ───────────
 
-export async function createOrUpdatePollMessage(pingEveryone = false) {
-    if (!salaryState.channelId) {
-        console.log("❌ [Salary Poll] No channel configured. Use !setsalary first.");
+export async function createOrUpdatePollMessage(serverId, pingEveryone = false) {
+    const state = getServerState(serverId);
+    if (!state.channelId) {
+        console.log(`❌ [Salary Poll] No channel configured for ${serverId}. Use !setsalary first.`);
         return false;
     }
 
     try {
-        const channel = await client.channels.fetch(salaryState.channelId).catch(() => null);
+        const channel = await client.channels.fetch(state.channelId).catch(() => null);
         if (!channel) {
-            console.error("❌ [Salary Poll] Salary channel not found.");
+            console.error(`❌ [Salary Poll] Salary channel not found for ${serverId}.`);
             return false;
         }
 
-        const embed = buildPollEmbed();
-        const components = buildPollActions();
+        const embed = buildPollEmbed(serverId);
+        const components = buildPollActions(serverId);
 
-        if (salaryState.messageId) {
-            // Try to edit existing message
+        if (state.messageId) {
             try {
-                const existingMsg = await channel.messages.fetch(salaryState.messageId).catch(() => null);
+                const existingMsg = await channel.messages.fetch(state.messageId).catch(() => null);
                 if (existingMsg) {
                     await existingMsg.edit({ embeds: [embed], components });
                     return true;
                 }
-            } catch (e) {
-                // Message deleted or lost — send new one
-            }
+            } catch (e) {}
         }
 
-        // Send new message (ping everyone only when requested, e.g. new poll week or !salarytest)
         const msg = await channel.send({ ...(pingEveryone ? { content: "@everyone" } : {}), embeds: [embed], components });
-        salaryState.messageId = msg.id;
-        saveSalaryState();
+        state.messageId = msg.id;
+        saveServerState(serverId);
         return true;
     } catch (err) {
-        console.error("❌ [Salary Poll] Error creating/updating poll message:", err.message);
+        console.error(`❌ [Salary Poll] Error creating/updating poll message for ${serverId}:`, err.message);
         return false;
     }
 }
 
 // ─── Open Poll ───────────────────────────────
 
-export async function openPoll() {
+export async function openPoll(serverId) {
+    const state = getServerState(serverId);
     const weekKey = getCurrentWeekKey();
 
-    // Don't re-open if already open for this week
-    if (salaryState.currentWeek === weekKey && salaryState.status === "open") {
-        console.log(`[Salary Poll] Poll already open for week ${weekKey}`);
+    if (state.currentWeek === weekKey && state.status === "open") {
+        console.log(`[Salary Poll] Poll already open for ${serverId} week ${weekKey}`);
         return;
     }
 
-    // Reset votes for new week
-    salaryState.currentWeek = weekKey;
-    salaryState.votes = {};
-    salaryState.status = "open";
-    salaryState.pollOpenedAt = new Date().toISOString();
+    state.currentWeek = weekKey;
+    state.votes = {};
+    state.status = "open";
+    state.pollOpenedAt = new Date().toISOString();
 
-    // Calculate poll close time: Wednesday 13:00 BRT
     const now = new Date();
     const wednesday = new Date(now);
     wednesday.setDate(wednesday.getDate() + ((3 - wednesday.getDay() + 7) % 7));
     wednesday.setHours(13, 0, 0, 0, 0);
-    // If today is Wednesday but before 13:00, use today
     if (now.getDay() === 3 && now.getHours() < 13) {
         wednesday.setTime(now.getTime());
         wednesday.setHours(13, 0, 0, 0);
     }
-    salaryState.pollClosesAt = wednesday.toISOString();
+    state.pollClosesAt = wednesday.toISOString();
 
-    saveSalaryState();
-    console.log(`📊 [Salary Poll] Poll opened for week ${weekKey}. Closes at ${wednesday.toISOString()}`);
+    saveServerState(serverId);
+    console.log(`📊 [Salary Poll] Poll opened for ${serverId} week ${weekKey}. Closes at ${wednesday.toISOString()}`);
 
-    await createOrUpdatePollMessage(true);
-    logEvent(`Salary poll opened for week ${weekKey}`);
+    await createOrUpdatePollMessage(serverId, true);
+    logEvent(`Salary poll opened for ${serverId} week ${weekKey}`);
 }
 
 // ─── Close Poll ──────────────────────────────
 
-export async function closePoll() {
-    if (salaryState.status !== "open") {
-        console.log("[Salary Poll] No open poll to close.");
+export async function closePoll(serverId) {
+    const state = getServerState(serverId);
+    if (state.status !== "open") {
+        console.log(`[Salary Poll] No open poll to close for ${serverId}.`);
         return;
     }
 
-    salaryState.status = "closed";
-    saveSalaryState();
+    state.status = "closed";
+    saveServerState(serverId);
+    console.log(`📊 [Salary Poll] Poll closed for ${serverId} week ${state.currentWeek}`);
 
-    console.log(`📊 [Salary Poll] Poll closed for week ${salaryState.currentWeek}`);
+    await createOrUpdatePollMessage(serverId);
 
-    // Update the message to show closed state
-    await createOrUpdatePollMessage();
-
-    // Export to Google Sheets
-    if ((salaryState.spreadsheetId || DEFAULT_SPREADSHEET_ID) && Object.keys(salaryState.votes).length > 0) {
-        await exportVotesToSheets();
-    } else if (!salaryState.spreadsheetId && !DEFAULT_SPREADSHEET_ID) {
-        console.log("⚠️ [Salary Poll] No spreadsheet ID configured. Skipping export.");
+    if ((state.spreadsheetId || DEFAULT_SPREADSHEET_ID) && Object.keys(state.votes).length > 0) {
+        await exportVotesToSheets(serverId);
+    } else if (!state.spreadsheetId && !DEFAULT_SPREADSHEET_ID) {
+        console.log(`⚠️ [Salary Poll] No spreadsheet ID configured for ${serverId}. Skipping export.`);
     } else {
-        console.log("📭 [Salary Poll] No votes recorded. Skipping export.");
+        console.log(`📭 [Salary Poll] No votes recorded for ${serverId}. Skipping export.`);
     }
 
-    logEvent(`Salary poll closed for week ${salaryState.currentWeek}`);
+    logEvent(`Salary poll closed for ${serverId} week ${state.currentWeek}`);
 }
 
 // ─── Google Sheets Integration ───────────────
+
+const GOOGLE_CREDENTIALS_PATH = path.resolve("./google_credentials.json");
 
 async function getSheetsClient() {
     try {
@@ -364,21 +384,21 @@ async function getSheetsClient() {
     }
 }
 
-export async function exportVotesToSheets() {
+export async function exportVotesToSheets(serverId) {
+    const state = getServerState(serverId);
     const sheets = await getSheetsClient();
     if (!sheets) {
-        console.error("❌ [Salary Poll] Cannot export — Sheets client unavailable.");
+        console.error(`❌ [Salary Poll] Cannot export for ${serverId} — Sheets client unavailable.`);
         return false;
     }
 
-    const spreadsheetId = salaryState.spreadsheetId || DEFAULT_SPREADSHEET_ID;
+    const spreadsheetId = state.spreadsheetId || DEFAULT_SPREADSHEET_ID;
     if (!spreadsheetId) {
-        console.error("❌ [Salary Poll] No spreadsheet ID configured.");
+        console.error(`❌ [Salary Poll] No spreadsheet ID for ${serverId}.`);
         return false;
     }
 
     try {
-        // 1. First, create/ensure a "Salary Poll" sheet exists for raw data
         const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
         let salarySheetExists = spreadsheet.data.sheets.some(
             s => s.properties.title === "Salary Poll"
@@ -397,12 +417,11 @@ export async function exportVotesToSheets() {
             });
         }
 
-        // 2. Write raw poll data to "Salary Poll" sheet
         const headerRow = [
             ["Discord ID", "Discord Name", "% Yellow Stones", "% Purple Stones", "% Darksteel", "Vote Date"]
         ];
 
-        const dataRows = Object.entries(salaryState.votes).map(([userId, vote]) => [
+        const dataRows = Object.entries(state.votes).map(([userId, vote]) => [
             userId,
             vote.userName,
             vote.yellowPercent,
@@ -420,33 +439,30 @@ export async function exportVotesToSheets() {
             requestBody: { values: allRows }
         });
 
-        console.log(`✅ [Salary Poll] Exported ${dataRows.length} votes to 'Salary Poll' sheet.`);
+        console.log(`✅ [Salary Poll] Exported ${dataRows.length} votes for ${serverId} to 'Salary Poll' sheet.`);
 
-        // 3. Try to update the main payment sheet columns J, M, P
-        // First, read existing data to find member rows
-        await updateMainSheet(sheets, spreadsheetId);
+        await updateMainSheet(sheets, spreadsheetId, serverId);
 
         return true;
     } catch (err) {
-        console.error("❌ [Salary Poll] Error exporting to sheets:", err.message);
+        console.error(`❌ [Salary Poll] Error exporting to sheets for ${serverId}:`, err.message);
         return false;
     }
 }
 
-async function updateMainSheet(sheets, spreadsheetId) {
+async function updateMainSheet(sheets, spreadsheetId, serverId) {
+    const state = getServerState(serverId);
     try {
-        // Find the PLAYERS sheet specifically
         const sheetMetadata = await sheets.spreadsheets.get({ spreadsheetId });
         const playersSheet = sheetMetadata.data.sheets.find(
             s => s.properties.title === "PLAYERS"
         );
         if (!playersSheet) {
-            console.log("⚠️ [Salary Poll] PLAYERS sheet not found. Cannot update.");
+            console.log(`⚠️ [Salary Poll] PLAYERS sheet not found for ${serverId}. Cannot update.`);
             return;
         }
         const sheetTitle = playersSheet.properties.title;
 
-        // Read data starting from row 7 (rows 1-6 are headers)
         const result = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: `${sheetTitle}!A7:P`
@@ -454,20 +470,18 @@ async function updateMainSheet(sheets, spreadsheetId) {
 
         const rows = result.data.values;
         if (!rows || rows.length === 0) {
-            console.log("⚠️ [Salary Poll] PLAYERS sheet has no data rows. Cannot update.");
+            console.log(`⚠️ [Salary Poll] PLAYERS sheet has no data rows for ${serverId}. Cannot update.`);
             return;
         }
 
-        // Build a lookup: map row numbers to vote data
-        // Try matching by: rankedName (registered character) > Discord displayName (column B) > Discord ID
-        const batchData = []; // { range, values }
+        const batchData = [];
         let updatedCount = 0;
 
-        for (const [userId, vote] of Object.entries(salaryState.votes)) {
+        for (const [userId, vote] of Object.entries(state.votes)) {
             const searchNames = [
-                vote.rankedName ? normalizeName(vote.rankedName) : null,  // Registered character name (best match)
-                normalizeName(vote.userName),                              // Discord display name
-                userId                                                      // Discord user ID (fallback — exact match)
+                vote.rankedName ? normalizeName(vote.rankedName) : null,
+                normalizeName(vote.userName),
+                userId
             ].filter(Boolean);
 
             let matchedRow = -1;
@@ -485,7 +499,7 @@ async function updateMainSheet(sheets, spreadsheetId) {
             }
 
             if (matchedRow >= 0) {
-                const sheetRow = matchedRow + 7; // data starts at row 7, so offset by 7
+                const sheetRow = matchedRow + 7;
                 const matchedName = rows[matchedRow][1] || rows[matchedRow][0] || "?";
                 batchData.push(
                     { range: `${sheetTitle}!J${sheetRow}`, values: [[vote.dsPercent]] },
@@ -495,11 +509,10 @@ async function updateMainSheet(sheets, spreadsheetId) {
                 updatedCount++;
                 console.log(`✅ [Salary Poll] Matched ${vote.userName} → row ${sheetRow} (${matchedName}): J=${vote.dsPercent}%, N=${vote.yellowPercent}%, Q=${vote.purplePercent}%`);
             } else {
-                console.log(`⚠️ [Salary Poll] Could not find ${vote.userName} in PLAYERS sheet. Searched for: ${searchNames.join(", ")}`);
+                console.log(`⚠️ [Salary Poll] Could not find ${vote.userName} in PLAYERS sheet for ${serverId}. Searched for: ${searchNames.join(", ")}`);
             }
         }
 
-        // Send all updates in a single batch API call
         if (batchData.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId,
@@ -508,22 +521,23 @@ async function updateMainSheet(sheets, spreadsheetId) {
                     data: batchData
                 }
             });
-            console.log(`✅ [Salary Poll] PLAYERS sheet: updated ${updatedCount} member(s) (${batchData.length} cells written).`);
+            console.log(`✅ [Salary Poll] PLAYERS sheet for ${serverId}: updated ${updatedCount} member(s) (${batchData.length} cells written).`);
         }
 
-        if (updatedCount < Object.keys(salaryState.votes).length) {
-            console.log(`⚠️ [Salary Poll] ${Object.keys(salaryState.votes).length - updatedCount} member(s) could not be matched in PLAYERS sheet.`);
+        if (updatedCount < Object.keys(state.votes).length) {
+            console.log(`⚠️ [Salary Poll] ${Object.keys(state.votes).length - updatedCount} member(s) could not be matched in PLAYERS sheet for ${serverId}.`);
         }
 
     } catch (err) {
-        console.error("❌ [Salary Poll] Error updating PLAYERS sheet:", err.message);
+        console.error(`❌ [Salary Poll] Error updating PLAYERS sheet for ${serverId}:`, err.message);
     }
 }
 
 // ─── Handle Vote Button ─────────────────────
 
-export async function handleVoteButton(interaction) {
-    if (salaryState.status !== "open") {
+export async function handleVoteButton(interaction, serverId) {
+    const state = getServerState(serverId);
+    if (state.status !== "open") {
         return await interaction.reply({
             content: "❌ The poll is currently closed. Wait for next Monday at 12:30 (BRT)!",
             flags: 64
@@ -531,54 +545,48 @@ export async function handleVoteButton(interaction) {
     }
 
     const userId = interaction.user.id;
-    // If user is a pilot, use owner's vote as current
-    let currentVote = salaryState.votes[userId];
+    let currentVote = state.votes[userId];
     if (!currentVote && rankingDb && rankingDb.users) {
         for (const [uid, data] of Object.entries(rankingDb.users)) {
             if (data.pilotIds && data.pilotIds.includes(userId)) {
-                currentVote = salaryState.votes[uid] || null;
+                currentVote = state.votes[uid] || null;
                 break;
             }
         }
     }
 
-    // Reset session cache
     voteSessionCache[userId] = {
         yellowPercent: currentVote ? currentVote.yellowPercent : null,
-        purplePercent: currentVote ? currentVote.purplePercent : null
+        purplePercent: currentVote ? currentVote.purplePercent : null,
+        serverId: serverId
     };
 
-    // Build percentage options for select menus
     const percentOptions = PERCENT_OPTIONS.map(p => ({
         label: p === 0 ? "0% — No stones" : `${p}%`,
         value: String(p),
         emoji: p === 0 ? "🚫" : p <= 50 ? "🔸" : "🔶"
     }));
 
-    // Yellow stone select
     const yellowSelect = new StringSelectMenuBuilder()
-        .setCustomId(`salary_yellow_${userId}`)
+        .setCustomId(`${serverId}_salary_yellow_${userId}`)
         .setPlaceholder("🎨 Choose % of Yellow Stones")
         .addOptions(percentOptions);
 
-    // Purple stone select
     const purpleSelect = new StringSelectMenuBuilder()
-        .setCustomId(`salary_purple_${userId}`)
+        .setCustomId(`${serverId}_salary_purple_${userId}`)
         .setPlaceholder("🟣 Choose % of Purple Stones")
         .addOptions(percentOptions);
 
-    // Confirm and Cancel buttons
     const confirmBtn = new ButtonBuilder()
-        .setCustomId(`salary_confirm_${userId}`)
+        .setCustomId(`${serverId}_salary_confirm_${userId}`)
         .setLabel("✅ Confirm Vote")
         .setStyle(ButtonStyle.Success);
 
     const cancelBtn = new ButtonBuilder()
-        .setCustomId(`salary_cancel_${userId}`)
+        .setCustomId(`${serverId}_salary_cancel_${userId}`)
         .setLabel("❌ Cancel")
         .setStyle(ButtonStyle.Secondary);
 
-    // Build embed showing current selection
     const session = voteSessionCache[userId];
     let embedDesc = "Choose the percentages for each stone type:";
 
@@ -607,40 +615,36 @@ export async function handleVoteButton(interaction) {
             new ActionRowBuilder().addComponents(purpleSelect),
             new ActionRowBuilder().addComponents(confirmBtn, cancelBtn)
         ],
-        flags: 64 // ephemeral
+        flags: 64
     }).catch(() => {});
 }
 
 // ─── Handle Select Menu ──────────────────────
 
-export async function handleSalarySelect(interaction) {
+export async function handleSalarySelect(interaction, serverId) {
     const userId = interaction.user.id;
     const customId = interaction.customId;
     const value = parseInt(interaction.values[0], 10);
 
-    // Initialize session if needed
-    if (!voteSessionCache[userId]) {
-        voteSessionCache[userId] = { yellowPercent: null, purplePercent: null };
+    if (!voteSessionCache[userId] || voteSessionCache[userId].serverId !== serverId) {
+        voteSessionCache[userId] = { yellowPercent: null, purplePercent: null, serverId: serverId };
     }
 
-    if (customId.startsWith("salary_yellow_")) {
+    if (customId.endsWith(`_salary_yellow_${userId}`) || customId.includes(`_salary_yellow_`)) {
         voteSessionCache[userId].yellowPercent = value;
-    } else if (customId.startsWith("salary_purple_")) {
+    } else if (customId.includes(`_salary_purple_`)) {
         voteSessionCache[userId].purplePercent = value;
     }
 
-    // Calculate DS
     const yellowPct = voteSessionCache[userId].yellowPercent || 0;
     const purplePct = voteSessionCache[userId].purplePercent || 0;
     const dsPct = Math.max(0, 100 - yellowPct - purplePct);
 
-    // Update the embed with current selections
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
         .setFields(
             { name: "📌 Rules", value: "The total (%) of Yellow Stones + Purple Stones cannot exceed **100%**.\nThe remainder will be automatically converted to ⚪ **Darksteel**." }
         );
 
-    // Find and update the description with current selections
     let desc = `Choose the percentages for each stone type:\n\n` +
         `**Your current selection:**\n` +
         `${STONE_EMOJIS.yellow} Yellow Stones: **${yellowPct}%**\n` +
@@ -664,11 +668,12 @@ export async function handleSalarySelect(interaction) {
 
 // ─── Handle Confirm / Cancel ────────────────
 
-export async function handleSalaryConfirm(interaction) {
+export async function handleSalaryConfirm(interaction, serverId) {
+    const state = getServerState(serverId);
     const userId = interaction.user.id;
     const session = voteSessionCache[userId];
 
-    if (!session || session.yellowPercent === null || session.purplePercent === null) {
+    if (!session || session.yellowPercent === null || session.purplePercent === null || session.serverId !== serverId) {
         return await interaction.update({
             content: "❌ You need to select the percentages of both stones before confirming!",
             embeds: [],
@@ -689,13 +694,11 @@ export async function handleSalaryConfirm(interaction) {
 
     const dsPercent = 100 - total;
 
-    // Determine the effective user — if voter is a pilot, use the owner's identity
     let effectiveUserId = userId;
     let effectiveName = interaction.member?.displayName || interaction.user.username;
     let rankedName = null;
 
     if (rankingDb && rankingDb.users) {
-        // Check if this user is a pilot — find the owner
         let ownerId = null;
         let ownerData = null;
         for (const [uid, data] of Object.entries(rankingDb.users)) {
@@ -707,12 +710,10 @@ export async function handleSalaryConfirm(interaction) {
         }
 
         if (ownerId && ownerData) {
-            // Pilot is voting — use owner's identity
             effectiveUserId = ownerId;
             effectiveName = ownerData.nickname || ownerData.characterName || effectiveName;
             rankedName = ownerData.nickname || ownerData.characterName || null;
         } else {
-            // Regular user (not a pilot)
             const userData = rankingDb.users[userId];
             if (userData) {
                 rankedName = userData.nickname || userData.characterName || null;
@@ -720,8 +721,7 @@ export async function handleSalaryConfirm(interaction) {
         }
     }
 
-    // Save vote under the effective user (owner if pilot, otherwise the voter)
-    salaryState.votes[effectiveUserId] = {
+    state.votes[effectiveUserId] = {
         yellowPercent: session.yellowPercent,
         purplePercent: session.purplePercent,
         dsPercent: dsPercent,
@@ -730,18 +730,13 @@ export async function handleSalaryConfirm(interaction) {
         updatedAt: new Date().toISOString()
     };
 
-    saveSalaryState();
-
-    // Clean up session
+    saveServerState(serverId);
     delete voteSessionCache[userId];
 
-    // Update the main poll message
-    await createOrUpdatePollMessage();
+    await createOrUpdatePollMessage(serverId);
 
-    // Sync to Google Sheets in real-time (fire-and-forget, don't block interaction response)
-    syncSingleVoteToSheet(effectiveUserId, salaryState.votes[effectiveUserId]).catch(() => {});
+    syncSingleVoteToSheet(serverId, effectiveUserId, state.votes[effectiveUserId]).catch(() => {});
 
-    // Reply success
     const embed = new EmbedBuilder()
         .setTitle("✅ Vote Registered!")
         .setColor("#57F287")
@@ -782,43 +777,73 @@ export function initSalaryCron() {
     cronTasks.forEach(task => task.stop());
     cronTasks = [];
 
-    // Monday 12:30 BRT — Open poll
+    const serverIds = getActiveServerIds();
+    if (serverIds.length === 0) {
+        console.log("⚠️ [Salary Poll] No servers configured, cron not started.");
+        return;
+    }
+
+    // Monday 12:30 BRT — Open poll for ALL servers
     const openTask = cron.schedule("30 12 * * 1", async () => {
-        console.log("⏰ [Salary Poll] Cron: Opening poll (Monday 12:30 BRT)...");
-        await openPoll();
+        console.log("⏰ [Salary Poll] Cron: Opening polls (Monday 12:30 BRT)...");
+        for (const sid of serverIds) {
+            try {
+                await openPoll(sid);
+            } catch (err) {
+                console.error(`❌ [Salary Poll] Error opening poll for ${sid}:`, err.message);
+            }
+        }
     }, {
         scheduled: true,
         timezone: TIMEZONE
     });
     cronTasks.push(openTask);
-    console.log("📅 [Salary Poll] Cron: Poll opens Monday 12:30 BRT");
+    console.log("📅 [Salary Poll] Cron: Polls open Monday 12:30 BRT");
 
-    // Wednesday 13:00 BRT — Close poll
+    // Wednesday 13:00 BRT — Close poll for ALL servers
     const closeTask = cron.schedule("0 13 * * 3", async () => {
-        console.log("⏰ [Salary Poll] Cron: Closing poll (Wednesday 13:00 BRT)...");
-        await closePoll();
+        console.log("⏰ [Salary Poll] Cron: Closing polls (Wednesday 13:00 BRT)...");
+        for (const sid of serverIds) {
+            try {
+                await closePoll(sid);
+            } catch (err) {
+                console.error(`❌ [Salary Poll] Error closing poll for ${sid}:`, err.message);
+            }
+        }
     }, {
         scheduled: true,
         timezone: TIMEZONE
     });
     cronTasks.push(closeTask);
-    console.log("📅 [Salary Poll] Cron: Poll closes Wednesday 13:00 BRT");
+    console.log("📅 [Salary Poll] Cron: Polls close Wednesday 13:00 BRT");
 
-    // Wednesday 16:00 BRT — Post salary report
+    // Wednesday 16:00 BRT — Post salary report for ALL servers
     const reportTask = cron.schedule("0 16 * * 3", async () => {
-        console.log("⏰ [Salary Poll] Cron: Posting salary report (Wednesday 16:00 BRT)...");
-        await postSalaryReport();
+        console.log("⏰ [Salary Poll] Cron: Posting salary reports (Wednesday 16:00 BRT)...");
+        for (const sid of serverIds) {
+            try {
+                await postSalaryReport(sid);
+            } catch (err) {
+                console.error(`❌ [Salary Poll] Error posting report for ${sid}:`, err.message);
+            }
+        }
     }, {
         scheduled: true,
         timezone: TIMEZONE
     });
     cronTasks.push(reportTask);
-    console.log("📅 [Salary Poll] Cron: Salary report Wednesday 16:00 BRT");
+    console.log("📅 [Salary Poll] Cron: Salary reports Wednesday 16:00 BRT");
 
-    // Friday 13:00 BRT — Reset all votes to 100% Darksteel / 0% stones
+    // Friday 13:00 BRT — Reset all votes to 100% Darksteel / 0% stones for ALL servers
     const resetTask = cron.schedule("0 13 * * 5", async () => {
         console.log("⏰ [Salary Poll] Cron: Resetting votes to default (Friday 13:00 BRT)...");
-        await resetVotesToDefault();
+        for (const sid of serverIds) {
+            try {
+                await resetVotesToDefault(sid);
+            } catch (err) {
+                console.error(`❌ [Salary Poll] Error resetting votes for ${sid}:`, err.message);
+            }
+        }
     }, {
         scheduled: true,
         timezone: TIMEZONE
@@ -826,98 +851,92 @@ export function initSalaryCron() {
     cronTasks.push(resetTask);
     console.log("📅 [Salary Poll] Cron: Votes reset to 100% DS Friday 13:00 BRT");
 
-    // Also check on startup — if it's between Monday 12:30 and Wednesday 13:00, open the poll
-    checkAndRestorePollOnBoot();
+    // Check and restore polls on boot for each server
+    for (const sid of serverIds) {
+        checkAndRestorePollOnBoot(sid).catch(err => {
+            console.error(`❌ [Salary Poll] Boot recovery error for ${sid}:`, err.message);
+        });
+    }
 
-    console.log("📅 [Salary Poll] Cron scheduling initialized.");
+    console.log(`📅 [Salary Poll] Cron scheduling initialized for ${serverIds.length} server(s).`);
 }
 
 // ─── Reset Votes to Default ─────────────────
 
-/**
- * Resets all votes to 100% Darksteel and 0% for stones.
- * Runs automatically every Friday 13:00 BRT.
- */
-export async function resetVotesToDefault() {
-    const voteCount = Object.keys(salaryState.votes).length;
+export async function resetVotesToDefault(serverId) {
+    const state = getServerState(serverId);
+    const voteCount = Object.keys(state.votes).length;
     if (voteCount === 0) {
-        console.log("📭 [Salary Poll] No votes to reset.");
+        console.log(`📭 [Salary Poll] No votes to reset for ${serverId}.`);
         return;
     }
 
     const now = new Date().toISOString();
-    for (const userId of Object.keys(salaryState.votes)) {
-        const vote = salaryState.votes[userId];
+    for (const userId of Object.keys(state.votes)) {
+        const vote = state.votes[userId];
         vote.yellowPercent = 0;
         vote.purplePercent = 0;
         vote.dsPercent = 100;
         vote.updatedAt = now;
     }
 
-    saveSalaryState();
-    console.log(`✅ [Salary Poll] Reset ${voteCount} vote(s) to 100% Darksteel / 0% stones.`);
-    logEvent(`Salary votes reset to default (${voteCount} members) — 100% DS`);
-    // NOTE: exportVotesToSheets() is NOT called here because the sheet was already exported
-    // on Wednesday (closePoll) with the CORRECT data. This reset is only to
-    // prepare the local state for the next poll.
+    saveServerState(serverId);
+    console.log(`✅ [Salary Poll] Reset ${voteCount} vote(s) for ${serverId} to 100% Darksteel / 0% stones.`);
+    logEvent(`Salary votes reset to default for ${serverId} (${voteCount} members) — 100% DS`);
 }
-
 
 // ─── Startup recovery ────────────────────────
 
-async function checkAndRestorePollOnBoot() {
+async function checkAndRestorePollOnBoot(serverId) {
+    const state = getServerState(serverId);
     const now = new Date();
-    const day = now.getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+    const day = now.getDay();
     const hour = now.getHours();
     const minute = now.getMinutes();
     const currentTimeMinutes = hour * 60 + minute;
 
-    const mondayOpen = 12 * 60 + 30;  // Monday 12:30
-    const wednesdayClose = 13 * 60;   // Wednesday 13:00
+    const mondayOpen = 12 * 60 + 30;
+    const wednesdayClose = 13 * 60;
 
     let shouldBeOpen = false;
 
     if (day === 1 && currentTimeMinutes >= mondayOpen) {
-        // Monday after 12:30
         shouldBeOpen = true;
     } else if (day === 2) {
-        // Tuesday — all day
         shouldBeOpen = true;
     } else if (day === 3 && currentTimeMinutes < wednesdayClose) {
-        // Wednesday before 13:00
         shouldBeOpen = true;
     }
 
     const weekKey = getCurrentWeekKey();
 
     if (shouldBeOpen) {
-        if (salaryState.currentWeek !== weekKey || salaryState.status !== "open") {
-            console.log(`🔄 [Salary Poll] Boot: Restoring poll for week ${weekKey}...`);
-            await openPoll();
+        if (state.currentWeek !== weekKey || state.status !== "open") {
+            console.log(`🔄 [Salary Poll] Boot: Restoring poll for ${serverId} week ${weekKey}...`);
+            await openPoll(serverId);
         } else {
-            console.log(`🔄 [Salary Poll] Boot: Poll already open for week ${weekKey}, refreshing message.`);
-            await createOrUpdatePollMessage();
+            console.log(`🔄 [Salary Poll] Boot: Poll already open for ${serverId} week ${weekKey}, refreshing message.`);
+            await createOrUpdatePollMessage(serverId);
         }
-    } else if (salaryState.status === "open") {
-        // Poll should be closed (past Wednesday 13:00 or before Monday 12:30)
+    } else if (state.status === "open") {
         if (day > 3 || (day === 3 && currentTimeMinutes >= wednesdayClose) || day === 0) {
-            console.log(`🔄 [Salary Poll] Boot: Closing expired poll...`);
-            await closePoll();
+            console.log(`🔄 [Salary Poll] Boot: Closing expired poll for ${serverId}...`);
+            await closePoll(serverId);
         }
     }
 }
 
 // ─── Real-time vote sync ─────────────────────
 
-async function syncSingleVoteToSheet(userId, vote) {
-    const spreadsheetId = salaryState.spreadsheetId || DEFAULT_SPREADSHEET_ID;
+async function syncSingleVoteToSheet(serverId, userId, vote) {
+    const state = getServerState(serverId);
+    const spreadsheetId = state.spreadsheetId || DEFAULT_SPREADSHEET_ID;
     if (!spreadsheetId) return;
 
     const sheets = await getSheetsClient();
     if (!sheets) return;
 
     try {
-        // 1. Ensure "Salary Poll" sheet exists
         const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
         let salarySheetExists = spreadsheet.data.sheets.some(
             s => s.properties.title === "Salary Poll"
@@ -934,7 +953,6 @@ async function syncSingleVoteToSheet(userId, vote) {
                     }]
                 }
             });
-            // Add header row to new sheet
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: "Salary Poll!A1:F1",
@@ -945,8 +963,6 @@ async function syncSingleVoteToSheet(userId, vote) {
             });
         }
 
-        // 2. Update/insert user's row in "Salary Poll" sheet
-        // Read existing data to find if user already has a row
         const existingData = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: "Salary Poll!A:A"
@@ -956,7 +972,7 @@ async function syncSingleVoteToSheet(userId, vote) {
         let userRow = -1;
         for (let i = 0; i < existingRows.length; i++) {
             if (existingRows[i][0] === userId) {
-                userRow = i + 1; // 1-based
+                userRow = i + 1;
                 break;
             }
         }
@@ -971,7 +987,6 @@ async function syncSingleVoteToSheet(userId, vote) {
         ]];
 
         if (userRow > 0) {
-            // Update existing row
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: `Salary Poll!A${userRow}:F${userRow}`,
@@ -979,7 +994,6 @@ async function syncSingleVoteToSheet(userId, vote) {
                 requestBody: { values: rowData }
             });
         } else {
-            // Append new row
             await sheets.spreadsheets.values.append({
                 spreadsheetId,
                 range: "Salary Poll!A:F",
@@ -989,12 +1003,11 @@ async function syncSingleVoteToSheet(userId, vote) {
             });
         }
 
-        // 3. Update the main payment sheet (single user)
         await updateSingleUserInMainSheet(sheets, spreadsheetId, userId, vote);
 
-        console.log(`✅ [Salary Poll] Real-time: synced ${vote.userName} to spreadsheet.`);
+        console.log(`✅ [Salary Poll] Real-time: synced ${vote.userName} to spreadsheet for ${serverId}.`);
     } catch (err) {
-        console.error(`❌ [Salary Poll] Real-time sync error for ${vote.userName}:`, err.message);
+        console.error(`❌ [Salary Poll] Real-time sync error for ${serverId}/${vote.userName}:`, err.message);
     }
 }
 
@@ -1010,7 +1023,6 @@ async function updateSingleUserInMainSheet(sheets, spreadsheetId, userId, vote) 
         }
         const sheetTitle = playersSheet.properties.title;
 
-        // Read data starting from row 7 (column B has names)
         const result = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: `${sheetTitle}!A7:P`
@@ -1026,11 +1038,11 @@ async function updateSingleUserInMainSheet(sheets, spreadsheetId, userId, vote) 
         ].filter(Boolean);
 
         for (let i = 0; i < rows.length; i++) {
-            const rowName = normalizeName(rows[i][1] || ""); // Column B = index 1
+            const rowName = normalizeName(rows[i][1] || "");
 
             for (const searchName of searchNames) {
                 if (rowName === searchName) {
-                    const sheetRow = i + 7; // data starts at row 7
+                    const sheetRow = i + 7;
                     await sheets.spreadsheets.values.batchUpdate({
                         spreadsheetId,
                         requestBody: {
@@ -1056,31 +1068,27 @@ async function updateSingleUserInMainSheet(sheets, spreadsheetId, userId, vote) 
 
 // ─── Salary Report (Wednesday 16:00 BRT) ─────
 
-/**
- * Post organized salary report to the salary channel.
- * Reads PLAYERS sheet columns L (DS qty), N (Y qty), O (Y pts), Q (P qty), R (P pts)
- * and builds a formatted table with percentages + quantities + points.
- */
-export async function postSalaryReport() {
-    const channelId = salaryState.channelId;
+export async function postSalaryReport(serverId) {
+    const state = getServerState(serverId);
+    const channelId = state.channelId;
     if (!channelId) {
-        console.log("❌ [Salary Report] No channel configured.");
+        console.log(`❌ [Salary Report] No channel configured for ${serverId}.`);
         return;
     }
 
-    const voteEntries = Object.entries(salaryState.votes);
+    const voteEntries = Object.entries(state.votes);
     if (voteEntries.length === 0) {
-        console.log("📭 [Salary Report] No votes to report.");
+        console.log(`📭 [Salary Report] No votes to report for ${serverId}.`);
         const channel = await client.channels.fetch(channelId).catch(() => null);
         if (channel) {
-            await channel.send({ content: "📭 **Salary Report:** No votes recorded this week." }).catch(() => {});
+            await channel.send({ content: `📭 **Salary Report (${serverId.toUpperCase()}):** No votes recorded this week.` }).catch(() => {});
         }
         return;
     }
 
-    const spreadsheetId = salaryState.spreadsheetId || DEFAULT_SPREADSHEET_ID;
+    const spreadsheetId = state.spreadsheetId || DEFAULT_SPREADSHEET_ID;
     if (!spreadsheetId) {
-        console.log("❌ [Salary Report] No spreadsheet ID.");
+        console.log(`❌ [Salary Report] No spreadsheet ID for ${serverId}.`);
         return;
     }
 
@@ -1088,18 +1096,16 @@ export async function postSalaryReport() {
     if (!sheets) return;
 
     try {
-        // Find PLAYERS sheet
         const sheetMetadata = await sheets.spreadsheets.get({ spreadsheetId });
         const playersSheet = sheetMetadata.data.sheets.find(
             s => s.properties.title === "PLAYERS"
         );
         if (!playersSheet) {
-            console.log("⚠️ [Salary Report] PLAYERS sheet not found.");
+            console.log(`⚠️ [Salary Report] PLAYERS sheet not found for ${serverId}.`);
             return;
         }
         const sheetTitle = playersSheet.properties.title;
 
-        // Read columns B (name) through R — data starts at row 7
         const result = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: `${sheetTitle}!B7:S`
@@ -1107,11 +1113,10 @@ export async function postSalaryReport() {
 
         const rows = result.data.values;
         if (!rows || rows.length === 0) {
-            console.log("⚠️ [Salary Report] No data in PLAYERS sheet.");
+            console.log(`⚠️ [Salary Report] No data in PLAYERS sheet for ${serverId}.`);
             return;
         }
 
-        // Column indices when reading from B7:R: B=0, C=1, ..., J=8, K=9, L=10, N=12, O=13, Q=15, R=16
         const reportData = [];
         let unmatchedCount = 0;
 
@@ -1124,7 +1129,7 @@ export async function postSalaryReport() {
 
             let matchedRow = -1;
             for (let i = 0; i < rows.length; i++) {
-                const rowName = normalizeName(rows[i][0] || ""); // Column B = index 0
+                const rowName = normalizeName(rows[i][0] || "");
                 for (const sName of searchNames) {
                     if (rowName === sName) {
                         matchedRow = i;
@@ -1136,20 +1141,17 @@ export async function postSalaryReport() {
 
             if (matchedRow >= 0) {
                 const row = rows[matchedRow];
-                // Read percentages from spreadsheet columns (J=DS%, N=Yellow%, Q=Purple%)
-                // with fallback to in-memory vote data (which is still correct at this point).
-                // Column indices when reading from B7:S: B=0, J=8, N=12, Q=15
                 reportData.push({
                     userId: userId,
                     name: row[0] || vote.userName,
                     dsPercent: row[8] !== undefined && row[8] !== null ? Number(row[8]) : vote.dsPercent,
-                    dsQty: row[11] || "—",   // Column M
+                    dsQty: row[11] || "—",
                     yellowPercent: row[12] !== undefined && row[12] !== null ? Number(row[12]) : vote.yellowPercent,
-                    yellowQty: row[13] || "—", // Column O
-                    yellowPts: row[14] || "—", // Column P
+                    yellowQty: row[13] || "—",
+                    yellowPts: row[14] || "—",
                     purplePercent: row[15] !== undefined && row[15] !== null ? Number(row[15]) : vote.purplePercent,
-                    purpleQty: row[16] || "—", // Column R
-                    purplePts: row[17] || "—", // Column S
+                    purpleQty: row[16] || "—",
+                    purplePts: row[17] || "—",
                     matched: true
                 });
             } else {
@@ -1174,16 +1176,18 @@ export async function postSalaryReport() {
 
         const channel = await client.channels.fetch(channelId).catch(() => null);
         if (!channel) {
-            console.error("❌ [Salary Report] Channel not found.");
+            console.error(`❌ [Salary Report] Channel not found for ${serverId}.`);
             return;
         }
 
-        // Send a single message with a "Check Your Salary" button
+        const serverTag = serverId.toUpperCase();
+
         const reportEmbed = new EmbedBuilder()
-            .setTitle("📊 Salary Report Ready!")
+            .setTitle(`📊 Salary Report Ready! — ${serverTag}`)
             .setColor("#57F287")
             .setDescription(
-                `**Week:** ${weekRange}\n\n` +
+                `**Week:** ${weekRange}\n` +
+                `**Server:** ${serverTag}\n\n` +
                 `The salary composition has been calculated and saved to the spreadsheet.\n` +
                 `**${reportData.length} member(s)** voted this week.\n\n` +
                 (unmatchedCount > 0
@@ -1195,7 +1199,7 @@ export async function postSalaryReport() {
             .setTimestamp();
 
         const checkBtn = new ButtonBuilder()
-            .setCustomId("salary_check")
+            .setCustomId(`${serverId}_salary_check`)
             .setLabel("🔍 Check Your Salary")
             .setStyle(ButtonStyle.Primary);
 
@@ -1205,32 +1209,28 @@ export async function postSalaryReport() {
             components: [new ActionRowBuilder().addComponents(checkBtn)]
         });
 
-        console.log(`✅ [Salary Report] Posted report message with button for ${reportData.length} members (${unmatchedCount} unmatched).`);
-        logEvent(`Salary report posted for week ${salaryState.currentWeek} (${reportData.length} members)`);
+        console.log(`✅ [Salary Report] Posted report for ${serverId} with ${reportData.length} members (${unmatchedCount} unmatched).`);
+        logEvent(`Salary report posted for ${serverId} week ${state.currentWeek} (${reportData.length} members)`);
 
     } catch (err) {
-        console.error("❌ [Salary Report] Error:", err.message);
+        console.error(`❌ [Salary Report] Error for ${serverId}:`, err.message);
     }
 }
 
-// ─── Shared: Build salary breakdown response ──
+// ─── Build salary breakdown response ─────────
 
-/**
- * Fetch salary data from spreadsheet and build an embed + refresh button.
- * Returns { embeds, components, content } or null if user didn't vote.
- */
-async function buildSalaryBreakdownResponse(interaction) {
+async function buildSalaryBreakdownResponse(interaction, serverId) {
+    const state = getServerState(serverId);
     const userId = interaction.user.id;
-    const userVote = salaryState.votes[userId];
+    const userVote = state.votes[userId];
 
-    // If user is a pilot, check owner's vote instead
     let checkUserId = userId;
     let checkVote = userVote;
     if (!checkVote && rankingDb && rankingDb.users) {
         for (const [uid, data] of Object.entries(rankingDb.users)) {
             if (data.pilotIds && data.pilotIds.includes(userId)) {
                 checkUserId = uid;
-                checkVote = salaryState.votes[uid] || null;
+                checkVote = state.votes[uid] || null;
                 break;
             }
         }
@@ -1239,10 +1239,9 @@ async function buildSalaryBreakdownResponse(interaction) {
     const finalVote = checkVote || userVote;
     if (!finalVote) return null;
 
-    // Always fetch fresh data from the spreadsheet
     let userData = null;
     try {
-        const spreadsheetId = salaryState.spreadsheetId || DEFAULT_SPREADSHEET_ID;
+        const spreadsheetId = state.spreadsheetId || DEFAULT_SPREADSHEET_ID;
         if (!spreadsheetId) throw new Error("No spreadsheet ID");
 
         const sheets = await getSheetsClient();
@@ -1250,7 +1249,9 @@ async function buildSalaryBreakdownResponse(interaction) {
 
         const meta = await sheets.spreadsheets.get({ spreadsheetId });
         const playersSheet = meta.data.sheets.find(s => s.properties.title === "PLAYERS");
-        if (!playersSheet) throw new Error("PLAYERS sheet not found");            const result = await sheets.spreadsheets.values.get({
+        if (!playersSheet) throw new Error("PLAYERS sheet not found");
+
+        const result = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: `${playersSheet.properties.title}!B7:S`
         });
@@ -1267,10 +1268,6 @@ async function buildSalaryBreakdownResponse(interaction) {
             for (const sName of searchNames) {
                 if (rowName === sName) {
                     const row = rows[i];
-                    // Read percentages from spreadsheet (columns J, N, Q) which were
-                    // exported when the poll closed on Wednesday. Fall back to in-memory
-                    // vote data if spreadsheet cells are empty.
-                    // Column indices when reading from B7:S: B=0, J=8, N=12, Q=15
                     userData = {
                         name: row[0] || finalVote.userName,
                         dsPercent: row[8] !== undefined && row[8] !== null ? Number(row[8]) : finalVote.dsPercent,
@@ -1288,10 +1285,9 @@ async function buildSalaryBreakdownResponse(interaction) {
             if (userData) break;
         }
     } catch (err) {
-        console.error("❌ [Salary Check] Error fetching data from spreadsheet:", err.message);
+        console.error(`❌ [Salary Check] Error fetching data from spreadsheet for ${serverId}:`, err.message);
     }
 
-    // Fallback to vote-only data if spreadsheet fetch fails
     if (!userData) {
         userData = {
             name: finalVote.userName,
@@ -1310,9 +1306,9 @@ async function buildSalaryBreakdownResponse(interaction) {
     const playerName = interaction.member?.displayName || userData.name;
 
     const embed = new EmbedBuilder()
-        .setTitle("📊 Your Salary Breakdown")
+        .setTitle(`📊 Your Salary Breakdown — ${serverId.toUpperCase()}`)
         .setColor("#57F287")
-        .setDescription(`**Week:** ${weekRange}\n**👤 ${playerName}**`)
+        .setDescription(`**Week:** ${weekRange}\n**Server:** ${serverId.toUpperCase()}\n**👤 ${playerName}**`)
         .addFields(
             { name: "⚪ Darksteel", value: `**${userData.dsPercent}%** — ${userData.dsQty}`, inline: true },
             { name: "🎨 Yellow Stones", value: `**${userData.yellowPercent}%** — ${userData.yellowQty} units | **${userData.yellowPts}** pts`, inline: true },
@@ -1322,7 +1318,7 @@ async function buildSalaryBreakdownResponse(interaction) {
         .setTimestamp();
 
     const refreshBtn = new ButtonBuilder()
-        .setCustomId("salary_refresh")
+        .setCustomId(`${serverId}_salary_refresh`)
         .setLabel("🔄 Refresh")
         .setStyle(ButtonStyle.Secondary);
 
@@ -1333,27 +1329,26 @@ async function buildSalaryBreakdownResponse(interaction) {
     };
 }
 
-// ─── Handle Salary Check Button (from report message) ─
+// ─── Handle Salary Check Button ──────────────
 
-export async function handleSalaryCheckButton(interaction) {
-    const response = await buildSalaryBreakdownResponse(interaction);
+export async function handleSalaryCheckButton(interaction, serverId) {
+    const response = await buildSalaryBreakdownResponse(interaction, serverId);
     if (!response) {
         return await interaction.reply({
-            content: "❌ You didn't vote in this week's salary poll. Wait for next **Monday 12:30 BRT** to participate!",
+            content: `❌ You didn't vote in ${serverId.toUpperCase()}'s salary poll. Wait for next **Monday 12:30 BRT** to participate!`,
             flags: 64
         }).catch(() => {});
     }
     return await interaction.reply(response).catch(() => {});
 }
 
-// ─── Handle Salary Refresh Button (from ephemeral response) ─
+// ─── Handle Salary Refresh Button ────────────
 
-export async function handleSalaryCheckRefresh(interaction) {
-    // Only the original user can refresh their own breakdown
-    const response = await buildSalaryBreakdownResponse(interaction);
+export async function handleSalaryCheckRefresh(interaction, serverId) {
+    const response = await buildSalaryBreakdownResponse(interaction, serverId);
     if (!response) {
         return await interaction.update({
-            content: "❌ You didn't vote in this week's salary poll.",
+            content: `❌ You didn't vote in ${serverId.toUpperCase()}'s salary poll.`,
             embeds: [],
             components: []
         }).catch(() => {});
@@ -1363,20 +1358,21 @@ export async function handleSalaryCheckRefresh(interaction) {
 
 // ─── Manual force-export ─────────────────────
 
-export async function forceExportToSheets() {
-    const sid = salaryState.spreadsheetId || DEFAULT_SPREADSHEET_ID;
+export async function forceExportToSheets(serverId) {
+    const state = getServerState(serverId);
+    const sid = state.spreadsheetId || DEFAULT_SPREADSHEET_ID;
     if (!sid) {
-        return { success: false, message: "❌ No spreadsheet configured. Use !salaryspreadsheet <ID> first." };
+        return { success: false, message: `❌ No spreadsheet configured for ${serverId}. Use !salaryspreadsheet first.` };
     }
-    if (Object.keys(salaryState.votes).length === 0) {
-        return { success: false, message: "📭 No votes recorded to export." };
+    if (Object.keys(state.votes).length === 0) {
+        return { success: false, message: `📭 No votes recorded for ${serverId} to export.` };
     }
-    await exportVotesToSheets();
-    return { success: true, message: `✅ Exported ${Object.keys(salaryState.votes).length} votes to the spreadsheet.` };
+    await exportVotesToSheets(serverId);
+    return { success: true, message: `✅ Exported ${Object.keys(state.votes).length} votes for ${serverId} to the spreadsheet.` };
 }
 
 // ─── Expose state for other modules ──────────
 
-export function getSalaryState() {
-    return salaryState;
+export function getSalaryState(serverId) {
+    return getServerState(serverId);
 }

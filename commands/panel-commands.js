@@ -71,7 +71,7 @@ async function handleMS(msg, lowerContent) {
         ];
         db._panelMapping || (db._panelMapping = {});
         for (let rawItem of list) {
-            const item = resolvePanelKey(rawItem, msg);
+            const item = resolvePanelKey(rawItem, msg.channel);
             if (db._panelMapping[item] && db._panelMapping[item].channelId === msg.channel.id) {
                 try {
                     let oldMsg = await msg.channel.messages.fetch(db._panelMapping[item].messageId).catch(() => null);
@@ -97,14 +97,14 @@ async function handleMS(msg, lowerContent) {
     // MS7 - MS10
     if (!defaultFloors.includes(sub)) return;
 
-    let norm = resolvePanelKey(`${sub}squarenormal`, msg);
+    let norm = resolvePanelKey(`${sub}squarenormal`, msg.channel);
 
     // MS9 and MS10 have two antidemon panels (1-1 and 1-2)
     let antiKeys;
     if (sub === "9" || sub === "10") {
-        antiKeys = [resolvePanelKey(`${sub}squareantidemon11`, msg), resolvePanelKey(`${sub}squareantidemon12`, msg)];
+        antiKeys = [resolvePanelKey(`${sub}squareantidemon11`, msg.channel), resolvePanelKey(`${sub}squareantidemon12`, msg.channel)];
     } else {
-        antiKeys = [resolvePanelKey(`${sub}squareantidemon`, msg)];
+        antiKeys = [resolvePanelKey(`${sub}squareantidemon`, msg.channel)];
     }
 
     db._panelMapping || (db._panelMapping = {});
@@ -156,7 +156,7 @@ async function handleSP(msg, lowerContent) {
     
     // SP11 / SP12 — same as regular SP peaks (7-10)
     if ("11" === floorNum || "12" === floorNum) {
-        let pKey = resolvePanelKey(`${floorNum}peak`, msg);
+        let pKey = resolvePanelKey(`${floorNum}peak`, msg.channel);
         db._panelMapping || (db._panelMapping = {});
         if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
             try {
@@ -176,7 +176,7 @@ async function handleSP(msg, lowerContent) {
     
     // SP12 also deploys the Random Event panel in the same channel
     if (floorNum === "12") {
-        const rKey = resolvePanelKey("12randomevent", msg);
+        const rKey = resolvePanelKey("12randomevent", msg.channel);
         if (db._panelMapping[rKey] && db._panelMapping[rKey].channelId === msg.channel.id) {
             try {
                 let oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
@@ -194,7 +194,7 @@ async function handleSP(msg, lowerContent) {
     }
     
     // Deploy goblin panel in the same channel for SP11 and SP12
-    const gKey = resolvePanelKey(`${floorNum}goblin`, msg);
+    const gKey = resolvePanelKey(`${floorNum}goblin`, msg.channel);
     if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
         try {
             let oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
@@ -217,7 +217,7 @@ async function handleSP(msg, lowerContent) {
 
     if (!defaultFloors.includes(floorNum)) return;
 
-    let pKey = resolvePanelKey(`${floorNum}peak`, msg);
+    let pKey = resolvePanelKey(`${floorNum}peak`, msg.channel);
     db._panelMapping || (db._panelMapping = {});
 
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
@@ -245,7 +245,7 @@ async function handleSP(msg, lowerContent) {
 // ==========================================
 
 async function handleSummon(msg) {
-    let pKey = resolvePanelKey("summon", msg);
+    let pKey = resolvePanelKey("summon", msg.channel);
     db._panelMapping || (db._panelMapping = {});
 
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {

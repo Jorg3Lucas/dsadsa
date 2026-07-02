@@ -12,6 +12,7 @@ const BACKUP_DIR = path.resolve("./backups");
 const MAX_BACKUPS = 7; // keep last 7 backups per file
 
 // All JSON files that should be backed up
+// Per-server ranking DBs are backed up individually via runBackup() on each write
 const BACKUP_FILES = [
   "./database.json",
   "./database_ranking.json",
@@ -20,6 +21,18 @@ const BACKUP_FILES = [
   "./punishments.json",
   "./ranking_cache.json"
 ];
+
+// Dynamically discover and back up per-server ranking DB files
+function getPerServerBackupFiles() {
+  try {
+    const files = fs.readdirSync("./")
+      .filter(f => /^database_ranking_[a-zA-Z0-9_-]+\.json$/.test(f))
+      .map(f => "./" + f);
+    return files;
+  } catch (err) {
+    return [];
+  }
+}
 
 let backupInterval = null;
 
@@ -45,7 +58,7 @@ export function runBackup(targetFiles) {
 
   const filesToBackup = targetFiles && targetFiles.length > 0
     ? targetFiles
-    : BACKUP_FILES;
+    : [...BACKUP_FILES, ...getPerServerBackupFiles()];
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   let count = 0;

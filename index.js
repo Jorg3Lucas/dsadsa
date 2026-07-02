@@ -11,7 +11,7 @@ import {
     handleClaimMessages,
     handleClaimInteractions
 } from './bot.js';
-import { loadServerConfig } from './server-config.js';
+import { loadServerConfig, getActiveServerIds, getServerDataFiles } from './server-config.js';
 import { DISCORD_SERVER_ID, reloadRankingConstants } from './ranking-constants.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
 import { initTempVoiceSystem } from './temp-voice.js';
@@ -23,7 +23,7 @@ import {
     runDailySynchronization
 } from './ranking_sync.js';
 import {
-    loadSalaryState,
+    loadAllSalaryStates,
     initSalaryCron
 } from './salary-poll.js';
 
@@ -41,7 +41,6 @@ const client = new Client({
 });
 
 const dbClaimPath = path.resolve('./database.json');
-const dbRankingPath = path.resolve('./database_ranking.json');
 const rankingLogsPath = path.resolve('./ranking_logs.txt');
 
 let claimDb = {};
@@ -75,7 +74,6 @@ try {
 
 function saveClaimStorage() {
     try {
-        // Backup before overwriting
         runBackup(['./database.json']);
 
         const persistentMessages = {};
@@ -96,30 +94,72 @@ function saveClaimStorage() {
     }
 }
 
-function saveRankingStorage() {
-    try {
-        // Backup before overwriting
-        runBackup(['./database_ranking.json']);
+// ─── Per-server ranking DB loading/saving ────
 
-        fs.writeFileSync(dbRankingPath, JSON.stringify(rankingDb, null, 2), 'utf8');
-    } catch (error) {
-        console.error('❌ Error saving ranking database:', error);
+function loadRankingDbs() {
+    const serverIds = getActiveServerIds();
+    if (serverIds.length === 0) {
+        console.log('📝 [Ranking] No servers configured, using single DB.');
+        // Try loading from legacy path
+        const legacyPath = path.resolve('./database_ranking.json');
+        if (fs.existsSync(legacyPath)) {
+            try {
+                rankingDb = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+                if (!rankingDb.users) rankingDb.users = {};
+                console.log('✅ Ranking database loaded from legacy path.');
+            } catch (e) {
+                console.error('❌ Error loading legacy ranking DB:', e.message);
+            }
+        }
+        return;
     }
+
+    // Load per-server files and merge into rankingDb
+    rankingDb = { users: {}, config: {} };
+    for (const serverId of serverIds) {
+        try {
+            const dbPath = getServerDataFiles(serverId).rankingDb;
+            if (fs.existsSync(dbPath)) {
+                const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+                if (data.users) {
+                    Object.assign(rankingDb.users, data.users);
+                }
+                if (data.config && !rankingDb.config) {
+                    rankingDb.config = data.config;
+                }
+                console.log(`✅ [Ranking] Loaded ${Object.keys(data.users || {}).length} users from ${serverId}.`);
+            } else {
+                console.log(`📝 [Ranking] No DB file for ${serverId}, will create on save.`);
+            }
+        } catch (e) {
+            console.error(`❌ [Ranking] Error loading DB for ${serverId}:`, e.message);
+        }
+    }
+    console.log(`✅ [Ranking] Merged DB: ${Object.keys(rankingDb.users).length} total users.`);
 }
 
-function loadLocalStorageRanking() {
-    try {
-        if (fs.existsSync(dbRankingPath)) {
-            const data = fs.readFileSync(dbRankingPath, 'utf8');
-            rankingDb = JSON.parse(data);
-            if (!rankingDb.users) rankingDb.users = {};
-            console.log('✅ Ranking database loaded successfully.');
-        } else {
-            saveRankingStorage();
-            console.log('📝 New database_ranking.json file created.');
+function saveRankingStorage() {
+    const serverIds = getActiveServerIds();
+    if (serverIds.length === 0) {
+        // Legacy fallback
+        try {
+            runBackup(['./database_ranking.json']);
+            fs.writeFileSync(path.resolve('./database_ranking.json'), JSON.stringify(rankingDb, null, 2), 'utf8');
+        } catch (e) {
+            console.error('❌ Error saving ranking database:', e);
         }
-    } catch (error) {
-        console.error('❌ Error loading ranking database:', error);
+        return;
+    }
+
+    // Save to EACH server's file (same merged data)
+    for (const serverId of serverIds) {
+        try {
+            const dbPath = getServerDataFiles(serverId).rankingDb;
+            runBackup([dbPath]);
+            fs.writeFileSync(dbPath, JSON.stringify(rankingDb, null, 2), 'utf8');
+        } catch (e) {
+            console.error(`❌ [Ranking] Error saving DB for ${serverId}:`, e.message);
+        }
     }
 }
 
@@ -129,11 +169,11 @@ function loadLocalStorageRanking() {
 client.once('ready', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
-    // Load server configuration and initialize ranking constants
     loadServerConfig();
     reloadRankingConstants();
 
-    loadLocalStorageRanking();
+    // Load per-server ranking files and merge
+    loadRankingDbs();
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
 
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
@@ -150,12 +190,10 @@ client.once('ready', async () => {
         await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, true);
     }, 10000);
 
-    // Start auto-backup scheduler
     startAutoBackup(6);
 
     initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb);
 
-    // Auto-setup channels after panels are initialized
     setTimeout(async () => {
         try {
             const { setupAllChannels } = await import('./auto-channel-setup.js');
@@ -165,14 +203,10 @@ client.once('ready', async () => {
         }
     }, 5000);
 
-    // Initialize Temp Voice system
     initTempVoiceSystem(client);
-
-    // Initialize Ticket system
     initTicketSystem(client);
 
-    // Initialize Salary Poll system
-    loadSalaryState();
+    loadAllSalaryStates();
     initSalaryCron();
 
     console.log(`🏁 Bot fully initialized. ${DISCORD_SERVER_ID ? `Discord Server: ${DISCORD_SERVER_ID}` : 'No Discord server configured - use !setup'}`);
@@ -217,7 +251,7 @@ client.on('interactionCreate', async (interaction) => {
             return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
         }
 
-        // B. USER SELECT MENUS (e.g. ticket add member)
+        // B. USER SELECT MENUS
         if (interaction.isUserSelectMenu()) {
             return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
         }
@@ -254,14 +288,11 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
         console.error('❌ Error caught in unified interaction router:', error);
         if (error.stack) console.error('📋 [Stack]:', error.stack);
-        // Prevent interaction timeout — reply if not already replied
         try {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: '❌ An unexpected error occurred. Please try again.', flags: 64 }).catch(() => {});
             }
-        } catch (e) {
-            // Silently fail — interaction may have already timed out
-        }
+        } catch (e) {}
     }
 });
 

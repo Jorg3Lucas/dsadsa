@@ -7,6 +7,7 @@
 import { EmbedBuilder as e } from "discord.js";
 import { getMsg } from "../lang.js";
 import { getLocalTime } from "../time-utils.js";
+import { getServerIdFromChannel } from "../claim-resolver.js";
 import {
     setSalaryChannelId,
     setSalarySpreadsheetId,
@@ -53,13 +54,28 @@ async function handleSetSalary(msg) {
     if (!msg.member.permissions.has("ManageGuild")) {
         return msg.reply({ content: getMsg("ranking.salary.setupError") }).catch(() => {});
     }
-    setSalaryChannelId(msg.channel.id);
-    // Also write to server config for all active servers
-    const { getActiveServerIds, setServerConfig } = await import("../server-config.js");
-    for (const serverId of getActiveServerIds()) {
-        setServerConfig(serverId, "channels.salaryPoll", msg.channel.id);
+
+    // Resolve which server this channel belongs to
+    let serverId = getServerIdFromChannel(msg.channel.id);
+    if (!serverId) {
+        // Fallback: try channel's parent category
+        serverId = msg.channel.parentId ? getServerIdFromChannel(msg.channel.parentId) : null;
     }
-    await createOrUpdatePollMessage(true);
+    // If still no match, use the first configured server
+    if (!serverId) {
+        const { getActiveServerIds } = await import("../server-config.js");
+        const activeIds = getActiveServerIds();
+        if (activeIds.length === 0) {
+            return msg.reply({ content: "❌ No servers configured. Use !setup first." }).catch(() => {});
+        }
+        serverId = activeIds[0];
+    }
+
+    setSalaryChannelId(serverId, msg.channel.id);
+    const { setServerConfig } = await import("../server-config.js");
+    setServerConfig(serverId, "channels.salaryPoll", msg.channel.id);
+
+    await createOrUpdatePollMessage(serverId, true);
     return msg.reply({ content: getMsg("ranking.salary.setupSuccess") }).catch(() => {});
 }
 
@@ -75,7 +91,15 @@ async function handleSalarySpreadsheet(msg, lowerContent) {
     if (!idMatch) {
         return msg.reply({ content: getMsg("ranking.salary.spreadsheetFormatError") }).catch(() => {});
     }
-    setSalarySpreadsheetId(idMatch[1].trim());
+    let serverId = getServerIdFromChannel(msg.channel.id);
+    if (!serverId) serverId = msg.channel.parentId ? getServerIdFromChannel(msg.channel.parentId) : null;
+    if (!serverId) {
+        const { getActiveServerIds } = await import("../server-config.js");
+        const activeIds = getActiveServerIds();
+        serverId = activeIds.length > 0 ? activeIds[0] : null;
+    }
+    if (!serverId) return msg.reply({ content: "❌ No servers configured." }).catch(() => {});
+    setSalarySpreadsheetId(serverId, idMatch[1].trim());
     return msg.reply({ content: getMsg("ranking.salary.spreadsheetSuccess") }).catch(() => {});
 }
 
@@ -87,7 +111,15 @@ async function handleSalaryExport(msg) {
     if (!msg.member.permissions.has("ManageMessages")) {
         return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {});
     }
-    const result = await forceExportToSheets();
+    let serverId = getServerIdFromChannel(msg.channel.id);
+    if (!serverId) serverId = msg.channel.parentId ? getServerIdFromChannel(msg.channel.parentId) : null;
+    if (!serverId) {
+        const { getActiveServerIds } = await import("../server-config.js");
+        const activeIds = getActiveServerIds();
+        serverId = activeIds.length > 0 ? activeIds[0] : null;
+    }
+    if (!serverId) return msg.reply({ content: "❌ No servers configured." }).catch(() => {});
+    const result = await forceExportToSheets(serverId);
     return msg.reply({ content: result.message }).catch(() => {});
 }
 
@@ -99,7 +131,15 @@ async function handleSalaryTest(msg) {
     if (!msg.member.permissions.has("ManageMessages")) {
         return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {});
     }
-    await createOrUpdatePollMessage(true);
+    let serverId = getServerIdFromChannel(msg.channel.id);
+    if (!serverId) serverId = msg.channel.parentId ? getServerIdFromChannel(msg.channel.parentId) : null;
+    if (!serverId) {
+        const { getActiveServerIds } = await import("../server-config.js");
+        const activeIds = getActiveServerIds();
+        serverId = activeIds.length > 0 ? activeIds[0] : null;
+    }
+    if (!serverId) return msg.reply({ content: "❌ No servers configured." }).catch(() => {});
+    await createOrUpdatePollMessage(serverId, true);
     return msg.reply({ content: "✅ Salary poll message sent/updated!" }).catch(() => {});
 }
 
@@ -111,8 +151,16 @@ async function handleSalaryReport(msg) {
     if (!msg.member.permissions.has("ManageMessages")) {
         return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {});
     }
-    await postSalaryReport();
-    return msg.reply({ content: "📊 Salary report posted in the salary channel!" }).catch(() => {});
+    let serverId = getServerIdFromChannel(msg.channel.id);
+    if (!serverId) serverId = msg.channel.parentId ? getServerIdFromChannel(msg.channel.parentId) : null;
+    if (!serverId) {
+        const { getActiveServerIds } = await import("../server-config.js");
+        const activeIds = getActiveServerIds();
+        serverId = activeIds.length > 0 ? activeIds[0] : null;
+    }
+    if (!serverId) return msg.reply({ content: "❌ No servers configured." }).catch(() => {});
+    await postSalaryReport(serverId);
+    return msg.reply({ content: `📊 Salary report for ${serverId.toUpperCase()} posted in the salary channel!` }).catch(() => {});
 }
 
 // ==========================================
@@ -120,7 +168,15 @@ async function handleSalaryReport(msg) {
 // ==========================================
 
 async function handleSalaryStatus(msg) {
-    const state = getSalaryState();
+    let serverId = getServerIdFromChannel(msg.channel.id);
+    if (!serverId) serverId = msg.channel.parentId ? getServerIdFromChannel(msg.channel.parentId) : null;
+    if (!serverId) {
+        const { getActiveServerIds } = await import("../server-config.js");
+        const activeIds = getActiveServerIds();
+        serverId = activeIds.length > 0 ? activeIds[0] : null;
+    }
+    if (!serverId) return msg.reply({ content: "❌ No servers configured." }).catch(() => {});
+    const state = getSalaryState(serverId);
     const week = state.currentWeek || "—";
     const status = state.status === "open" ? "🟢 Open" : state.status === "closed" ? "🔴 Closed" : "⚪ Idle";
     const votes = Object.keys(state.votes).length;
@@ -147,9 +203,10 @@ async function handleSalaryStatus(msg) {
 
     return msg.reply({
         embeds: [new e()
-            .setTitle("📊 Salary System Status")
+            .setTitle(`📊 Salary System Status — ${serverId.toUpperCase()}`)
             .setColor(status.includes("Open") ? "#57F287" : "#FEE75C")
             .addFields(
+                { name: "🆔 Server", value: serverId.toUpperCase(), inline: true },
                 { name: "📅 Week", value: week, inline: true },
                 { name: "🟢 Status", value: status, inline: true },
                 { name: "🗳️ Votes", value: String(votes), inline: true },
