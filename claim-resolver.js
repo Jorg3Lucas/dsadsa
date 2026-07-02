@@ -6,6 +6,9 @@
 
 import { getActiveServerIds, getServer } from './server-config.js';
 
+// Re-export for convenience (used by panel-utils.js and others)
+export { getActiveServerIds };
+
 // ─── In-memory channel → server map ────────
 
 let channelServerMap = null;
