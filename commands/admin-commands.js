@@ -21,6 +21,7 @@ import { renderEmbed, renderButtons } from "../panel-render.js";
 import { STATUS_CLAIMED } from "../constants.js";
 import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "../claim-core.js";
 import { handleSetupCommand } from "./server-setup.js";
+import { registerMir4SlashCommands } from "../ranking_sync.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -64,6 +65,9 @@ export async function handleAdminCommand(msg) {
     }
     if (lowerContent.startsWith("!reset ")) {
         return handleResetSpecific(msg, lowerContent.replace("!reset ", "").trim());
+    }
+    if ("!deploy" === lowerContent) {
+        return handleDeployCommands(msg);
     }
 
     return false; // not handled
@@ -346,6 +350,34 @@ async function handleResetMenu(msg) {
         )]
     });
     try { await msg.delete() } catch (C) {}
+}
+
+// ==========================================
+// 🔄 RESET SPECIFIC PANEL
+// ==========================================
+
+// ==========================================
+// 📜 DEPLOY SLASH COMMANDS
+// ==========================================
+
+async function handleDeployCommands(msg) {
+    if (!msg.member.permissions.has("ManageGuild")) {
+        return msg.reply({ content: "❌ You need the **Manage Server** permission to deploy slash commands." }).catch(() => {});
+    }
+
+    const guild = msg.guild;
+    if (!guild) {
+        return msg.reply({ content: "❌ This command must be used in a server." }).catch(() => {});
+    }
+
+    await msg.reply({ content: "🔄 Deploying slash commands..." }).catch(() => {});
+
+    try {
+        await registerMir4SlashCommands(guild);
+        await msg.channel.send({ content: `✅ Slash commands registered successfully in **${guild.name}**!` }).catch(() => {});
+    } catch (err) {
+        await msg.channel.send({ content: `❌ Failed to register slash commands: ${err.message}` }).catch(() => {});
+    }
 }
 
 // ==========================================
