@@ -294,6 +294,56 @@ export function migrateBossCooldowns() {
 }
 
 // ==========================================
+// 🔄 MIGRATION: Fix goblin panel room keys
+// Old format used the label string as room key (e.g. "⭐ SP 11F Goblin"),
+// new format uses short keys (sp11, sp12, ms11, ms12).
+// ==========================================
+
+export function migrateGoblinRoomKeys() {
+    let migrated = 0;
+    
+    // Mapping: label string → correct room key
+    const labelToRoom = {
+        "⭐ SP 11F Goblin": "sp11",
+        "⭐ SP 12F Goblin": "sp12",
+        "👹 MS 11 Goblin": "ms11",
+        "👹 MS 12 Goblin": "ms12"
+    };
+    
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        const panel = db[key];
+        if (panel.type !== "summon") continue;
+        
+        // Check if this panel has any old label-keyed room
+        for (const [label, correctKey] of Object.entries(labelToRoom)) {
+            if (panel[label] && typeof panel[label] === "object") {
+                // Found old-style room data — move to correct key
+                if (!panel[correctKey]) {
+                    panel[correctKey] = panel[label];
+                    // Ensure the name property is the label, not the key
+                    panel[correctKey].name = label;
+                } else {
+                    // Correct key already exists, merge owner data if present
+                    const oldRoom = panel[label];
+                    if (oldRoom.ownerId && !panel[correctKey].ownerId) {
+                        Object.assign(panel[correctKey], oldRoom);
+                    }
+                }
+                delete panel[label];
+                migrated++;
+                logEvent(`Migrated goblin room "${label}" → ${correctKey} in panel "${key}"`);
+            }
+        }
+    }
+    
+    if (migrated > 0) {
+        saveLocalStorage();
+        logEvent(`Goblin room key migration complete: ${migrated} room(s) fixed.`);
+    }
+}
+
+// ==========================================
 // 🔄 MIGRATION: Backfill _lastKilledAt timestamp for existing entries
 // ==========================================
 

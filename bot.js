@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "./state.js";
-import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migrateMS1112, migrateSPLegacyToUnified, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
+import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migrateMS1112, migrateSPLegacyToUnified, migrateGoblinRoomKeys, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
 import { startTickInterval } from "./panel-tick.js";
 import { STATUS_AVAILABLE } from "./constants.js";
 import { getActiveServerIds } from "./server-config.js";
@@ -38,6 +38,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     migrateLastKilledAt();
     migrateMS1112();
     migrateSPLegacyToUnified();
+    migrateGoblinRoomKeys();
 
     // Force-refresh all panels
     for (let key in db) {
@@ -177,11 +178,12 @@ function initPanelsForServer(serverId) {
     });
 
     // ── Individual Goblin Panels ──
-    const goblinTpl = (label) => ({ type: "summon", title: fmtTitle(label), [label]: { name: label, status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } });
-    db[p("11goblin")] || (db[p("11goblin")] = goblinTpl("⭐ SP 11F Goblin"));
-    db[p("12goblin")] || (db[p("12goblin")] = goblinTpl("⭐ SP 12F Goblin"));
-    db[p("11msgoblin")] || (db[p("11msgoblin")] = goblinTpl("👹 MS 11 Goblin"));
-    db[p("12msgoblin")] || (db[p("12msgoblin")] = goblinTpl("👹 MS 12 Goblin"));
+    // Room keys MUST match what getSummonRoomKeys() returns: sp11, sp12, ms11, ms12
+    const goblinTpl = (roomKey, label) => ({ type: "summon", title: fmtTitle(label), [roomKey]: { name: label, status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } });
+    db[p("11goblin")] || (db[p("11goblin")] = goblinTpl("sp11", "⭐ SP 11F Goblin"));
+    db[p("12goblin")] || (db[p("12goblin")] = goblinTpl("sp12", "⭐ SP 12F Goblin"));
+    db[p("11msgoblin")] || (db[p("11msgoblin")] = goblinTpl("ms11", "👹 MS 11 Goblin"));
+    db[p("12msgoblin")] || (db[p("12msgoblin")] = goblinTpl("ms12", "👹 MS 12 Goblin"));
 
     // ── Combined Summon Panel ──
     const summonRooms = {
