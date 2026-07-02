@@ -13,7 +13,7 @@ import { canHandleAntidemonInteraction, handleAntidemonInteraction, canHandleAnt
 import { canHandleSummonInteraction, handleSummonInteraction } from "./interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "./interactions/floor-interactions.js";
 import { canHandleSalaryInteraction, handleSalaryInteraction } from "./interactions/salary-interactions.js";
-import { canHandleGoldInteraction, handleGoldInteraction, handleGoldModalSubmit } from "./interactions/gold-interactions.js";
+import { canHandleSetupInteraction, handleSetupInteraction, handleAddServerModal, handleRankUrlModal, handleStaffRoleModal, handleRenameModal, handleCategoryModal, handleChannelModal, handleAddClanRoleModal, handleRemoveClanRoleSelect, canHandleSetupModal, handleSetupModal } from "./commands/server-setup.js";
 
 // ==========================================
 // 💬 TEXT COMMAND ROUTER
@@ -65,19 +65,19 @@ export async function handleClaimInteractions(interaction) {
         return await handleTicketInteraction(interaction);
     }
 
-    // 6. Gold shop interactions
-    if (canHandleGoldInteraction(interaction)) {
-        return await handleGoldInteraction(interaction);
-    }
-
-    // 7. Gold shop modal submits
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('gold-modal-')) {
-        return await handleGoldModalSubmit(interaction);
-    }
-
-    // 7b. Antidemon password modal submits
+    // 6. Antidemon password modal submits
     if (canHandleAntidemonModal(interaction)) {
         return await handleAntidemonModal(interaction);
+    }
+
+    // 6b. Setup modal submits (server configuration modals)
+    if (canHandleSetupModal(interaction)) {
+        return await handleSetupModal(interaction);
+    }
+
+    // 7. Setup interactions (server configuration)
+    if (canHandleSetupInteraction(interaction)) {
+        return await handleSetupInteraction(interaction);
     }
 
     // 8. Floor interactions (buttons: death, claim, cancel, next)
