@@ -193,7 +193,8 @@ async function handleSP(msg, lowerContent) {
         db._panelInstances[rKey].push({ channelId: msg.channel.id, messageId: rMsg.id });
     }
     
-    // Deploy goblin panel in the same channel for SP11 and SP12        const gKey = resolvePanelKey(`${floorNum}goblin`, msg);
+    // Deploy goblin panel in the same channel for SP11 and SP12
+    const gKey = resolvePanelKey(`${floorNum}goblin`, msg);
     if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
         try {
             let oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
