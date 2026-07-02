@@ -54,6 +54,11 @@ async function handleSetSalary(msg) {
         return msg.reply({ content: getMsg("ranking.salary.setupError") }).catch(() => {});
     }
     setSalaryChannelId(msg.channel.id);
+    // Also write to server config for all active servers
+    const { getActiveServerIds, setServerConfig } = await import("../server-config.js");
+    for (const serverId of getActiveServerIds()) {
+        setServerConfig(serverId, "channels.salaryPoll", msg.channel.id);
+    }
     await createOrUpdatePollMessage(true);
     return msg.reply({ content: getMsg("ranking.salary.setupSuccess") }).catch(() => {});
 }

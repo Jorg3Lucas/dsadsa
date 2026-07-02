@@ -6,23 +6,40 @@
 // ==========================================
 
 import { ChannelType } from "discord.js";
-import { CLAN_ROLES } from "./ranking-constants.js";
+import { getAllClanRoleIds } from "./ranking-constants.js";
+import { getActiveServerIds, getServer } from "./server-config.js";
 
-const SOURCE_CHANNEL_ID = "1432525604854436002";
 const tempVoiceChannels = new Set();
 
-// Unique allied clan role IDs that get Connect + Speak on temp channels
-const ALLIED_ROLE_IDS = [...new Set(Object.values(CLAN_ROLES))];
+// Resolve the source channel ID from server config (uses first configured server)
+function getSourceChannelId() {
+    const serverIds = getActiveServerIds();
+    for (const serverId of serverIds) {
+        const server = getServer(serverId);
+        if (server?.channels?.tempVoiceSource) {
+            return server.channels.tempVoiceSource;
+        }
+    }
+    return null;
+}
 
 // ── Init ────────────────────────────────────
 
 export function initTempVoiceSystem(client) {
-    console.log(`🔉 Temp voice system active — source channel ID: ${SOURCE_CHANNEL_ID}`);
+    const sourceId = getSourceChannelId();
+    if (!sourceId) {
+        console.log("⚠️ [TempVoice] No source channel configured. Use !setup to configure a temp voice channel.");
+        return;
+    }
+    console.log(`🔉 Temp voice system active — source channel ID: ${sourceId}`);
 
     client.on("voiceStateUpdate", async (oldState, newState) => {
         try {
+            const srcId = getSourceChannelId();
+            if (!srcId) return;
+            
             // ── User JOINED the source channel ──
-            if (newState.channelId === SOURCE_CHANNEL_ID && oldState.channelId !== SOURCE_CHANNEL_ID) {
+            if (newState.channelId === srcId && oldState.channelId !== srcId) {
                 await handleUserJoinedSource(newState);
             }
 
@@ -61,6 +78,8 @@ async function handleUserJoinedSource(state) {
     const guild = state.guild;
     if (!member || !guild) return;
 
+    const alliedRoleIds = getAllClanRoleIds();
+
     // If user already has a temp channel, just move them back
     for (const chId of tempVoiceChannels) {
         const existing = guild.channels.cache.get(chId);
@@ -85,7 +104,7 @@ async function handleUserJoinedSource(state) {
                     deny: ["CreateInstantInvite"],
                 },
                 // Give all allied clan roles View Channel + Connect + Speak
-                ...ALLIED_ROLE_IDS.map(roleId => ({
+                ...alliedRoleIds.map(roleId => ({
                     id: roleId,
                     allow: ["ViewChannel", "Connect", "Speak"],
                 })),
@@ -107,10 +126,11 @@ async function handleUserJoinedSource(state) {
 // ── Cleanup orphaned channels on startup ────
 
 async function cleanupOrphanedChannels(client) {
-    if (!SOURCE_CHANNEL_ID) return;
+    const srcId = getSourceChannelId();
+    if (!srcId) return;
 
     for (const [, guild] of client.guilds.cache) {
-        const source = guild.channels.cache.get(SOURCE_CHANNEL_ID);
+        const source = guild.channels.cache.get(srcId);
         if (!source || !source.parentId) continue;
 
         const category = guild.channels.cache.get(source.parentId);

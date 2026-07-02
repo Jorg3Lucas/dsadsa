@@ -56,6 +56,10 @@ async function handleMS(msg, lowerContent) {
             });
             lastMessages[item] = sent;
             db._panelMapping[item] = { channelId: msg.channel.id, messageId: sent.id };
+            // Track all instances for multi-server refresh
+            if (!db._panelInstances) db._panelInstances = {};
+            if (!db._panelInstances[item]) db._panelInstances[item] = [];
+            db._panelInstances[item].push({ channelId: msg.channel.id, messageId: sent.id });
         }
         saveLocalStorage();
         try { await msg.delete() } catch (M) {}
@@ -92,6 +96,10 @@ async function handleMS(msg, lowerContent) {
     });
     lastMessages[norm] = m1;
     db._panelMapping[norm] = { channelId: msg.channel.id, messageId: m1.id };
+    // Track all instances
+    if (!db._panelInstances) db._panelInstances = {};
+    if (!db._panelInstances[norm]) db._panelInstances[norm] = [];
+    db._panelInstances[norm].push({ channelId: msg.channel.id, messageId: m1.id });
 
     for (let antiKey of antiKeys) {
         let m = await msg.channel.send({
@@ -100,6 +108,9 @@ async function handleMS(msg, lowerContent) {
         });
         lastMessages[antiKey] = m;
         db._panelMapping[antiKey] = { channelId: msg.channel.id, messageId: m.id };
+        if (!db._panelInstances) db._panelInstances = {};
+        if (!db._panelInstances[antiKey]) db._panelInstances[antiKey] = [];
+        db._panelInstances[antiKey].push({ channelId: msg.channel.id, messageId: m.id });
     }
 
     saveLocalStorage();
@@ -123,46 +134,53 @@ async function handleSP(msg, lowerContent) {
                 oldMsg && await oldMsg.delete().catch(() => {});
             } catch (C) {}
         }
-        let pMsg = await msg.channel.send({
-            embeds: [renderEmbed(pKey)],
-            components: renderButtons(pKey)
-        });
-        lastMessages[pKey] = pMsg;
-        db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
-        
-        // SP12 also deploys the Random Event panel in the same channel
-        if (floorNum === "12") {
-            const rKey = "12randomevent";
-            if (db._panelMapping[rKey] && db._panelMapping[rKey].channelId === msg.channel.id) {
-                try {
-                    let oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
-                    oldRMsg && await oldRMsg.delete().catch(() => {});
-                } catch (C) {}
-            }
-            let rMsg = await msg.channel.send({
-                embeds: [renderEmbed(rKey)],
-                components: renderButtons(rKey)
-            });
-            lastMessages[rKey] = rMsg;
-            db._panelMapping[rKey] = { channelId: msg.channel.id, messageId: rMsg.id };
-        }
-        
-        // Deploy goblin panel in the same channel for SP11 and SP12
-        const gKey = `${floorNum}goblin`;
-        if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
+    let pMsg = await msg.channel.send({
+        embeds: [renderEmbed(pKey)],
+        components: renderButtons(pKey)
+    });
+    lastMessages[pKey] = pMsg;
+    db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
+    if (!db._panelInstances) db._panelInstances = {};
+    if (!db._panelInstances[pKey]) db._panelInstances[pKey] = [];
+    db._panelInstances[pKey].push({ channelId: msg.channel.id, messageId: pMsg.id });
+    
+    // SP12 also deploys the Random Event panel in the same channel
+    if (floorNum === "12") {
+        const rKey = "12randomevent";
+        if (db._panelMapping[rKey] && db._panelMapping[rKey].channelId === msg.channel.id) {
             try {
-                let oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
-                oldGMsg && await oldGMsg.delete().catch(() => {});
+                let oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
+                oldRMsg && await oldRMsg.delete().catch(() => {});
             } catch (C) {}
         }
-        let gMsg = await msg.channel.send({
-            embeds: [renderEmbed(gKey)],
-            components: renderButtons(gKey)
+        let rMsg = await msg.channel.send({
+            embeds: [renderEmbed(rKey)],
+            components: renderButtons(rKey)
         });
-        lastMessages[gKey] = gMsg;
-        db._panelMapping[gKey] = { channelId: msg.channel.id, messageId: gMsg.id };
-        
-        saveLocalStorage();
+        lastMessages[rKey] = rMsg;
+        db._panelMapping[rKey] = { channelId: msg.channel.id, messageId: rMsg.id };
+        if (!db._panelInstances[rKey]) db._panelInstances[rKey] = [];
+        db._panelInstances[rKey].push({ channelId: msg.channel.id, messageId: rMsg.id });
+    }
+    
+    // Deploy goblin panel in the same channel for SP11 and SP12
+    const gKey = `${floorNum}goblin`;
+    if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
+        try {
+            let oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
+            oldGMsg && await oldGMsg.delete().catch(() => {});
+        } catch (C) {}
+    }
+    let gMsg = await msg.channel.send({
+        embeds: [renderEmbed(gKey)],
+        components: renderButtons(gKey)
+    });
+    lastMessages[gKey] = gMsg;
+    db._panelMapping[gKey] = { channelId: msg.channel.id, messageId: gMsg.id };
+    if (!db._panelInstances[gKey]) db._panelInstances[gKey] = [];
+    db._panelInstances[gKey].push({ channelId: msg.channel.id, messageId: gMsg.id });
+    
+    saveLocalStorage();
         try { await msg.delete() } catch (C) {}
         return;
     }
@@ -185,6 +203,9 @@ async function handleSP(msg, lowerContent) {
     });
     lastMessages[pKey] = pMsg;
     db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
+    if (!db._panelInstances) db._panelInstances = {};
+    if (!db._panelInstances[pKey]) db._panelInstances[pKey] = [];
+    db._panelInstances[pKey].push({ channelId: msg.channel.id, messageId: pMsg.id });
     saveLocalStorage();
     try { await msg.delete() } catch (C) {}
 }
@@ -210,6 +231,9 @@ async function handleSummon(msg) {
     });
     lastMessages[pKey] = pMsg;
     db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
+    if (!db._panelInstances) db._panelInstances = {};
+    if (!db._panelInstances[pKey]) db._panelInstances[pKey] = [];
+    db._panelInstances[pKey].push({ channelId: msg.channel.id, messageId: pMsg.id });
     saveLocalStorage();
     try { await msg.delete() } catch (C) {}
 }

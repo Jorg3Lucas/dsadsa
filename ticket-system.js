@@ -12,10 +12,29 @@ import path from "path";
 import { dailyLogs, client } from "./state.js";
 import { runBackup } from "./auto-backup.js";
 import { getLogsChannelIds } from "./daily-logs.js";
+import { getActiveServerIds, getServer } from "./server-config.js";
 
 const ticketsPath = path.resolve("./tickets.json");
-const STAFF_ROLE_ID = "1503934006431973488";
-const TICKET_CATEGORY_ID = "1519145795838808093";
+
+// Resolve staff role ID from server config (first configured server)
+function getStaffRoleId() {
+    const serverIds = getActiveServerIds();
+    for (const serverId of serverIds) {
+        const server = getServer(serverId);
+        if (server?.staffRoleId) return server.staffRoleId;
+    }
+    return null;
+}
+
+// Resolve ticket category ID from server config (first configured server)
+function getTicketCategoryId() {
+    const serverIds = getActiveServerIds();
+    for (const serverId of serverIds) {
+        const server = getServer(serverId);
+        if (server?.channels?.ticketCategory) return server.channels.ticketCategory;
+    }
+    return null;
+}
 
 const TICKET_CATEGORIES = [
     { label: "❓ Support", value: "support", description: "General help and questions" },
@@ -217,9 +236,11 @@ async function handleTicketCategory(interaction) {
             },
         ];
 
-        if (STAFF_ROLE_ID) {
+        const staffRoleId = getStaffRoleId();
+        const ticketCategoryId = getTicketCategoryId();
+        if (staffRoleId) {
             overwrites.push({
-                id: STAFF_ROLE_ID,
+                id: staffRoleId,
                 allow: ["ViewChannel", "SendMessages", "ReadMessageHistory", "ManageChannels"],
             });
         }
@@ -227,7 +248,7 @@ async function handleTicketCategory(interaction) {
         const ticketChannel = await guild.channels.create({
             name: channelName,
             type: ChannelType.GuildText,
-            parent: TICKET_CATEGORY_ID || undefined,
+            parent: ticketCategoryId || undefined,
             permissionOverwrites: overwrites,
             topic: `Ticket for ${interaction.user.tag} (${uid}) — ${categoryLabel}`,
         });
@@ -264,7 +285,7 @@ async function handleTicketCategory(interaction) {
         };
 
         await ticketChannel.send({
-            content: STAFF_ROLE_ID ? `<@&${STAFF_ROLE_ID}>` : "",
+            content: staffRoleId ? `<@&${staffRoleId}>` : "",
             embeds: [welcomeEmbed],
             components: [actionRow]
         });
@@ -286,8 +307,9 @@ async function handleTicketCategory(interaction) {
 // ── Add member to ticket (show user select) ──
 
 async function handleAddMember(interaction) {
+    const staffRoleId = getStaffRoleId();
     const isStaff = interaction.member.permissions.has("ManageMessages") ||
-                    (STAFF_ROLE_ID && interaction.member.roles.cache.has(STAFF_ROLE_ID));
+                    (staffRoleId && interaction.member.roles.cache.has(staffRoleId));
 
     if (!isStaff) {
         return await interaction.reply({
@@ -354,8 +376,9 @@ async function handleAddMemberSelect(interaction) {
 // ── Remove member from ticket (show user select) ──
 
 async function handleRemoveMember(interaction) {
+    const staffRoleId = getStaffRoleId();
     const isStaff = interaction.member.permissions.has("ManageMessages") ||
-                    (STAFF_ROLE_ID && interaction.member.roles.cache.has(STAFF_ROLE_ID));
+                    (staffRoleId && interaction.member.roles.cache.has(staffRoleId));
 
     if (!isStaff) {
         return await interaction.reply({
@@ -409,8 +432,9 @@ async function handleRemoveMemberSelect(interaction) {
         }).catch(() => {});
     }
 
+    const staffRoleId = getStaffRoleId();
     // Prevent removing staff role members
-    if (STAFF_ROLE_ID && targetMember.roles.cache.has(STAFF_ROLE_ID)) {
+    if (staffRoleId && targetMember.roles.cache.has(staffRoleId)) {
         return await interaction.reply({
             content: "❌ Cannot remove staff members from the ticket.",
             flags: 64
@@ -453,8 +477,9 @@ async function handleRemoveMemberSelect(interaction) {
 async function handleCloseTicket(interaction) {
     const uid = interaction.user.id;
     const channelId = interaction.channelId;
+    const staffRoleId = getStaffRoleId();
     const isStaff = interaction.member.permissions.has("ManageMessages") ||
-                    (STAFF_ROLE_ID && interaction.member.roles.cache.has(STAFF_ROLE_ID));
+                    (staffRoleId && interaction.member.roles.cache.has(staffRoleId));
 
     // Find the ticket owner
     let ticketOwnerId = null;
@@ -735,19 +760,20 @@ async function cleanupOrphanedTickets(client) {
     if (orphanCleanupDone) return;
     orphanCleanupDone = true;
 
-    if (!TICKET_CATEGORY_ID) return;
+    const ticketCategoryId = getTicketCategoryId();
+    if (!ticketCategoryId) return;
 
     const now = Date.now();
     const ONE_HOUR_MS = 60 * 60 * 1000;
 
     for (const [, guild] of client.guilds.cache) {
-        const category = guild.channels.cache.get(TICKET_CATEGORY_ID);
+        const category = guild.channels.cache.get(ticketCategoryId);
         if (!category) continue;
 
         for (const [, channel] of guild.channels.cache) {
             if (
                 channel.type === ChannelType.GuildText &&
-                channel.parentId === TICKET_CATEGORY_ID &&
+                channel.parentId === ticketCategoryId &&
                 channel.name.startsWith("ticket-")
             ) {
                 // Check if this channel is tracked
