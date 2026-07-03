@@ -10,7 +10,6 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import { dailyLogs, client } from "./state.js";
-import { runBackup } from "./auto-backup.js";
 import { getLogsChannelIds } from "./daily-logs.js";
 import { getActiveServerIds, getServer } from "./server-config.js";
 
@@ -62,7 +61,6 @@ export function loadTicketState() {
 
 function saveTicketState() {
     try {
-        runBackup(["./tickets.json"]);
         fs.writeFileSync(ticketsPath, JSON.stringify({
             panelChannelId: ticketPanelChannelId,
             openTickets

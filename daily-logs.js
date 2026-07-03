@@ -4,7 +4,6 @@ import { getLocalTime } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { dailyLogs, dailyLogsPath, client } from "./state.js";
 import fs from "fs";
-import { runBackup } from "./auto-backup.js";
 import { getActiveServerIds, getServer } from "./server-config.js";
 
 // ==========================================
@@ -13,9 +12,6 @@ import { getActiveServerIds, getServer } from "./server-config.js";
 
 export function saveDailyLogs() {
     try {
-        // Backup before overwriting
-        runBackup(["./daily-logs.json"]);
-
         fs.writeFileSync(dailyLogsPath, JSON.stringify(dailyLogs, null, 2));
     } catch (err) {
         console.error("❌ Error saving daily logs:", err.message);

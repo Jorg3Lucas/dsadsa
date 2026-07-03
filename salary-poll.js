@@ -16,7 +16,6 @@ import path from "path";
 import { getMsg } from "./lang.js";
 import { client, saveLocalStorage, logEvent, rankingDb } from "./state.js";
 import { getLocalTime } from "./time-utils.js";
-import { runBackup } from "./auto-backup.js";
 import { getActiveServerIds, getServerDataFiles } from "./server-config.js";
 
 // ─── Default spreadsheet ─────────────────────
@@ -73,8 +72,6 @@ export function getServerState(serverId) {
 function saveServerState(serverId) {
     try {
         const statePath = getStatePath(serverId);
-        // Backup before overwriting
-        runBackup([statePath]);
         fs.writeFileSync(statePath, JSON.stringify(serverStates[serverId], null, 2));
     } catch (err) {
         console.error(`❌ [Salary Poll] Error saving state for ${serverId}:`, err.message);

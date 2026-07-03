@@ -1,7 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { runBackup } from './auto-backup.js';
-
 // ==========================================
 // 💾 RANKING CACHE (Local JSON)
 // ==========================================
@@ -25,9 +23,6 @@ function getCachePath(serverId) {
 export function saveRankingCache(data, serverId) {
     try {
         const cachePath = getCachePath(serverId);
-
-        // Backup before overwriting
-        runBackup([cachePath]);
 
         const cacheData = { updatedAt: new Date().toISOString(), ranking: data };
         fs.writeFileSync(cachePath, JSON.stringify(cacheData, null, 2), 'utf8');

@@ -1,7 +1,5 @@
 import o from "fs";
 import s from "path";
-import { runBackup } from "./auto-backup.js";
-
 // ==========================================
 // 🏗️ MODULE-LEVEL STATE
 // ==========================================
@@ -49,9 +47,6 @@ export function loadPunishmentsFromDisk() {
 
 export function savePunishmentsToDisk() {
     try {
-        // Backup before overwriting
-        runBackup(["./punishments.json"]);
-
         o.writeFileSync(punishmentsPath, JSON.stringify(punishments, null, 2));
     } catch (e) {}
 }

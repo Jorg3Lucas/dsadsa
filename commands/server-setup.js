@@ -310,22 +310,6 @@ async function handleRemoveServerMenu(interaction) {
         return await interaction.reply({ content: '📭 No servers to remove.', flags: 64 }).catch(() => {});
     }
 
-    const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('setup-menu-remove')
-        .setPlaceholder('Select a server to remove...')
-        .addOptions(
-            servers.map(srv =>
-                new StringSelectMenuOptionBuilder()
-                    .setLabel(srv.name)
-                    .setDescription(`Remove ${srv.name}`)
-                    .setValue(srv.id)
-            )
-        );
-
-    const row = new ActionRowBuilder().addComponents(selectMenu);
-
-    // Override: the select menu handler needs a different customId for the selection
-    // Actually let me use a unique customId for the select menu
     const menuWithConfirm = new StringSelectMenuBuilder()
         .setCustomId('setup-menu-remove-select')
         .setPlaceholder('Select a server to remove...')

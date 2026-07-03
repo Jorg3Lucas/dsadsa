@@ -517,12 +517,13 @@ export function renderButtons(key) {
                 .setStyle(a.Danger)
         );
         // Party password buttons for antidemon rooms (one per claimed room, with improved labels)
+        // Split into multiple rows if needed (Discord max 5 per ActionRow)
         if ("antidemon" === current.type) {
-            let pwdRow = new t();
+            const pwdButtons = [];
             getAntidemonRoomKeys(key).forEach(rm => {
                 if (current[rm] && current[rm].status === STATUS_CLAIMED) {
                     const hasPwd = current[rm].password;
-                    pwdRow.addComponents(
+                    pwdButtons.push(
                         new n()
                             .setCustomId(`antipwd-${key}-${rm}`)
                             .setEmoji(hasPwd ? "🎮" : "🔒")
@@ -531,7 +532,11 @@ export function renderButtons(key) {
                     );
                 }
             });
-            if (pwdRow.components.length > 0) componentsList.push(pwdRow);
+            // Split into chunks of 5 per row
+            for (let i = 0; i < pwdButtons.length; i += 5) {
+                const row = new t().addComponents(...pwdButtons.slice(i, i + 5));
+                componentsList.push(row);
+            }
         }
     } else {
         coreRow.addComponents(

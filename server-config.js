@@ -7,8 +7,6 @@
 
 import fs from 'fs';
 import path from 'path';
-import { runBackup } from './auto-backup.js';
-
 // ─── File path ──────────────────────────────
 
 const CONFIG_PATH = path.resolve('./server-config.json');
@@ -81,8 +79,6 @@ export function loadServerConfig() {
 
 export function saveServerConfig() {
     try {
-        // Backup before overwriting
-        runBackup(['./server-config.json']);
         fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
     } catch (err) {
         console.error('❌ [Server Config] Error saving:', err.message);

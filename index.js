@@ -13,7 +13,6 @@ import {
 } from './bot.js';
 import { loadServerConfig, getActiveServerIds, getServerDataFiles } from './server-config.js';
 import { DISCORD_SERVER_ID, reloadRankingConstants } from './ranking-constants.js';
-import { startAutoBackup, runBackup } from './auto-backup.js';
 import { initTempVoiceSystem } from './temp-voice.js';
 import { loadTicketState, initTicketSystem } from './ticket-system.js';
 import {
@@ -74,8 +73,6 @@ try {
 
 function saveClaimStorage() {
     try {
-        runBackup(['./database.json']);
-
         const persistentMessages = {};
         for (const panelId in claimLastMessages) {
             if (claimLastMessages[panelId]) {
@@ -143,7 +140,6 @@ function saveRankingStorage() {
     if (serverIds.length === 0) {
         // Legacy fallback
         try {
-            runBackup(['./database_ranking.json']);
             fs.writeFileSync(path.resolve('./database_ranking.json'), JSON.stringify(rankingDb, null, 2), 'utf8');
         } catch (e) {
             console.error('❌ Error saving ranking database:', e);
@@ -155,7 +151,6 @@ function saveRankingStorage() {
     for (const serverId of serverIds) {
         try {
             const dbPath = getServerDataFiles(serverId).rankingDb;
-            runBackup([dbPath]);
             fs.writeFileSync(dbPath, JSON.stringify(rankingDb, null, 2), 'utf8');
         } catch (e) {
             console.error(`❌ [Ranking] Error saving DB for ${serverId}:`, e.message);
@@ -189,8 +184,6 @@ client.once('ready', async () => {
         console.log('🧪 [Test] Starting forced validation scan...');
         await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, true);
     }, 10000);
-
-    startAutoBackup(6);
 
     initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb);
 

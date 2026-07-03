@@ -100,7 +100,6 @@ export function startTickInterval() {
                     "" === current.timeWindow && (panelUpdate = !0, updateNeeded = !0);
                 } else {
                     // Don't release claim during the 5-minute pre-opening window
-                    let now = getLocalTime();
                     let nextOpen = calculateNextOpening(current.schedules, minuteOffset);
                     let fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
                     let insidePreWindow = now >= fiveMinBefore && now < nextOpen;
@@ -277,62 +276,7 @@ export function startTickInterval() {
                 }
             }
 
-            if ("event_group" === current.type) {
-                const egEvents = getEventGroupKeys(current);
-                for (let ev of egEvents) {
-                    let evData = current[ev];
-                    // Summon-type time limit
-                    if (evData.type === "summon" && evData.timeWindow && evData.ownerId) {
-                        let limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
-                        if (limitTime && now >= limitTime) {
-                            evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
-                            await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
-                                title: `${current.title} - ${evData.name}`,
-                                reason: getMsg("logs.timeout")
-                            })).catch(() => {});
-                            evData.ownerId = null;
-                            evData.ownerName = null;
-                            evData.time = "";
-                            evData.timeWindow = "";
-                            if (evData.nextId) {
-                                let nid = evData.nextId, nname = evData.nextName;
-                                evData.nextId = null;
-                                evData.nextName = null;
-                                evData.formattedTimeNext = "";
-                                evData.ownerId = nid;
-                                evData.ownerName = nname;
-                                let grace = new Date(now.getTime() + 3e5);
-                                evData.timeWindow = `${getFormattedTime12h(now)} ~ ${getFormattedTime12h(grace)}`;
-                                notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
-                                    roomKey: evData.name,
-                                    title: current.title
-                                })).catch(() => {});
-                            } else {
-                                evData.endLimit = null;
-                            }
-                            panelUpdate = !0;
-                            updateNeeded = !0;
-                        }
-                    }
-                    // Summon-type queue endLimit
-                    if (evData.type === "summon" && evData.endLimit && evData.nextId) {
-                        let absenceLimit = parseStringToDate(evData.endLimit);
-                        if (absenceLimit && now >= absenceLimit) {
-                            await notifyUserDM(evData.nextId, getMsg("rooms.antidemonAbsenceDM", {
-                                roomKey: evData.name,
-                                title: current.title
-                            })).catch(() => {});
-                            evData.nextName && pushToDailyLogs("CLAIM_END", evData.nextName, `${current.title} - ${evData.name}`, getMsg("logs.absenceQueue"));
-                            evData.nextId = null;
-                            evData.nextName = null;
-                            evData.endLimit = null;
-                            evData.formattedTimeNext = "";
-                            panelUpdate = !0;
-                            updateNeeded = !0;
-                        }
-                    }
-                }
-            } else if ("antidemon" === current.type || "summon" === current.type) {
+            if ("antidemon" === current.type || "summon" === current.type) {
                 const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                 for (let room of roomList) {
                     let rData = current[room];
