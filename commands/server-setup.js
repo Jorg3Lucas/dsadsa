@@ -799,23 +799,28 @@ async function showClanRolesConfig(interaction, serverId) {
         .setDescription(desc)
         .setTimestamp();
 
+    const menuOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel('➕ Add Clan Role')
+            .setDescription('Add a new clan-to-role mapping')
+            .setValue('add')
+            .setEmoji('➕')
+    ];
+
+    if (roles.length > 0) {
+        menuOptions.push(
+            new StringSelectMenuOptionBuilder()
+                .setLabel('🗑️ Remove Clan Role')
+                .setDescription('Remove an existing clan role')
+                .setValue('remove')
+                .setEmoji('🗑️')
+        );
+    }
+
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(`setup-role-select-${serverId}`)
         .setPlaceholder('Manage clan roles...')
-        .addOptions(
-            new StringSelectMenuOptionBuilder()
-                .setLabel('➕ Add Clan Role')
-                .setDescription('Add a new clan-to-role mapping')
-                .setValue('add')
-                .setEmoji('➕'),
-            roles.length > 0
-                ? new StringSelectMenuOptionBuilder()
-                    .setLabel('🗑️ Remove Clan Role')
-                    .setDescription('Remove an existing clan role')
-                    .setValue('remove')
-                    .setEmoji('🗑️')
-                : null
-        ).filter(Boolean);
+        .addOptions(menuOptions);
 
     const backRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
