@@ -196,6 +196,25 @@ If categories are configured via `!setup`, the bot can auto-create channels and 
 - Fixed event open/close transitions
 - Daily log dispatch at 18:00 Berlin time
 
+### Database Files
+
+Each in-game server has its own set of data files, automatically created on first save:
+
+| File | Pattern | Content |
+|---|---|---|
+| **`database_<server>.json`** | `database_*.json` | Claim panel data (occupancy, timers, passwords) + panel message IDs |
+| **`database_ranking_<server>.json`** | `database_ranking_*.json` | Player registrations, pilot links, clan assignments |
+| **`ranking_cache_<server>.json`** | `ranking_cache_*.json` | Cached MIR4 ranking data per server |
+| **`ranking_logs_<server>.txt`** | `ranking_logs_*.txt` | Synchronization logs per server |
+| **`daily-logs_<server>.json`** | `daily-logs_*.json` | Daily claim activity logs per server |
+| **`salary-poll-db_<server>.json`** | `salary-poll-db_*.json` | Salary poll votes and results per server |
+
+On boot, the bot loads per-server files and merges them into memory. When no servers are configured, legacy single-file fallbacks (`database.json`, `database_ranking.json`) are used.
+
+Legacy files are automatically migrated on first startup with servers configured — the old `database.json` is renamed to `claim-database.backup` after migration.
+
+All database files are gitignored via wildcard patterns.
+
 ## Configuration
 
 ### server-config.json

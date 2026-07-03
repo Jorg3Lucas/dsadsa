@@ -82,12 +82,83 @@ function saveClaimStorage() {
                 };
             }
         }
-        fs.writeFileSync(dbClaimPath, JSON.stringify({
-            maps: claimDb,
-            panels: persistentMessages
-        }, null, 2), 'utf8');
+
+        const serverIds = getActiveServerIds();
+        if (serverIds.length === 0) {
+            // Legacy fallback — save single file
+            fs.writeFileSync(dbClaimPath, JSON.stringify({
+                maps: claimDb,
+                panels: persistentMessages
+            }, null, 2), 'utf8');
+            return;
+        }
+
+        // Save to EACH server's file (same merged data)
+        for (const serverId of serverIds) {
+            const dbPath = getServerDataFiles(serverId).claimDb;
+            fs.writeFileSync(dbPath, JSON.stringify({
+                maps: claimDb,
+                panels: persistentMessages
+            }, null, 2), 'utf8');
+        }
     } catch (e) {
         console.error('❌ Error saving claim database:', e);
+    }
+}
+
+// ─── Per-server claim DB loading ─────────────
+
+function loadClaimDbs() {
+    const serverIds = getActiveServerIds();
+    if (serverIds.length === 0) {
+        console.log('📝 [Claim] No servers configured, using single DB.');
+        return;
+    }
+
+    let foundAnyFile = false;
+    const mergedMaps = {};
+    const mergedPanels = {};
+
+    for (const serverId of serverIds) {
+        try {
+            const dbPath = getServerDataFiles(serverId).claimDb;
+            if (fs.existsSync(dbPath)) {
+                foundAnyFile = true;
+                const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+                if (data.maps) Object.assign(mergedMaps, data.maps);
+                if (data.panels) {
+                    for (const panelId in data.panels) {
+                        mergedPanels[panelId] = data.panels[panelId];
+                    }
+                }
+                console.log(`✅ [Claim] Loaded ${Object.keys(data.maps || {}).length} panels from ${serverId}.`);
+            } else {
+                console.log(`📝 [Claim] No DB file for ${serverId}, will create on save.`);
+            }
+        } catch (e) {
+            console.error(`❌ [Claim] Error loading DB for ${serverId}:`, e.message);
+        }
+    }
+
+    if (foundAnyFile) {
+        // Replace in-memory data with per-server data
+        Object.keys(claimDb).forEach(k => delete claimDb[k]);
+        Object.assign(claimDb, mergedMaps);
+        Object.keys(claimLastMessages).forEach(k => delete claimLastMessages[k]);
+        Object.assign(claimLastMessages, mergedPanels);
+        console.log(`✅ [Claim] Per-server DB loaded: ${Object.keys(claimDb).length} total panels.`);
+    } else if (Object.keys(claimDb).length > 0) {
+        // No per-server files yet, but legacy data exists — migrate now
+        console.log('📝 [Claim] Migrating legacy database.json to per-server files...');
+        saveClaimStorage();
+        // Rename legacy file to prevent re-migration on next boot
+        try {
+            const backupPath = path.resolve('./claim-database.backup');
+            fs.renameSync(dbClaimPath, backupPath);
+            console.log('✅ [Claim] Legacy database.json renamed to claim-database.backup');
+        } catch (e) {
+            console.error('❌ [Claim] Could not rename legacy file:', e.message);
+        }
     }
 }
 
@@ -167,8 +238,9 @@ client.once('ready', async () => {
     loadServerConfig();
     reloadRankingConstants();
 
-    // Load per-server ranking files and merge
+    // Load per-server ranking and claim files and merge
     loadRankingDbs();
+    loadClaimDbs();
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
 
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);

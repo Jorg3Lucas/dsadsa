@@ -1,15 +1,26 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Environment variables
 .env
 .env.local
 .env.*.local
 
-# Bot data files
+# Server config (IDs, roles, channels - sensitive!)
+server-config.json
+
+# Claim databases — single + per-server
+claim-database.backup
+
+# Per-server data files (all servers)
+database_*.json
+ranking_cache_*.json
+ranking_logs_*.txt
+daily-logs_*.json
+salary-poll-db_*.json
+
+# Legacy data files
 database.json
-database_ranking.json
 database_gold.json
 daily-logs.json
 punishments.json
@@ -33,4 +44,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Windows artifacts
 nul
