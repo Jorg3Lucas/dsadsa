@@ -1,6 +1,6 @@
 import { getLocalTime, isRoomOpen, parseStringToDate, usesScheduleRespawn, getFormattedTime12h, calculateNextOpening, redBossSchedules, leader3Schedules } from "./time-utils.js";
 import { sendBossSpawnAlerts, sendScheduledEventAlerts, resetScheduledEventAlertCache } from "./boss-spawn-scheduler.js";
-import { getMsg, reloadLanguage } from "./lang.js";
+import { getMsg } from "./lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "./state.js";
 import { pushToDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
@@ -12,10 +12,11 @@ import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX }
 // ==========================================
 
 export function startTickInterval() {
+    let throttleCounter = 0;
     setInterval(async () => {
+        throttleCounter++;
         let updateNeeded = !1,
             now = getLocalTime();
-        reloadLanguage();
 
         // ── Daily logs dispatch at 18:00 Berlin time (once per day) ──
         if (18 === now.getHours() && 0 === now.getMinutes() && !alertCache._dailyDispatched) {
@@ -347,10 +348,20 @@ export function startTickInterval() {
                     }
                 }
             }
-            // Force refresh for countdown timers
+            // Force refresh for countdown timers (throttled: 1 in 4 ticks ≈ every 60s)
             if (!panelUpdate) {
+                const shouldThrottle = throttleCounter % 4 !== 0;
                 if ("event_group" === current.type) {
-                    panelUpdate = !0; // Countdown timers for schedule/fixed events change each tick
+                    if (shouldThrottle && !getEventGroupKeys(current).some(ev => {
+                        const e = current[ev];
+                        return e && (e.type === "summon"
+                            ? !!(e.timeWindow || e.endLimit)
+                            : !!(e.timeWindow || e.ownerId));
+                    })) {
+                        panelUpdate = !1; // Skip this tick, no active timers
+                    } else {
+                        panelUpdate = !0; // Refresh (active timers or every 4th tick)
+                    }
                 } else if ("antidemon" === current.type || "summon" === current.type) {
                     const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                     for (let room of roomList) {
@@ -361,8 +372,17 @@ export function startTickInterval() {
                             break;
                         }
                     }
+                    // Also refresh every 4th tick for queue countdowns
+                    if (!panelUpdate && !shouldThrottle) {
+                        panelUpdate = !0;
+                    }
                 } else if ("fixed" === current.type) {
-                    panelUpdate = !0; // Next opening countdown always changes
+                    // Refresh every 4th tick for next-open countdown, or every tick if claimed/open
+                    if (current.ownerId || (current.schedules && isRoomOpen(current.schedules, current.scheduleMinutes || 0))) {
+                        panelUpdate = !0;
+                    } else if (!shouldThrottle) {
+                        panelUpdate = !0; // Every 4th tick for closed countdown
+                    }
                 } else {
                     // Check for boss respawn countdowns
                     for (let prop in current) {
@@ -375,6 +395,10 @@ export function startTickInterval() {
                     }
                     // Also check for endLimit countdown on peak/square floors
                     if (!panelUpdate && current.next && current.next.endLimit) {
+                        panelUpdate = !0;
+                    }
+                    // Refresh every 4th tick for "X ago" elapsed counters
+                    if (!panelUpdate && !shouldThrottle) {
                         panelUpdate = !0;
                     }
                 }

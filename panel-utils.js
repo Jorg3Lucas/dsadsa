@@ -10,19 +10,23 @@ import { stripPrefix, getActiveServerIds } from "./claim-resolver.js";
 // ==========================================
 
 export async function refreshVisualPanel(key) {
+    // Fast-path: nothing cached, nothing to update
+    const cachedMsg = lastMessages[key];
+    const instances = db._panelInstances?.[key];
+    if (!cachedMsg && (!instances || instances.length === 0)) return;
+    
+    // Render once, reuse for all edits
+    const embed = renderEmbed(key);
+    const buttons = renderButtons(key);
+    
     // 1. Update the primary reference (backward compat)
-    let cachedMsg = lastMessages[key];
     if (cachedMsg) try {
-        await cachedMsg.edit({
-            embeds: [renderEmbed(key)],
-            components: renderButtons(key)
-        })
+        await cachedMsg.edit({ embeds: [embed], components: buttons })
     } catch (n) {
         delete lastMessages[key]
     }
     
     // 2. Update ALL panel instances (multi-server support)
-    const instances = db._panelInstances?.[key];
     if (instances && instances.length > 0) {
         for (let i = instances.length - 1; i >= 0; i--) {
             const inst = instances[i];
@@ -40,10 +44,7 @@ export async function refreshVisualPanel(key) {
                 continue;
             }
             try {
-                await msg.edit({
-                    embeds: [renderEmbed(key)],
-                    components: renderButtons(key)
-                });
+                await msg.edit({ embeds: [embed], components: buttons });
             } catch (n) {
                 instances.splice(i, 1);
             }
