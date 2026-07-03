@@ -144,7 +144,6 @@ export function startTickInterval() {
                         if (isRoomOpen(evData.schedules, minuteOffset)) {
                             "" === evData.timeWindow && (panelUpdate = !0, updateNeeded = !0);
                         } else {
-                            let now = getLocalTime();
                             let nextOpen = calculateNextOpening(evData.schedules, minuteOffset);
                             let fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
                             let insidePreWindow = now >= fiveMinBefore && now < nextOpen;

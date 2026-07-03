@@ -273,8 +273,6 @@ export function renderEmbed(key) {
         embed.setDescription(desc);
 
         if ("fixed" === current.type) {
-            let now = getLocalTime();
-            
             let minuteOffset = current.scheduleMinutes || 0;
             if (isRoomOpen(current.schedules, minuteOffset)) {
                 // Room is currently open — show close countdown
