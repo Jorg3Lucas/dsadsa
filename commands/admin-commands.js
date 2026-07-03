@@ -446,9 +446,6 @@ async function handleStatus(msg) {
         if (srv.rankingUrl) {
             desc += `**Ranking URL:** [Link](${srv.rankingUrl})\n`;
         }
-        if (srv.clanPowerRole) {
-            desc += `**Clan Power Role:** <@&${srv.clanPowerRole}> (≥ ${srv.clanPowerThreshold?.toLocaleString() || "400,000"} power)\n`;
-        }
         if (srv.staffRoleId) {
             desc += `**Staff Role:** <@&${srv.staffRoleId}>\n`;
         }

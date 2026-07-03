@@ -1,9 +1,8 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { HOFGAMER_CLAN_URLS, getRankingServerConfig } from './ranking-constants.js';
+import { getRankingServerConfig } from './ranking-constants.js';
 import { saveRankingCache, getLocalRankingCache } from './ranking-cache.js';
 import { getMsg } from './lang.js';
-import { fetchWithBrowser, closeBrowser } from './hofgamer-scraper.js';
 
 // ==========================================
 // 🌐 WEB SCRAPING (MIR4 Official Ranking)
@@ -19,7 +18,7 @@ export async function fetchMir4RankingData(forceRefresh = false, serverId) {
         if (localCache && Object.keys(localCache).length > 0) return localCache;
     }
 
-    // Get the ranking URL: use per-server config if available, else fallback to default
+    // Get the ranking URL from per-server config
     let baseUrl;
     if (serverId) {
         const srvConfig = getRankingServerConfig(serverId);
@@ -29,8 +28,8 @@ export async function fetchMir4RankingData(forceRefresh = false, serverId) {
         }
     }
     if (!baseUrl) {
-        baseUrl = 'https://forum.mir4global.com/rank?ranktype=1&worldgroupid=3&worldid=611&classtype=&searchname=';
-        console.log('[Ranking] Using default URL (no per-server config)');
+        console.warn(`[Ranking] No ranking URL configured${serverId ? ` for server "${serverId}"` : ''}. Use !setup to set one.`);
+        return {};
     }
 
     const rankingMap = {};
@@ -60,49 +59,6 @@ export async function fetchMir4RankingData(forceRefresh = false, serverId) {
     if (Object.keys(rankingMap).length === 0) return getLocalRankingCache(serverId) || {};
     saveRankingCache(rankingMap, serverId);
     return rankingMap;
-}
-
-/**
- * Fetch clan power data from hofgamer.com.
- * Uses HOFGAMER_CLAN_URLS merged from all server configs.
- */
-export async function fetchClanPowerData(logEvent) {
-    const powerMap = {};
-    try {
-        for (const [clanName, url] of Object.entries(HOFGAMER_CLAN_URLS)) {
-            try {
-                const html = await fetchWithBrowser(url, { timeout: 60000 });
-                const $ = cheerio.load(html);
-
-                let count = 0;
-                $('table').first().find('tr').each((i, el) => {
-                    const cells = $(el).find('td');
-                    if (cells.length >= 3) {
-                        let rawNick = cells.eq(0).text().trim().normalize('NFC');
-                        let nick = rawNick.split(/[\n\r]+/)[0].trim();
-                        // Strip impersonation suffix (冒用) added by hofgamer.com
-                        nick = nick.replace(/\(冒用\)/g, '').trim();
-                        let powerText = cells.eq(2).text().replace(/[\n\t\r,]/g, '').trim();
-                        let power = parseInt(powerText, 10);
-                        if (nick && !isNaN(power) && power > 0) {
-                            powerMap[nick] = power;
-                            count++;
-                        }
-                    }
-                });
-                logEvent(`Scraped clan ${clanName}: ${count} members found (${Object.keys(powerMap).length} total)`);
-                await new Promise(resolve => setTimeout(resolve, 2500));
-            } catch (err) {
-                logEvent(`Error scraping clan ${clanName}: ${err.message}`);
-            }
-        }
-        if (Object.keys(powerMap).length === 0) {
-            logEvent('WARNING: No power data found from any clan page! Selector may need adjustment.');
-        }
-        return powerMap;
-    } finally {
-        await closeBrowser();
-    }
 }
 
 export async function safelyFetchGuildMembers(guild, logEvent) {

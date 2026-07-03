@@ -408,8 +408,6 @@ function buildServerConfigEmbed(server) {
     desc += `**👑 Clan Roles:** ${roleCount} role(s)\n`;
     desc += `**📁 Categories:** ${catCount}/${totalCats} configured\n`;
     desc += `**📺 Channels:** ${chanCount}/${totalChans} configured\n`;
-    desc += `**🎯 Power Role:** ${server.clanPowerRole ? `<@&${server.clanPowerRole}>` : '❌ Not set'}\n`;
-    desc += `**⚡ Power Threshold:** ${server.clanPowerThreshold?.toLocaleString() || '400,000'}\n`;
 
     return new EmbedBuilder()
         .setColor(0x57F287)

@@ -24,10 +24,7 @@ const DEFAULT_SERVER = {
     enabled: true,
     rankingUrl: '',
     clanRoles: {},
-    clanPowerRole: '',
-    clanPowerThreshold: 400000,
     staffRoleId: '',
-    hofgamerUrls: {},
     categories: {
         '7F': '',
         '8F': '',
