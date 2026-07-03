@@ -18,6 +18,7 @@ import {
 } from 'discord.js';
 import * as serverConfig from '../server-config.js';
 import { getMsg } from '../lang.js';
+import { reloadRankingConstants } from '../ranking-constants.js';
 
 // ==========================================
 // 🔤 PREFIXES for interaction routing
@@ -867,6 +868,7 @@ export async function handleAddClanRoleModal(interaction) {
     const roleId = interaction.fields.getTextInputValue('setup-role-id').trim();
 
     const result = serverConfig.setServerConfig(serverId, `clanRoles.${clanName}`, roleId);
+    reloadRankingConstants();
     await interaction.reply({ content: result.message, flags: 64 }).catch(() => {});
     await showClanRolesConfig(interaction, serverId);
 }
@@ -908,6 +910,7 @@ export async function handleRemoveClanRoleSelect(interaction, serverId) {
         serverConfig.saveServerConfig();
     }
 
+    reloadRankingConstants();
     await interaction.update({
         content: `✅ Removed clan role **${clanName}** from ${serverId}.`,
         components: [],
