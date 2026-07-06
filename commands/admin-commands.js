@@ -75,6 +75,22 @@ export async function handleAdminCommand(msg) {
         return handleStatus(msg);
     }
 
+    // ==========================================
+    // 🔒 RESERVE COMMANDS (Fury/Frenzy)
+    // ==========================================
+    if ("!furyreserve" === lowerContent || lowerContent.startsWith("!furyreserve ")) {
+        return handleReserveEvent(msg, "fury", lowerContent.replace("!furyreserve", "").trim());
+    }
+    if ("!frenzyreserve" === lowerContent || lowerContent.startsWith("!frenzyreserve ")) {
+        return handleReserveEvent(msg, "frenzy", lowerContent.replace("!frenzyreserve", "").trim());
+    }
+    if ("!furyopen" === lowerContent) {
+        return handleOpenEvent(msg, "fury");
+    }
+    if ("!frenzyopen" === lowerContent) {
+        return handleOpenEvent(msg, "frenzy");
+    }
+
     return false; // not handled
 }
 
@@ -482,4 +498,100 @@ async function handleResetSpecific(msg, resetKey) {
     resetPanelData(resetKey);
     await refreshVisualPanel(resetKey);
     return msg.reply({ content: getMsg("system.resetPanelSuccess", { key: resetKey }) }).catch(() => {});
+}
+
+// ==========================================
+// 🔒 RESERVE EVENT (Fury/Frenzy)
+// ==========================================
+
+async function handleReserveEvent(msg, eventName, userArg) {
+    if (!msg.member.permissions.has("ManageMessages")) {
+        return msg.reply({ content: getMsg("reserve.permissionDenied") }).catch(() => {});
+    }
+
+    if (!userArg) {
+        return msg.reply({ content: getMsg("reserve.userNotFound", { usage: getMsg(`reserve.usage${eventName.charAt(0).toUpperCase() + eventName.slice(1)}`) }) }).catch(() => {});
+    }
+
+    let targetId = userArg.replace(/[<@!>]/g, "").trim();
+    let targetMember;
+    try {
+        targetMember = await msg.guild.members.fetch(targetId).catch(() => null);
+    } catch (e) {}
+
+    if (!targetMember) {
+        return msg.reply({ content: getMsg("reserve.userNotFound", { usage: getMsg(`reserve.usage${eventName.charAt(0).toUpperCase() + eventName.slice(1)}`) }) }).catch(() => {});
+    }
+
+    const targetName = targetMember.displayName;
+    const eventLabel = eventName.charAt(0).toUpperCase() + eventName.slice(1);
+    let reservedCount = 0;
+
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        const current = db[key];
+        if ("event_group" !== current.type) continue;
+        const evData = current[eventName];
+        if (!evData || evData.type !== "fixed") continue;
+
+        evData.reservedFor = targetId;
+        evData.reservedByName = targetName;
+        reservedCount++;
+    }
+
+    if (reservedCount === 0) {
+        return msg.reply({ content: getMsg("reserve.noEvent", { event: eventLabel }) }).catch(() => {});
+    }
+
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        await refreshVisualPanel(key);
+    }
+
+    return msg.reply({ content: getMsg("reserve.success", { event: eventLabel, userName: targetName }) }).catch(() => {});
+}
+
+// ==========================================
+// 🔓 OPEN EVENT (Fury/Frenzy)
+// ==========================================
+
+async function handleOpenEvent(msg, eventName) {
+    if (!msg.member.permissions.has("ManageMessages")) {
+        return msg.reply({ content: getMsg("reserve.permissionDenied") }).catch(() => {});
+    }
+
+    const eventLabel = eventName.charAt(0).toUpperCase() + eventName.slice(1);
+    let openedCount = 0;
+    let wasReserved = false;
+
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        const current = db[key];
+        if ("event_group" !== current.type) continue;
+        const evData = current[eventName];
+        if (!evData || evData.type !== "fixed") continue;
+
+        if (evData.reservedFor) {
+            wasReserved = true;
+        }
+
+        evData.reservedFor = null;
+        evData.reservedByName = null;
+        openedCount++;
+    }
+
+    if (openedCount === 0) {
+        return msg.reply({ content: getMsg("reserve.noEvent", { event: eventLabel }) }).catch(() => {});
+    }
+
+    if (!wasReserved) {
+        return msg.reply({ content: getMsg("reserve.notReserved", { event: eventLabel }) }).catch(() => {});
+    }
+
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        await refreshVisualPanel(key);
+    }
+
+    return msg.reply({ content: getMsg("reserve.openSuccess", { event: eventLabel }) }).catch(() => {});
 }

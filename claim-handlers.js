@@ -14,6 +14,7 @@ import { canHandleSummonInteraction, handleSummonInteraction } from "./interacti
 import { canHandleFloorInteraction, handleFloorInteraction } from "./interactions/floor-interactions.js";
 import { canHandleSalaryInteraction, handleSalaryInteraction } from "./interactions/salary-interactions.js";
 import { canHandleSetupInteraction, handleSetupInteraction, handleAddServerModal, handleRankUrlModal, handleStaffRoleModal, handleRenameModal, handleCategoryModal, handleChannelModal, handleAddClanRoleModal, handleRemoveClanRoleSelect, canHandleSetupModal, handleSetupModal } from "./commands/server-setup.js";
+import { dmOptOut, saveDmOptOutToDisk } from "./state.js";
 
 // ==========================================
 // 💬 TEXT COMMAND ROUTER
@@ -80,8 +81,77 @@ export async function handleClaimInteractions(interaction) {
         return await handleSetupInteraction(interaction);
     }
 
+    // 0. DM Opt-Out button (🔕 on all panels)
+    if (interaction.isButton() && interaction.customId === 'dmoptout') {
+        return await handleDmOptOut(interaction, uid);
+    }
+
+    // 1. Admin interactions (reset menu, kick menu, reset logs)
+    if (canHandleAdminInteraction(interaction)) {
+        return await handleAdminInteraction(interaction, uid);
+    }
+
+    // 2. Antidemon interactions (slide, ticket, queue)
+    if (canHandleAntidemonInteraction(interaction)) {
+        return await handleAntidemonInteraction(interaction, uid, uName);
+    }
+
+    // 3. Summon interactions (slide, ticket, queue)
+    if (canHandleSummonInteraction(interaction)) {
+        return await handleSummonInteraction(interaction, uid, uName);
+    }
+
+    // 4. Salary interactions (vote, select, confirm, check)
+    if (canHandleSalaryInteraction(interaction)) {
+        return await handleSalaryInteraction(interaction);
+    }
+
+    // 5. Ticket interactions (open, close, confirm, cancel)
+    if (canHandleTicketInteraction(interaction)) {
+        return await handleTicketInteraction(interaction);
+    }
+
+    // 6. Antidemon password modal submits
+    if (canHandleAntidemonModal(interaction)) {
+        return await handleAntidemonModal(interaction);
+    }
+
+    // 6b. Setup modal submits (server configuration modals)
+    if (canHandleSetupModal(interaction)) {
+        return await handleSetupModal(interaction);
+    }
+
+    // 7. Setup interactions (server configuration)
+    if (canHandleSetupInteraction(interaction)) {
+        return await handleSetupInteraction(interaction);
+    }
+
     // 8. Floor interactions (buttons: death, claim, cancel, next)
     if (canHandleFloorInteraction(interaction)) {
         return await handleFloorInteraction(interaction, uid, uName);
+    }
+}
+
+// ==========================================
+// 🔕 DM OPT-OUT HANDLER — toggles DM preference per user
+// ==========================================
+
+async function handleDmOptOut(interaction, uid) {
+    const currentlyOptedOut = dmOptOut.has(uid);
+
+    if (currentlyOptedOut) {
+        dmOptOut.delete(uid);
+        saveDmOptOutToDisk();
+        await interaction.reply({
+            content: '✅ **DM notifications enabled!**\\n\\nYou will now receive claim alerts, boss reminders, and other notifications via DM.',
+            flags: 64
+        });
+    } else {
+        dmOptOut.add(uid);
+        saveDmOptOutToDisk();
+        await interaction.reply({
+            content: '🔕 **DM notifications disabled!**\\n\\nYou will no longer receive claim alerts, boss reminders, and other notifications via DM.\\n\\nClick the button again anytime to re-enable them.',
+            flags: 64
+        });
     }
 }

@@ -592,6 +592,14 @@ async function handleEGFixClaim(interaction, uid, uName) {
         }).catch(() => {});
     }
 
+    // 🚫 Check if reserved for another user
+    if (evData.reservedFor && evData.reservedFor !== uid) {
+        return await interaction.reply({
+            content: getMsg("reserve.blockedOther", { event: evData.name, userName: evData.reservedByName || evData.reservedFor }),
+            flags: 64
+        }).catch(() => {});
+    }
+
     let now = getLocalTime();
     let minuteOffset = evData.scheduleMinutes || 0;
     let eventStart;

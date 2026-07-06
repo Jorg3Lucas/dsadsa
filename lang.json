@@ -144,6 +144,18 @@
         "modRequired": "❌ Only Staff can send reports manually.",
         "noChannel": "❌ No report channel configured. Use `!setlogs` first."
     },
+    "reserve": {
+        "success": "✅ **{event}** has been reserved for **{userName}**. No one else can claim it until reopened.",
+        "openSuccess": "✅ **{event}** is now open for everyone to claim.",
+        "notReserved": "ℹ️ **{event}** is not currently reserved for anyone.",
+        "noEvent": "❌ Could not find **{event}** in any panel.",
+        "reservedNotice": "🔒 Reserved for {userName}",
+        "blockedOther": "🔒 **{event}** is currently reserved for **{userName}**. Only they can claim it.",
+        "usageFury": "Usage: `!furyreserve @user` or `!furyopen`",
+        "usageFrenzy": "Usage: `!frenzyreserve @user` or `!frenzyopen`",
+        "userNotFound": "❌ Please mention a valid user. {usage}",
+        "permissionDenied": "🛡️ Only Staff members can reserve events."
+    },
     "ranking": {
         "commands": {
             "register": {

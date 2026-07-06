@@ -1,6 +1,6 @@
 import { getLocalTime, getFormattedTime12h, parseStringToDate } from "./time-utils.js";
 import { getMsg } from "./lang.js";
-import { db, client, saveLocalStorage, logEvent, lastMessages } from "./state.js";
+import { db, client, saveLocalStorage, logEvent, lastMessages, dmOptOut } from "./state.js";
 import { renderEmbed, renderButtons, getEmbedColor } from "./panel-render.js";
 import { STATUS_AVAILABLE, STATUS_KILLED, STATUS_KILLED_PREFIX } from "./constants.js";
 import { stripPrefix, getActiveServerIds } from "./claim-resolver.js";
@@ -52,12 +52,51 @@ export async function refreshVisualPanel(key) {
     }
 }
 
+// ── DM Rate-Limit Queue ───────────────────────────────
+// Processes DMs sequentially with a 1.5s gap between messages
+// to avoid hitting Discord's rate limits (~5 messages/5s per channel).
+// -----------------------------------------------------------------
+const dmQueue = [];
+let dmQueueProcessing = false;
+const DM_INTERVAL_MS = 1500;
+
+async function processDMQueue() {
+    if (dmQueueProcessing) return;
+    dmQueueProcessing = true;
+
+    while (dmQueue.length > 0) {
+        const { uid, content } = dmQueue.shift();
+        try {
+            await (await client.users.fetch(uid)).send({ content });
+        } catch (err) {
+            if (err.code === 50007) {
+                console.log(`⚠️ [DM] Cannot send DM to ${uid}: DMs closed or bot blocked.`);
+            } else if (err.code === 10013) {
+                console.log(`⚠️ [DM] Cannot send DM to ${uid}: User not found.`);
+            } else if (err.code === 429) {
+                // Rate-limited — re-queue and wait longer
+                console.log(`⏳ [DM] Rate-limited sending to ${uid}, re-queuing.`);
+                dmQueue.unshift({ uid, content });
+                await new Promise(r => setTimeout(r, 5000));
+                continue;
+            } else {
+                console.log(`⚠️ [DM] Failed to send DM to ${uid}: ${err.message}`);
+            }
+        }
+        if (dmQueue.length > 0) {
+            await new Promise(r => setTimeout(r, DM_INTERVAL_MS));
+        }
+    }
+
+    dmQueueProcessing = false;
+}
+
 export async function notifyUserDM(uid, msgContent) {
-    try {
-        await (await client.users.fetch(uid)).send({
-            content: msgContent
-        })
-    } catch (n) {}
+    if (dmOptOut.has(uid)) {
+        return; // User opted out of DMs
+    }
+    dmQueue.push({ uid, content: msgContent });
+    processDMQueue();
 }
 
 // ==========================================
@@ -186,6 +225,7 @@ export function resetPanelData(key) {
                     name: "🔴 Fury", type: "fixed",
                     status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                     timeWindow: "", _claimTimestamp: null,
+                    reservedFor: null, reservedByName: null,
                     schedules: [0, 3, 6, 9, 12, 15, 18, 21],
                     scheduleMinutes: 30
                 },
@@ -193,6 +233,7 @@ export function resetPanelData(key) {
                     name: "🟣 Frenzy", type: "fixed",
                     status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                     timeWindow: "", _claimTimestamp: null,
+                    reservedFor: null, reservedByName: null,
                     schedules: [2, 5, 8, 11, 14, 17, 20, 23]
                 }
             };
@@ -476,24 +517,25 @@ export function migrateMS1112() {
     // === 2. Event panels (Fury + Frenzy event_group) ===
     for (let floor of ["11", "12"]) {
         for (const key of eachKey(`${floor}squareevents`)) {
-            if (!db[key]) {
-                db[key] = {
-                    type: "event_group",
-                    title: `Magic Square ${floor}F - Events`,
-                    fury: {
-                        name: "🔴 Fury", type: "fixed",
-                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                        timeWindow: "", _claimTimestamp: null,
-                        schedules: [0, 3, 6, 9, 12, 15, 18, 21],
-                        scheduleMinutes: 30
-                    },
-                    frenzy: {
-                        name: "🟣 Frenzy", type: "fixed",
-                        status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                        timeWindow: "", _claimTimestamp: null,
-                        schedules: [2, 5, 8, 11, 14, 17, 20, 23]
-                    }
-                };
+            if (!db[key]) {            db[key] = {
+                type: "event_group",
+                title: `Magic Square ${floor}F - Events`,
+                fury: {
+                    name: "🔴 Fury", type: "fixed",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    reservedFor: null, reservedByName: null,
+                    schedules: [0, 3, 6, 9, 12, 15, 18, 21],
+                    scheduleMinutes: 30
+                },
+                frenzy: {
+                    name: "🟣 Frenzy", type: "fixed",
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    timeWindow: "", _claimTimestamp: null,
+                    reservedFor: null, reservedByName: null,
+                    schedules: [2, 5, 8, 11, 14, 17, 20, 23]
+                }
+            };
                 migrated++;
                 logEvent(`Created missing MS${floor} events panel: ${key}`);
             }

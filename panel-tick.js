@@ -1,6 +1,6 @@
 import { getLocalTime, isRoomOpen, parseStringToDate, usesScheduleRespawn, getFormattedTime12h, calculateNextOpening, redBossSchedules, leader3Schedules } from "./time-utils.js";
 import { sendBossSpawnAlerts, sendScheduledEventAlerts, resetScheduledEventAlertCache } from "./boss-spawn-scheduler.js";
-import { getMsg } from "./lang.js";
+import { getMsg, reloadLanguage } from "./lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "./state.js";
 import { pushToDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
@@ -17,6 +17,7 @@ export function startTickInterval() {
         throttleCounter++;
         let updateNeeded = !1,
             now = getLocalTime();
+        reloadLanguage();
 
         // ── Daily logs dispatch at 18:00 Berlin time (once per day) ──
         if (18 === now.getHours() && 0 === now.getMinutes() && !alertCache._dailyDispatched) {
@@ -30,6 +31,17 @@ export function startTickInterval() {
         // Reset the daily dispatch flag once we're past 18:01
         if (alertCache._dailyDispatched && (now.getHours() !== 18 || now.getMinutes() > 1)) {
             alertCache._dailyDispatched = !1;
+        }
+
+        // ── Midnight alert cache cleanup: clears spawnAlerted to prevent stale entries from suppressing new-day spawn alerts ──
+        // warning5mAfter uses timestamps with a 1-hour stale check, so no midnight cleanup needed (self-cleaning).
+        if (0 === now.getHours() && 0 === now.getMinutes() && !alertCache._midnightCleaned) {
+            alertCache._midnightCleaned = !0;
+            alertCache.spawnAlerted = {};
+        }
+        // Reset the midnight cleanup flag once we're past 00:01
+        if (alertCache._midnightCleaned && (now.getHours() !== 0 || now.getMinutes() > 1)) {
+            alertCache._midnightCleaned = !1;
         }
 
         // ── Boss spawn alerts (5 min before, individual bosses) ──
@@ -46,13 +58,15 @@ export function startTickInterval() {
             // Use custom schedules if available (e.g. SP11: [1,7,13,19]), fall back to default
             const peakRedScheds = (current.red && current.red.schedules) || redBossSchedules;
             if ("peak" === current.type && isRoomOpen(peakRedScheds)) {
-                if (STATUS_AVAILABLE !== current.red.status && now.getMinutes() === 5 && current.ownerId) {
-                    if (!alertCache.warning5mAfter[`${key}-red-${now.getHours()}`]) {
+                // DM warning: 5min after Red Boss auto-respawn, if still not killed/marked
+                if (STATUS_AVAILABLE === current.red.status && current.red._freeSince > 0 && current.ownerId) {
+                    const minutesIdle = Math.floor((now.getTime() - current.red._freeSince) / 6e4);
+                    if (minutesIdle >= 5 && (!alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] || Date.now() - alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] > 36e5)) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
                             title: current.title,
                             boss: current.red.name
                         })).catch(() => {});
-                        alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] = !0;
+                        alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] = Date.now();
                     }
                 }
                 if (STATUS_AVAILABLE !== current.red.status && now.getMinutes() === 0) {
@@ -71,13 +85,15 @@ export function startTickInterval() {
             }
 
             if ("normal" === current.type && current.boss3 && isRoomOpen(leader3Schedules)) {
-                if (STATUS_AVAILABLE !== current.boss3.status && now.getMinutes() === 5 && current.ownerId) {
-                    if (!alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`]) {
+                // DM warning: 5min after Leader 3 auto-respawn, if still not killed/marked
+                if (STATUS_AVAILABLE === current.boss3.status && current.boss3._freeSince > 0 && current.ownerId) {
+                    const minutesIdle = Math.floor((now.getTime() - current.boss3._freeSince) / 6e4);
+                    if (minutesIdle >= 5 && (!alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] || Date.now() - alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] > 36e5)) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
                             title: current.title,
                             boss: current.boss3.name
                         })).catch(() => {});
-                        alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] = !0;
+                        alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] = Date.now();
                     }
                 }
                 if (STATUS_AVAILABLE !== current.boss3.status && now.getMinutes() === 0) {
@@ -157,6 +173,8 @@ export function startTickInterval() {
                                 evData.ownerId = null;
                                 evData.ownerName = null;
                                 evData.timeWindow = "";
+                                evData.reservedFor = null;
+                                evData.reservedByName = null;
                                 if (evData._claimTimestamp) delete evData._claimTimestamp;
                                 panelUpdate = !0;
                                 updateNeeded = !0;

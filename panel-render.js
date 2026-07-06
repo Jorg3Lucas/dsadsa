@@ -129,12 +129,15 @@ export function renderEmbed(key) {
                     block = `\`\`\`yaml\n🟢 Available\n\`\`\``;
                 }
             } else if (evData.type === "fixed") {
-                // Fixed event (Fury/Frenzy/Random Event) — show open/closed with countdown
+                // Fixed event (Fury/Frenzy/Random Event) — show open/closed/reserved with countdown
                 // Format: status line, "Next in:" label, timer value — separate lines
                 let minuteOffset = evData.scheduleMinutes || 0;
                 let statusLine, timerLabel, timerValue;
                 
-                if (isRoomOpen(evData.schedules, minuteOffset)) {
+                // Check if reserved
+                if (evData.reservedFor && !evData.ownerId) {
+                    statusLine = `🔒 Reserved for ${evData.reservedByName || evData.reservedFor}`;
+                } else if (isRoomOpen(evData.schedules, minuteOffset)) {
                     let nowMinutes = now.getHours() * 60 + now.getMinutes();
                     let endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
                     let endOfEvent = new Date(now.getTime());
@@ -441,11 +444,12 @@ export function renderButtons(key) {
         // 2. Individual claim buttons for fixed events (Fury/Frenzy only, not Random Event)
         fixedEvents.filter(ev => ev !== "randomevent").forEach(ev => {
             const isClaimed = !!current[ev].ownerId;
+            const isReserved = !!current[ev].reservedFor && !isClaimed;
             mainRow.addComponents(new n()
                 .setCustomId(`egfixclaim-${key}-${ev}`)
-                .setLabel(isClaimed ? `👑 ${current[ev].ownerName || "Claimed"}` : current[ev].name)
+                .setLabel(isClaimed ? `👑 ${current[ev].ownerName || "Claimed"}` : isReserved ? `🔒 ${current[ev].name}` : current[ev].name)
                 .setDisabled(isClaimed)
-                .setStyle(isClaimed ? a.Secondary : a.Success));
+                .setStyle(isClaimed ? a.Secondary : isReserved ? a.Secondary : a.Success));
         });
         
         // 3. Core action buttons
@@ -552,5 +556,18 @@ export function renderButtons(key) {
     }
     
     if (coreRow.components.length > 0) componentsList.push(coreRow);
+    
+    // ── DM Notification Toggle ──
+    // Global button on all panels — users toggle their own DM preference
+    const dmRow = new t();
+    dmRow.addComponents(
+        new n()
+            .setCustomId('dmoptout')
+            .setEmoji('🔕')
+            .setLabel('DM Notifications')
+            .setStyle(a.Secondary)
+    );
+    componentsList.push(dmRow);
+    
     return componentsList;
 }
