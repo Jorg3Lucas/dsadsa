@@ -9,7 +9,6 @@
         "kickCurrentLabel": "👑 Current Owner:",
         "kickNoClaims": "📭 No active claims found.",
         "kickSuccess": "✅ Claim removed successfully.",
-        "kickDMNotice": "⚠️ Your claim on **{title}** has been removed by Staff.",
         "resetMenuTitle": "🔄 **Select a panel to reset:**",
         "resetMenuPlaceholder": "Choose a panel...",
         "resetNoPanels": "📭 No panels found.",
@@ -18,8 +17,6 @@
         "resetLogsSuccess": "✅ **{count}** log entries purged.",
         "resetLogsConfirm": "⚠️ Confirm — Permanently purge **{count}** log entries? This cannot be undone.",
         "resetLogsCancel": "❌ Reset cancelled.",
-        "resetLogsEmpty": "📭 No logs to clear.",
-        "resetLogsDenied": "🛡️ Only Staff members can reset logs.",
         "updateRunningGit": "🔄 Running `git pull`...",
         "updateSuccess": "✅ `git pull` completed:\n```\n{output}\n```\n🔄 Restarting...",
         "updateError": "❌ Update failed:\n```\n{error}\n```"
@@ -89,7 +86,6 @@
         "antidemonQueueRight": "Join the queue for the right room",
         "antidemonQueueMidLeft": "Join queue for both middle and left",
         "antidemonQueueMidRight": "Join queue for both middle and right",
-        "antidemonPasswordBtn": "🎮 Set Party Password",
         "antidemonPasswordInputLabel": "🎮 In-game Party Password",
         "antidemonPasswordInputPlaceholder": "Enter the party password for other members to find the room",
         "antidemonPasswordSet": "✅ Party password set for **{room}**: `{password}`\n\nMembers can use this password to join your party and find the room.",
@@ -180,9 +176,6 @@
                     "owner": "Select the primary character owner.",
                     "pilot": "Select the Discord user acting as pilot."
                 }
-            },
-            "manage": {
-                "description": "👑 [Admin] Manage registered players via interactive menus."
             },
             "cleandb": {
                 "description": "👑 [Admin] Remove all duplicate nickname entries from the database."
@@ -292,15 +285,8 @@
             "setupError": "❌ You need Manage Server permission to configure this.",
             "spreadsheetSuccess": "✅ Payment spreadsheet linked! Votes will be exported automatically when the poll closes.",
             "spreadsheetError": "❌ You need Manage Server permission to configure this.",
-            "spreadsheetFormatError": "❌ Invalid format. Use: `!salaryspreadsheet <SPREADSHEET_ID>`",
-            "noChannel": "❌ No salary channel configured. Use `!setsalary` first.",
-            "exportSuccess": "✅ Votes exported to spreadsheet successfully.",
-            "exportError": "❌ No votes recorded to export.",
-            "votedSuccess": "✅ Vote registered! You can change it until Wednesday at 13:00 (BRT).",
-            "pollClosed": "❌ Voting is closed. Next poll opens Monday at 12:30 (BRT).",
-            "invalidSelection": "❌ Please select percentages for both stone types before confirming.",
-            "exceedsTotal": "❌ The combined values exceed 100%. Please adjust."
-        },
+            "spreadsheetFormatError": "❌ Invalid format. Use: `!salaryspreadsheet <SPREADSHEET_ID>`"
+                    },
         "logs": {
             "syncStart": "⏳ [Sync] Starting role and nickname update routine...",
             "syncAbort": "❌ [Sync] Aborting sync: Member list unavailable.",
@@ -318,11 +304,7 @@
             "manualLink": "👑 [Manual] Admin locked user {targetId} into clan {selectedClan}",
             "welcomeError": "❌ Failed to send welcome message: {error}",
             "leaveError": "❌ Error executing member leave cleanup: {error}",
-            "subsystemInit": "Sub-system initialized and panels auto-refreshed.",
-            "panelRecovery": "Starting automatic panel recovery and chat cleanup...",
-            "panelRestoreFailed": "Failed to restore panel {key}: {error}",
-            "floorReleased": "{title} fully released and closed.",
-            "commandsRegistered": "✅ All slash commands registered successfully.",
+                        "commandsRegistered": "✅ All slash commands registered successfully.",
             "commandsError": "❌ Slash command registration failed: {error}"
         }
     },
@@ -426,8 +408,6 @@
             "progress": "🔄 **Updating bot...**\n\nPulling latest code and restarting.",
             "failed": "❌ **Update failed:**\n```\n{error}\n```",
             "cancelled": "❌ Update cancelled.",
-            "confirmBtn": "Yes, update and restart",
-            "cancelBtn": "Cancel",
             "btnConfirm": "Yes, update and restart",
             "btnCancel": "Cancel"
         },
@@ -440,10 +420,8 @@
         "btnTickets": "Tickets",
         "btnUpdate": "Update Bot",
         "btnBack": "Back",
-        "btnBackPanels": "Back to Panels",
         "btnBackReservations": "Back to Reservations",
         "btnBackChannels": "Back to Channels",
-        "btnBackLogs": "Back to Logs",
         "btnBackSalary": "Back to Salary",
         "btnBackPlayers": "Back to Players",
         "btnBackMenu": "Back to Menu",
@@ -451,7 +429,6 @@
     },
     "reserve": {
         "success": "✅ **{event}** has been reserved for **{userName}**. No one else can claim it until reopened.",
-        "successSlots": "✅ **{event}** in **{floors}** at **{hours}** reserved for **{userName}**.\n\nTo revert, use the interactive `!reserve` menu or `!{eventName}open`.",
         "openSuccess": "✅ **{event}** is now open for everyone to claim.",
         "notReserved": "ℹ️ **{event}** is not currently reserved for anyone.",
         "noEvent": "❌ Could not find **{event}** in any panel.",
@@ -472,10 +449,6 @@
             "cancelled": "❌ Reservation cancelled.",
             "btnConfirm": "✅ Confirm",
             "btnCancel": "❌ Cancel",
-            "optFury": "🔴 Fury",
-            "optFrenzy": "🟣 Frenzy",
-            "optMS11": "MS11 Events",
-            "optMS12": "MS12 Events",
             "optAll": "All Hours",
             "hourFormat": "{hour}:00 - {nextHour}:00"
         }
