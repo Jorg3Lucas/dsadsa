@@ -237,6 +237,7 @@
                 "ownerNotRegistered": "❌ **{displayName}** does not have an active profile.",
                 "selfPilot": "❌ You cannot link a user as their own pilot.",
                 "limitReached": "❌ Admin Override Failed: Owner already has **4 pilots**.",
+                "alreadyLinked": "❌ This pilot is already linked to this owner.",
                 "success": "✅ **Success!** {pilotMember} manually linked as pilot for **{nick}**."
             },
             "manualremovepilot": {
@@ -300,29 +301,30 @@
             "invalidSelection": "❌ Please select percentages for both stone types before confirming.",
             "exceedsTotal": "❌ The combined values exceed 100%. Please adjust."
         },
-    "logs": {
-        "syncStart": "⏳ [Sync] Starting role and nickname update routine...",
-        "syncAbort": "❌ [Sync] Aborting sync: Member list unavailable.",
-        "syncComplete": "🏁 [MIR4] Synchronization complete.",
-        "syncError": "❌ Sync error: {error}",
-        "fetchStart": "🚀 [MIR4] Fetching Top 1000 from the official website...",
-        "fetchPageError": "❌ Page {page} error: {error}",
-        "gatewayWarning": "⚠️ [Gateway] Gateway busy. Falling back to cached member list.",
-        "autoLink": "🔗 [Auto-Link] {username} linked as pilot ({count}/4) for {baseNick}",
-        "imposterDetected": "⚠️ [Security] Resetting impersonator nickname for {username} trying to impersonate {nickname}",
-        "roleAdded": "✅ [Automation] Role [{clan}] added to {username}",
-        "roleRemoved": "❌ [Automation] Role [{clan}] removed from {username}",
-        "memberLeave": "🏃‍♂️ [Leave-Handler] Registered member {tag} left the server. Cleaning up registration and pilots.",
-        "pilotCleaned": "🗑️ [Leave-Handler] Pilot {tag} removed due to owner leaving.",
-        "manualLink": "👑 [Manual] Admin locked user {targetId} into clan {selectedClan}",
-        "welcomeError": "❌ Failed to send welcome message: {error}",
-        "leaveError": "❌ Error executing member leave cleanup: {error}",
-        "subsystemInit": "Sub-system initialized and panels auto-refreshed.",
-        "panelRecovery": "Starting automatic panel recovery and chat cleanup...",
-        "panelRestoreFailed": "Failed to restore panel {key}: {error}",
-        "floorReleased": "{title} fully released and closed.",
-        "commandsRegistered": "✅ All slash commands registered successfully.",
-        "commandsError": "❌ Slash command registration failed: {error}"
+        "logs": {
+            "syncStart": "⏳ [Sync] Starting role and nickname update routine...",
+            "syncAbort": "❌ [Sync] Aborting sync: Member list unavailable.",
+            "syncComplete": "🏁 [MIR4] Synchronization complete.",
+            "syncError": "❌ Sync error: {error}",
+            "fetchStart": "🚀 [MIR4] Fetching Top 1000 from the official website...",
+            "fetchPageError": "❌ Page {page} error: {error}",
+            "gatewayWarning": "⚠️ [Gateway] Gateway busy. Falling back to cached member list.",
+            "autoLink": "🔗 [Auto-Link] {username} linked as pilot ({count}/4) for {baseNick}",
+            "imposterDetected": "⚠️ [Security] Resetting impersonator nickname for {username} trying to impersonate {nickname}",
+            "roleAdded": "✅ [Automation] Role [{clan}] added to {username}",
+            "roleRemoved": "❌ [Automation] Role [{clan}] removed from {username}",
+            "memberLeave": "🏃‍♂️ [Leave-Handler] Registered member {tag} left the server. Cleaning up registration and pilots.",
+            "pilotCleaned": "🗑️ [Leave-Handler] Pilot {tag} removed due to owner leaving.",
+            "manualLink": "👑 [Manual] Admin locked user {targetId} into clan {selectedClan}",
+            "welcomeError": "❌ Failed to send welcome message: {error}",
+            "leaveError": "❌ Error executing member leave cleanup: {error}",
+            "subsystemInit": "Sub-system initialized and panels auto-refreshed.",
+            "panelRecovery": "Starting automatic panel recovery and chat cleanup...",
+            "panelRestoreFailed": "Failed to restore panel {key}: {error}",
+            "floorReleased": "{title} fully released and closed.",
+            "commandsRegistered": "✅ All slash commands registered successfully.",
+            "commandsError": "❌ Slash command registration failed: {error}"
+        }
     },
     "reserve": {
         "success": "✅ **{event}** has been reserved for **{userName}**. No one else can claim it until reopened.",
@@ -355,5 +357,4 @@
             "hourFormat": "{hour}:00 - {nextHour}:00"
         }
     }
-}
 }
