@@ -74,7 +74,7 @@ export async function handleMgmtSlash(interaction) {
             return await interaction.reply({
                 content: getMsg("system.permissionDeniedAdminDropped"),
                 flags: 64
-            }).catch(() => {});
+            });
         }
 
         const embed = new e()
@@ -110,16 +110,18 @@ export async function handleMgmtSlash(interaction) {
                 )
             ],
             flags: 64
-        }).catch(() => {});
+        });
     } catch (err) {
         console.error("❌ [handleMgmtSlash] CRASH:", err);
         if (err.stack) console.error("📋 [Stack]:", err.stack);
         try {
+            const errContent = "❌ **Internal error** in management panel.\n```\n" +
+                (err.message || String(err)).slice(0, 1500) +
+                "\n```\nCheck the bot console for full details.";
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: "❌ **Internal error** in management panel. Check bot console for details.",
-                    flags: 64
-                });
+                await interaction.reply({ content: errContent, flags: 64 });
+            } else {
+                await interaction.followUp({ content: errContent, flags: 64 });
             }
         } catch (e) {}
     }
