@@ -271,7 +271,7 @@ export function renderEmbed(key) {
                 }
             }
             let block = STATUS_CLAIMED === rData.status && rData.ownerName 
-                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n${rData.password ? `🎮 PT Password: ${rData.password}` : ""}\n\`\`\`` 
+                ? `\`\`\`md\n# 👑 ${rData.ownerName}\n${remainingClaimStr || rData.time}\n${rData.password ? getMsg("rooms.antidemonPasswordLabel", { password: rData.password }) : ""}\n\`\`\`` 
                 : rData.endLimit && rData.nextName 
                     ? `\`\`\`md\n⏭️ ${rData.nextName}\n\`\`\`\n${getEndLimitCountdown(rData.endLimit)}` 
                     : `\`\`\`yaml\n${STATUS_AVAILABLE}\n\`\`\``;
@@ -566,7 +566,7 @@ export function renderButtons(key) {
                         new n()
                             .setCustomId(`antipwd-${key}-${rm}`)
                             .setEmoji(hasPwd ? "🎮" : "🔒")
-                            .setLabel(`${hasPwd ? "PT" : "Set PT"} ${getAntidemonRoomName(key, rm)}`)
+                            .setLabel(`${getMsg(hasPwd ? "rooms.antidemonPasswordBtnActive" : "rooms.antidemonPasswordBtnSet")} ${getAntidemonRoomName(key, rm)}`)
                             .setStyle(a.Secondary)
                     );
                 }
