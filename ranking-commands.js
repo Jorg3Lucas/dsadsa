@@ -52,8 +52,7 @@ export async function registerMir4SlashCommands(guild) {
             },
             {
                 name: 'manage',
-                description: '🛠️ Bot Management Panel — Configure all bot systems',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+                description: '🛠️ Bot Management Panel — Configure all bot systems'
             },
             {
                 name: 'manualremove',
