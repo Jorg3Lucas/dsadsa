@@ -108,6 +108,7 @@
         "floorTurnArrivedDM": "🟢 **Your Turn!**\n\n**{title}** is now available.\nClaim it within **5 minutes** or lose your spot.",
         "floorAbsenceDM": "❌ **Queue Lost**\n\nYou didn't claim **{title}** in time and lost your position.",
         "antidemonTurnArrivedDM": "🟢 **Your Turn!**\n\nThe Antidemon room **{roomKey}** in **{title}** is ready.\nActivate your tickets within **5 minutes**.",
+        "summonTurnArrivedDM": "🟢 **Your Turn!**\n\n**{roomKey}** in **{title}** is now available.\nActivate your tickets within **5 minutes**.",
         "antidemonAbsenceDM": "❌ **Queue Lost**\n\nYou didn't activate your tickets for **{roomKey}** in time.",
         "dmBossNotMarkedWarning": "⚠️ **Boss Reminder**\n\n**{boss}** in **{title}** has been available for over 5 minutes.\nDon't forget to register the kill.",
         "slotAlreadyClaimed": "🔒 {room} is already claimed by {ownerName}.",

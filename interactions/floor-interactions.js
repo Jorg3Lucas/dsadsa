@@ -525,7 +525,7 @@ async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelK
                         let grace = new Date(getLocalTime().getTime() + 3e5);
                         evData.timeWindow = `${getFormattedTime12h(new Date())} ~ ${getFormattedTime12h(grace)}`;
                         evData.status = STATUS_OPEN;
-                        notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
+                        notifyUserDM(nid, getMsg("rooms.summonTurnArrivedDM", {
                             roomKey: evData.name,
                             title: targetObj.title
                         })).catch(() => {});
@@ -689,7 +689,7 @@ async function handleEGSlide(interaction, uid, uName) {
         evData._claimTimestamp = now.getTime();
         
         pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, "Claimed Red Boss");
-        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: "" }));
+        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: "Until boss is killed" }));
         saveLocalStorage();
         await refreshVisualPanel(pKey);
         return await interaction.update({
