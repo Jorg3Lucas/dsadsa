@@ -86,11 +86,15 @@ export async function handleManagementInteraction(interaction, uid, extra) {
     if (cid === "mgmt-panels-kick-menu") return handleMgmtPanelsKickMenu(interaction);
     if (cid === "mgmt-reservations") return handleMgmtReservations(interaction);
     if (cid === "mgmt-reservations-clear") return handleMgmtReservationsClear(interaction);
+    if (cid === "mgmt-reservations-clear-confirm") return handleMgmtReservationsClearExecute(interaction);
+    if (cid === "mgmt-reservations-clear-cancel") return handleMgmtReservationsClearCancel(interaction);
     if (cid === "mgmt-channels") return handleMgmtChannels(interaction);
     if (cid === "mgmt-channels-logs") return handleMgmtChannelsLogs(interaction);
     if (cid === "mgmt-channels-boss") return handleMgmtChannelsBoss(interaction);
     if (cid === "mgmt-channels-events") return handleMgmtChannelsEvents(interaction);
     if (cid === "mgmt-update") return handleMgmtUpdate(interaction);
+    if (cid === "mgmt-update-confirm") return handleMgmtUpdateConfirm(interaction);
+    if (cid === "mgmt-update-cancel") return handleMgmtUpdateCancel(interaction);
     if (cid === "mgmt-tickets") return handleMgmtTickets(interaction);
     if (cid === "mgmt-logs") return handleMgmtLogs(interaction);
     if (cid === "mgmt-salary") return handleMgmtSalary(interaction);
@@ -412,12 +416,57 @@ async function handleMgmtReservationsClear(interaction) {
         }).catch(() => {});
     }
 
+    // Count how many reservations exist
+    let totalCount = 0;
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        if ("event_group" !== db[key].type) continue;
+        for (const ev of ["fury", "frenzy"]) {
+            const evData = db[key][ev];
+            if (evData && evData.type === "fixed" && (evData.reservedFor || evData.reservations)) {
+                totalCount++;
+            }
+        }
+    }
+
+    if (totalCount === 0) {
+        return await interaction.update({
+            content: "ℹ️ No reservations to clear.",
+            components: [
+                new t().addComponents(
+                    new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Back to Reservations").setStyle(a.Secondary)
+                )
+            ],
+            flags: 64
+        }).catch(() => {});
+    }
+
+    return await interaction.update({
+        content: `⚠️ **Are you sure?**\n\nThis will clear **${totalCount}** reservation(s) across Fury and Frenzy in all panels.\n\nThis action **cannot be undone** — all reserved slots will be opened for everyone.`,
+        components: [
+            new t().addComponents(
+                new n().setCustomId("mgmt-reservations-clear-confirm").setEmoji("✅").setLabel("Yes, clear all").setStyle(a.Danger),
+                new n().setCustomId("mgmt-reservations-clear-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
+            )
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtReservationsClearExecute(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
     let clearedCount = 0;
     for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
         const current = db[key];
         if ("event_group" !== current.type) continue;
-        
+
         for (const ev of ["fury", "frenzy"]) {
             const evData = current[ev];
             if (!evData || evData.type !== "fixed") continue;
@@ -438,9 +487,19 @@ async function handleMgmtReservationsClear(interaction) {
     }
 
     return await interaction.update({
-        content: clearedCount > 0
-            ? `✅ Cleared **${clearedCount}** reservation(s). All events are now open.`
-            : "ℹ️ No reservations to clear.",
+        content: `✅ Cleared **${clearedCount}** reservation(s). All events are now open.`,
+        components: [
+            new t().addComponents(
+                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Back to Reservations").setStyle(a.Secondary)
+            )
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtReservationsClearCancel(interaction) {
+    return await interaction.update({
+        content: "❌ Clear cancelled. No reservations were changed.",
         components: [
             new t().addComponents(
                 new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Back to Reservations").setStyle(a.Secondary)
@@ -862,6 +921,26 @@ async function handleMgmtUpdate(interaction) {
         }).catch(() => {});
     }
 
+    return await interaction.update({
+        content: "⚠️ **Are you sure?**\n\nThis will:\n1. Pull the latest code from Git\n2. Run `npm install`\n3. **Restart the bot** via pm2\n\nThe bot will be **offline for a few seconds** during restart.\n\nProceed with the update?",
+        components: [
+            new t().addComponents(
+                new n().setCustomId("mgmt-update-confirm").setEmoji("🔄").setLabel("Yes, update and restart").setStyle(a.Danger),
+                new n().setCustomId("mgmt-update-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
+            )
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtUpdateConfirm(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
     await interaction.update({
         content: "🔄 **Updating bot...**\n\nPulling latest code and restarting.",
         components: []
@@ -877,4 +956,14 @@ async function handleMgmtUpdate(interaction) {
             flags: 64
         }).catch(() => {});
     }
+}
+
+async function handleMgmtUpdateCancel(interaction) {
+    return await interaction.update({
+        content: "❌ Update cancelled.",
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back to Menu").setStyle(a.Secondary))
+        ],
+        flags: 64
+    }).catch(() => {});
 }
