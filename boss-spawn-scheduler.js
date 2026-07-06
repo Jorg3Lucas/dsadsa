@@ -281,7 +281,7 @@ export async function sendScheduledEventAlerts() {
     .setTimestamp();
 
   try {
-    await channel.send({ content: "@everyone", embeds: [embed] });
+    await channel.send({ embeds: [embed] });
     for (const alert of alerts) {
       scheduledEventAlertCache[alert.cacheKey] = true;
     }
