@@ -24,6 +24,7 @@ import {
     loadSalaryState,
     initSalaryCron
 } from './salary-poll.js';
+import { handleManagementInteraction, handleMgmtSlash } from './management-menu.js';
 
 
 const DISCORD_SERVER_ID = '1432320162278670440';
@@ -194,6 +195,11 @@ client.on('interactionCreate', async (interaction) => {
     try {
         // A. SLASH COMMANDS (/)
         if (interaction.isCommand()) {
+            // Management panel — show main menu
+            if (interaction.commandName === 'manage') {
+                return await handleMgmtSlash(interaction);
+            }
+
             const rankingCommands = [
                 'register',
                 'pilot',
@@ -203,8 +209,7 @@ client.on('interactionCreate', async (interaction) => {
                 'manualpilot',
                 'manualremove',
                 'manualremovepilot',
-                'cleandb',
-                'manage'
+                'cleandb'
             ];
 
             if (rankingCommands.includes(interaction.commandName)) {
@@ -221,6 +226,10 @@ client.on('interactionCreate', async (interaction) => {
 
         // C. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
+            if (interaction.customId.startsWith('mgmt-')) {
+                return await handleManagementInteraction(interaction);
+            }
+
             const rankingMenus = ['select_pilot_to_remove', 'select_clan_manual_', 'manage_'];
             const isRankingMenu = rankingMenus.some(id => interaction.customId.startsWith(id));
 
@@ -242,6 +251,9 @@ client.on('interactionCreate', async (interaction) => {
 
         // E. PANEL BUTTON CLICKS
         if (interaction.isButton()) {
+            if (interaction.customId.startsWith('mgmt-')) {
+                return await handleManagementInteraction(interaction);
+            }
             if (interaction.customId.startsWith('confirm-manual') || interaction.customId.startsWith('manage_')) {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
