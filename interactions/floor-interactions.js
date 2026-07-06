@@ -594,7 +594,7 @@ async function handleEGFixClaim(interaction, uid, uName) {
     const now = getLocalTime();
     const minuteOffset = evData.scheduleMinutes || 0;
     let eventStart;
-    let claimedHour = null;
+    let claimedHour;
 
     if (isRoomOpen(evData.schedules, minuteOffset)) {
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -718,7 +718,7 @@ async function handleEGSlide(interaction, uid, uName) {
         const now = getLocalTime();
         const minuteOffset = evData.scheduleMinutes || 0;
         let eventStart;
-        let claimedHour = null;
+        let claimedHour;
         
         if (isRoomOpen(evData.schedules, minuteOffset)) {
             const nowMinutes = now.getHours() * 60 + now.getMinutes();

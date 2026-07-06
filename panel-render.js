@@ -59,7 +59,7 @@ export function renderEmbed(key) {
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
         for (const ev of eventKeys) {
             const evData = current[ev];
-            let block = "";
+            let block;
             
             if (evData.type === "schedule") {
                 // Schedule-based event (Red Boss)
@@ -213,7 +213,7 @@ export function renderEmbed(key) {
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
         for (const loc of summonProps) {
             const rData = current[loc];
-            let block = "";
+            let block;
             
             if (STATUS_CLAIMED === rData.status && rData.ownerName) {
                 let timerStr = "";

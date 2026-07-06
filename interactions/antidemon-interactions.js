@@ -136,7 +136,7 @@ async function handleAntiTicket(interaction, uid, uName) {
         startTime = getLocalTime(),
         endTime = new Date(startTime.getTime() + 6e4 * calcMinutes),
         rangeStr = `${getFormattedTime12h(startTime)} ~ ${getFormattedTime12h(endTime)}`,
-        roomsToClaim = [];
+        roomsToClaim;
 
     const roomKeys = getAntidemonRoomKeys(pKey);
     if (roomKeys.length > 3) {

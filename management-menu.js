@@ -715,7 +715,7 @@ async function handleMgmtSalary(interaction) {
     const now = getLocalTime();
     const day = now.getDay();
     const currMin = now.getHours() * 60 + now.getMinutes();
-    let nextEvent = "";
+    let nextEvent;
     if (day <= 1 && (day < 1 || currMin < 12*60+30)) {
         nextEvent = getMsg("management.salary.nextOpen");
     } else if (day < 3 || (day === 3 && currMin < 13*60)) {
