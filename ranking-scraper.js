@@ -29,8 +29,8 @@ export async function fetchMir4RankingData(forceRefresh = false) {
             $('table tbody tr').each((i, el) => {
                 const cells = $(el).find('td');
                 if (cells.length >= 3) {
-                    let nick = cells.eq(1).text().replace(/[\n\t\r]/g, '').trim().normalize('NFC');
-                    let clan = cells.eq(2).text().replace(/[\n\t\r]/g, '').trim().normalize('NFC');
+                    const nick = cells.eq(1).text().replace(/[\n\t\r]/g, '').trim().normalize('NFC');
+                    const clan = cells.eq(2).text().replace(/[\n\t\r]/g, '').trim().normalize('NFC');
                     if (nick) {
                         rankingMap[nick] = (clan && clan !== '-' && clan !== '—') ? clan : "No Clan";
                     }
@@ -56,12 +56,12 @@ export async function fetchClanPowerData(logEvent) {
                 $('table').first().find('tr').each((i, el) => {
                     const cells = $(el).find('td');
                     if (cells.length >= 3) {
-                        let rawNick = cells.eq(0).text().trim().normalize('NFC');
+                        const rawNick = cells.eq(0).text().trim().normalize('NFC');
                         let nick = rawNick.split(/[\n\r]+/)[0].trim();
                         // Strip impersonation suffix (冒用) added by hofgamer.com
                         nick = nick.replace(/\(冒用\)/g, '').trim();
-                        let powerText = cells.eq(2).text().replace(/[\n\t\r,]/g, '').trim();
-                        let power = parseInt(powerText, 10);
+                        const powerText = cells.eq(2).text().replace(/[\n\t\r,]/g, '').trim();
+                        const power = parseInt(powerText, 10);
                         if (nick && !isNaN(power) && power > 0) {
                             powerMap[nick] = power;
                             count++;

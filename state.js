@@ -8,15 +8,18 @@ import { runBackup } from "./auto-backup.js";
 
 export const punishmentsPath = s.resolve("./punishments.json");
 export const dailyLogsPath = s.resolve("./daily-logs.json");
+export const dmOptOutPath = s.resolve("./dm-optout.json");
 export const defaultFloors = ["7", "8", "9", "10"];
 
 export let punishments = {};
 export let dailyLogs = { configChannelId: null, queue: [], bossSpawnChannelId: null, scheduledEventChannelId: null };
-export let alertCache = { warning5mAfter: {}, spawnAlerted: {} };
-export let antiDemonSelectionCache = {};
-export let summonSelectionCache = {};
-export let bossSpawnAlertCache = {};
+export const alertCache = { warning5mAfter: {}, spawnAlerted: {} };
+export const antiDemonSelectionCache = {};
+export const summonSelectionCache = {};
+export const bossSpawnAlertCache = {};
 
+// ── DM Opt-Out (Set of user IDs that opted out of DMs) ──
+export let dmOptOut = new Set();
 
 export let client, db, rankingDb, saveLocalStorage, logEvent, lastMessages;
 
@@ -56,8 +59,32 @@ export function savePunishmentsToDisk() {
     } catch (e) {}
 }
 
+// ── DM Opt-Out Persistence ────────────────────────────────
+
+export function loadDmOptOutFromDisk() {
+    try {
+        if (o.existsSync(dmOptOutPath)) {
+            const data = JSON.parse(o.readFileSync(dmOptOutPath, "utf8"));
+            if (Array.isArray(data)) {
+                dmOptOut = new Set(data);
+            }
+        }
+    } catch (err) {
+        console.error("❌ Error loading dm-optout.json:", err.message);
+    }
+}
+
+export function saveDmOptOutToDisk() {
+    try {
+        o.writeFileSync(dmOptOutPath, JSON.stringify([...dmOptOut], null, 2));
+    } catch (err) {
+        console.error("❌ Error saving dm-optout.json:", err.message);
+    }
+}
+
 // ==========================================
 // 🏗️ MODULE-LEVEL STATE (loaded at import time)
 // ==========================================
 
 loadDailyLogsFromDisk();
+loadDmOptOutFromDisk();

@@ -13,7 +13,7 @@ import {
 } from './bot.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
 import { initTempVoiceSystem } from './temp-voice.js';
-import { loadTicketState, initTicketSystem } from './ticket-system.js';
+import { initTicketSystem } from './ticket-system.js';
 import {
     registerMir4SlashCommands,
     initMir4BotEvents,
@@ -24,10 +24,7 @@ import {
     loadSalaryState,
     initSalaryCron
 } from './salary-poll.js';
-import { handleGoldSlashCommand } from './commands/gold-commands.js';
-import { initGoldShop, startExpiredOrdersCheck, startQrCodeCleanup, startGoldDailyReport, startPaymentPolling } from './gold-shop.js';
-import { initMercadoPago, checkGoldEnvVars } from './mercadopago.js';
-import { startWebhookServer } from './webhook-server.js';
+
 
 const DISCORD_SERVER_ID = '1432320162278670440';
 
@@ -175,47 +172,7 @@ client.once('ready', async () => {
     loadSalaryState();
     initSalaryCron();
 
-    // Initialize Gold Shop system
-    const { buildGoldPanelEmbed, buildGoldPanelButtons } = await import('./interactions/gold-interactions.js');
-    initGoldShop();
-    startExpiredOrdersCheck(client);
-    startQrCodeCleanup();
-    startGoldDailyReport(client);
-    startPaymentPolling(client);
-    initMercadoPago();
-    checkGoldEnvVars();
 
-    // Start webhook server for automatic payment confirmation
-    startWebhookServer(client);
-
-    // Auto-recover gold panel on restart
-    try {
-        const goldDb = await import('./gold-shop.js');
-        const panelRef = goldDb.getPanelRef();
-        if (panelRef && panelRef.channelId && panelRef.messageId) {
-            const channel = await client.channels.fetch(panelRef.channelId).catch(() => null);
-            if (channel) {
-                try {
-                    const oldMsg = await channel.messages.fetch(panelRef.messageId).catch(() => null);
-                    if (oldMsg) {
-                        await oldMsg.edit({ embeds: [buildGoldPanelEmbed()], components: buildGoldPanelButtons() }).catch(() => {});
-                        console.log('🏪 Gold Shop panel auto-recovered.');
-                    } else {
-                        throw new Error('Message not found');
-                    }
-                } catch {
-                    // Message was deleted, re-create
-                    const newMsg = await channel.send({ embeds: [buildGoldPanelEmbed()], components: buildGoldPanelButtons() });
-                    goldDb.savePanelRef(channel.id, newMsg.id);
-                    console.log('🏪 Gold Shop panel re-created after deletion.');
-                }
-            }
-        }
-    } catch (err) {
-        console.error('❌ Gold panel auto-recovery error:', err.message);
-    }
-
-    console.log('🏪 Gold Shop system initialized.');
 });
 
 // ==========================================
@@ -252,12 +209,6 @@ client.on('interactionCreate', async (interaction) => {
 
             if (rankingCommands.includes(interaction.commandName)) {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Gold shop slash commands
-            const goldCommands = ['shop', 'orders', 'order', 'goldshop', 'goldadmin'];
-            if (goldCommands.includes(interaction.commandName)) {
-                return await handleGoldSlashCommand(interaction);
             }
 
             return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);

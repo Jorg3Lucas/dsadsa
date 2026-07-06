@@ -154,7 +154,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const power = matchKey ? powerData[matchKey] : undefined;
                     if (!matchKey && powerData && Object.keys(powerData).length > 0) {
                         if (Math.random() < 0.1) {
-                            let sampleKeys = Object.keys(powerData).slice(0, 3).map(k => `"${k}"`).join(', ');
+                            const sampleKeys = Object.keys(powerData).slice(0, 3).map(k => `"${k}"`).join(', ');
                             logEvent(`10F Power: No match for "${normalizedNick}" in powerData. Sample keys: ${sampleKeys}`);
                         }
                     }

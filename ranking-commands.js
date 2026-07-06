@@ -70,36 +70,7 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 6, name: 'pilot', description: getMsg('ranking.commands.manualremovepilot.options.pilot'), required: true }
                 ]
             },
-            // ── Gold Shop commands ──
-            {
-                name: 'shop',
-                description: '🛒 View the MIR4 Gold Shop'
-            },
-            {
-                name: 'orders',
-                description: '📋 View your Gold orders'
-            },
-            {
-                name: 'order',
-                description: '🔍 View order details',
-                options: [{ type: 3, name: 'id', description: 'Order ID (e.g., GOLD-000001)', required: true }]
-            },
-            {
-                name: 'goldshop',
-                description: '🏪 [Admin] Create fixed Gold Shop panel in this channel',
-                default_member_permissions: PermissionFlagsBits.ManageMessages.toString()
-            },
-            {
-                name: 'goldadmin',
-                description: '👑 [Admin] Manage Gold Shop',
-                default_member_permissions: PermissionFlagsBits.ManageMessages.toString(),
-                options: [
-                    { type: 1, name: 'stats', description: 'View shop statistics' },
-                    { type: 1, name: 'pedidos', description: 'View pending delivery orders' },
-                    { type: 1, name: 'entregar', description: 'Mark order as delivered', options: [{ type: 3, name: 'id', description: 'Order ID', required: true }] },
-                    { type: 1, name: 'cancelar', description: 'Cancel an order', options: [{ type: 3, name: 'id', description: 'Order ID', required: true }, { type: 3, name: 'motivo', description: 'Cancellation reason', required: false }] }
-                ]
-            }
+
         ]);
         console.log(getMsg('ranking.logs.commandsRegistered'));
     } catch (error) { console.error(getMsg('ranking.logs.commandsError'), error); }

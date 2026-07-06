@@ -28,7 +28,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 if (ownerMember) {
                     for (const [clanName, roleId] of Object.entries(CLAN_ROLES)) {
                         if (ownerMember.roles.cache.has(roleId)) {
-                            for (const [cn, rId] of Object.entries(CLAN_ROLES)) {
+                            for (const [, rId] of Object.entries(CLAN_ROLES)) {
                                 if (rId === roleId) {
                                     if (!targetMember.roles.cache.has(rId)) await targetMember.roles.add(rId).catch(() => {});
                                 } else {
@@ -490,7 +490,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }).catch(() => {});
         }
 
-        const [_, __, direction, pageStr] = interaction.customId.split('_');
+        const [, , , pageStr] = interaction.customId.split('_');
         const currentPage = parseInt(pageStr, 10);
         const newPage = interaction.customId.includes('next') ? currentPage + 1 : currentPage - 1;
 

@@ -12,8 +12,9 @@ import { canHandleTicketInteraction, handleTicketInteraction } from "./ticket-sy
 import { canHandleAntidemonInteraction, handleAntidemonInteraction, canHandleAntidemonModal, handleAntidemonModal } from "./interactions/antidemon-interactions.js";
 import { canHandleSummonInteraction, handleSummonInteraction } from "./interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "./interactions/floor-interactions.js";
+import { dmOptOut, saveDmOptOutToDisk } from "./state.js";
 import { canHandleSalaryInteraction, handleSalaryInteraction } from "./interactions/salary-interactions.js";
-import { canHandleGoldInteraction, handleGoldInteraction, handleGoldModalSubmit } from "./interactions/gold-interactions.js";
+
 
 // ==========================================
 // 💬 TEXT COMMAND ROUTER
@@ -37,8 +38,13 @@ export async function handleClaimMessages(msg) {
 // ==========================================
 
 export async function handleClaimInteractions(interaction) {
-    let uid = interaction.user.id;
-    let uName = interaction.member ? interaction.member.displayName : interaction.user.username;
+    const uid = interaction.user.id;
+    const uName = interaction.member ? interaction.member.displayName : interaction.user.username;
+
+    // 0. DM Opt-Out button (🔕 on all panels)
+    if (interaction.isButton() && interaction.customId === 'dmoptout') {
+        return await handleDmOptOut(interaction, uid);
+    }
 
     // 1. Admin interactions (reset menu, kick menu, reset logs)
     if (canHandleAdminInteraction(interaction)) {
@@ -65,17 +71,7 @@ export async function handleClaimInteractions(interaction) {
         return await handleTicketInteraction(interaction);
     }
 
-    // 6. Gold shop interactions
-    if (canHandleGoldInteraction(interaction)) {
-        return await handleGoldInteraction(interaction);
-    }
-
-    // 7. Gold shop modal submits
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('gold-modal-')) {
-        return await handleGoldModalSubmit(interaction);
-    }
-
-    // 7b. Antidemon password modal submits
+    // 6. Antidemon password modal submits
     if (canHandleAntidemonModal(interaction)) {
         return await handleAntidemonModal(interaction);
     }
@@ -83,5 +79,29 @@ export async function handleClaimInteractions(interaction) {
     // 8. Floor interactions (buttons: death, claim, cancel, next)
     if (canHandleFloorInteraction(interaction)) {
         return await handleFloorInteraction(interaction, uid, uName);
+    }
+}
+
+// ==========================================
+// 🔕 DM OPT-OUT HANDLER — toggles DM preference per user
+// ==========================================
+
+async function handleDmOptOut(interaction, uid) {
+    const currentlyOptedOut = dmOptOut.has(uid);
+
+    if (currentlyOptedOut) {
+        dmOptOut.delete(uid);
+        saveDmOptOutToDisk();
+        await interaction.reply({
+            content: '✅ **DM notifications enabled!**\\n\\nYou will now receive claim alerts, boss reminders, and other notifications via DM.',
+            flags: 64
+        });
+    } else {
+        dmOptOut.add(uid);
+        saveDmOptOutToDisk();
+        await interaction.reply({
+            content: '🔕 **DM notifications disabled!**\\n\\nYou will no longer receive claim alerts, boss reminders, and other notifications via DM.\\n\\nClick the button again anytime to re-enable them.',
+            flags: 64
+        });
     }
 }

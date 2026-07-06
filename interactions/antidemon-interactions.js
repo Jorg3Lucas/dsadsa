@@ -11,16 +11,12 @@ import {
     hasActiveClaim,
     hasActiveQueue,
     checkPunishment,
-    applyFiveMinCooldown,
-    freeAntidemonRoom,
     buildActiveClaimMessage,
     getAntidemonRoomKeys
 } from "../claim-core.js";
 import {
     ActionRowBuilder as t,
     StringSelectMenuBuilder as i,
-    ButtonBuilder as n,
-    ButtonStyle as a,
     ModalBuilder as m,
     TextInputBuilder as ti,
     TextInputStyle as tis
@@ -80,21 +76,12 @@ export async function handleAntidemonModal(interaction) {
 // ==========================================
 
 async function handleAntiSlide(interaction, uid) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
 
-    let pKey = interaction.customId.replace("antislide-", ""),
+    const pKey = interaction.customId.replace("antislide-", ""),
         targetFloor = db[pKey],
         configSelected = interaction.values[0];
-
-    let roomsToCheck = [];
-    const roomKeys = getAntidemonRoomKeys(pKey);
-    if (roomKeys.length > 3) {
-        // 11/12: support combo values (e.g. "v1l+v1m")
-        roomsToCheck = configSelected.includes("+") ? configSelected.split("+") : [configSelected];
-    } else if ("mid-left" === configSelected) roomsToCheck = ["left", "mid"];
-    else if ("mid-right" === configSelected) roomsToCheck = ["mid", "right"];
-    else roomsToCheck = [configSelected];
 
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -124,10 +111,10 @@ async function handleAntiSlide(interaction, uid) {
 // ==========================================
 
 async function handleAntiTicket(interaction, uid, uName) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
 
-    let pKey = interaction.customId.replace("antiticket-", ""),
+    const pKey = interaction.customId.replace("antiticket-", ""),
         targetFloor = db[pKey],
         cacheObj = antiDemonSelectionCache[uid];
 
@@ -159,13 +146,13 @@ async function handleAntiTicket(interaction, uid, uName) {
     else roomsToClaim = [configSelected];
 
     // Check priority reservation for each room
-    for (let roomKey of roomsToClaim) {
+    for (const roomKey of roomsToClaim) {
         if (targetFloor[roomKey].nextId && targetFloor[roomKey].nextId !== uid) {
             let timeRemainingStr = "";
             if (targetFloor[roomKey].endLimit) {
-                let limitTime = parseStringToDate(targetFloor[roomKey].endLimit);
+                const limitTime = parseStringToDate(targetFloor[roomKey].endLimit);
                 if (limitTime) {
-                    let diffMins = Math.ceil((limitTime.getTime() - getLocalTime().getTime()) / 6e4);
+                    const diffMins = Math.ceil((limitTime.getTime() - getLocalTime().getTime()) / 6e4);
                     if (diffMins > 0) timeRemainingStr = getMsg("cooldowns.timeRemaining", { minutes: diffMins });
                 }
             }
@@ -187,7 +174,7 @@ async function handleAntiTicket(interaction, uid, uName) {
     }
 
     // RACE CONDITION GUARD: Re-verify each room is still available before claiming
-    for (let roomKey of roomsToClaim) {
+    for (const roomKey of roomsToClaim) {
         if (targetFloor[roomKey].ownerId) {
             delete antiDemonSelectionCache[uid];
             return await interaction.update({
@@ -198,7 +185,7 @@ async function handleAntiTicket(interaction, uid, uName) {
         }
     }
 
-    let applyClaim = roomKey => {
+    const applyClaim = roomKey => {
         targetFloor[roomKey].nextId === uid && (targetFloor[roomKey].nextId = null, targetFloor[roomKey].nextName = null, targetFloor[roomKey].endLimit = null);
         targetFloor[roomKey].status = STATUS_CLAIMED;
         targetFloor[roomKey].ownerId = uid;
@@ -226,10 +213,10 @@ async function handleAntiTicket(interaction, uid, uName) {
 // ==========================================
 
 async function handleAntiNextSide(interaction, uid, uName) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
 
-    let pKey = interaction.customId.replace("antinextside-", ""),
+    const pKey = interaction.customId.replace("antinextside-", ""),
         targetFloor = db[pKey];
     if (!targetFloor) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
 
@@ -239,13 +226,13 @@ async function handleAntiNextSide(interaction, uid, uName) {
     }
     if (hasActiveQueue(uid)) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
 
-    let tryJoinQueue = roomKey => {
+    const tryJoinQueue = roomKey => {
         if (!targetFloor[roomKey] || targetFloor[roomKey].nextId) return !1;
         // Guard: only allow queue for rooms that are currently claimed
         if (targetFloor[roomKey].status !== STATUS_CLAIMED) return !1;
         let baseTime = getLocalTime();
         if (targetFloor[roomKey].timeWindow) {
-            let calcLimit = parseStringToDate(targetFloor[roomKey].timeWindow.split(" ~ ")[1]);
+            const calcLimit = parseStringToDate(targetFloor[roomKey].timeWindow.split(" ~ ")[1]);
             calcLimit && (baseTime = calcLimit);
         }
         targetFloor[roomKey].nextId = uid;
@@ -255,7 +242,7 @@ async function handleAntiNextSide(interaction, uid, uName) {
         return !0;
     };
 
-    let choice = interaction.values[0],
+    const choice = interaction.values[0],
         joinedRooms = [];
     const roomKeys = getAntidemonRoomKeys(pKey);
 
@@ -276,7 +263,7 @@ async function handleAntiNextSide(interaction, uid, uName) {
     }
 
     if (joinedRooms.length > 0) {
-        let roomsLabel = joinedRooms.join(" + ");
+        const roomsLabel = joinedRooms.join(" + ");
         pushToDailyLogs("QUEUE_JOIN", uName, `${targetFloor.title} - Room ${roomsLabel}`, getMsg("render.joinedAsNext"));
         notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - Room ${roomsLabel}` }));
         saveLocalStorage();

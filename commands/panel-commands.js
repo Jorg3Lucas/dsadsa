@@ -3,7 +3,6 @@
 // !ms, !sp, !summon
 // ==========================================
 
-import { getMsg } from "../lang.js";
 import { db, lastMessages, defaultFloors, saveLocalStorage } from "../state.js";
 import { renderEmbed, renderButtons } from "../panel-render.js";
 
@@ -32,25 +31,25 @@ export async function handlePanelCommand(msg) {
 // ==========================================
 
 async function handleMS(msg, lowerContent) {
-    let sub = lowerContent.replace("!ms", "").trim();
+    const sub = lowerContent.replace("!ms", "").trim();
 
     // MS11 / MS12 — Leaders, Events (Fury+Frenzy), Antidemon, Goblin
     if ("11" === sub || "12" === sub) {
-        let list = [
+        const list = [
             `${sub}squareleaders`,
             `${sub}squareevents`,
             `${sub}squareantidemon`,
             `${sub}msgoblin`
         ];
         db._panelMapping || (db._panelMapping = {});
-        for (let item of list) {
+        for (const item of list) {
             if (db._panelMapping[item] && db._panelMapping[item].channelId === msg.channel.id) {
                 try {
-                    let oldMsg = await msg.channel.messages.fetch(db._panelMapping[item].messageId).catch(() => null);
+                    const oldMsg = await msg.channel.messages.fetch(db._panelMapping[item].messageId).catch(() => null);
                     oldMsg && await oldMsg.delete().catch(() => {});
                 } catch (M) {}
             }
-            let sent = await msg.channel.send({
+            const sent = await msg.channel.send({
                 embeds: [renderEmbed(item)],
                 components: renderButtons(item)
             });
@@ -65,7 +64,7 @@ async function handleMS(msg, lowerContent) {
     // MS7 - MS10
     if (!defaultFloors.includes(sub)) return;
 
-    let norm = `${sub}squarenormal`;
+    const norm = `${sub}squarenormal`;
 
     // MS9 and MS10 have two antidemon panels (1-1 and 1-2)
     let antiKeys;
@@ -77,24 +76,24 @@ async function handleMS(msg, lowerContent) {
 
     db._panelMapping || (db._panelMapping = {});
 
-    for (let key of [norm, ...antiKeys]) {
+    for (const key of [norm, ...antiKeys]) {
         if (db._panelMapping[key] && db._panelMapping[key].channelId === msg.channel.id) {
             try {
-                let oldMsg = await msg.channel.messages.fetch(db._panelMapping[key].messageId).catch(() => null);
+                const oldMsg = await msg.channel.messages.fetch(db._panelMapping[key].messageId).catch(() => null);
                 oldMsg && await oldMsg.delete().catch(() => {});
             } catch (L) {}
         }
     }
 
-    let m1 = await msg.channel.send({
+    const m1 = await msg.channel.send({
         embeds: [renderEmbed(norm)],
         components: renderButtons(norm)
     });
     lastMessages[norm] = m1;
     db._panelMapping[norm] = { channelId: msg.channel.id, messageId: m1.id };
 
-    for (let antiKey of antiKeys) {
-        let m = await msg.channel.send({
+    for (const antiKey of antiKeys) {
+        const m = await msg.channel.send({
             embeds: [renderEmbed(antiKey)],
             components: renderButtons(antiKey)
         });
@@ -111,19 +110,19 @@ async function handleMS(msg, lowerContent) {
 // ==========================================
 
 async function handleSP(msg, lowerContent) {
-    let floorNum = lowerContent.replace("!sp", "").trim();
+    const floorNum = lowerContent.replace("!sp", "").trim();
     
     // SP11 / SP12 — same as regular SP peaks (7-10)
     if ("11" === floorNum || "12" === floorNum) {
-        let pKey = `${floorNum}peak`;
+        const pKey = `${floorNum}peak`;
         db._panelMapping || (db._panelMapping = {});
         if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
             try {
-                let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
+                const oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
                 oldMsg && await oldMsg.delete().catch(() => {});
             } catch (C) {}
         }
-        let pMsg = await msg.channel.send({
+        const pMsg = await msg.channel.send({
             embeds: [renderEmbed(pKey)],
             components: renderButtons(pKey)
         });
@@ -135,11 +134,11 @@ async function handleSP(msg, lowerContent) {
             const rKey = "12randomevent";
             if (db._panelMapping[rKey] && db._panelMapping[rKey].channelId === msg.channel.id) {
                 try {
-                    let oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
+                    const oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
                     oldRMsg && await oldRMsg.delete().catch(() => {});
                 } catch (C) {}
             }
-            let rMsg = await msg.channel.send({
+            const rMsg = await msg.channel.send({
                 embeds: [renderEmbed(rKey)],
                 components: renderButtons(rKey)
             });
@@ -151,11 +150,11 @@ async function handleSP(msg, lowerContent) {
         const gKey = `${floorNum}goblin`;
         if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
             try {
-                let oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
+                const oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
                 oldGMsg && await oldGMsg.delete().catch(() => {});
             } catch (C) {}
         }
-        let gMsg = await msg.channel.send({
+        const gMsg = await msg.channel.send({
             embeds: [renderEmbed(gKey)],
             components: renderButtons(gKey)
         });
@@ -169,17 +168,17 @@ async function handleSP(msg, lowerContent) {
 
     if (!defaultFloors.includes(floorNum)) return;
 
-    let pKey = `${floorNum}peak`;
+    const pKey = `${floorNum}peak`;
     db._panelMapping || (db._panelMapping = {});
 
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
         try {
-            let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
+            const oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
             oldMsg && await oldMsg.delete().catch(() => {});
         } catch (C) {}
     }
 
-    let pMsg = await msg.channel.send({
+    const pMsg = await msg.channel.send({
         embeds: [renderEmbed(pKey)],
         components: renderButtons(pKey)
     });
@@ -194,17 +193,17 @@ async function handleSP(msg, lowerContent) {
 // ==========================================
 
 async function handleSummon(msg) {
-    let pKey = "summon";
+    const pKey = "summon";
     db._panelMapping || (db._panelMapping = {});
 
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
         try {
-            let oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
+            const oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
             oldMsg && await oldMsg.delete().catch(() => {});
         } catch (C) {}
     }
 
-    let pMsg = await msg.channel.send({
+    const pMsg = await msg.channel.send({
         embeds: [renderEmbed(pKey)],
         components: renderButtons(pKey)
     });

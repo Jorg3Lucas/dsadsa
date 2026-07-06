@@ -4,13 +4,11 @@
 // ==========================================
 
 import { getMsg } from "../lang.js";
-import { db, dailyLogs } from "../state.js";
-import { saveDailyLogs } from "../daily-logs.js";
+import { db, dailyLogs, saveLocalStorage } from "../state.js";
 import { refreshVisualPanel, resetPanelData, notifyUserDM } from "../panel-utils.js";
-import { pushToDailyLogs } from "../daily-logs.js";
+import { pushToDailyLogs, saveDailyLogs } from "../daily-logs.js";
 import { getFormattedTime12h } from "../time-utils.js";
 import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom } from "../claim-core.js";
-import { saveLocalStorage } from "../state.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -54,11 +52,11 @@ async function handleAdminResetMenu(interaction) {
         }).catch(() => {});
     }
 
-    let resetKey = interaction.values[0];
+    const resetKey = interaction.values[0];
 
     if ("__all__" === resetKey) {
         let count = 0;
-        for (let key in db) {
+        for (const key in db) {
             if (!db[key] || key.startsWith("_")) continue;
             resetPanelData(key);
             await refreshVisualPanel(key);
@@ -70,11 +68,11 @@ async function handleAdminResetMenu(interaction) {
         }).catch(() => {});
     }
 
-    if (!db[resetKey]) return await interaction.update({
+    if (!db[resetKey]) {return await interaction.update({
         content: getMsg("system.resetPanelNotFound", { key: resetKey }),
         components: [],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {});}
 
     resetPanelData(resetKey);
     await refreshVisualPanel(resetKey);
@@ -104,9 +102,9 @@ async function handleAdminKickMenu(interaction, uid) {
     if (targetFloor) {
         if ("event_group" === targetFloor.type) {
             // event_group kick: roomType is the sub-event key (e.g. "red", "goblin")
-            let evData = targetFloor[roomType];
+            const evData = targetFloor[roomType];
             if (evData && evData.ownerId) {
-                let finalUserLabel = evData.ownerName || getMsg("render.memberLabel");
+                const finalUserLabel = evData.ownerName || getMsg("render.memberLabel");
                 pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - ${evData.name}`, getMsg("logs.adminRemove"));
                 notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetFloor.title} - ${evData.name}`,
@@ -120,13 +118,13 @@ async function handleAdminKickMenu(interaction, uid) {
                     evData.time = "";
                     evData.timeWindow = "";
                     if (evData.nextId) {
-                        let nid = evData.nextId, nname = evData.nextName;
+                        const nid = evData.nextId, nname = evData.nextName;
                         evData.nextId = null;
                         evData.nextName = null;
                         evData.formattedTimeNext = "";
                         evData.ownerId = nid;
                         evData.ownerName = nname;
-                        let grace = new Date(Date.now() + 3e5);
+                        const grace = new Date(Date.now() + 3e5);
                         evData.timeWindow = `${getFormattedTime12h(new Date())} ~ ${getFormattedTime12h(grace)}`;
                         evData.status = "🟢 Open";
                     }
@@ -140,14 +138,13 @@ async function handleAdminKickMenu(interaction, uid) {
                 
                 saveLocalStorage();
                 await refreshVisualPanel(pKey);
-                notifyUserDM(targetUid, getMsg("system.kickDMNotice", { title: `${targetFloor.title} - ${evData.name}` }));
                 return await interaction.update({
                     content: getMsg("system.kickSuccess"),
                     components: []
                 }).catch(() => {});
             }
         } else if ("floor" === roomType) {
-            let finalUserLabel = targetFloor.ownerName || getMsg("render.memberLabel");
+            const finalUserLabel = targetFloor.ownerName || getMsg("render.memberLabel");
             pushToDailyLogs("CANCEL", finalUserLabel, targetFloor.title, getMsg("logs.adminRemove"));
             notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                 title: targetFloor.title,
@@ -155,7 +152,6 @@ async function handleAdminKickMenu(interaction, uid) {
             }));
             freeFloorAndActivateNextGracePeriod(targetFloor);
             await refreshVisualPanel(pKey);
-            notifyUserDM(targetUid, getMsg("system.kickDMNotice", { title: targetFloor.title }));
             return await interaction.update({
                 content: getMsg("system.kickSuccess"),
                 components: []
@@ -164,10 +160,10 @@ async function handleAdminKickMenu(interaction, uid) {
 
         // Support combo values (e.g. "v1l+v1m") — for antidemon/summon rooms
         const roomsToFree = roomType.includes("+") ? roomType.split("+") : [roomType];
-        let freedLabels = [];
-        for (let rm of roomsToFree) {
+        const freedLabels = [];
+        for (const rm of roomsToFree) {
             if (targetFloor[rm]) {
-                let finalUserLabel = targetFloor[rm].ownerName || getMsg("render.memberLabel");
+                const finalUserLabel = targetFloor[rm].ownerName || getMsg("render.memberLabel");
                 freedLabels.push(rm.toUpperCase());
                 pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - Room ${rm.toUpperCase()}`, getMsg("logs.adminRemove"));
                 notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
@@ -177,9 +173,7 @@ async function handleAdminKickMenu(interaction, uid) {
                 freeAntidemonRoom(targetFloor, rm);
             }
         }
-        let labelStr = freedLabels.join(" + ");
         await refreshVisualPanel(pKey);
-        notifyUserDM(targetUid, getMsg("system.kickDMNotice", { title: `${targetFloor.title} - ${labelStr}` }));
         return await interaction.update({
             content: getMsg("system.kickSuccess"),
             components: []

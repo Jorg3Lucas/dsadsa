@@ -12,22 +12,22 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 // ==========================================
 
 export function getLocalTime() {
-    let timeStr = (new Date).toLocaleString("en-US", {
+    const timeStr = (new Date).toLocaleString("en-US", {
         timeZone: "Europe/Berlin"
     });
     return new Date(timeStr);
 }
 
 export function isRoomOpen(schedules, minuteOffset = 0) {
-    let now = getLocalTime();
-    let hr = now.getHours();
-    let min = now.getMinutes();
+    const now = getLocalTime();
+    const hr = now.getHours();
+    const min = now.getMinutes();
     if (minuteOffset > 0) {
         // Event lasts from X:minuteOffset to X+1:minuteOffset
-        let currentMinutes = hr * 60 + min;
+        const currentMinutes = hr * 60 + min;
         for (const h of schedules) {
-            let eventStart = h * 60 + minuteOffset;
-            let eventEnd = eventStart + 60;
+            const eventStart = h * 60 + minuteOffset;
+            const eventEnd = eventStart + 60;
             if (currentMinutes >= eventStart && currentMinutes < eventEnd) return true;
         }
         return false;
@@ -48,7 +48,7 @@ export function getFormattedTime12h(d) {
 
 export function getDynamicQueueETA(floorObj) {
     if (floorObj && floorObj.timeWindow) {
-        let endOfClaim = parseStringToDate(floorObj.timeWindow.split(" ~ ")[1]);
+        const endOfClaim = parseStringToDate(floorObj.timeWindow.split(" ~ ")[1]);
         if (endOfClaim) return getFormattedTime12h(endOfClaim);
     }
     return floorObj && floorObj.next ? floorObj.next.formattedTime : "--:--";
@@ -56,20 +56,20 @@ export function getDynamicQueueETA(floorObj) {
 
 export function getEndLimitCountdown(endLimitStr) {
     if (!endLimitStr) return "";
-    let limitTime = parseStringToDate(endLimitStr);
+    const limitTime = parseStringToDate(endLimitStr);
     if (!limitTime) return getMsg("rooms.claimBefore", { endLimit: endLimitStr });
-    let remainingSecs = Math.floor((limitTime.getTime() - getLocalTime().getTime()) / 1e3);
+    const remainingSecs = Math.floor((limitTime.getTime() - getLocalTime().getTime()) / 1e3);
     if (remainingSecs <= 0) return `⏳ Expired (${getMsg("render.countdownUntil")} ${endLimitStr})`;
-    let mins = Math.floor(remainingSecs / 60);
-    let secs = remainingSecs % 60;
+    const mins = Math.floor(remainingSecs / 60);
+    const secs = remainingSecs % 60;
     return `⏳ Claim within ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${endLimitStr})`;
 }
 
 export function calculateNextOpening(schedules, minuteOffset = 0) {
-    let base = getLocalTime(),
+    const base = getLocalTime(),
         datesList = [];
     schedules.forEach(hr => {
-        let checkDate = new Date(base.getTime());
+        const checkDate = new Date(base.getTime());
         checkDate.setHours(hr, minuteOffset, 0, 0);
         checkDate <= base && checkDate.setDate(checkDate.getDate() + 1);
         datesList.push(checkDate);
@@ -78,9 +78,9 @@ export function calculateNextOpening(schedules, minuteOffset = 0) {
 }
 
 export function getNextScheduleAfter(baseDate, schedules, minuteOffset = 0) {
-    let datesList = [];
+    const datesList = [];
     schedules.forEach(hr => {
-        let checkDate = new Date(baseDate.getTime());
+        const checkDate = new Date(baseDate.getTime());
         checkDate.setHours(hr, minuteOffset, 0, 0);
         if (checkDate <= baseDate) {
             checkDate.setDate(checkDate.getDate() + 1);
@@ -113,7 +113,7 @@ export function parseStringToDate(str) {
 
     isPm && hr < 12 && (hr += 12);
     isAm && 12 === hr && (hr = 0);
-    let res = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hr, min, sec);
+    const res = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hr, min, sec);
     // If result is >12h ahead of base, the killed time was yesterday (e.g. killed 14:00, now 01:30 next day)
     if (res.getTime() - base.getTime() > 432e5) {
         res.setDate(res.getDate() - 1);

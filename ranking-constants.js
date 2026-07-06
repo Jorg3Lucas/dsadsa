@@ -2,7 +2,7 @@
 // 🔧 CONSTANTS
 // ==========================================
 
-export let confirmationCache = {};
+export const confirmationCache = {};
 
 export const DISCORD_SERVER_ID = '1432320162278670440';
 

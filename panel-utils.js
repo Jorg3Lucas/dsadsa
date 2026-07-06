@@ -1,31 +1,81 @@
 import { getLocalTime, getFormattedTime12h, parseStringToDate } from "./time-utils.js";
-import { getMsg } from "./lang.js";
-import { db, client, saveLocalStorage, logEvent, lastMessages } from "./state.js";
-import { renderEmbed, renderButtons, getEmbedColor } from "./panel-render.js";
+import { db, client, saveLocalStorage, logEvent, lastMessages, dmOptOut } from "./state.js";
+import { renderEmbed, renderButtons } from "./panel-render.js";
 import { STATUS_AVAILABLE, STATUS_KILLED, STATUS_KILLED_PREFIX } from "./constants.js";
 
 // ==========================================
 // 📡 PANEL UPDATE & NOTIFICATIONS
 // ==========================================
 
+// ── DM Rate-Limit Queue ───────────────────────────────
+// Processes DMs sequentially with a 1.5s gap between messages
+// to avoid hitting Discord's rate limits (~5 messages/5s per channel).
+// -----------------------------------------------------------------
+const dmQueue = [];
+let dmQueueProcessing = false;
+const DM_INTERVAL_MS = 1500;
+
+/**
+ * Process queued DMs one at a time with a delay between each.
+ * Automatically starts if not already running.
+ */
+async function processDMQueue() {
+    if (dmQueueProcessing) return;
+    dmQueueProcessing = true;
+
+    while (dmQueue.length > 0) {
+        const { uid, content } = dmQueue.shift();
+        try {
+            await (await client.users.fetch(uid)).send({ content });
+        } catch (err) {
+            if (err.code === 50007) {
+                console.log(`⚠️ [DM] Cannot send DM to ${uid}: DMs closed or bot blocked.`);
+            } else if (err.code === 10013) {
+                console.log(`⚠️ [DM] Cannot send DM to ${uid}: User not found.`);
+            } else if (err.code === 429) {
+                // Rate-limited — re-queue and wait longer
+                console.log(`⏳ [DM] Rate-limited sending to ${uid}, re-queuing.`);
+                dmQueue.unshift({ uid, content });
+                await new Promise(r => setTimeout(r, 5000));
+                continue;
+            } else {
+                console.log(`⚠️ [DM] Failed to send DM to ${uid}: ${err.message}`);
+            }
+        }
+        // Only wait if more items are queued — avoids unnecessary delay before releasing the processor
+        if (dmQueue.length > 0) {
+            await new Promise(r => setTimeout(r, DM_INTERVAL_MS));
+        }
+    }
+
+    dmQueueProcessing = false;
+}
+
 export async function refreshVisualPanel(key) {
-    let cachedMsg = lastMessages[key];
-    if (cachedMsg) try {
+    const cachedMsg = lastMessages[key];
+    if (cachedMsg) {try {
         await cachedMsg.edit({
             embeds: [renderEmbed(key)],
             components: renderButtons(key)
         })
     } catch (n) {
         delete lastMessages[key]
-    }
+    }}
 }
 
+/**
+ * Send a DM via the rate-limited queue.
+ * Messages from the same caller are enqueued and sent sequentially
+ * with a 1.5s pause between each to avoid Discord rate limits.
+ *
+ * Skips users who have opted out of DMs via the /dmoptout command.
+ */
 export async function notifyUserDM(uid, msgContent) {
-    try {
-        await (await client.users.fetch(uid)).send({
-            content: msgContent
-        })
-    } catch (n) {}
+    if (dmOptOut.has(uid)) {
+        return; // User opted out of DMs
+    }
+    dmQueue.push({ uid, content: msgContent });
+    processDMQueue();
 }
 
 // ==========================================
@@ -33,17 +83,17 @@ export async function notifyUserDM(uid, msgContent) {
 // ==========================================
 
 export function resetPanelData(key) {
-    let oldMapping = db._panelMapping ? db._panelMapping[key] : null;
+    const oldMapping = db._panelMapping ? db._panelMapping[key] : null;
     delete db[key];
     
     // Re-initialize using the same logic as initClaimSystem
-    let isPeak = key.match(/^(\d+)peak$/),
+    const isPeak = key.match(/^(\d+)peak$/),
         isNormal = key.match(/^(\d+)squarenormal$/),
         isAnti = key.match(/^(\d+)squareantidemon(\d+)?$/),
         is11or12 = key.match(/^(11|12)square(leaders|events)$/);
     
     if (isPeak) {
-        let floor = isPeak[1];
+        const floor = isPeak[1];
         // SP11 and SP12 don't have Plant/Ore
         const hasPlantOre = floor !== "11" && floor !== "12";
         // SP11/SP12 Red Boss uses custom schedules (1, 7, 13, 19) instead of global (every 3h)
@@ -59,7 +109,7 @@ export function resetPanelData(key) {
             } : {})
         };
     } else if (isNormal) {
-        let floor = isNormal[1];
+        const floor = isNormal[1];
         db[key] = {
             type: "normal",            title: `Magic Square ${floor}F`, timeWindow: "", next: null, ownerId: null, ownerName: null,
             boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
@@ -69,9 +119,9 @@ export function resetPanelData(key) {
             ore: { name: "⛏️ Ore", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" }
         };
     } else if (isAnti) {
-        let floor = isAnti[1];
-        let version = isAnti[2] || "";
-        let title = version ? `Antidemon ${floor}F ${version.slice(0,1)}-${version.slice(1)}` : `Antidemon ${floor}F`;
+        const floor = isAnti[1];
+        const version = isAnti[2] || "";
+        const title = version ? `Antidemon ${floor}F ${version.slice(0,1)}-${version.slice(1)}` : `Antidemon ${floor}F`;
         
         // MS11 and MS12: expanded panel with 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
         if (floor === "11" || floor === "12") {
@@ -131,7 +181,7 @@ export function resetPanelData(key) {
             sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }
         };
     } else if (is11or12) {
-        let num = is11or12[1], type = is11or12[2];
+        const num = is11or12[1], type = is11or12[2];
         const isLeaders = "leaders" === type;
         const isEvents = "events" === type;
         if (isLeaders) {
@@ -195,21 +245,21 @@ export function migrateNamesCleanEmojis() {
         { from: "👹 Antidemon ", to: "Antidemon " },
         { from: "👑 Magic Square ", to: "Magic Square " }
     ];
-    for (let key in db) {
+    for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        let current = db[key];
+        const current = db[key];
         let changed = !1;
         // Clean panel title
-        for (let r of emojiReplacements) {
+        for (const r of emojiReplacements) {
             if (current.title && current.title.includes(r.from)) {
                 current.title = current.title.replace(r.from, r.to);
                 changed = !0;
             }
         }
         // Clean boss/room names
-        for (let prop in current) {
+        for (const prop in current) {
             if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop) && current[prop] && current[prop].name) {
-                for (let r of emojiReplacements) {
+                for (const r of emojiReplacements) {
                     if (current[prop].name === r.from) {
                         current[prop].name = r.to;
                         changed = !0;
@@ -231,9 +281,9 @@ export function migrateNamesCleanEmojis() {
 
 export function migrateBossCooldowns() {
     let migrated = 0;
-    for (let key in db) {
+    for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        let current = db[key];
+        const current = db[key];
         
         if ("peak" === current.type && current.red) {
             if (!current.red.cooldown) {
@@ -318,16 +368,8 @@ export function migrateSPLegacyToUnified() {
     ["11peak", "12peak"].forEach(key => {
         if (db[key] && db[key].type === "peak") {
             // SP11/SP12 only have left/red/right (no plant/ore)
-            const p = db[key];
-            const requiredRooms = ["left", "red", "right"];
-            let needsFix = false;
-            for (const room of requiredRooms) {
-                if (!p[room] || typeof p[room] !== "object") {
-                    needsFix = true;
-                    break;
-                }
-            }
             // Ensure plant/ore are removed if present
+            const p = db[key];
             if (p.plant) delete p.plant;
             if (p.ore) delete p.ore;
         }
@@ -348,7 +390,7 @@ export function migrateMS1112() {
     let migrated = 0;
 
     // === 1. Leaders panels (boss1/boss2/boss3) ===
-    for (let floor of ["11", "12"]) {
+    for (const floor of ["11", "12"]) {
         const key = `${floor}squareleaders`;
         if (!db[key]) {
             db[key] = {
@@ -365,7 +407,7 @@ export function migrateMS1112() {
     }
 
     // === 2. Event panels (Fury + Frenzy event_group) ===
-    for (let floor of ["11", "12"]) {
+    for (const floor of ["11", "12"]) {
         const key = `${floor}squareevents`;
         if (!db[key]) {
             db[key] = {
@@ -391,7 +433,7 @@ export function migrateMS1112() {
     }
 
     // === 3. Antidemon panels (9-room format for MS11/MS12) ===
-    for (let floor of ["11", "12"]) {
+    for (const floor of ["11", "12"]) {
         const key = `${floor}squareantidemon`;
         const existing = db[key];
 
@@ -474,7 +516,7 @@ export function migrateMS1112() {
 
     // === 4. Backfill type:"fixed" and schedules on existing MS11/MS12 events panels ===
     // Fixes existing DB entries that were created without these properties
-    for (let floor of ["11", "12"]) {
+    for (const floor of ["11", "12"]) {
         const key = `${floor}squareevents`;
         const panel = db[key];
         if (panel && panel.type === "event_group") {
@@ -539,17 +581,17 @@ export function migrateMS1112() {
 
 export function migrateLastKilledAt() {
     let migrated = 0;
-    for (let key in db) {
+    for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        let current = db[key];
-        for (let prop in current) {
+        const current = db[key];
+        for (const prop in current) {
             if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
-            let bossData = current[prop];
+            const bossData = current[prop];
             if (!bossData || typeof bossData !== "object") continue;
             // If boss is currently killed but has no _lastKilledAt, set it by parsing the status string
             if (bossData.status && bossData.status.startsWith(STATUS_KILLED) && !bossData._lastKilledAt) {
-                let killedTimeStr = bossData.status.replace(STATUS_KILLED_PREFIX, "").trim();
-                let killedDate = parseStringToDate(killedTimeStr);
+                const killedTimeStr = bossData.status.replace(STATUS_KILLED_PREFIX, "").trim();
+                const killedDate = parseStringToDate(killedTimeStr);
                 if (killedDate && !isNaN(killedDate.getTime())) {
                     bossData._lastKilledAt = killedDate.getTime();
                     migrated++;
@@ -557,9 +599,9 @@ export function migrateLastKilledAt() {
             }
             // Also handle entries already "🟢 Available" that have _lastKilledTimeStr but no _lastKilledAt
             if (bossData.status === STATUS_AVAILABLE && !bossData._lastKilledAt && bossData._lastKilledTimeStr) {
-                let killedDate = parseStringToDate(bossData._lastKilledTimeStr);
+                const killedDate = parseStringToDate(bossData._lastKilledTimeStr);
                 if (killedDate && !isNaN(killedDate.getTime())) {
-                    let diffMs = getLocalTime().getTime() - killedDate.getTime();
+                    const diffMs = getLocalTime().getTime() - killedDate.getTime();
                     // Only set if the time is in the past (valid old killed time)
                     if (diffMs > 0) {
                         bossData._lastKilledAt = killedDate.getTime();
@@ -587,17 +629,17 @@ export function migrateLastKilledAt() {
 export async function processAutoRecoveryOnBoot() {
     logEvent("Starting automatic panel recovery and chat cleanup...");
     db._panelMapping || (db._panelMapping = {});
-    for (let key in db) {
+    for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        let mapping = db._panelMapping[key];
-        if (mapping && mapping.channelId && mapping.messageId) try {
-            let channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+        const mapping = db._panelMapping[key];
+        if (mapping && mapping.channelId && mapping.messageId) {try {
+            const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
             if (!channel) continue;
             try {
-                let msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
+                const msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
                 msg && await msg.delete().catch(() => {});
             } catch (i) {}
-            let newMsg = await channel.send({
+            const newMsg = await channel.send({
                 embeds: [renderEmbed(key)],
                 components: renderButtons(key)
             }).catch(() => null);
@@ -608,7 +650,7 @@ export async function processAutoRecoveryOnBoot() {
         } catch (s) {
             logEvent(`Failed to restore panel ${key}: ${s.message}`);
             console.error(`[Panel Restore Error] ${key}:`, s);
-        }
+        }}
     }
     saveLocalStorage();
 }

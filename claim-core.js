@@ -10,15 +10,15 @@ import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN } from "./constants.js";
 
 // Returns all Discord user IDs linked to the same in-game account (owner + all pilots)
 export function getAllLinkedIds(userId) {
-    let linkedIds = new Set([userId]);
-    let usersData = rankingDb && rankingDb.users ? rankingDb.users : null;
+    const linkedIds = new Set([userId]);
+    const usersData = rankingDb && rankingDb.users ? rankingDb.users : null;
     // If user has pilots, add them
     if (usersData && usersData[userId] && usersData[userId].pilotIds) {
         usersData[userId].pilotIds.forEach(id => linkedIds.add(id));
     }
     // If user is a pilot of someone, add owner and their other pilots
     if (usersData) {
-        for (let uid in usersData) {
+        for (const uid in usersData) {
             if (usersData[uid].pilotIds && usersData[uid].pilotIds.includes(userId)) {
                 linkedIds.add(uid);
                 usersData[uid].pilotIds.forEach(id => linkedIds.add(id));
@@ -82,14 +82,14 @@ export function getAntidemonRoomName(panelKey, roomKey) {
  */
 function getTimeRemainingStr(timeWindow) {
     if (!timeWindow) return "";
-    let endTime = parseStringToDate(timeWindow.split(" ~ ")[1]);
+    const endTime = parseStringToDate(timeWindow.split(" ~ ")[1]);
     if (!endTime) return "";
-    let diffMs = endTime.getTime() - getLocalTime().getTime();
+    const diffMs = endTime.getTime() - getLocalTime().getTime();
     if (diffMs <= 0) return "⌛ Expired";
     let mins = Math.floor(diffMs / 6e4);
-    let secs = Math.floor((diffMs % 6e4) / 1e3);
+    const secs = Math.floor((diffMs % 6e4) / 1e3);
     if (mins >= 60) {
-        let hrs = Math.floor(mins / 60);
+        const hrs = Math.floor(mins / 60);
         mins = mins % 60;
         return `⏱️ ${hrs}h ${mins}m`;
     }
@@ -97,23 +97,23 @@ function getTimeRemainingStr(timeWindow) {
 }
 
 export function getActiveClaimInfo(uid) {
-    let linkedIds = getAllLinkedIds(uid);
-    let claims = [];
-    for (let linkedUid of linkedIds) {
-        for (let key in db) {
+    const linkedIds = getAllLinkedIds(uid);
+    const claims = [];
+    for (const linkedUid of linkedIds) {
+        for (const key in db) {
             if (!db[key] || key.startsWith("_")) continue;
-            let current = db[key];
+            const current = db[key];
             if ("event_group" === current.type) {
                 getEventGroupKeys(current).forEach(ev => {
                     if (current[ev] && current[ev].ownerId === linkedUid) {
-                        let remaining = getTimeRemainingStr(current[ev].timeWindow);
+                        const remaining = getTimeRemainingStr(current[ev].timeWindow);
                         claims.push({ title: `${current.title} - ${current[ev].name}`, type: "event_group", event: ev, remaining });
                     }
                 });
             } else if ("antidemon" === current.type) {
                 getAntidemonRoomKeys(key).forEach(rm => {
                     if (current[rm] && current[rm].ownerId === linkedUid) {
-                        let remaining = getTimeRemainingStr(current[rm].timeWindow);
+                        const remaining = getTimeRemainingStr(current[rm].timeWindow);
                         claims.push({ title: `${current.title} - ${getAntidemonRoomName(key, rm)}`, type: "antidemon", room: rm, remaining });
                     }
                 });
@@ -121,13 +121,13 @@ export function getActiveClaimInfo(uid) {
                 const summonProps = getSummonRoomKeys(key);
                 summonProps.forEach(loc => {
                     if (current[loc] && current[loc].ownerId === linkedUid) {
-                        let remaining = getTimeRemainingStr(current[loc].timeWindow);
+                        const remaining = getTimeRemainingStr(current[loc].timeWindow);
                         claims.push({ title: `${current.title} - ${current[loc].name}`, type: "summon", loc, remaining });
                     }
                 });
             } else {
                 if (current.ownerId === linkedUid) {
-                    let remaining = getTimeRemainingStr(current.timeWindow);
+                    const remaining = getTimeRemainingStr(current.timeWindow);
                     claims.push({ title: current.title, type: current.type, remaining });
                 }
             }
@@ -137,9 +137,9 @@ export function getActiveClaimInfo(uid) {
 }
 
 export function buildActiveClaimMessage(uid) {
-    let claims = getActiveClaimInfo(uid);
+    const claims = getActiveClaimInfo(uid);
     if (claims.length === 0) return null;
-    let claimList = claims.map(c => {
+    const claimList = claims.map(c => {
         let line = `• ${c.title}`;
         if (c.remaining) line += ` — ${c.remaining}`;
         return line;
@@ -148,11 +148,11 @@ export function buildActiveClaimMessage(uid) {
 }
 
 export function hasActiveQueue(uid) {
-    let linkedIds = getAllLinkedIds(uid);
-    for (let linkedUid of linkedIds) {
-        for (let key in db) {
+    const linkedIds = getAllLinkedIds(uid);
+    for (const linkedUid of linkedIds) {
+        for (const key in db) {
             if (!db[key] || key.startsWith("_")) continue;
-            let current = db[key];
+            const current = db[key];
             if ("event_group" === current.type) {
                 if (getEventGroupKeys(current).some(ev => current[ev] && current[ev].nextId === linkedUid)) return !0;
             } else if ("antidemon" === current.type) {
@@ -171,14 +171,14 @@ export function hasActiveQueue(uid) {
 }
 
 export function checkPunishment(uid) {
-    let linkedIds = getAllLinkedIds(uid);
-    for (let linkedUid of linkedIds) {
+    const linkedIds = getAllLinkedIds(uid);
+    for (const linkedUid of linkedIds) {
         if (punishments[linkedUid]) {
-            let rem = punishments[linkedUid] - Date.now();
-            if (rem > 0) return getMsg("cooldowns.activeTimeout", {
+            const rem = punishments[linkedUid] - Date.now();
+            if (rem > 0) {return getMsg("cooldowns.activeTimeout", {
                 minutes: Math.floor(rem / 6e4),
                 seconds: Math.floor(rem % 6e4 / 1e3)
-            });
+            });}
             delete punishments[linkedUid];
             saveLocalStorage();
         }
@@ -212,7 +212,7 @@ export function freeFloorAndActivateNextGracePeriod(floorObj) {
     if (floorObj._claimTimestamp) delete floorObj._claimTimestamp;
 
     if (floorObj.next) {
-        let grace = new Date(getLocalTime().getTime() + 3e5);
+        const grace = new Date(getLocalTime().getTime() + 3e5);
         floorObj.next.endLimit = getFormattedTime12h(grace);
         notifyUserDM(floorObj.next.userId, getMsg("rooms.floorTurnArrivedDM", {
             title: floorObj.title
@@ -222,7 +222,7 @@ export function freeFloorAndActivateNextGracePeriod(floorObj) {
 }
 
 export function freeAntidemonRoom(floorObj, roomKey) {
-    let target = floorObj[roomKey];
+    const target = floorObj[roomKey];
     target.status = STATUS_AVAILABLE;
     target.ownerId = null;
     target.ownerName = null;
@@ -230,7 +230,7 @@ export function freeAntidemonRoom(floorObj, roomKey) {
     target.timeWindow = "";
     target.password = "";
     if (target.nextId) {
-        let nid = target.nextId,
+        const nid = target.nextId,
             nname = target.nextName;
         target.nextId = null;
         target.nextName = null;
@@ -238,10 +238,16 @@ export function freeAntidemonRoom(floorObj, roomKey) {
         target.status = STATUS_OPEN;
         target.nextId = nid;
         target.nextName = nname;
-        let grace = new Date(getLocalTime().getTime() + 3e5);
+        const grace = new Date(getLocalTime().getTime() + 3e5);
         target.endLimit = getFormattedTime12h(grace);
-        notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
-            roomKey: roomKey.toUpperCase(),
+        // Use display name from room data if available, fall back to uppercase key
+        const displayName = target.name || roomKey.toUpperCase();
+        // Choose correct template based on panel type
+        const turnTemplate = floorObj.type === "summon"
+            ? "rooms.summonTurnArrivedDM"
+            : "rooms.antidemonTurnArrivedDM";
+        notifyUserDM(nid, getMsg(turnTemplate, {
+            roomKey: displayName,
             title: floorObj.title
         }));
     } else {

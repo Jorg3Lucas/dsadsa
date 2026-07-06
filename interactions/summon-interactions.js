@@ -60,10 +60,10 @@ export async function handleSummonInteraction(interaction, uid, uName) {
 // ==========================================
 
 async function handleSummonSlide(interaction, uid) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
 
-    let pKey = interaction.customId.replace("summonslide-", ""),
+    const pKey = interaction.customId.replace("summonslide-", ""),
         targetFloor = db[pKey],
         selectedLoc = interaction.values[0];
 
@@ -96,10 +96,10 @@ async function handleSummonSlide(interaction, uid) {
 // ==========================================
 
 async function handleSummonTicket(interaction, uid, uName) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
 
-    let pKey = interaction.customId.replace("summonticket-", ""),
+    const pKey = interaction.customId.replace("summonticket-", ""),
         targetFloor = db[pKey],
         cacheObj = summonSelectionCache[uid];
 
@@ -117,7 +117,7 @@ async function handleSummonTicket(interaction, uid, uName) {
         if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
     }
 
-    let selectedLoc = cacheObj.selectedLoc,
+    const selectedLoc = cacheObj.selectedLoc,
         calcMinutes = 30 * parseInt(interaction.values[0]),
         startTime = getLocalTime(),
         endTime = new Date(startTime.getTime() + 6e4 * calcMinutes),
@@ -127,10 +127,10 @@ async function handleSummonTicket(interaction, uid, uName) {
     if (targetFloor[selectedLoc].nextId && targetFloor[selectedLoc].nextId !== uid) {
         let timeRemainingStr = "";
         if (targetFloor[selectedLoc].endLimit) {
-            let limitTime = parseStringToDate(targetFloor[selectedLoc].endLimit);
+            const limitTime = parseStringToDate(targetFloor[selectedLoc].endLimit);
             if (limitTime) {
-                let diffMs = limitTime.getTime() - getLocalTime().getTime();
-                let diffMins = Math.ceil(diffMs / 6e4);
+                const diffMs = limitTime.getTime() - getLocalTime().getTime();
+                const diffMins = Math.ceil(diffMs / 6e4);
                 if (diffMins > 0) timeRemainingStr = getMsg("cooldowns.timeRemaining", { minutes: diffMins });
             }
         }
@@ -192,10 +192,10 @@ async function handleSummonTicket(interaction, uid, uName) {
 // ==========================================
 
 async function handleSummonNextSide(interaction, uid, uName) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
 
-    let pKey = interaction.customId.replace("summonnextside-", ""),
+    const pKey = interaction.customId.replace("summonnextside-", ""),
         targetFloor = db[pKey];
     if (!targetFloor) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
 
@@ -205,23 +205,23 @@ async function handleSummonNextSide(interaction, uid, uName) {
     }
     if (hasActiveQueue(uid)) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
 
-    let selectedLoc = interaction.values[0];
-    if (targetFloor[selectedLoc].nextId) return await interaction.update({
+    const selectedLoc = interaction.values[0];
+    if (targetFloor[selectedLoc].nextId) {return await interaction.update({
         content: getMsg("rooms.antidemonQueueLocked"),
         components: [],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {});}
 
     // Guard: only allow queue for locations that are currently claimed
-    if (targetFloor[selectedLoc].status !== STATUS_CLAIMED) return await interaction.update({
+    if (targetFloor[selectedLoc].status !== STATUS_CLAIMED) {return await interaction.update({
         content: getMsg("rooms.antidemonQueueLocked"),
         components: [],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {});}
 
     let baseTime = getLocalTime();
     if (targetFloor[selectedLoc].timeWindow) {
-        let calcLimit = parseStringToDate(targetFloor[selectedLoc].timeWindow.split(" ~ ")[1]);
+        const calcLimit = parseStringToDate(targetFloor[selectedLoc].timeWindow.split(" ~ ")[1]);
         calcLimit && (baseTime = calcLimit);
     }
 

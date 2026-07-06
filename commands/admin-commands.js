@@ -16,7 +16,6 @@ import { getMsg } from "../lang.js";
 import { db, dailyLogs } from "../state.js";
 import { saveDailyLogs, dispatchDailyLogs } from "../daily-logs.js";
 import { setupTicketPanel } from "../ticket-system.js";
-import { renderEmbed, renderButtons } from "../panel-render.js";
 import { refreshVisualPanel, resetPanelData } from "../panel-utils.js";
 import { STATUS_CLAIMED } from "../constants.js";
 import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "../claim-core.js";
@@ -36,9 +35,6 @@ export async function handleAdminCommand(msg) {
     }
     if ("!seteventchannel" === lowerContent) {
         return handleSetEventChannel(msg);
-    }
-    if ("!goldshop" === lowerContent) {
-        return handleGoldShopPanel(msg);
     }
     if ("!testevent" === lowerContent) {
         return handleTestEvent(msg);
@@ -66,43 +62,6 @@ export async function handleAdminCommand(msg) {
     }
 
     return false; // not handled
-}
-
-// ==========================================
-// 🏪 GOLD SHOP PANEL
-// ==========================================
-
-async function handleGoldShopPanel(msg) {
-    if (!msg.member || !msg.member.permissions.has("ManageMessages")) {
-        return msg.reply({ content: "❌ You need the Manage Messages permission." }).catch(() => {});
-    }
-
-    try {
-        const { buildGoldPanelEmbed, buildGoldPanelButtons } = await import('../interactions/gold-interactions.js');
-
-        const embed = buildGoldPanelEmbed();
-        const components = buildGoldPanelButtons();
-
-        // Delete existing gold panel if it exists in this channel
-        const goldDb = (await import('../gold-shop.js')).default;
-        const existing = goldDb.getPanelRef();
-        if (existing && existing.channelId === msg.channel.id) {
-            try {
-                const oldMsg = await msg.channel.messages.fetch(existing.messageId).catch(() => null);
-                if (oldMsg) await oldMsg.delete();
-            } catch { /* message may have been deleted already */ }
-        }
-
-        const sent = await msg.channel.send({ embeds: [embed], components });
-        goldDb.savePanelRef(msg.channel.id, sent.id);
-
-        try { await msg.delete(); } catch { /* message may have been deleted */ }
-
-        console.log(`🏪 Gold Shop panel created in channel ${msg.channel.id}`);
-    } catch (error) {
-        console.error('❌ Error creating gold shop panel:', error);
-        await msg.reply({ content: '❌ Error creating gold shop panel.' }).catch(() => {});
-    }
 }
 
 // ==========================================
@@ -244,15 +203,15 @@ async function handleSetTicket(msg) {
 
 async function handleKick(msg) {
     if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {});
-    let optionsList = [];
-    for (let key in db) {
-        let current = db[key];
+    const optionsList = [];
+    for (const key in db) {
+        const current = db[key];
         if (!current || key.startsWith("_")) continue;
-        let cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
+        const cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
         if ("event_group" === current.type) {
             const egKeys = getEventGroupKeys(current);
-            for (let ev of egKeys) {
-                let evData = current[ev];
+            for (const ev of egKeys) {
+                const evData = current[ev];
                 if (evData.ownerId) {
                     optionsList.push({
                         label: `${cleanedTitle} - ${evData.name}`,
@@ -264,7 +223,7 @@ async function handleKick(msg) {
         } else if ("antidemon" === current.type) {
             const antiRoomKeys = getAntidemonRoomKeys(key);
             // Individual room options
-            for (let room of antiRoomKeys) {
+            for (const room of antiRoomKeys) {
                 STATUS_CLAIMED === current[room].status && current[room].ownerId && optionsList.push({
                     label: `${cleanedTitle} - ${room.toUpperCase()} Room`,
                     description: `${getMsg("system.kickCurrentLabel")} ${current[room].ownerName}`,
@@ -299,7 +258,7 @@ async function handleKick(msg) {
             }
         } else if ("summon" === current.type) {
             const summonProps = getSummonRoomKeys(key);
-            for (let loc of summonProps) {
+            for (const loc of summonProps) {
                 STATUS_CLAIMED === current[loc].status && current[loc].ownerId && optionsList.push({
                     label: `${cleanedTitle} - ${current[loc].name}`,
                     description: `${getMsg("system.kickCurrentLabel")} ${current[loc].ownerName}`,
@@ -330,9 +289,9 @@ async function handleKick(msg) {
 
 async function handleUpdate(msg) {
     if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {});
-    let updateReply = await msg.reply({ content: getMsg("system.updateRunningGit") }).catch(() => {});
+    const updateReply = await msg.reply({ content: getMsg("system.updateRunningGit") }).catch(() => {});
     try {
-        let output = execSync("git pull --rebase", { encoding: "utf8", cwd: process.cwd() });
+        const output = execSync("git pull --rebase", { encoding: "utf8", cwd: process.cwd() });
         if (updateReply) await updateReply.edit({ content: getMsg("system.updateSuccess", { output: output.slice(0, 1900) }) }).catch(() => {});
         execSync("npm install", { encoding: "utf8", cwd: process.cwd(), stdio: "pipe" });
         exec("pm2 restart bot", () => process.exit());
@@ -347,11 +306,11 @@ async function handleUpdate(msg) {
 
 async function handleResetMenu(msg) {
     if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {});
-    let optionsList = [];
-    for (let key in db) {
+    const optionsList = [];
+    for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        let current = db[key];
-        let cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
+        const current = db[key];
+        const cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
         optionsList.push({ label: `${cleanedTitle}`, description: `Key: ${key}`, value: key });
     }
     if (0 === optionsList.length) return msg.reply({ content: getMsg("system.resetNoPanels") }).catch(() => {});
@@ -376,7 +335,7 @@ async function handleResetSpecific(msg, resetKey) {
 
     if ("all" === resetKey) {
         let count = 0;
-        for (let key in db) {
+        for (const key in db) {
             if (!db[key] || key.startsWith("_")) continue;
             resetPanelData(key);
             await refreshVisualPanel(key);

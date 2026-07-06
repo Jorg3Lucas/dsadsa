@@ -2,13 +2,12 @@ import {
     EmbedBuilder as e,
     ActionRowBuilder as t,
     ButtonBuilder as n,
-    ButtonStyle as a,
-    StringSelectMenuBuilder as i
+    ButtonStyle as a
 } from "discord.js";
-import { getLocalTime, isRoomOpen, getFormattedTime12h, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate } from "./time-utils.js";
+import { getLocalTime, isRoomOpen, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { db } from "./state.js";
-import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_OPEN, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT, STATUS_NOW, COLOR_OCCUPIED, COLOR_HAS_QUEUE, COLOR_DEFAULT, COLOR_OPEN } from "./constants.js";
+import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT, COLOR_OCCUPIED, COLOR_HAS_QUEUE, COLOR_DEFAULT, COLOR_OPEN } from "./constants.js";
 import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 
 // ==========================================
@@ -21,16 +20,16 @@ export function getEmbedColor(current, key) {
     if (current.next) return COLOR_HAS_QUEUE;
     if ("event_group" === current.type) {
         const events = getEventGroupKeys(current);
-        let anyClaimed = events.some(e => current[e] && current[e].ownerId);
+        const anyClaimed = events.some(e => current[e] && current[e].ownerId);
         if (anyClaimed) return COLOR_OCCUPIED;
-        let anyQueued = events.some(e => current[e] && current[e].nextId);
+        const anyQueued = events.some(e => current[e] && current[e].nextId);
         if (anyQueued) return COLOR_HAS_QUEUE;
     }
     if ("antidemon" === current.type || "summon" === current.type) {
         const props = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
-        let hasClaimed = props.some(p => current[p] && current[p].status.startsWith("🔴"));
+        const hasClaimed = props.some(p => current[p] && current[p].status.startsWith("🔴"));
         if (hasClaimed) return COLOR_OCCUPIED;
-        let hasQueue = props.some(p => current[p] && current[p].nextId);
+        const hasQueue = props.some(p => current[p] && current[p].nextId);
         if (hasQueue) return COLOR_HAS_QUEUE;
     }
     if ("fixed" === current.type) {
@@ -40,12 +39,12 @@ export function getEmbedColor(current, key) {
 }
 
 export function renderEmbed(key) {
-    let current = db[key];
+    const current = db[key];
     if (!current) return new e().setTitle(getMsg("system.errorTitle"));
     
-    let embedColor = getEmbedColor(current, key),
+    const embedColor = getEmbedColor(current, key),
         now = getLocalTime();
-    let embed = new e().setColor(embedColor);
+    const embed = new e().setColor(embedColor);
     
     // Dynamic title with time window
     "antidemon" !== current.type && current.timeWindow 
@@ -58,17 +57,17 @@ export function renderEmbed(key) {
     if ("event_group" === current.type) {
         const eventKeys = getEventGroupKeys(current);
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
-        for (let ev of eventKeys) {
-            let evData = current[ev];
+        for (const ev of eventKeys) {
+            const evData = current[ev];
             let block = "";
             
             if (evData.type === "schedule") {
                 // Schedule-based event (Red Boss)
                 // Block 1: claim owner or available
                 // Block 2: respawn timer (same format as regular SP peaks)
-                let displayStatus = evData.status;
+                const displayStatus = evData.status;
                 
-                let claimLine = evData.ownerId && evData.ownerName
+                const claimLine = evData.ownerId && evData.ownerName
                     ? `👑 ${evData.ownerName}`
                     : "🟢 Available";
                 
@@ -78,18 +77,18 @@ export function renderEmbed(key) {
                     if (evData._lastKilledAt) {
                         killedTime = new Date(evData._lastKilledAt);
                     } else {
-                        let killedTimeStr = displayStatus.replace(STATUS_KILLED_PREFIX, "").trim();
+                        const killedTimeStr = displayStatus.replace(STATUS_KILLED_PREFIX, "").trim();
                         killedTime = parseStringToDate(killedTimeStr);
                     }
                     if (killedTime) {
-                        let schedules = evData.schedules || [];
-                        let nextSpawn = getNextScheduleAfter(killedTime, schedules);
+                        const schedules = evData.schedules || [];
+                        const nextSpawn = getNextScheduleAfter(killedTime, schedules);
                         if (nextSpawn) {
-                            let remainingMs = nextSpawn.getTime() - now.getTime();
+                            const remainingMs = nextSpawn.getTime() - now.getTime();
                             if (remainingMs > 0) {
-                                let totalMins = Math.ceil(remainingMs / 6e4);
-                                let hrs = Math.floor(totalMins / 60);
-                                let mins = totalMins % 60;
+                                const totalMins = Math.ceil(remainingMs / 6e4);
+                                const hrs = Math.floor(totalMins / 60);
+                                const mins = totalMins % 60;
                                 timerLine = hrs > 0
                                     ? `🔴 Respawn in ${hrs}h ${mins}m`
                                     : `🔴 Respawn in ${mins}m`;
@@ -107,13 +106,13 @@ export function renderEmbed(key) {
                 if (evData.ownerId && evData.ownerName) {
                     let timerLine = "";
                     if (evData.timeWindow) {
-                        let endTimeStr = evData.timeWindow.split(" ~ ")[1];
-                        let endTime = parseStringToDate(endTimeStr);
+                        const endTimeStr = evData.timeWindow.split(" ~ ")[1];
+                        const endTime = parseStringToDate(endTimeStr);
                         if (endTime) {
-                            let remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
+                            const remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
                             if (remainingSecs > 0) {
-                                let mins = Math.floor(remainingSecs / 60);
-                                let secs = remainingSecs % 60;
+                                const mins = Math.floor(remainingSecs / 60);
+                                const secs = remainingSecs % 60;
                                 timerLine = `⏱️ Remaining: ${mins}m ${secs}s`;
                             } else {
                                 timerLine = "⏱️ Expiring...";
@@ -131,16 +130,16 @@ export function renderEmbed(key) {
             } else if (evData.type === "fixed") {
                 // Fixed event (Fury/Frenzy/Random Event) — show open/closed with countdown
                 // Format: status line, "Next in:" label, timer value — separate lines
-                let minuteOffset = evData.scheduleMinutes || 0;
+                const minuteOffset = evData.scheduleMinutes || 0;
                 let statusLine, timerLabel, timerValue;
                 
                 if (isRoomOpen(evData.schedules, minuteOffset)) {
-                    let nowMinutes = now.getHours() * 60 + now.getMinutes();
-                    let endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
-                    let endOfEvent = new Date(now.getTime());
+                    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                    const endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
+                    const endOfEvent = new Date(now.getTime());
                     endOfEvent.setHours(Math.floor(endMinute / 60) % 24, endMinute % 60, 0, 0);
                     if (endOfEvent <= now) endOfEvent.setHours(endOfEvent.getHours() + 1);
-                    let closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
+                    const closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
                     
                     if (evData.ownerId && evData.ownerName) {
                         statusLine = `👑 ${evData.ownerName}`;
@@ -150,9 +149,9 @@ export function renderEmbed(key) {
                     timerLabel = "Closes in:";
                     timerValue = closeMins <= 0 ? "Expiring..." : `${closeMins}m`;
                 } else {
-                    let nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
-                    let diffMs = nextOpenDate.getTime() - now.getTime();
-                    let diffMins = Math.floor(diffMs / 6e4);
+                    const nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
+                    const diffMs = nextOpenDate.getTime() - now.getTime();
+                    const diffMins = Math.floor(diffMs / 6e4);
                     
                     statusLine = "🔴 Closed";
                     timerLabel = "Next in:";
@@ -172,20 +171,20 @@ export function renderEmbed(key) {
         const summonProps = getSummonRoomKeys(key);
         const isSingle = summonProps.length === 1;
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
-        for (let loc of summonProps) {
-            let rData = current[loc];
+        for (const loc of summonProps) {
+            const rData = current[loc];
             let block = "";
             
             if (STATUS_CLAIMED === rData.status && rData.ownerName) {
                 let timerStr = "";
                 if (rData.timeWindow) {
-                    let endTimeStr = rData.timeWindow.split(" ~ ")[1];
-                    let endTime = parseStringToDate(endTimeStr);
+                    const endTimeStr = rData.timeWindow.split(" ~ ")[1];
+                    const endTime = parseStringToDate(endTimeStr);
                     if (endTime) {
-                        let remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
+                        const remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
                         if (remainingSecs > 0) {
-                            let mins = Math.floor(remainingSecs / 60);
-                            let secs = remainingSecs % 60;
+                            const mins = Math.floor(remainingSecs / 60);
+                            const secs = remainingSecs % 60;
                             timerStr = `⏱️ ${mins}m ${secs}s`;
                         } else {
                             timerStr = "⏱️ Expiring...";
@@ -214,17 +213,17 @@ export function renderEmbed(key) {
     } else if ("antidemon" === current.type) {
         const antiRoomKeys = getAntidemonRoomKeys(key);
         embed.setDescription(`**${getMsg("rooms.statusOverview")}**`);
-        for (let room of antiRoomKeys) {
-            let rData = current[room];
+        for (const room of antiRoomKeys) {
+            const rData = current[room];
             let remainingClaimStr = "";
             if (STATUS_CLAIMED === rData.status && rData.timeWindow) {
-                let endTimeStr = rData.timeWindow.split(" ~ ")[1];
-                let endTime = parseStringToDate(endTimeStr);
+                const endTimeStr = rData.timeWindow.split(" ~ ")[1];
+                const endTime = parseStringToDate(endTimeStr);
                 if (endTime) {
-                    let remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
+                    const remainingSecs = Math.floor((endTime.getTime() - now.getTime()) / 1e3);
                     if (remainingSecs > 0) {
-                        let mins = Math.floor(remainingSecs / 60);
-                        let secs = remainingSecs % 60;
+                        const mins = Math.floor(remainingSecs / 60);
+                        const secs = remainingSecs % 60;
                         remainingClaimStr = `⏱️ ${mins}m ${secs}s (${getMsg("render.countdownUntil")} ${endTimeStr})`;
                     } else {
                         remainingClaimStr = "⏱️ Expiring...";
@@ -273,18 +272,18 @@ export function renderEmbed(key) {
         embed.setDescription(desc);
 
         if ("fixed" === current.type) {
-            let now = getLocalTime();
+            const now = getLocalTime();
             
-            let minuteOffset = current.scheduleMinutes || 0;
+            const minuteOffset = current.scheduleMinutes || 0;
             if (isRoomOpen(current.schedules, minuteOffset)) {
                 // Room is currently open — show close countdown
-                let nowMinutes = now.getHours() * 60 + now.getMinutes();
-                let endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
-                let endOfEvent = new Date(now.getTime());
+                const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                const endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
+                const endOfEvent = new Date(now.getTime());
                 endOfEvent.setHours(Math.floor(endMinute / 60) % 24, endMinute % 60, 0, 0);
                 if (endOfEvent <= now) endOfEvent.setHours(endOfEvent.getHours() + 1);
-                let closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
-                let countdownStr = closeMins <= 0
+                const closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
+                const countdownStr = closeMins <= 0
                     ? "🟢 Open now"
                     : `🟢 Closes in ${closeMins}m`;
                 embed.addFields({
@@ -294,10 +293,10 @@ export function renderEmbed(key) {
                 });
             } else {
                 // Room is closed — show next opening countdown
-                let nextOpenDate = calculateNextOpening(current.schedules, minuteOffset);
-                let diffMs = nextOpenDate.getTime() - now.getTime();
-                let diffMins = Math.floor(diffMs / 6e4);
-                let countdownStr = diffMins < 60
+                const nextOpenDate = calculateNextOpening(current.schedules, minuteOffset);
+                const diffMs = nextOpenDate.getTime() - now.getTime();
+                const diffMins = Math.floor(diffMs / 6e4);
+                const countdownStr = diffMins < 60
                     ? `Next in ${diffMins}m`
                     : `Next in ${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
                 embed.addFields({
@@ -307,7 +306,7 @@ export function renderEmbed(key) {
                 });
             }
         } else {
-            for (let prop in current) {
+            for (const prop in current) {
                 if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp", "scheduleMinutes"].includes(prop)) {
                     let displayStatus = current[prop].status;
 
@@ -318,20 +317,20 @@ export function renderEmbed(key) {
                         if (current[prop]._lastKilledAt) {
                             killedTime = new Date(current[prop]._lastKilledAt);
                         } else {
-                            let killedTimeStr = displayStatus.replace(STATUS_KILLED_PREFIX, "").trim();
+                            const killedTimeStr = displayStatus.replace(STATUS_KILLED_PREFIX, "").trim();
                             killedTime = parseStringToDate(killedTimeStr);
                         }
                         if (killedTime) {
                             // Schedule-based respawn (Red Boss, Leader 3) — based on fixed schedules
                             if (usesScheduleRespawn(current, prop)) {
-                                let schedules = getBossSchedules(current, prop);
-                                let nextSpawn = getNextScheduleAfter(killedTime, schedules);
+                                const schedules = getBossSchedules(current, prop);
+                                const nextSpawn = getNextScheduleAfter(killedTime, schedules);
                                 if (nextSpawn) {
-                                    let remainingMs = nextSpawn.getTime() - now.getTime();
+                                    const remainingMs = nextSpawn.getTime() - now.getTime();
                                     if (remainingMs > 0) {
-                                        let totalMins = Math.ceil(remainingMs / 6e4);
-                                        let hrs = Math.floor(totalMins / 60);
-                                        let mins = totalMins % 60;
+                                        const totalMins = Math.ceil(remainingMs / 6e4);
+                                        const hrs = Math.floor(totalMins / 60);
+                                        const mins = totalMins % 60;
                                         displayStatus = hrs > 0
                                             ? `🔴 Respawn in ${hrs}h ${mins}m`
                                             : `🔴 Respawn in ${mins}m`;
@@ -341,12 +340,12 @@ export function renderEmbed(key) {
                                 }
                             } else {
                                 // Cooldown-based respawn for regular bosses (Left, Right, Plant, Ore, Leader 1, 2)
-                                let totalCooldownSeconds = 60 * current[prop].cooldown;
-                                let secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
-                                let remainingSeconds = totalCooldownSeconds - secondsPassed;
+                                const totalCooldownSeconds = 60 * current[prop].cooldown;
+                                const secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
+                                const remainingSeconds = totalCooldownSeconds - secondsPassed;
                                 if (remainingSeconds > 0) {
-                                    let mins = Math.floor(remainingSeconds / 60);
-                                    let secs = remainingSeconds % 60;
+                                    const mins = Math.floor(remainingSeconds / 60);
+                                    const secs = remainingSeconds % 60;
                                     displayStatus = `🔴 Respawn in ${mins}m ${secs}s`;
                                 } else {
                                     displayStatus = STATUS_ANY_MOMENT;
@@ -357,19 +356,19 @@ export function renderEmbed(key) {
                     
                     // Show elapsed time since respawn (progressive counter from _freeSince)
                     if (displayStatus === STATUS_AVAILABLE && current[prop]._freeSince > 0) {
-                        let freeDate = new Date(current[prop]._freeSince);
-                        let diffMs = now.getTime() - freeDate.getTime();
+                        const freeDate = new Date(current[prop]._freeSince);
+                        const diffMs = now.getTime() - freeDate.getTime();
                         if (diffMs < 0) {
                             displayStatus = STATUS_AVAILABLE;
                         } else {
-                            let diffMins = Math.floor(diffMs / 6e4);
-                            let diffHours = Math.floor(diffMs / 36e5);
+                            const diffMins = Math.floor(diffMs / 6e4);
+                            const diffHours = Math.floor(diffMs / 36e5);
                             if (diffMins < 1) {
                                 displayStatus = `🟢 Now`;
                             } else if (diffHours < 1) {
                                 displayStatus = `🟢 ${diffMins}m ago`;
                             } else {
-                                let remainingMins = diffMins % 60;
+                                const remainingMins = diffMins % 60;
                                 displayStatus = remainingMins > 0
                                     ? `🟢 ${diffHours}h ${remainingMins}m ago`
                                     : `🟢 ${diffHours}h ago`;
@@ -384,18 +383,18 @@ export function renderEmbed(key) {
                             killedDate = parseStringToDate(current[prop]._lastKilledTimeStr);
                         }
                         if (killedDate && !isNaN(killedDate.getTime())) {
-                            let diffMs = now.getTime() - killedDate.getTime();
+                            const diffMs = now.getTime() - killedDate.getTime();
                             if (diffMs < 0) {
                                 displayStatus = STATUS_AVAILABLE;
                             } else {
-                                let diffMins = Math.floor(diffMs / 6e4);
-                                let diffHours = Math.floor(diffMs / 36e5);
+                                const diffMins = Math.floor(diffMs / 6e4);
+                                const diffHours = Math.floor(diffMs / 36e5);
                                 if (diffMins < 1) {
                                     displayStatus = `🟢 Now`;
                                 } else if (diffHours < 1) {
                                     displayStatus = `🟢 ${diffMins}m ago`;
                                 } else {
-                                    let remainingMins = diffMins % 60;
+                                    const remainingMins = diffMins % 60;
                                     displayStatus = remainingMins > 0
                                         ? `🟢 ${diffHours}h ${remainingMins}m ago`
                                         : `🟢 ${diffHours}h ago`;
@@ -417,7 +416,7 @@ export function renderEmbed(key) {
 }
 
 export function renderButtons(key) {
-    let current = db[key],
+    const current = db[key],
         componentsList = [];
     if (!current) return componentsList;
     
@@ -427,10 +426,10 @@ export function renderButtons(key) {
         const hasNonFixedEvents = eventKeys.some(ev => current[ev] && current[ev].type !== "fixed");
         const schedEvents = eventKeys.filter(ev => current[ev].type === "schedule");
         const fixedEvents = eventKeys.filter(ev => current[ev].type === "fixed");
-        let anySummonQueue = eventKeys.some(ev => current[ev].type === "summon" && current[ev].nextId);
+        const anySummonQueue = eventKeys.some(ev => current[ev].type === "summon" && current[ev].nextId);
         
         // Build one combined row (all fit within 5-button limit)
-        let mainRow = new t();
+        const mainRow = new t();
         
         // 1. Death mark buttons for schedule events
         schedEvents.forEach(ev => {
@@ -471,9 +470,9 @@ export function renderButtons(key) {
         if (mainRow.components.length > 0) componentsList.push(mainRow);
         
     } else if ("fixed" !== current.type && "antidemon" !== current.type && "summon" !== current.type) {
-        let row = new t();
+        const row = new t();
         let hasProperties = !1;
-        for (let prop in current) {
+        for (const prop in current) {
             if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
             let emojiStr = "🎯";
             if (current[prop].name.includes("Left")) emojiStr = "⬅️";
@@ -495,13 +494,13 @@ export function renderButtons(key) {
     }
 
     // Core action buttons
-    let coreRow = new t();
+    const coreRow = new t();
     
     if ("event_group" === current.type) {
         // Already handled above in combined row
     } else if ("antidemon" === current.type || "summon" === current.type) {
         const summonProps = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
-        let anyClaimed = summonProps.some(p => current[p] && current[p].status === STATUS_CLAIMED);
+        const anyClaimed = summonProps.some(p => current[p] && current[p].status === STATUS_CLAIMED);
         coreRow.addComponents(
             new n()
                 .setCustomId(`floor-${key}-claim`)
@@ -518,7 +517,7 @@ export function renderButtons(key) {
         );
         // Party password buttons for antidemon rooms (one per claimed room, with improved labels)
         if ("antidemon" === current.type) {
-            let pwdRow = new t();
+            const pwdRow = new t();
             getAntidemonRoomKeys(key).forEach(rm => {
                 if (current[rm] && current[rm].status === STATUS_CLAIMED) {
                     const hasPwd = current[rm].password;
@@ -549,5 +548,18 @@ export function renderButtons(key) {
     }
     
     if (coreRow.components.length > 0) componentsList.push(coreRow);
+    
+    // ── DM Notification Toggle ──
+    // Global button on all panels — users toggle their own DM preference
+    const dmRow = new t();
+    dmRow.addComponents(
+        new n()
+            .setCustomId('dmoptout')
+            .setEmoji('🔕')
+            .setLabel('DM Notifications')
+            .setStyle(a.Secondary)
+    );
+    componentsList.push(dmRow);
+    
     return componentsList;
 }

@@ -25,11 +25,9 @@ import {
     getEventGroupKeys
 } from "../claim-core.js";
 import {
-    EmbedBuilder as e,
     ActionRowBuilder as t,
     ButtonBuilder as n,
-    ButtonStyle as a,
-    StringSelectMenuBuilder as i
+    ButtonStyle as a
 } from "discord.js";
 import {
     getLocalTime,
@@ -227,12 +225,12 @@ export async function handleFloorInteraction(interaction, uid, uName) {
 // ==========================================
 
 async function handleDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp) {
-    let currTimeStr = getFormattedTime12h(getLocalTime());
-    let nowTs = getLocalTime().getTime();
+    const currTimeStr = getFormattedTime12h(getLocalTime());
+    const nowTs = getLocalTime().getTime();
 
     // If boss is already marked as killed, ask for confirmation to update the time
     if (targetObj[specificProp].status.startsWith(STATUS_KILLED)) {
-        let oldTimeStr = targetObj[specificProp].status.replace(STATUS_KILLED_PREFIX, "").trim();
+        const oldTimeStr = targetObj[specificProp].status.replace(STATUS_KILLED_PREFIX, "").trim();
         const timeoutKey = `death-${panelKey}-${specificProp}`;
 
         // Clear any stale timeout for this boss
@@ -293,8 +291,8 @@ async function handleDeathConfirm(interaction, uid, uName, targetObj, panelKey, 
         deathConfirmTimeouts.delete(timeoutKey);
     }
 
-    let currTimeStr = getFormattedTime12h(getLocalTime());
-    let nowTs = getLocalTime().getTime();
+    const currTimeStr = getFormattedTime12h(getLocalTime());
+    const nowTs = getLocalTime().getTime();
 
     targetObj[specificProp].status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     targetObj[specificProp]._lastKilledAt = nowTs;
@@ -332,11 +330,11 @@ async function handleDeathCancel(interaction, uid, uName, targetObj, panelKey, s
 // ==========================================
 
 async function handleEGDeathConfirm(interaction, uid, uName, targetObj, panelKey, specificProp) {
-    let evData = targetObj[specificProp];
+    const evData = targetObj[specificProp];
     if (!evData) return await interaction.update({ content: getMsg("rooms.noActiveClaimsFeedback"), components: [], flags: 64 }).catch(() => {});
     
-    let currTimeStr = getFormattedTime12h(getLocalTime());
-    let nowTs = getLocalTime().getTime();
+    const currTimeStr = getFormattedTime12h(getLocalTime());
+    const nowTs = getLocalTime().getTime();
     
     evData.status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     evData._lastKilledAt = nowTs;
@@ -361,15 +359,15 @@ async function handleEGDeathCancel(interaction, uid, uName, targetObj, panelKey,
 // ==========================================
 
 async function handleEGDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp) {
-    let evData = targetObj[specificProp];
+    const evData = targetObj[specificProp];
     if (!evData) return await interaction.reply({ content: getMsg("rooms.noActiveClaimsFeedback"), flags: 64 }).catch(() => {});
     
-    let currTimeStr = getFormattedTime12h(getLocalTime());
-    let nowTs = getLocalTime().getTime();
+    const currTimeStr = getFormattedTime12h(getLocalTime());
+    const nowTs = getLocalTime().getTime();
     
     if (evData.status && evData.status.startsWith(STATUS_KILLED)) {
         // Ask for confirmation to update
-        let oldTimeStr = evData.status.replace(STATUS_KILLED_PREFIX, "").trim();
+        const oldTimeStr = evData.status.replace(STATUS_KILLED_PREFIX, "").trim();
         await interaction.reply({
             content: getMsg("rooms.deathUpdateConfirm", { oldTime: oldTimeStr, newTime: currTimeStr }),
             components: [
@@ -396,7 +394,7 @@ async function handleEGDeathMark(interaction, uid, uName, targetObj, panelKey, s
 // ==========================================
 
 async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -414,11 +412,11 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
     // Build available options based on event type
     // Fixed-type events (Fury/Frenzy/Random Event) have their own individual buttons,
     // so they are excluded from the generic select menu.
-    let now = getLocalTime();
+    const now = getLocalTime();
     const options = [];
     
-    for (let ev of eventKeys) {
-        let evData = targetObj[ev];
+    for (const ev of eventKeys) {
+        const evData = targetObj[ev];
         if (evData.ownerId) continue; // Already claimed
         
         if (evData.type === "schedule") {
@@ -455,7 +453,7 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
 // ==========================================
 
 async function handleEventGroupNext(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -488,20 +486,20 @@ async function handleEventGroupNext(interaction, uid, uName, targetObj, panelKey
 // ==========================================
 
 async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelKey) {
-    let isMod = interaction.member.permissions.has("ManageMessages");
+    const isMod = interaction.member.permissions.has("ManageMessages");
     const eventKeys = getEventGroupKeys(targetObj);
-    let isOwner = eventKeys.some(ev => targetObj[ev] && targetObj[ev].ownerId === uid);
-    let isInQueue = eventKeys.some(ev => targetObj[ev] && targetObj[ev].nextId === uid);
+    const isOwner = eventKeys.some(ev => targetObj[ev] && targetObj[ev].ownerId === uid);
+    const isInQueue = eventKeys.some(ev => targetObj[ev] && targetObj[ev].nextId === uid);
     
     if (isOwner || isInQueue || isMod) {
         let penalized = !1;
         let anyAction = !1;
         
-        for (let ev of eventKeys) {
-            let evData = targetObj[ev];
+        for (const ev of eventKeys) {
+            const evData = targetObj[ev];
             if (evData.ownerId === uid) {
                 anyAction = !0;
-                let currentLoggedName = evData.ownerName || uName;
+                const currentLoggedName = evData.ownerName || uName;
                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${evData.name}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${evData.name}`,
@@ -516,16 +514,16 @@ async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelK
                     evData.time = "";
                     evData.timeWindow = "";
                     if (evData.nextId) {
-                        let nid = evData.nextId, nname = evData.nextName;
+                        const nid = evData.nextId, nname = evData.nextName;
                         evData.nextId = null;
                         evData.nextName = null;
                         evData.formattedTimeNext = "";
                         evData.ownerId = nid;
                         evData.ownerName = nname;
-                        let grace = new Date(getLocalTime().getTime() + 3e5);
+                        const grace = new Date(getLocalTime().getTime() + 3e5);
                         evData.timeWindow = `${getFormattedTime12h(new Date())} ~ ${getFormattedTime12h(grace)}`;
                         evData.status = STATUS_OPEN;
-                        notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
+                        notifyUserDM(nid, getMsg("rooms.summonTurnArrivedDM", {
                             roomKey: evData.name,
                             title: targetObj.title
                         })).catch(() => {});
@@ -542,7 +540,7 @@ async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelK
             }
             if (evData.nextId === uid) {
                 anyAction = !0;
-                let currentLoggedName = evData.nextName || uName;
+                const currentLoggedName = evData.nextName || uName;
                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${evData.name} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                 notifyUserDM(evData.nextId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${evData.name} (Queue)`,
@@ -572,18 +570,18 @@ async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelK
 // ==========================================
 
 async function handleEGFixClaim(interaction, uid, uName) {
-    let [, panelKey, eventName] = interaction.customId.split("-");
-    let targetFloor = db[panelKey];
+    const [, panelKey, eventName] = interaction.customId.split("-");
+    const targetFloor = db[panelKey];
     if (!targetFloor || !targetFloor[eventName]) return await interaction.reply({ content: getMsg("rooms.antidemonTimeoutCache"), flags: 64 }).catch(() => {});
 
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {});
     }
 
-    let evData = targetFloor[eventName];
+    const evData = targetFloor[eventName];
     // Race condition guard
     if (evData.ownerId) {
         return await interaction.reply({
@@ -592,17 +590,17 @@ async function handleEGFixClaim(interaction, uid, uName) {
         }).catch(() => {});
     }
 
-    let now = getLocalTime();
-    let minuteOffset = evData.scheduleMinutes || 0;
+    const now = getLocalTime();
+    const minuteOffset = evData.scheduleMinutes || 0;
     let eventStart;
 
     if (isRoomOpen(evData.schedules, minuteOffset)) {
         // Event is currently open — use current event start
-        let nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
         let foundHour = null;
         for (const h of evData.schedules) {
-            let startMin = h * 60 + minuteOffset;
-            let endMin = startMin + 60;
+            const startMin = h * 60 + minuteOffset;
+            const endMin = startMin + 60;
             if (nowMinutes >= startMin && nowMinutes < endMin) { foundHour = h; break; }
         }
         if (foundHour !== null) {
@@ -614,10 +612,10 @@ async function handleEGFixClaim(interaction, uid, uName) {
     } else {
         // Event not yet open — 5 min pre-window check
         eventStart = calculateNextOpening(evData.schedules, minuteOffset);
-        let fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
+        const fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
         if (now < fiveMinBefore) {
-            let diffMs = eventStart.getTime() - now.getTime();
-            let diffMins = Math.ceil(diffMs / 6e4);
+            const diffMs = eventStart.getTime() - now.getTime();
+            const diffMins = Math.ceil(diffMs / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
                 flags: 64
@@ -625,8 +623,8 @@ async function handleEGFixClaim(interaction, uid, uName) {
         }
     }
 
-    let eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
-    let windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
+    const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
+    const windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
 
     evData.ownerId = uid;
     evData.ownerName = uName;
@@ -649,7 +647,7 @@ async function handleEGFixClaim(interaction, uid, uName) {
 // ==========================================
 
 async function handleEGSlide(interaction, uid, uName) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
     
     if (hasActiveClaim(uid)) {
@@ -657,13 +655,13 @@ async function handleEGSlide(interaction, uid, uName) {
         return await interaction.update({ content: claimMsg, components: [], flags: 64 }).catch(() => {});
     }
     
-    let pKey = interaction.customId.replace("egslide-", ""),
+    const pKey = interaction.customId.replace("egslide-", ""),
         targetFloor = db[pKey],
         selectedEvent = interaction.values[0];
     
     if (!targetFloor || !targetFloor[selectedEvent]) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
     
-    let evData = targetFloor[selectedEvent];
+    const evData = targetFloor[selectedEvent];
     
     // Race condition guard
     if (evData.ownerId) {
@@ -675,13 +673,13 @@ async function handleEGSlide(interaction, uid, uName) {
     
     if (evData.type === "schedule") {
         // Schedule-type (Red Boss) — just claim it
-        let now = getLocalTime();
+        const now = getLocalTime();
         evData.ownerId = uid;
         evData.ownerName = uName;
         evData._claimTimestamp = now.getTime();
         
         pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, "Claimed Red Boss");
-        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: "" }));
+        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: "Until boss is killed" }));
         saveLocalStorage();
         await refreshVisualPanel(pKey);
         return await interaction.update({
@@ -690,16 +688,16 @@ async function handleEGSlide(interaction, uid, uName) {
         }).catch(() => {});
     } else if (evData.type === "fixed") {
         // Fixed-type (Fury/Frenzy/Random Event) — claim with 1 hour window
-        let now = getLocalTime();
-        let minuteOffset = evData.scheduleMinutes || 0;
+        const now = getLocalTime();
+        const minuteOffset = evData.scheduleMinutes || 0;
         let eventStart;
         
         if (isRoomOpen(evData.schedules, minuteOffset)) {
-            let nowMinutes = now.getHours() * 60 + now.getMinutes();
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
             let foundHour = null;
             for (const h of evData.schedules) {
-                let startMin = h * 60 + minuteOffset;
-                let endMin = startMin + 60;
+                const startMin = h * 60 + minuteOffset;
+                const endMin = startMin + 60;
                 if (nowMinutes >= startMin && nowMinutes < endMin) { foundHour = h; break; }
             }
             if (foundHour !== null) {
@@ -712,8 +710,8 @@ async function handleEGSlide(interaction, uid, uName) {
             eventStart = calculateNextOpening(evData.schedules, minuteOffset);
         }
         
-        let eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
-        let windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
+        const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
+        const windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
         
         evData.ownerId = uid;
         evData.ownerName = uName;
@@ -752,7 +750,7 @@ async function handleEGSlide(interaction, uid, uName) {
 // ==========================================
 
 async function handleEGNextSide(interaction, uid, uName) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
     
     if (hasActiveClaim(uid)) {
@@ -761,26 +759,26 @@ async function handleEGNextSide(interaction, uid, uName) {
     }
     if (hasActiveQueue(uid)) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
     
-    let pKey = interaction.customId.replace("egnextside-", ""),
+    const pKey = interaction.customId.replace("egnextside-", ""),
         targetFloor = db[pKey],
         selectedEvent = interaction.values[0];
     
     if (!targetFloor || !targetFloor[selectedEvent]) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {});
     
-    let evData = targetFloor[selectedEvent];
-    if (evData.nextId) return await interaction.update({
+    const evData = targetFloor[selectedEvent];
+    if (evData.nextId) {return await interaction.update({
         content: getMsg("rooms.antidemonQueueLocked"),
         components: [], flags: 64
-    }).catch(() => {});
+    }).catch(() => {});}
     
-    if (!evData.ownerId) return await interaction.update({
+    if (!evData.ownerId) {return await interaction.update({
         content: getMsg("rooms.antidemonQueueLocked"),
         components: [], flags: 64
-    }).catch(() => {});
+    }).catch(() => {});}
     
     let baseTime = getLocalTime();
     if (evData.timeWindow) {
-        let calcLimit = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
+        const calcLimit = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
         calcLimit && (baseTime = calcLimit);
     }
     
@@ -805,10 +803,10 @@ async function handleEGNextSide(interaction, uid, uName) {
 // ==========================================
 
 async function handleEGTicket(interaction, uid, uName) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {});
     
-    let pKey = interaction.customId.replace("egticket-", ""),
+    const pKey = interaction.customId.replace("egticket-", ""),
         targetFloor = db[pKey],
         cacheEntry = egSummonCache.get(uid);
     
@@ -826,7 +824,7 @@ async function handleEGTicket(interaction, uid, uName) {
         if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {});
     }
     
-    let selectedEvent = cacheEntry.event,
+    const selectedEvent = cacheEntry.event,
         evData = targetFloor[selectedEvent],
         calcMinutes = 30 * parseInt(interaction.values[0]),
         startTime = getLocalTime(),
@@ -873,7 +871,7 @@ async function handleEGTicket(interaction, uid, uName) {
 
 async function handleAntiVersionSlide(interaction, uid, uName) {
     // User selected a version (1-1, 1-2, 1-3) — now show rooms for that version
-    let pKey = interaction.customId.replace("antiversion-", ""),
+    const pKey = interaction.customId.replace("antiversion-", ""),
         targetFloor = db[pKey],
         selectedVersion = interaction.values[0]; // e.g. "v1", "v2", "v3"
     
@@ -884,8 +882,8 @@ async function handleAntiVersionSlide(interaction, uid, uName) {
     
     // Build room options for this version
     const roomOpts = [];
-    for (let rk of versionRooms) {
-        let rData = targetFloor[rk];
+    for (const rk of versionRooms) {
+        const rData = targetFloor[rk];
         if (!rData.ownerId && (!rData.nextId || rData.nextId === uid)) {
             roomOpts.push({ label: rData.name, value: rk, emoji: "👹" });
         }
@@ -915,7 +913,7 @@ async function handleAntiVersionSlide(interaction, uid, uName) {
 // ==========================================
 
 async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -953,7 +951,7 @@ async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
 // ==========================================
 
 async function handleSummonNext(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -983,10 +981,10 @@ async function handleSummonNext(interaction, uid, uName, targetObj, panelKey) {
 // ==========================================
 
 async function handleSummonCancel(interaction, uid, uName, targetObj, panelKey) {
-    let isMod = interaction.member.permissions.has("ManageMessages");
+    const isMod = interaction.member.permissions.has("ManageMessages");
     const summonProps = getSummonRoomKeys(panelKey);
-    let isOwner = summonProps.some(p => targetObj[p].ownerId === uid);
-    let isInQueue = summonProps.some(p => targetObj[p].nextId === uid);
+    const isOwner = summonProps.some(p => targetObj[p].ownerId === uid);
+    const isInQueue = summonProps.some(p => targetObj[p].nextId === uid);
 
     if (isOwner || isInQueue || isMod) {
         let penalized = !1;
@@ -995,7 +993,7 @@ async function handleSummonCancel(interaction, uid, uName, targetObj, panelKey) 
         summonProps.forEach(loc => {
             if (targetObj[loc].ownerId === uid) {
                 anyAction = !0;
-                let currentLoggedName = targetObj[loc].ownerName || uName;
+                const currentLoggedName = targetObj[loc].ownerName || uName;
                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${targetObj[loc].name}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(targetObj[loc].ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${targetObj[loc].name}`,
@@ -1006,7 +1004,7 @@ async function handleSummonCancel(interaction, uid, uName, targetObj, panelKey) 
             }
             if (targetObj[loc].nextId === uid) {
                 anyAction = !0;
-                let currentLoggedName = targetObj[loc].nextName || uName;
+                const currentLoggedName = targetObj[loc].nextName || uName;
                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${targetObj[loc].name} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                 notifyUserDM(targetObj[loc].nextId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${targetObj[loc].name} (Queue)`,
@@ -1037,7 +1035,7 @@ async function handleSummonCancel(interaction, uid, uName, targetObj, panelKey) 
 // ==========================================
 
 async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -1090,7 +1088,7 @@ async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
 // ==========================================
 
 async function handleAntiNext(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -1111,10 +1109,10 @@ async function handleAntiNext(interaction, uid, uName, targetObj, panelKey) {
 // ==========================================
 
 async function handleAntiCancel(interaction, uid, uName, targetObj, panelKey) {
-    let isMod = interaction.member.permissions.has("ManageMessages");
+    const isMod = interaction.member.permissions.has("ManageMessages");
     const antiRoomKeys = getAntidemonRoomKeys(panelKey);
-    let isOwner = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].ownerId === uid);
-    let isInQueue = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].nextId === uid);
+    const isOwner = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].ownerId === uid);
+    const isInQueue = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].nextId === uid);
 
     if (isOwner || isInQueue || isMod) {
         let penalized = !1;
@@ -1123,7 +1121,7 @@ async function handleAntiCancel(interaction, uid, uName, targetObj, panelKey) {
         antiRoomKeys.forEach(rm => {
             if (targetObj[rm].ownerId === uid) {
                 anyAction = !0;
-                let currentLoggedName = targetObj[rm].ownerName || uName;
+                const currentLoggedName = targetObj[rm].ownerName || uName;
                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(targetObj[rm].ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - Room ${rm.toUpperCase()}`,
@@ -1134,7 +1132,7 @@ async function handleAntiCancel(interaction, uid, uName, targetObj, panelKey) {
             }
             if (targetObj[rm].nextId === uid) {
                 anyAction = !0;
-                let currentLoggedName = targetObj[rm].nextName || uName;
+                const currentLoggedName = targetObj[rm].nextName || uName;
                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                 notifyUserDM(targetObj[rm].nextId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - Room ${rm.toUpperCase()} (Queue)`,
@@ -1165,8 +1163,8 @@ async function handleAntiCancel(interaction, uid, uName, targetObj, panelKey) {
 // ==========================================
 
 async function handleFloorCancel(interaction, uid, uName, targetObj, panelKey) {
-    let isMod = interaction.member.permissions.has("ManageMessages");
-    let isOwner = targetObj.ownerId === uid;
+    const isMod = interaction.member.permissions.has("ManageMessages");
+    const isOwner = targetObj.ownerId === uid;
 
     let inQueue = !1;
     let pointer = targetObj.next;
@@ -1209,7 +1207,7 @@ async function handleFloorCancel(interaction, uid, uName, targetObj, panelKey) {
 // ==========================================
 
 async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -1217,17 +1215,17 @@ async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
     }
     if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {});
 
-    let now = getLocalTime();
-    let minuteOffset = targetObj.scheduleMinutes || 0;
+    const now = getLocalTime();
+    const minuteOffset = targetObj.scheduleMinutes || 0;
     let eventStart;
 
     if (isRoomOpen(targetObj.schedules, minuteOffset)) {
         // Event is currently open — use current event start
-        let nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
         let foundHour = null;
         for (const h of targetObj.schedules) {
-            let startMin = h * 60 + minuteOffset;
-            let endMin = startMin + 60;
+            const startMin = h * 60 + minuteOffset;
+            const endMin = startMin + 60;
             if (nowMinutes >= startMin && nowMinutes < endMin) { foundHour = h; break; }
         }
         if (foundHour !== null) {
@@ -1239,10 +1237,10 @@ async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
     } else {
         // Event not yet open — 5 min pre-window check
         eventStart = calculateNextOpening(targetObj.schedules, minuteOffset);
-        let fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
+        const fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
         if (now < fiveMinBefore) {
-            let diffMs = eventStart.getTime() - now.getTime();
-            let diffMins = Math.ceil(diffMs / 6e4);
+            const diffMs = eventStart.getTime() - now.getTime();
+            const diffMins = Math.ceil(diffMs / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
                 flags: 64
@@ -1258,8 +1256,8 @@ async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
         }).catch(() => {});
     }
 
-    let eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
-    let windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
+    const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
+    const windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
 
     targetObj.ownerId = uid;
     targetObj.ownerName = uName;
@@ -1282,7 +1280,7 @@ async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
 // ==========================================
 
 async function handleGeneralClaim(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -1294,10 +1292,10 @@ async function handleGeneralClaim(interaction, uid, uName, targetObj, panelKey) 
     if (targetObj.next && targetObj.next.userId !== uid) {
         let timeRemainingStr = "";
         if (targetObj.next.endLimit) {
-            let limitTime = parseStringToDate(targetObj.next.endLimit);
+            const limitTime = parseStringToDate(targetObj.next.endLimit);
             if (limitTime) {
-                let diffMs = limitTime.getTime() - getLocalTime().getTime();
-                let diffMins = Math.ceil(diffMs / 6e4);
+                const diffMs = limitTime.getTime() - getLocalTime().getTime();
+                const diffMins = Math.ceil(diffMs / 6e4);
                 if (diffMins > 0) timeRemainingStr = getMsg("cooldowns.timeRemaining", { minutes: diffMins });
             }
         }
@@ -1315,9 +1313,9 @@ async function handleGeneralClaim(interaction, uid, uName, targetObj, panelKey) 
         }).catch(() => {});
     }
 
-    let start = getLocalTime();
-    let end = new Date(start.getTime() + 18e5);
-    let windowStr = `${getFormattedTime12h(start)} ~ ${getFormattedTime12h(end)}`;
+    const start = getLocalTime();
+    const end = new Date(start.getTime() + 18e5);
+    const windowStr = `${getFormattedTime12h(start)} ~ ${getFormattedTime12h(end)}`;
 
     targetObj.ownerId = uid;
     targetObj.ownerName = uName;
@@ -1344,7 +1342,7 @@ async function handleGeneralClaim(interaction, uid, uName, targetObj, panelKey) 
 // ==========================================
 
 async function handleGeneralNext(interaction, uid, uName, targetObj, panelKey) {
-    let pStr = checkPunishment(uid);
+    const pStr = checkPunishment(uid);
     if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {});
     if ("peak" === targetObj.type) return await interaction.reply({ content: getMsg("rooms.alreadyOwner"), flags: 64 }).catch(() => {});
     if (hasActiveClaim(uid)) {
@@ -1362,13 +1360,13 @@ async function handleGeneralNext(interaction, uid, uName, targetObj, panelKey) {
     }
     if (inQueue) return await interaction.reply({ content: getMsg("rooms.alreadyInQueue"), flags: 64 }).catch(() => {});
 
-    let nowTime = getLocalTime();
+    const nowTime = getLocalTime();
     let expectedTime = nowTime;
     if (targetObj.timeWindow) {
-        let endOfClaim = parseStringToDate(targetObj.timeWindow.split(" ~ ")[1]);
+        const endOfClaim = parseStringToDate(targetObj.timeWindow.split(" ~ ")[1]);
         if (endOfClaim) expectedTime = endOfClaim;
     }
-    let node = {
+    const node = {
         userId: uid,
         userName: uName,
         formattedTime: getFormattedTime12h(expectedTime),

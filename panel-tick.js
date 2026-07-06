@@ -31,33 +31,48 @@ export function startTickInterval() {
             alertCache._dailyDispatched = !1;
         }
 
+        // ── Midnight alert cache cleanup: clears spawnAlerted to prevent stale entries from suppressing new-day spawn alerts ──
+        // warning5mAfter uses timestamps with a 1-hour stale check, so no midnight cleanup needed (self-cleaning).
+        if (0 === now.getHours() && 0 === now.getMinutes() && !alertCache._midnightCleaned) {
+            alertCache._midnightCleaned = !0;
+            alertCache.spawnAlerted = {};
+        }
+        // Reset the midnight cleanup flag once we're past 00:01
+        if (alertCache._midnightCleaned && (now.getHours() !== 0 || now.getMinutes() > 1)) {
+            alertCache._midnightCleaned = !1;
+        }
+
         // ── Boss spawn alerts (5 min before, individual bosses) ──
         if (now.getSeconds() < 15) {
             await sendBossSpawnAlerts();
             await sendScheduledEventAlerts();
         }
 
-        for (let key in db) {
-            let current = db[key];
+        for (const key in db) {
+            const current = db[key];
             if (!current || key.startsWith("_")) continue;
             let panelUpdate = !1;
 
             // Use custom schedules if available (e.g. SP11: [1,7,13,19]), fall back to default
             const peakRedScheds = (current.red && current.red.schedules) || redBossSchedules;
             if ("peak" === current.type && isRoomOpen(peakRedScheds)) {
-                if (STATUS_AVAILABLE !== current.red.status && now.getMinutes() === 5 && current.ownerId) {
-                    if (!alertCache.warning5mAfter[`${key}-red-${now.getHours()}`]) {
+                // DM warning: 5min after Red Boss auto-respawn, if still not killed/marked
+                if (STATUS_AVAILABLE === current.red.status && current.red._freeSince > 0 && current.ownerId) {
+                    const minutesIdle = Math.floor((now.getTime() - current.red._freeSince) / 6e4);
+                    if (minutesIdle >= 5 && (!alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] || Date.now() - alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] > 36e5)) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
                             title: current.title,
                             boss: current.red.name
                         })).catch(() => {});
-                        alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] = !0;
+                        alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] = Date.now();
                     }
                 }
                 if (STATUS_AVAILABLE !== current.red.status && now.getMinutes() === 0) {
                     current.red._lastKilledTimeStr = current.red.status.replace(STATUS_KILLED_PREFIX, "").trim();
                     current.red.status = STATUS_AVAILABLE;
                     current.red._freeSince = now.getTime();
+                    // Clear warning cache so the 5-minute warning can re-fire if boss isn't killed during this window
+                    delete alertCache.warning5mAfter[`${key}-red-${now.getHours()}`];
                     if (current.ownerId) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.dmImmediateSpawnFixed", {
                             title: current.title,
@@ -70,19 +85,23 @@ export function startTickInterval() {
             }
 
             if ("normal" === current.type && current.boss3 && isRoomOpen(leader3Schedules)) {
-                if (STATUS_AVAILABLE !== current.boss3.status && now.getMinutes() === 5 && current.ownerId) {
-                    if (!alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`]) {
+                // DM warning: 5min after Leader 3 auto-respawn, if still not killed/marked
+                if (STATUS_AVAILABLE === current.boss3.status && current.boss3._freeSince > 0 && current.ownerId) {
+                    const minutesIdle = Math.floor((now.getTime() - current.boss3._freeSince) / 6e4);
+                    if (minutesIdle >= 5 && (!alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] || Date.now() - alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] > 36e5)) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
                             title: current.title,
                             boss: current.boss3.name
                         })).catch(() => {});
-                        alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] = !0;
+                        alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] = Date.now();
                     }
                 }
                 if (STATUS_AVAILABLE !== current.boss3.status && now.getMinutes() === 0) {
                     current.boss3._lastKilledTimeStr = current.boss3.status.replace(STATUS_KILLED_PREFIX, "").trim();
                     current.boss3.status = STATUS_AVAILABLE;
                     current.boss3._freeSince = now.getTime();
+                    // Clear warning cache so the 5-minute warning can re-fire if boss isn't killed during this window
+                    delete alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`];
                     if (current.ownerId) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.dmImmediateSpawnFixed", {
                             title: current.title,
@@ -95,15 +114,15 @@ export function startTickInterval() {
             }
 
             if ("fixed" === current.type && current.schedules) {
-                let minuteOffset = current.scheduleMinutes || 0;
+                const minuteOffset = current.scheduleMinutes || 0;
                 if (isRoomOpen(current.schedules, minuteOffset)) {
                     "" === current.timeWindow && (panelUpdate = !0, updateNeeded = !0);
                 } else {
                     // Don't release claim during the 5-minute pre-opening window
-                    let now = getLocalTime();
-                    let nextOpen = calculateNextOpening(current.schedules, minuteOffset);
-                    let fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
-                    let insidePreWindow = now >= fiveMinBefore && now < nextOpen;
+                    const now = getLocalTime();
+                    const nextOpen = calculateNextOpening(current.schedules, minuteOffset);
+                    const fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
+                    const insidePreWindow = now >= fiveMinBefore && now < nextOpen;
 
                     if (!insidePreWindow && ("" !== current.timeWindow || current.ownerId)) {
                         current.ownerName && pushToDailyLogs("CLAIM_END", current.ownerName, current.title, getMsg("logs.autoClose"));
@@ -121,8 +140,8 @@ export function startTickInterval() {
             if ("event_group" === current.type) {
                 // Handle schedule-type events (Red Boss) auto-respawn
                 const egEvents = getEventGroupKeys(current);
-                for (let ev of egEvents) {
-                    let evData = current[ev];
+                for (const ev of egEvents) {
+                    const evData = current[ev];
                     if (evData.type === "schedule" && evData.schedules) {
                         if (isRoomOpen(evData.schedules)) {
                             if (evData.status && evData.status.startsWith(STATUS_KILLED) && now.getMinutes() === 0) {
@@ -141,14 +160,14 @@ export function startTickInterval() {
                     
                     // Handle fixed-type events (Fury/Frenzy/Random Event) auto-release
                     if (evData.type === "fixed" && evData.schedules) {
-                        let minuteOffset = evData.scheduleMinutes || 0;
+                        const minuteOffset = evData.scheduleMinutes || 0;
                         if (isRoomOpen(evData.schedules, minuteOffset)) {
                             "" === evData.timeWindow && (panelUpdate = !0, updateNeeded = !0);
                         } else {
-                            let now = getLocalTime();
-                            let nextOpen = calculateNextOpening(evData.schedules, minuteOffset);
-                            let fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
-                            let insidePreWindow = now >= fiveMinBefore && now < nextOpen;
+                            const now = getLocalTime();
+                            const nextOpen = calculateNextOpening(evData.schedules, minuteOffset);
+                            const fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
+                            const insidePreWindow = now >= fiveMinBefore && now < nextOpen;
                             if (!insidePreWindow && ("" !== evData.timeWindow || evData.ownerId)) {
                                 evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.autoClose"));
                                 await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
@@ -167,7 +186,7 @@ export function startTickInterval() {
                     
                     // Handle summon-type events (Goblin) time limit
                     if (evData.type === "summon" && evData.timeWindow && evData.ownerId) {
-                        let limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
+                        const limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
                         if (limitTime && now >= limitTime) {
                             evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
                             await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
@@ -179,15 +198,15 @@ export function startTickInterval() {
                             evData.time = "";
                             evData.timeWindow = "";
                             if (evData.nextId) {
-                                let nid = evData.nextId, nname = evData.nextName;
+                                const nid = evData.nextId, nname = evData.nextName;
                                 evData.nextId = null;
                                 evData.nextName = null;
                                 evData.formattedTimeNext = "";
                                 evData.ownerId = nid;
                                 evData.ownerName = nname;
-                                let grace = new Date(now.getTime() + 3e5);
+                                const grace = new Date(now.getTime() + 3e5);
                                 evData.timeWindow = `${getFormattedTime12h(now)} ~ ${getFormattedTime12h(grace)}`;
-                                notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
+                                notifyUserDM(nid, getMsg("rooms.summonTurnArrivedDM", {
                                     roomKey: evData.name,
                                     title: current.title
                                 })).catch(() => {});
@@ -201,9 +220,9 @@ export function startTickInterval() {
                     
                     // Handle summon queue endLimit
                     if (evData.type === "summon" && evData.endLimit && evData.nextId) {
-                        let absenceLimit = parseStringToDate(evData.endLimit);
+                        const absenceLimit = parseStringToDate(evData.endLimit);
                         if (absenceLimit && now >= absenceLimit) {
-                            await notifyUserDM(evData.nextId, getMsg("rooms.antidemonAbsenceDM", {
+                            await notifyUserDM(evData.nextId, getMsg("rooms.summonAbsenceDM", {
                                 roomKey: evData.name,
                                 title: current.title
                             })).catch(() => {});
@@ -218,7 +237,7 @@ export function startTickInterval() {
                     }
                 }
             } else if ("antidemon" !== current.type && "fixed" !== current.type) {
-                for (let prop in current) {
+                for (const prop in current) {
                     if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) {
 
                         if (current[prop].status.startsWith("🔴")) {
@@ -226,7 +245,7 @@ export function startTickInterval() {
                             if (usesScheduleRespawn(current, prop)) continue;
                             
                             // Capture killed time string BEFORE changing status
-                            let killedTimeStr = current[prop].status.replace(STATUS_KILLED_PREFIX, "").trim();
+                            const killedTimeStr = current[prop].status.replace(STATUS_KILLED_PREFIX, "").trim();
                             // Prefer stored millisecond timestamp (timezone-safe), fall back to parsing string
                             let killedTime;
                             if (current[prop]._lastKilledAt) {
@@ -235,18 +254,20 @@ export function startTickInterval() {
                                 killedTime = parseStringToDate(killedTimeStr);
                             }
                             if (killedTime) {
-                                let secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
-                                let totalCooldownSeconds = 60 * current[prop].cooldown;
+                                const secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
+                                const totalCooldownSeconds = 60 * current[prop].cooldown;
 
                                 if (secondsPassed >= totalCooldownSeconds) {
                                     current[prop].status = STATUS_AVAILABLE;
                                     current[prop]._freeSince = now.getTime();
                                     current[prop]._lastKilledTimeStr = killedTimeStr;
+                                    // Clear warning cache so it can re-fire on the next respawn cycle
+                                    delete alertCache.warning5mAfter[`${key}-${prop}`];
                                     panelUpdate = !0;
                                     updateNeeded = !0;
 
                                     if (current.ownerId) {
-                                        let spawnKeyAlert = `${key}-${prop}-spawn-${now.getHours()}-${now.getMinutes()}`;
+                                        const spawnKeyAlert = `${key}-${prop}-spawn-${now.getHours()}-${now.getMinutes()}`;
                                         if (!alertCache.spawnAlerted[spawnKeyAlert]) {
                                             await notifyUserDM(current.ownerId, getMsg("rooms.dmImmediateSpawn", {
                                                 title: current.title,
@@ -262,14 +283,14 @@ export function startTickInterval() {
                         // DM warning: 5min after boss respawn, only if respawn happened AFTER claim started
                         if (STATUS_AVAILABLE === current[prop].status && current[prop]._freeSince > 0 && current._claimTimestamp) {
                             if (current[prop]._freeSince > current._claimTimestamp) {
-                                let minutesIdle = Math.floor((now.getTime() - current[prop]._freeSince) / 6e4);
-                                let targetKeyAlert = `${key}-${prop}`;
+                                const minutesIdle = Math.floor((now.getTime() - current[prop]._freeSince) / 6e4);
+                                const targetKeyAlert = `${key}-${prop}`;
                                 if (minutesIdle >= 5 && current.ownerId && !alertCache.warning5mAfter[targetKeyAlert]) {
                                     await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
                                         title: current.title,
                                         boss: current[prop].name
                                     })).catch(() => {});
-                                    alertCache.warning5mAfter[targetKeyAlert] = !0;
+                                    alertCache.warning5mAfter[targetKeyAlert] = Date.now();
                                 }
                             }
                         }
@@ -279,11 +300,11 @@ export function startTickInterval() {
 
             if ("event_group" === current.type) {
                 const egEvents = getEventGroupKeys(current);
-                for (let ev of egEvents) {
-                    let evData = current[ev];
+                for (const ev of egEvents) {
+                    const evData = current[ev];
                     // Summon-type time limit
                     if (evData.type === "summon" && evData.timeWindow && evData.ownerId) {
-                        let limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
+                        const limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
                         if (limitTime && now >= limitTime) {
                             evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
                             await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
@@ -295,15 +316,15 @@ export function startTickInterval() {
                             evData.time = "";
                             evData.timeWindow = "";
                             if (evData.nextId) {
-                                let nid = evData.nextId, nname = evData.nextName;
+                                const nid = evData.nextId, nname = evData.nextName;
                                 evData.nextId = null;
                                 evData.nextName = null;
                                 evData.formattedTimeNext = "";
                                 evData.ownerId = nid;
                                 evData.ownerName = nname;
-                                let grace = new Date(now.getTime() + 3e5);
+                                const grace = new Date(now.getTime() + 3e5);
                                 evData.timeWindow = `${getFormattedTime12h(now)} ~ ${getFormattedTime12h(grace)}`;
-                                notifyUserDM(nid, getMsg("rooms.antidemonTurnArrivedDM", {
+                                notifyUserDM(nid, getMsg("rooms.summonTurnArrivedDM", {
                                     roomKey: evData.name,
                                     title: current.title
                                 })).catch(() => {});
@@ -316,9 +337,9 @@ export function startTickInterval() {
                     }
                     // Summon-type queue endLimit
                     if (evData.type === "summon" && evData.endLimit && evData.nextId) {
-                        let absenceLimit = parseStringToDate(evData.endLimit);
+                        const absenceLimit = parseStringToDate(evData.endLimit);
                         if (absenceLimit && now >= absenceLimit) {
-                            await notifyUserDM(evData.nextId, getMsg("rooms.antidemonAbsenceDM", {
+                            await notifyUserDM(evData.nextId, getMsg("rooms.summonAbsenceDM", {
                                 roomKey: evData.name,
                                 title: current.title
                             })).catch(() => {});
@@ -334,10 +355,10 @@ export function startTickInterval() {
                 }
             } else if ("antidemon" === current.type || "summon" === current.type) {
                 const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
-                for (let room of roomList) {
-                    let rData = current[room];
+                for (const room of roomList) {
+                    const rData = current[room];
                     if (STATUS_CLAIMED === rData.status && rData.timeWindow) {
-                        let limitTime = parseStringToDate(rData.timeWindow.split(" ~ ")[1]);
+                        const limitTime = parseStringToDate(rData.timeWindow.split(" ~ ")[1]);
                         if (limitTime && now >= limitTime) {
                             rData.ownerName && pushToDailyLogs("CLAIM_END", rData.ownerName, `${current.title} - Room ${room.toUpperCase()}`, getMsg("logs.timeout"));
                             await notifyUserDM(rData.ownerId, getMsg("rooms.dmRemovedNotice", {
@@ -350,13 +371,17 @@ export function startTickInterval() {
                         }
                     }
                     if (rData.endLimit && rData.nextId) {
-                        let absenceLimit = parseStringToDate(rData.endLimit);
+                        const absenceLimit = parseStringToDate(rData.endLimit);
                         if (absenceLimit && now >= absenceLimit) {
-                            await notifyUserDM(rData.nextId, getMsg("rooms.antidemonAbsenceDM", {
-                                roomKey: room.toUpperCase(),
+                            const displayName = rData.name || room.toUpperCase();
+                            const absenceTemplate = current.type === "summon"
+                                ? "rooms.summonAbsenceDM"
+                                : "rooms.antidemonAbsenceDM";
+                            await notifyUserDM(rData.nextId, getMsg(absenceTemplate, {
+                                roomKey: displayName,
                                 title: current.title
                             })).catch(() => {});
-                            rData.nextName && pushToDailyLogs("CLAIM_END", rData.nextName, `${current.title} - Room ${room.toUpperCase()}`, getMsg("logs.absenceQueue"));
+                            rData.nextName && pushToDailyLogs("CLAIM_END", rData.nextName, `${current.title} - ${displayName}`, getMsg("logs.absenceQueue"));
                             rData.nextId = null;
                             rData.nextName = null;
                             rData.endLimit = null;
@@ -369,7 +394,7 @@ export function startTickInterval() {
                 }
             } else {
                 if (current.ownerId && current.timeWindow && "fixed" !== current.type) {
-                    let limitTime = parseStringToDate(current.timeWindow.split(" ~ ")[1]);
+                    const limitTime = parseStringToDate(current.timeWindow.split(" ~ ")[1]);
                     if (limitTime && now >= limitTime) {
                         await notifyUserDM(current.ownerId, getMsg("rooms.floorExpiredDM", {
                             title: current.title
@@ -381,16 +406,16 @@ export function startTickInterval() {
                     }
                 }
                 if (current.next && current.next.endLimit) {
-                    let absenceLimit = parseStringToDate(current.next.endLimit);
+                    const absenceLimit = parseStringToDate(current.next.endLimit);
                     if (absenceLimit && now >= absenceLimit) {
                         await notifyUserDM(current.next.userId, getMsg("rooms.floorAbsenceDM", {
                             title: current.title
                         })).catch(() => {});
                         current.next.userName && pushToDailyLogs("CLAIM_END", current.next.userName, current.title, getMsg("logs.absenceQueue"));
-                        let nextInLine = current.next.nextQueue;
+                        const nextInLine = current.next.nextQueue;
                         if (nextInLine) {
                             current.next = nextInLine;
-                            let grace = new Date(now.getTime() + 3e5);
+                            const grace = new Date(now.getTime() + 3e5);
                             current.next.endLimit = getFormattedTime12h(grace);
                             await notifyUserDM(current.next.userId, getMsg("rooms.floorTurnArrivedDM", {
                                 title: current.title
@@ -409,8 +434,8 @@ export function startTickInterval() {
                     panelUpdate = !0; // Countdown timers for schedule/fixed events change each tick
                 } else if ("antidemon" === current.type || "summon" === current.type) {
                     const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
-                    for (let room of roomList) {
-                        let rData = current[room];
+                    for (const room of roomList) {
+                        const rData = current[room];
                         if ((STATUS_CLAIMED === rData.status && rData.timeWindow) || rData.endLimit) {
                             panelUpdate = !0;
                             break;
@@ -420,7 +445,7 @@ export function startTickInterval() {
                     panelUpdate = !0; // Next opening countdown always changes
                 } else {
                     // Check for boss respawn countdowns
-                    for (let prop in current) {
+                    for (const prop in current) {
                         if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) {
                             if (current[prop].status.startsWith("🔴 Killed at") && current[prop].cooldown) {
                                 panelUpdate = !0;

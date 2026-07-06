@@ -295,7 +295,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     migrateSPLegacyToUnified();
 
     // Force-refresh all panels to fix any incorrect respawn timers on existing displays
-    for (let key in db) {
+    for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
         refreshVisualPanel(key);
     }

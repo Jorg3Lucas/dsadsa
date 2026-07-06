@@ -10,8 +10,7 @@ import { google } from "googleapis";
 import cron from "node-cron";
 import fs from "fs";
 import path from "path";
-import { getMsg } from "./lang.js";
-import { client, saveLocalStorage, logEvent, rankingDb } from "./state.js";
+import { client, logEvent, rankingDb } from "./state.js";
 import { getLocalTime } from "./time-utils.js";
 import { runBackup } from "./auto-backup.js";
 
@@ -52,7 +51,7 @@ let salaryState = {
 
 // ─── Voting session cache ────────────────────
 
-let voteSessionCache = {}; // { userId: { yellowPercent: null, purplePercent: null } }
+const voteSessionCache = {}; // { userId: { yellowPercent: null, purplePercent: null } }
 
 
 // ─── Save / Load ─────────────────────────────
@@ -380,7 +379,7 @@ export async function exportVotesToSheets() {
     try {
         // 1. First, create/ensure a "Salary Poll" sheet exists for raw data
         const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
-        let salarySheetExists = spreadsheet.data.sheets.some(
+        const salarySheetExists = spreadsheet.data.sheets.some(
             s => s.properties.title === "Salary Poll"
         );
 
@@ -579,7 +578,6 @@ export async function handleVoteButton(interaction) {
         .setStyle(ButtonStyle.Secondary);
 
     // Build embed showing current selection
-    const session = voteSessionCache[userId];
     let embedDesc = "Choose the percentages for each stone type:";
 
     if (currentVote) {
@@ -641,7 +639,7 @@ export async function handleSalarySelect(interaction) {
         );
 
     // Find and update the description with current selections
-    let desc = `Choose the percentages for each stone type:\n\n` +
+    const desc = `Choose the percentages for each stone type:\n\n` +
         `**Your current selection:**\n` +
         `${STONE_EMOJIS.yellow} Yellow Stones: **${yellowPct}%**\n` +
         `${STONE_EMOJIS.purple} Purple Stones: **${purplePct}%**\n` +
@@ -919,7 +917,7 @@ async function syncSingleVoteToSheet(userId, vote) {
     try {
         // 1. Ensure "Salary Poll" sheet exists
         const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
-        let salarySheetExists = spreadsheet.data.sheets.some(
+        const salarySheetExists = spreadsheet.data.sheets.some(
             s => s.properties.title === "Salary Poll"
         );
 

@@ -124,7 +124,6 @@ async function handleSalaryStatus(msg) {
     const messageId = state.messageId ? "✅ Posted" : "❌ No message";
 
     // Calculate next events (Brazil time)
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const now = getLocalTime();
     const day = now.getDay();
     const currMin = now.getHours() * 60 + now.getMinutes();
