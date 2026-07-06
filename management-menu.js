@@ -68,47 +68,61 @@ function clearConfirmTimeout(interaction) {
 // ==========================================
 
 export async function handleMgmtSlash(interaction) {
-    if (!interaction.member.permissions.has("ManageMessages")) {
+    try {
+        const hasPerm = interaction.member?.permissions?.has("ManageMessages");
+        if (!hasPerm) {
+            return await interaction.reply({
+                content: getMsg("system.permissionDeniedAdminDropped"),
+                flags: 64
+            }).catch(() => {});
+        }
+
+        const embed = new e()
+            .setTitle("🛠️ Bot Management Panel")
+            .setColor("#2b2d31")
+            .setDescription(
+                "Select a category below to manage that system.\n\n" +
+                "**🏗️ Panels** — Reset panels, kick users\n" +
+                "**🔒 Reservations** — View/clear Fury/Frenzy reservations\n" +
+                "**📢 Channels** — Configure log/event channels\n" +
+                "**👥 Players** — Ranking user management\n" +
+                "**📋 Logs** — Dispatch daily reports\n" +
+                "**💰 Salary** — Manage salary polls\n" +
+                "**🎫 Tickets** — Create ticket panel\n" +
+                "**🔄 Update** — Git pull and restart"
+            )
+            .setTimestamp();
+
         return await interaction.reply({
-            content: getMsg("system.permissionDeniedAdminDropped"),
+            embeds: [embed],
+            components: [
+                new t().addComponents(
+                    new n().setCustomId("mgmt-panels").setEmoji("🏗️").setLabel("Panels").setStyle(a.Primary),
+                    new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Reservations").setStyle(a.Primary),
+                    new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel("Channels").setStyle(a.Primary),
+                    new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Players").setStyle(a.Primary),
+                    new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary),
+                    new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary)
+                ),
+                new t().addComponents(
+                    new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel("Tickets").setStyle(a.Secondary),
+                    new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel("Update Bot").setStyle(a.Danger)
+                )
+            ],
             flags: 64
         }).catch(() => {});
+    } catch (err) {
+        console.error("❌ [handleMgmtSlash] CRASH:", err);
+        if (err.stack) console.error("📋 [Stack]:", err.stack);
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: "❌ **Internal error** in management panel. Check bot console for details.",
+                    flags: 64
+                });
+            }
+        } catch (e) {}
     }
-
-    const embed = new e()
-        .setTitle("🛠️ Bot Management Panel")
-        .setColor("#2b2d31")
-        .setDescription(
-            "Select a category below to manage that system.\n\n" +
-            "**🏗️ Panels** — Reset panels, kick users\n" +
-            "**🔒 Reservations** — View/clear Fury/Frenzy reservations\n" +
-            "**📢 Channels** — Configure log/event channels\n" +
-            "**👥 Players** — Ranking user management\n" +
-            "**📋 Logs** — Dispatch daily reports\n" +
-            "**💰 Salary** — Manage salary polls\n" +
-            "**🎫 Tickets** — Create ticket panel\n" +
-            "**🔄 Update** — Git pull and restart"
-        )
-        .setTimestamp();
-
-    return await interaction.reply({
-        embeds: [embed],
-        components: [
-            new t().addComponents(
-                new n().setCustomId("mgmt-panels").setEmoji("🏗️").setLabel("Panels").setStyle(a.Primary),
-                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Reservations").setStyle(a.Primary),
-                new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel("Channels").setStyle(a.Primary),
-                new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Players").setStyle(a.Primary),
-                new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary),
-                new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary)
-            ),
-            new t().addComponents(
-                new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel("Tickets").setStyle(a.Secondary),
-                new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel("Update Bot").setStyle(a.Danger)
-            )
-        ],
-        flags: 64
-    }).catch(() => {});
 }
 
 export function canHandleManagementInteraction(interaction) {
