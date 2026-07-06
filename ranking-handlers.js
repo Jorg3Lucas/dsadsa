@@ -30,13 +30,13 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         if (ownerMember.roles.cache.has(roleId)) {
                             for (const [, rId] of Object.entries(CLAN_ROLES)) {
                                 if (rId === roleId) {
-                                    if (!targetMember.roles.cache.has(rId)) await targetMember.roles.add(rId).catch(() => {
+                                    if (!targetMember.roles.cache.has(rId)) {await targetMember.roles.add(rId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
                                 } else {
-                                    if (targetMember.roles.cache.has(rId)) await targetMember.roles.remove(rId).catch(() => {
+                                    if (targetMember.roles.cache.has(rId)) {await targetMember.roles.remove(rId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
                                 }
                             }
                             logEvent(getMsg('ranking.logs.roleAdded', { clan: clanName, username: targetMember.user.username }));
@@ -57,13 +57,13 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         for (const roleId of Object.values(CLAN_ROLES)) {
             if (roleId === idealRoleId) {
-                if (!targetMember.roles.cache.has(roleId)) await targetMember.roles.add(roleId).catch(() => {
+                if (!targetMember.roles.cache.has(roleId)) {await targetMember.roles.add(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
             } else {
-                if (targetMember.roles.cache.has(roleId)) await targetMember.roles.remove(roleId).catch(() => {
+                if (targetMember.roles.cache.has(roleId)) {await targetMember.roles.remove(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
             }
         }
     };
@@ -124,12 +124,12 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     });
                 const idealRoleId = CLAN_ROLES[selectedClan];
                 for (const rId of Object.values(CLAN_ROLES)) {
-                    if (rId === idealRoleId) await member.roles.add(rId).catch(() => {
+                    if (rId === idealRoleId) {await member.roles.add(rId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-                    else await member.roles.remove(rId).catch(() => {
+    });}
+                    else {await member.roles.remove(rId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
                 }
             }
             logEvent(getMsg('ranking.logs.manualLink', { targetId, selectedClan }));
@@ -163,9 +163,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             .then(async (pilotMember) => {
                 if (pilotMember) {
                     for (const roleId of Object.values(CLAN_ROLES)) {
-                        if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {
+                        if (pilotMember.roles.cache.has(roleId)) {await pilotMember.roles.remove(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
                     }
                     await pilotMember.setNickname(pilotMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -218,9 +218,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 for (const pId of userData.pilotIds) {
                     const pilotMember = await guild.members.fetch(pId).catch(() => null);
                     if (pilotMember) {
-                        for (const roleId of Object.values(CLAN_ROLES)) await pilotMember.roles.remove(roleId).catch(() => {
+                        for (const roleId of Object.values(CLAN_ROLES)) {await pilotMember.roles.remove(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
                         await pilotMember.setNickname(pilotMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
@@ -228,9 +228,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 }
             }
             for (const roleId of Object.values(CLAN_ROLES)) {
-                if (targetMember.roles.cache.has(roleId)) await targetMember.roles.remove(roleId).catch(() => {
+                if (targetMember.roles.cache.has(roleId)) {await targetMember.roles.remove(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
             }
             await targetMember.setNickname(targetMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -269,9 +269,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
             if (pilotMember) {
                 for (const roleId of Object.values(CLAN_ROLES)) {
-                    if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {
+                    if (pilotMember.roles.cache.has(roleId)) {await pilotMember.roles.remove(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
                 }
                 await pilotMember.setNickname(pilotMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -349,12 +349,12 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     });
             const idealRoleId = CLAN_ROLES[cached.clan];
             for (const [clanName, roleId] of Object.entries(CLAN_ROLES)) {
-                if (roleId === idealRoleId) await targetMember.roles.add(roleId).catch(() => {
+                if (roleId === idealRoleId) {await targetMember.roles.add(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-                else await targetMember.roles.remove(roleId).catch(() => {
+    });}
+                else {await targetMember.roles.remove(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
             }
 
             logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}`);
@@ -539,9 +539,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         interaction.guild.members.fetch(pilotToRemoveId).then(async (pilotMember) => {
             if (pilotMember) {
                 for (const roleId of Object.values(CLAN_ROLES)) {
-                    if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {
+                    if (pilotMember.roles.cache.has(roleId)) {await pilotMember.roles.remove(roleId).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
                 }
                 await pilotMember.setNickname(pilotMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -613,9 +613,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const PAGE_SIZE = 25;
         const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
 
-        if (newPage < 0 || newPage >= totalPages) return interaction.deferUpdate().catch(() => {
+        if (newPage < 0 || newPage >= totalPages) {return interaction.deferUpdate().catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
         const pageItems = sorted.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE);
         const selectOptions = pageItems.map(([id, data]) => ({

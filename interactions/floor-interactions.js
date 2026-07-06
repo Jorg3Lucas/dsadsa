@@ -342,9 +342,9 @@ async function handleDeathCancel(interaction, uid, uName, targetObj, panelKey, s
 
 async function handleEGDeathConfirm(interaction, uid, uName, targetObj, panelKey, specificProp) {
     const evData = targetObj[specificProp];
-    if (!evData) return await interaction.update({ content: getMsg("rooms.noActiveClaimsFeedback"), components: [], flags: 64 }).catch(() => {
+    if (!evData) {return await interaction.update({ content: getMsg("rooms.noActiveClaimsFeedback"), components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const currTimeStr = getFormattedTime12h(getLocalTime());
     const nowTs = getLocalTime().getTime();
@@ -377,9 +377,9 @@ async function handleEGDeathCancel(interaction, uid, uName, targetObj, panelKey,
 
 async function handleEGDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp) {
     const evData = targetObj[specificProp];
-    if (!evData) return await interaction.reply({ content: getMsg("rooms.noActiveClaimsFeedback"), flags: 64 }).catch(() => {
+    if (!evData) {return await interaction.reply({ content: getMsg("rooms.noActiveClaimsFeedback"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const currTimeStr = getFormattedTime12h(getLocalTime());
     const nowTs = getLocalTime().getTime();
@@ -418,9 +418,9 @@ async function handleEGDeathMark(interaction, uid, uName, targetObj, panelKey, s
 
 async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
@@ -433,9 +433,9 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
     // For summon-type events, check if user has priority queue
     if (hasActiveQueue(uid)) {
         const hasPriority = eventKeys.some(ev => targetObj[ev] && targetObj[ev].nextId === uid);
-        if (!hasPriority) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+        if (!hasPriority) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     }
     
     // Build available options based on event type
@@ -466,9 +466,9 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
         }
     }
     
-    if (options.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
+    if (options.length === 0) {return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     return await interaction.reply({
         content: `🎯 **${getMsg("rooms.summonMenuSelectClaim")}**`,
@@ -487,18 +487,18 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
 
 async function handleEventGroupNext(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
     }
-    if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+    if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const eventKeys = getEventGroupKeys(targetObj);
     const summonEvents = eventKeys.filter(ev => targetObj[ev].type === "summon" && targetObj[ev].ownerId && !targetObj[ev].nextId);
@@ -509,9 +509,9 @@ async function handleEventGroupNext(interaction, uid, uName, targetObj, panelKey
         emoji: "⭐"
     }));
     
-    if (queueOpts.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
+    if (queueOpts.length === 0) {return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     return await interaction.reply({
         content: `⭐ **${getMsg("rooms.summonMenuSelectNext")}**`,
@@ -621,14 +621,14 @@ async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelK
 async function handleEGFixClaim(interaction, uid, uName) {
     const [, panelKey, eventName] = interaction.customId.split("-");
     const targetFloor = db[panelKey];
-    if (!targetFloor || !targetFloor[eventName]) return await interaction.reply({ content: getMsg("rooms.antidemonTimeoutCache"), flags: 64 }).catch(() => {
+    if (!targetFloor || !targetFloor[eventName]) {return await interaction.reply({ content: getMsg("rooms.antidemonTimeoutCache"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
@@ -741,9 +741,9 @@ async function handleEGFixClaim(interaction, uid, uName) {
 
 async function handleEGSlide(interaction, uid, uName) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -756,9 +756,9 @@ async function handleEGSlide(interaction, uid, uName) {
         targetFloor = db[pKey],
         selectedEvent = interaction.values[0];
     
-    if (!targetFloor || !targetFloor[selectedEvent]) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {
+    if (!targetFloor || !targetFloor[selectedEvent]) {return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const evData = targetFloor[selectedEvent];
     
@@ -894,9 +894,9 @@ async function handleEGSlide(interaction, uid, uName) {
 
 async function handleEGNextSide(interaction, uid, uName) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
@@ -904,17 +904,17 @@ async function handleEGNextSide(interaction, uid, uName) {
         // Silently ignore — Discord API errors are non-critical
     });
     }
-    if (hasActiveQueue(uid)) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {
+    if (hasActiveQueue(uid)) {return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const pKey = interaction.customId.replace("egnextside-", ""),
         targetFloor = db[pKey],
         selectedEvent = interaction.values[0];
     
-    if (!targetFloor || !targetFloor[selectedEvent]) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {
+    if (!targetFloor || !targetFloor[selectedEvent]) {return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const evData = targetFloor[selectedEvent];
     if (evData.nextId) {return await interaction.update({
@@ -961,9 +961,9 @@ async function handleEGNextSide(interaction, uid, uName) {
 
 async function handleEGTicket(interaction, uid, uName) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const pKey = interaction.customId.replace("egticket-", ""),
         targetFloor = db[pKey],
@@ -984,9 +984,9 @@ async function handleEGTicket(interaction, uid, uName) {
     if (hasActiveQueue(uid)) {
         const eventKeys = getEventGroupKeys(targetFloor);
         const hasPriority = eventKeys.some(ev => targetFloor[ev] && targetFloor[ev].nextId === uid);
-        if (!hasPriority) return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {
+        if (!hasPriority) {return await interaction.update({ content: getMsg("rooms.limitReached"), components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     }
     
     const selectedEvent = cacheEntry.event,
@@ -1044,9 +1044,9 @@ async function handleAntiVersionSlide(interaction, uid, uName) {
         targetFloor = db[pKey],
         selectedVersion = interaction.values[0]; // e.g. "v1", "v2", "v3"
     
-    if (!targetFloor) return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {
+    if (!targetFloor) {return await interaction.update({ content: getMsg("rooms.antidemonTimeoutCache"), components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     const roomKeys = getAntidemonRoomKeys(pKey);
     const versionRooms = roomKeys.filter(rk => rk.startsWith(selectedVersion));
@@ -1068,9 +1068,9 @@ async function handleAntiVersionSlide(interaction, uid, uName) {
         roomOpts.push({ label: `${getAntidemonRoomName(pKey, selectedVersion+"m")} + ${getAntidemonRoomName(pKey, selectedVersion+"r")}`, value: `${selectedVersion}m+${selectedVersion}r`, emoji: "🔵" });
     }
     
-    if (roomOpts.length === 0) return await interaction.update({ content: getMsg("rooms.antidemonQueueLocked"), components: [], flags: 64 }).catch(() => {
+    if (roomOpts.length === 0) {return await interaction.update({ content: getMsg("rooms.antidemonQueueLocked"), components: [], flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     
     return await interaction.update({
         content: `👹 **${getMsg("rooms.antidemonMenuSelectClaim")}**`,
@@ -1089,9 +1089,9 @@ async function handleAntiVersionSlide(interaction, uid, uName) {
 
 async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
@@ -1101,9 +1101,9 @@ async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
     const summonProps = getSummonRoomKeys(panelKey);
     if (hasActiveQueue(uid)) {
         const hasPriority = summonProps.some(loc => targetObj[loc].nextId === uid);
-        if (!hasPriority) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+        if (!hasPriority) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     }
 
     // Find available locations
@@ -1117,9 +1117,9 @@ async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
         emoji: "🌀"
     }));
 
-    if (locOptions.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
+    if (locOptions.length === 0) {return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     return await interaction.reply({
         content: `🌀 **${getMsg("rooms.summonMenuSelectClaim")}**`,
         components: [new t().addComponents(
@@ -1137,18 +1137,18 @@ async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
 
 async function handleSummonNext(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
     }
-    if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+    if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
     const summonProps = getSummonRoomKeys(panelKey);
     const queueOpts = summonProps.filter(loc => targetObj[loc].status === STATUS_CLAIMED && !targetObj[loc].nextId).map(loc => ({
@@ -1157,9 +1157,9 @@ async function handleSummonNext(interaction, uid, uName, targetObj, panelKey) {
         emoji: "🌀"
     }));
 
-    if (queueOpts.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
+    if (queueOpts.length === 0) {return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     return await interaction.reply({
         content: `🌀 **${getMsg("rooms.summonMenuSelectNext")}**`,
         components: [new t().addComponents(
@@ -1235,9 +1235,9 @@ async function handleSummonCancel(interaction, uid, uName, targetObj, panelKey) 
 
 async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
@@ -1247,9 +1247,9 @@ async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
     if (hasActiveQueue(uid)) {
         const antiRoomKeys = getAntidemonRoomKeys(panelKey);
         const hasPriority = antiRoomKeys.some(rm => targetObj[rm] && targetObj[rm].nextId === uid);
-        if (!hasPriority) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+        if (!hasPriority) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     }
     
     // MS11/12 antidemon: show version selection first (2-level menu)
@@ -1267,9 +1267,9 @@ async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
             }
         });
         
-        if (versionOpts.length === 0) return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
+        if (versionOpts.length === 0) {return await interaction.reply({ content: getMsg("rooms.antidemonQueueLocked"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
         
         return await interaction.reply({
             content: `👹 **Select a version to claim:**`,
@@ -1300,18 +1300,18 @@ async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
 
 async function handleAntiNext(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
     }
-    if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+    if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     return await interaction.reply({
         content: `⚔️ **${getMsg("rooms.antidemonMenuSelectNext")}**`,
         components: [new t().addComponents(
@@ -1439,18 +1439,18 @@ async function handleFloorCancel(interaction, uid, uName, targetObj, panelKey) {
 
 async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
     }
-    if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+    if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
     const now = getLocalTime();
     const minuteOffset = targetObj.scheduleMinutes || 0;
@@ -1524,18 +1524,18 @@ async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
 
 async function handleGeneralClaim(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
     }
-    if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+    if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
     // Access denied if someone else reserved (next queue with endLimit active)
     if (targetObj.next && targetObj.next.userId !== uid) {
@@ -1598,24 +1598,24 @@ async function handleGeneralClaim(interaction, uid, uName, targetObj, panelKey) 
 
 async function handleGeneralNext(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
-    if (pStr) return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
+    if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-    if ("peak" === targetObj.type) return await interaction.reply({ content: getMsg("rooms.alreadyOwner"), flags: 64 }).catch(() => {
+    });}
+    if ("peak" === targetObj.type) {return await interaction.reply({ content: getMsg("rooms.alreadyOwner"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
     }
-    if (hasActiveQueue(uid)) return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
+    if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-    if (targetObj.ownerId === uid) return await interaction.reply({ content: getMsg("rooms.alreadyOwner"), flags: 64 }).catch(() => {
+    });}
+    if (targetObj.ownerId === uid) {return await interaction.reply({ content: getMsg("rooms.alreadyOwner"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
     let pointer = targetObj.next;
     let inQueue = !1;
@@ -1623,9 +1623,9 @@ async function handleGeneralNext(interaction, uid, uName, targetObj, panelKey) {
         if (pointer.userId === uid) { inQueue = !0; break; }
         pointer = pointer.nextQueue;
     }
-    if (inQueue) return await interaction.reply({ content: getMsg("rooms.alreadyInQueue"), flags: 64 }).catch(() => {
+    if (inQueue) {return await interaction.reply({ content: getMsg("rooms.alreadyInQueue"), flags: 64 }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
     const nowTime = getLocalTime();
     let expectedTime = nowTime;

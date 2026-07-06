@@ -201,18 +201,18 @@ async function handleTestEvent(msg) {
 // ==========================================
 
 async function handleLogs(msg) {
-    if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("logs.modRequired") }).catch(() => {
+    if (!msg.member.permissions.has("ManageMessages")) {return msg.reply({ content: getMsg("logs.modRequired") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-    if (!dailyLogs.configChannelId) return msg.reply({ content: getMsg("logs.noChannel") }).catch(() => {
+    });}
+    if (!dailyLogs.configChannelId) {return msg.reply({ content: getMsg("logs.noChannel") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-    if (!await dispatchDailyLogs(!0)) return msg.reply({ content: getMsg("logs.dispatchError") }).catch(() => {
+    });}
+    if (!await dispatchDailyLogs(!0)) {return msg.reply({ content: getMsg("logs.dispatchError") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-    if (msg.channel.id !== dailyLogs.configChannelId) return msg.reply({ content: getMsg("logs.dispatchSuccess") }).catch(() => {
+    });}
+    if (msg.channel.id !== dailyLogs.configChannelId) {return msg.reply({ content: getMsg("logs.dispatchSuccess") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     try { await msg.delete() } catch (r) {
         // Silently ignore — message may already be deleted
     }
@@ -223,9 +223,9 @@ async function handleLogs(msg) {
 // ==========================================
 
 async function handleResetLogs(msg) {
-    if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
+    if (!msg.member.permissions.has("ManageMessages")) {return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     const oldCount = (dailyLogs.queue || []).length;
     await msg.reply({
         content: getMsg("system.resetLogsConfirm", { count: oldCount }),
@@ -264,9 +264,9 @@ async function handleSetTicket(msg) {
 // ==========================================
 
 async function handleKick(msg) {
-    if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
+    if (!msg.member.permissions.has("ManageMessages")) {return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     const optionsList = [];
     for (const key in db) {
         const current = db[key];
@@ -337,9 +337,9 @@ async function handleKick(msg) {
             });
         }
     }
-    if (0 === optionsList.length) return msg.reply({ content: getMsg("system.kickNoClaims") }).catch(() => {
+    if (0 === optionsList.length) {return msg.reply({ content: getMsg("system.kickNoClaims") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     await msg.reply({
         content: getMsg("system.kickPanelTitle"),
         components: [new t().addComponents(
@@ -356,23 +356,23 @@ async function handleKick(msg) {
 // ==========================================
 
 async function handleUpdate(msg) {
-    if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
+    if (!msg.member.permissions.has("ManageMessages")) {return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     const updateReply = await msg.reply({ content: getMsg("system.updateRunningGit") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
     try {
         const output = execSync("git pull --rebase", { encoding: "utf8", cwd: process.cwd() });
-        if (updateReply) await updateReply.edit({ content: getMsg("system.updateSuccess", { output: output.slice(0, 1900) }) }).catch(() => {
+        if (updateReply) {await updateReply.edit({ content: getMsg("system.updateSuccess", { output: output.slice(0, 1900) }) }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
         execSync("npm install", { encoding: "utf8", cwd: process.cwd(), stdio: "pipe" });
         exec("pm2 restart bot", () => process.exit());
     } catch (e) {
-        if (updateReply) await updateReply.edit({ content: getMsg("system.updateError", { error: (e.message || e).slice(0, 1900) }) }).catch(() => {
+        if (updateReply) {await updateReply.edit({ content: getMsg("system.updateError", { error: (e.message || e).slice(0, 1900) }) }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     }
 }
 
@@ -381,9 +381,9 @@ async function handleUpdate(msg) {
 // ==========================================
 
 async function handleResetMenu(msg) {
-    if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
+    if (!msg.member.permissions.has("ManageMessages")) {return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     const optionsList = [];
     for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
@@ -391,9 +391,9 @@ async function handleResetMenu(msg) {
         const cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
         optionsList.push({ label: `${cleanedTitle}`, description: `Key: ${key}`, value: key });
     }
-    if (0 === optionsList.length) return msg.reply({ content: getMsg("system.resetNoPanels") }).catch(() => {
+    if (0 === optionsList.length) {return msg.reply({ content: getMsg("system.resetNoPanels") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     if (optionsList.length > 1) {
         optionsList.unshift({ label: "🔄 Reset ALL Panels", description: "Reset all panels to defaults", value: "__all__" });
     }
@@ -413,9 +413,9 @@ async function handleResetMenu(msg) {
 // ==========================================
 
 async function handleResetSpecific(msg, resetKey) {
-    if (!msg.member.permissions.has("ManageMessages")) return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
+    if (!msg.member.permissions.has("ManageMessages")) {return msg.reply({ content: getMsg("system.permissionDeniedManageMessages") }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
 
     if ("all" === resetKey) {
         let count = 0;
@@ -430,9 +430,9 @@ async function handleResetSpecific(msg, resetKey) {
     });
     }
 
-    if (!db[resetKey]) return msg.reply({ content: getMsg("system.resetPanelNotFound", { key: resetKey }) }).catch(() => {
+    if (!db[resetKey]) {return msg.reply({ content: getMsg("system.resetPanelNotFound", { key: resetKey }) }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
+    });}
     resetPanelData(resetKey);
     await refreshVisualPanel(resetKey);
     return msg.reply({ content: getMsg("system.resetPanelSuccess", { key: resetKey }) }).catch(() => {
@@ -458,7 +458,7 @@ async function handleReserveEvent(msg, eventName, userArg) {
     }
 
     // Extract user ID from mention or raw ID
-    let targetId = userArg.replace(/[<@!>]/g, "").trim();
+    const targetId = userArg.replace(/[<@!>]/g, "").trim();
     let targetMember;
     try {
         targetMember = await msg.guild.members.fetch(targetId).catch(() => null);
@@ -523,7 +523,7 @@ async function handleReserveInteractive(msg) {
     });
     }
 
-    let targetId = userArg.replace(/[<@!>]/g, "").trim();
+    const targetId = userArg.replace(/[<@!>]/g, "").trim();
     let targetMember;
     try {
         targetMember = await msg.guild.members.fetch(targetId).catch(() => null);
