@@ -130,39 +130,46 @@ export function renderEmbed(key) {
             } else if (evData.type === "fixed") {
                 // Fixed event (Fury/Frenzy/Random Event) — show open/closed/reserved with countdown
                 const minuteOffset = evData.scheduleMinutes || 0;
-                let statusLine, timerLabel, timerValue;
+                let lines = [], timerLine = "";
                 
-                // Check if reserved (all slots or specific slot)
-                if (evData.reservedFor && !evData.ownerId) {
-                    statusLine = `🔒 ${getMsg("reserve.reservedNotice", { userName: evData.reservedByName || evData.reservedFor })}`;
+                if (evData.ownerId && evData.ownerName) {
+                    // Claimed by someone — use # prefix for heading-style highlight in md code block
+                    lines.push(`# 👑 ${evData.ownerName}`);
+                } else if (evData.reservedFor && !evData.ownerId) {
+                    // All hours reserved for one user
+                    const userName = evData.reservedByName || evData.reservedFor;
+                    lines.push(`# ${getMsg("reserve.reservedNotice", { userName })}`);
                 } else if (evData.reservations && !evData.ownerId) {
-                    // Show per-slot reservations
+                    // Per-slot reservations — build slot timeline
                     const nowHour = now.getHours();
-                    const currentSlotRes = evData.reservations[String(nowHour)];
                     const hasAllRes = evData.reservations._all;
+                    
                     if (hasAllRes) {
-                        statusLine = `🔒 ${getMsg("reserve.reservedNotice", { userName: hasAllRes.userName })}`;
-                    } else if (currentSlotRes) {
-                        statusLine = `🔒 ${getMsg("reserve.reservedNotice", { userName: currentSlotRes.userName })}`;
+                        lines.push(`# ${getMsg("reserve.reservedNotice", { userName: hasAllRes.userName })}`);
                     } else {
-                        // Check if ANY reservation exists for today
-                        const resHours = Object.keys(evData.reservations).filter(k => !k.startsWith("_"));
-                        if (resHours.length > 1) {
-                            // Multiple slots reserved for different users — show compact status
-                            const nextRes = resHours.find(h => parseInt(h) >= nowHour) || resHours[0];
-                            if (nextRes) {
-                                const slotUser = evData.reservations[nextRes].userName;
-                                statusLine = `🔒 ${nextRes}:00 reserved for ${slotUser}`;
-                            } else {
-                                statusLine = "🟢 Open now";
+                        const resHours = Object.keys(evData.reservations).filter(k => !k.startsWith("_")).sort((a, b) => parseInt(a) - parseInt(b));
+                        if (resHours.length > 0) {
+                            // Current active slot
+                            const currentSlot = evData.reservations[String(nowHour)];
+                            if (currentSlot) {
+                                lines.push(`🟢 Now: ${currentSlot.userName}`);
                             }
-                        } else if (resHours.length === 1) {
-                            const slotRes = evData.reservations[resHours[0]];
-                            const hour = parseInt(resHours[0]);
-                            const nextHour = (hour + 1) % 24;
-                            statusLine = `🔒 ${hour}:00-${nextHour}:00: ${slotRes.userName}`;
-                        } else {
-                            statusLine = "🟢 Open now";
+                            // Next upcoming reservation
+                            const nextSlot = resHours.find(h => parseInt(h) > nowHour);
+                            if (nextSlot) {
+                                const slotUser = evData.reservations[nextSlot].userName;
+                                lines.push(`⏭️ Next: ${nextSlot}:00 -> ${slotUser}`);
+                            }
+                            // If no current and no next, show the first reservation
+                            if (!currentSlot && !nextSlot) {
+                                const firstSlot = resHours[0];
+                                const slotUser = evData.reservations[firstSlot].userName;
+                                lines.push(`# ${firstSlot}:00 -> ${slotUser}`);
+                            }
+                            // Total reserved slots summary
+                            if (resHours.length > 1) {
+                                lines.push(`📌 ${resHours.length} slot(s) reserved`);
+                            }
                         }
                     }
                 } else if (isRoomOpen(evData.schedules, minuteOffset)) {
@@ -173,26 +180,27 @@ export function renderEmbed(key) {
                     if (endOfEvent <= now) endOfEvent.setHours(endOfEvent.getHours() + 1);
                     const closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
                     
-                    if (evData.ownerId && evData.ownerName) {
-                        statusLine = `👑 ${evData.ownerName}`;
-                    } else {
-                        statusLine = "🟢 Open now";
-                    }
-                    timerLabel = "Closes in:";
-                    timerValue = closeMins <= 0 ? "Expiring..." : `${closeMins}m`;
+                    lines.push(`🟢 Open`);
+                    timerLine = closeMins <= 0
+                        ? "⏱️ Expiring..."
+                        : `⏱️ Closes in ${closeMins}m`;
                 } else {
                     const nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
                     const diffMs = nextOpenDate.getTime() - now.getTime();
                     const diffMins = Math.floor(diffMs / 6e4);
                     
-                    statusLine = "🔴 Closed";
-                    timerLabel = "Next in:";
-                    timerValue = diffMins < 60
-                        ? `${diffMins}m`
-                        : `${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
+                    lines.push(`🔴 Closed`);
+                    timerLine = diffMins < 60
+                        ? `⏱️ Next in ${diffMins}m`
+                        : `⏱️ Next in ${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
                 }
                 
-                block = `\`\`\`yaml\n${statusLine}\n\`\`\`\n\`\`\`yaml\n${timerLabel} ${timerValue}\n\`\`\``;
+                // Build embed field — timer block only when applicable
+                if (timerLine) {
+                    block = `\`\`\`md\n${lines.join("\n")}\n\`\`\`\n\`\`\`yaml\n${timerLine}\n\`\`\``;
+                } else {
+                    block = `\`\`\`md\n${lines.join("\n")}\n\`\`\``;
+                }
             } else {
                 block = `\`\`\`yaml\n${evData.status || STATUS_AVAILABLE}\n\`\`\``;
             }
