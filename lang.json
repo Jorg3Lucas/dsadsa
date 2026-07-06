@@ -1,28 +1,28 @@
 {
     "system": {
         "errorTitle": "💀 Alert",
-        "accessDenied": "🔒 This floor is currently controlled by {ownerName}.",
-        "permissionDeniedManageMessages": "⛔ You need the Manage Messages permission.",
-        "permissionDeniedAdminDropped": "🛡️ Only Staff can remove claims.",
+        "accessDenied": "🔒 This floor is currently controlled by **{ownerName}**.",
+        "permissionDeniedManageMessages": "⛔ Insufficient permissions. You require the **Manage Messages** privilege to perform this action.",
+        "permissionDeniedAdminDropped": "🛡️ Only **Staff** members can remove claims.",
         "kickPanelTitle": "⚔️ Floor Management",
-        "kickPanelPlaceholder": "Select a player to remove...",
+        "kickPanelPlaceholder": "Select a player to remove from their claim...",
         "kickCurrentLabel": "👑 Current Owner:",
         "kickNoClaims": "📭 No active claims found.",
         "kickSuccess": "✅ Claim removed successfully.",
-        "kickDMNotice": "⚠️ Your claim on {title} has been removed by Staff.",
+        "kickDMNotice": "⚠️ Your claim on **{title}** has been removed by Staff.",
         "resetMenuTitle": "🔄 **Select a panel to reset:**",
         "resetMenuPlaceholder": "Choose a panel...",
         "resetNoPanels": "📭 No panels found.",
         "resetPanelNotFound": "❌ Panel `{key}` not found.",
-        "resetPanelSuccess": "✅ Panel `{key}` data reset successfully!",
-        "resetLogsSuccess": "✅ **{count}** log(s) cleared successfully.",
-        "resetLogsConfirm": "⚠️ Are you sure you want to clear **{count}** log(s)?",
+        "resetPanelSuccess": "✅ Panel `{key}` has been reset successfully.",
+        "resetLogsSuccess": "✅ **{count}** log entries purged.",
+        "resetLogsConfirm": "⚠️ Confirm — Permanently purge **{count}** log entries? This cannot be undone.",
         "resetLogsCancel": "❌ Reset cancelled.",
         "resetLogsEmpty": "📭 No logs to clear.",
-        "resetLogsDenied": "🛡️ Only Staff can reset logs.",
+        "resetLogsDenied": "🛡️ Only Staff members can reset logs.",
         "updateRunningGit": "🔄 Running `git pull`...",
         "updateSuccess": "✅ `git pull` completed:\n```\n{output}\n```\n🔄 Restarting...",
-        "updateError": "❌ Update error:\n```\n{error}\n```"
+        "updateError": "❌ Update failed:\n```\n{error}\n```"
     },
     "buttons": {
         "claimLabel": "⚔️ Claim",
@@ -30,9 +30,9 @@
         "nextLabel": "⏭️ Join Queue"
     },
     "cooldowns": {
-        "activeTimeout": "⏳ Cooldown active! Try again in {minutes}m {seconds}s.",
-        "canceledClaimFeedback": "❌ Claim canceled. A 5-minute cooldown has been applied.",
-        "floorReservedNotice": "❌ This floor is temporarily reserved for **{userName}**{timeRemaining}. Please wait for their grace period to expire.",
+        "activeTimeout": "⏳ Cooldown active. Please wait **{minutes}m {seconds}s** before your next action.",
+        "canceledClaimFeedback": "❌ Claim cancelled. A **5-minute** cooldown has been applied.",
+        "floorReservedNotice": "❌ This floor is temporarily reserved for **{userName}**{timeRemaining}. Please wait for the grace period to expire.",
         "timeRemaining": " (Approximately **{minutes} min** remaining)"
     },
     "tickets": [
@@ -53,30 +53,31 @@
         "statusOverview": "🏰 Floor Status",
         "claimBefore": "⌛ Claim before: **{endLimit}**",
         "expectedAt": "🕒 ETA: **{formattedTime}** {timezone}",
-        "roomIsOpen": "🟢 Floor is now free to claim.",
-        "eventEnded": "🔴 Event window has ended.",
+        "roomIsOpen": "🟢 Floor is now open for claiming.",
+        "eventEnded": "🔴 Event window has closed.",
         "nextOpeningTitle": "⏰ Next Respawn",
         "deathLogged": "💀 Boss kill registered. Respawn timer started.",
-        "deathUpdateConfirm": "⏳ Boss already marked as killed at **{oldTime}**. Do you want to UPDATE the death time to **{newTime}**?",
-        "deathUpdateConfirmed": "✅ Death time updated to **{newTime}**. Respawn timer restarted.",            "deathUpdateCancelled": "❌ Update cancelled. Keeping original death time.",
-        "deathUpdateExpired": "⏳ Confirmation expired after 30s. Boss death time was NOT changed. Press the button again to try.",
+        "deathUpdateConfirm": "⏳ Boss already marked as killed at **{oldTime}**. Do you want to UPDATE the kill time to **{newTime}**?",
+        "deathUpdateConfirmed": "✅ Kill time updated to **{newTime}**. Respawn timer restarted.",
+        "deathUpdateCancelled": "❌ Update cancelled. Original kill time kept.",
+        "deathUpdateExpired": "⏳ Confirmation expired after 30s. Boss kill time was NOT changed. Press the button again to retry.",
         "limitReached": "🚫 You already have an active claim elsewhere.",
         "floorClaimSuccess": "🏆 Floor claimed successfully!",
         "queueJoinedSuccess": "🟨 You joined the queue.",
-        "alreadyOwner": "👑 You already control this floor.",
+        "alreadyOwner": "👑 You already own this floor.",
         "alreadyInQueue": "⏳ You're already in the queue.",
         "floorReleasedSuccess": "🔓 Floor released successfully.",
         "removedFromQueueFeedback": "🚪 You left the queue.",
-        "actionsCanceledFeedback": "✅ All active claims and reservations have been canceled.",
+        "actionsCanceledFeedback": "✅ All active claims and queue positions have been cancelled.",
         "noActiveClaimsFeedback": "❌ You don't have any active claims or queue positions.",
-        "antidemonMenuSelectClaim": "👹 Select an Antidemon room:",
+        "antidemonMenuSelectClaim": "👹 Select an Antidemon room to claim:",
         "antidemonMenuSelectNext": "⚔️ Select an Antidemon queue:",
         "antidemonSelectPlaceholder": "Choose a room...",
         "antidemonPromptSelection": "🎫 How many tickets do you want to use?",
         "antidemonTicketPlaceholder": "Choose a duration...",
-        "antidemonClaimSuccessEphemeral": "🏆 Antidemon room secured!",
+        "antidemonClaimSuccessEphemeral": "🏆 Antidemon room claimed!",
         "antidemonQueueSuccessEphemeral": "🟨 You joined the Antidemon queue.",
-        "antidemonQueueLocked": "🔒 This slot is already taken.",
+        "antidemonQueueLocked": "🔒 This room is already taken.",
         "antidemonTimeoutCache": "⌛ Selection expired. Try again.",
         "antidemonRoomLeft": "Claim the left room individually",
         "antidemonRoomMid": "Claim the middle room individually",
@@ -91,19 +92,19 @@
         "antidemonPasswordBtn": "🎮 Set Party Password",
         "antidemonPasswordInputLabel": "🎮 In-game Party Password",
         "antidemonPasswordInputPlaceholder": "Enter the party password for other members to find the room",
-        "antidemonPasswordSet": "✅ Party password set for **{room}**: `{password}`\n\nMembers can use this password to join the party and find the room faster!",
+        "antidemonPasswordSet": "✅ Party password set for **{room}**: `{password}`\n\nMembers can use this password to join your party and find the room.",
         "antidemonPasswordCleared": "✅ Party password cleared for **{room}**",
-        "antidemonPasswordNoChange": "ℹ️ No password was set (empty).",
+        "antidemonPasswordNoChange": "ℹ️ No password was provided (empty).",
         "antidemonPasswordNotOwner": "❌ Only the room owner can set the party password.",
         "antidemonPasswordNotFound": "❌ Room not found.",
         "summonMenuSelectClaim": "🌀 Select a Summon Location to claim:",
         "summonMenuSelectNext": "🌀 Select a Summon Location to queue:",
         "summonSelectPlaceholder": "Choose a location...",
-        "summonClaimSuccessEphemeral": "🏆 Summon location claimed successfully!",
+        "summonClaimSuccessEphemeral": "🏆 Summon location claimed!",
         "summonQueueSuccessEphemeral": "🟨 You joined the queue for this summon location.",
         "dmClaimStartedNotice": "👑 **Claim Active**\n\nYou now control **{title}**.\n⏳ Duration: **{window}**.",
-        "dmQueueJoinedNotice": "🟨 **Queue Joined**\n\nYou're now in line for **{title}**.",
-        "dmRemovedNotice": "⚠️ **Claim Removed**\n\nYour claim/queue position in **{title}** has ended.\nReason: *{reason}*",
+        "dmQueueJoinedNotice": "🟨 **Queue Joined**\n\nYou are now in line for **{title}**.",
+        "dmRemovedNotice": "⚠️ **Claim Removed**\n\nYour claim/queue in **{title}** has ended.\nReason: *{reason}*",
         "floorExpiredDM": "⌛ **Claim Expired**\n\nYour time on **{title}** has ended.",
         "floorTurnArrivedDM": "🟢 **Your Turn!**\n\n**{title}** is now available.\nClaim it within **5 minutes** or lose your spot.",
         "floorAbsenceDM": "❌ **Queue Lost**\n\nYou didn't claim **{title}** in time and lost your position.",
@@ -113,8 +114,8 @@
         "summonAbsenceDM": "❌ **Queue Lost**\n\nYou didn't activate your tickets for **{roomKey}** in time.",
         "dmBossNotMarkedWarning": "⚠️ **Boss Reminder**\n\n**{boss}** in **{title}** has been available for over 5 minutes.\nDon't forget to register the kill.",
         "slotAlreadyClaimed": "🔒 {room} is already claimed by {ownerName}.",
-        "eventOpensIn": "⏳ This event opens in {minutes} minutes. You can only claim 5 minutes before the start!",
-        "eventClaimedFixed": "🏆 {title} secured! You have 1 full hour.",
+        "eventOpensIn": "⏳ This event opens in {minutes} minutes. You can claim 5 minutes before the start!",
+        "eventClaimedFixed": "🏆 {title} claimed! You have 1 full hour.",
         "dmImmediateSpawn": "🚨 **INSTANT SPAWN**\n\n**{boss}** has just spawned on **{title}**!",
         "dmImmediateSpawnFixed": "🚨 **INSTANT SPAWN**\n\n**{boss}** has just spawned on **{title}**! Move now!"
     },
@@ -133,61 +134,61 @@
         "timeout": "Ticket duration expired.",
         "absenceQueue": "Queue lost due to inactivity.",
         "adminRemove": "Removed by Staff.",
-        "staffCancel": "Canceled by Staff.",
-        "staffQueueCancel": "Queue canceled by Staff.",
-        "userCancel": "Claim canceled.",
+        "staffCancel": "Cancelled by Staff.",
+        "staffQueueCancel": "Queue cancelled by Staff.",
+        "userCancel": "Claim cancelled.",
         "userQueueCancel": "Queue abandoned.",
         "voluntaryLeave": "Floor released.",
         "queueLeave": "Left the queue.",
         "dispatchSuccess": "✅ Report sent successfully.",
         "dispatchError": "❌ Failed to send report.",
         "setupSuccess": "✅ Report channel configured.",
-        "setupError": "❌ You don't have permission to configure report channels.",
-        "modRequired": "❌ Only Staff can send reports manually.",
+        "setupError": "❌ Insufficient permissions to configure report channels.",
+        "modRequired": "❌ Only Staff members can send reports manually.",
         "noChannel": "❌ No report channel configured. Use `!setlogs` first."
     },
     "ranking": {
         "commands": {
             "register": {
-                "description": "Link your Discord account to your MIR4 character using a popup form.",
+                "description": "Link your Discord account to your MIR4 character.",
                 "modalTitle": "Link MIR4 Character",
                 "inputLabel": "Character Name (Exactly as in-game)",
                 "inputPlaceholder": "e.g., xVraeL"
             },
             "pilot": {
-                "description": "Add a pilot employee to your account (Maximum 4).",
+                "description": "Add a pilot to your account (Maximum of 4).",
                 "options": {
                     "member": "Select the pilot member."
                 }
             },
             "removepilot": {
-                "description": "Remove a specific pilot employee assigned to your account."
+                "description": "Remove a specific pilot assigned to your account."
             },
             "forcesync": {
-                "description": "⚡ [Admin] Force an immediate live synchronization with the website."
+                "description": "⚡ [Admin] Force an immediate synchronization with the official ranking portal."
             },
             "manualregister": {
-                "description": "👑 [Admin] Register a player using cache check or manual clan assignment.",
+                "description": "👑 [Admin] Register a player via cache or manual clan assignment.",
                 "options": {
                     "member": "Discord member.",
                     "nickname": "In-game character name."
                 }
             },
             "manualpilot": {
-                "description": "👑 [Admin] Manually link a pilot to a character owner profile.",
+                "description": "👑 [Admin] Manually link a pilot to a character owner.",
                 "options": {
                     "owner": "Select the primary character owner.",
                     "pilot": "Select the Discord user acting as pilot."
                 }
             },
             "manage": {
-                "description": "👑 [Admin] Manage registered players via interactive menus"
+                "description": "👑 [Admin] Manage registered players via interactive menus."
             },
             "cleandb": {
-                "description": "👑 [Admin] Remove all duplicate nickname entries from the local database."
+                "description": "👑 [Admin] Remove all duplicate nickname entries from the database."
             },
             "manualremove": {
-                "description": "👑 [Admin] Completely remove a player's manual registration and profile.",
+                "description": "👑 [Admin] Completely remove a player's registration and profile.",
                 "options": {
                     "member": "Discord member to clear."
                 }
@@ -202,63 +203,63 @@
         },
         "responses": {
             "register": {
-                "alreadyRegistered": "❌ This nickname is already registered by another user.",
+                "alreadyRegistered": "❌ This character name is already registered by another user.",
                 "success": "✅ Successfully linked to **{nickname}**."
             },
             "pilot": {
-                "notRegistered": "❌ **Access Denied!** You don't have a registered account. Use the `/register` command first.",
-                "selfPilot": "❌ Invalid action. You cannot set yourself as a pilot.",
-                "limitReached": "❌ Operation Limit Reached! You can only register up to **4 pilots** per account.",
-                "alreadyLinked": "❌ This pilot employee is already linked to your profile.",
-                "success": "✅ **Pilot set!** {pilotMember} has been configured as pilot employee ({count}/4) for account **{nick}**."
+                "notRegistered": "❌ **Access Denied.** You don't have a registered account. Use `/register` first.",
+                "selfPilot": "❌ You cannot set yourself as a pilot.",
+                "limitReached": "❌ Pilot limit reached. Maximum of **4 pilots** per account.",
+                "alreadyLinked": "❌ This pilot is already linked to your account.",
+                "success": "✅ **Pilot added!** {pilotMember} has been set as pilot ({count}/4) for **{nick}**."
             },
             "removepilot": {
-                "noPilots": "❌ You don't have any active pilots registered on your account.",
-                "menuContent": "👇 **Pilot Management Menu:** Select which employee you want to unlink from your account:",
-                "menuPlaceholder": "Choose which pilot to remove...",
+                "noPilots": "❌ You don't have any active pilots on your account.",
+                "menuContent": "👇 **Pilot Management:** Select which pilot to remove from your account:",
+                "menuPlaceholder": "Choose a pilot to remove...",
                 "optionDescription": "Remove this member's pilot access.",
-                "success": "✅ **Success!** The pilot has been removed from your list. Their roles and nickname are being restored.",
-                "error": "❌ **Error:** This pilot no longer belongs to your account."
+                "success": "✅ **Pilot removed.** Their roles and nickname are being restored.",
+                "error": "❌ This pilot is no longer linked to your account."
             },
             "forcesync": {
-                "log": "⚡ Administrator {tag} forced a full database refresh.",
-                "success": "⚡ **Forced synchronization complete!** Latest rank values fetched from the official portal and roles updated."
+                "log": "⚡ Administrator {tag} initiated a full database sync.",
+                "success": "⚡ **Forced sync complete!** Latest rankings retrieved and roles updated."
             },
             "manualregister": {
                 "confirm": "⚠️ Register **{username}** as **{nickname}** in **{clan}**?",
-                "cacheFound": "✅ **Registered via Cache!** Profile linked to **{nickname}** inside **{clan}** clan.",
-                "cacheNotFound": "👑 **Notice:** \"{nickname}\" could not be found within the local ranking cache data. Choose the accurate clan allocation below:",
-                "menuPlaceholder": "Choose the correct clan allocation...",
+                "cacheFound": "✅ **Registered via Cache!** Profile linked to **{nickname}** under **{clan}**.",
+                "cacheNotFound": "👑 **Notice:** \"{nickname}\" was not found in the local ranking cache. Select the correct clan below:",
+                "menuPlaceholder": "Select the correct clan...",
                 "optionDescription": "Lock player into clan: {clanName}"
             },
             "manualpilot": {
-                "confirm": "⚠️ Link **{pilotDisplay}** as a pilot for **{ownerDisplay}**?",
-                "ownerNotRegistered": "❌ The owner member **{displayName}** does not have an active profile setup.",
-                "selfPilot": "❌ You cannot set a user as a pilot of themselves.",
-                "limitReached": "❌ Admin Override Failed: Owner already reached the limit of **4 pilots**.",
-                "success": "✅ **Success!** Manually linked {pilotMember} as a pilot for **{nick}**."
+                "confirm": "⚠️ Link **{pilotDisplay}** as pilot for **{ownerDisplay}**?",
+                "ownerNotRegistered": "❌ **{displayName}** does not have an active profile.",
+                "selfPilot": "❌ You cannot link a user as their own pilot.",
+                "limitReached": "❌ Admin Override Failed: Owner already has **4 pilots**.",
+                "success": "✅ **Success!** {pilotMember} manually linked as pilot for **{nick}**."
             },
             "manualremovepilot": {
                 "confirm": "⚠️ Remove pilot **{pilotDisplay}** from **{ownerDisplay}**?",
-                "ownerNotRegistered": "❌ The owner member **{displayName}** does not have an active profile setup.",
+                "ownerNotRegistered": "❌ **{displayName}** does not have an active profile.",
                 "notLinked": "❌ **{pilotDisplay}** is not linked as a pilot to this owner.",
                 "success": "✅ **Success!** Pilot **{pilotDisplay}** removed from **{ownerDisplay}**."
             },
             "cleandb": {
-                "noDuplicates": "✨ **No duplicate entries found!**",
-                "success": "✅ **Database Cleanup complete!**\n\nRemoved structural duplicate profiles:\n{list}"
+                "noDuplicates": "✨ **No duplicate entries found.**",
+                "success": "✅ **Database Cleanup complete!**\n\nDuplicate profiles removed:\n{list}"
             },
             "manualremove": {
-                "noRegistration": "❌ This user has no valid registration entries.",
-                "confirm": "⚠️ Are you sure you want to completely remove **{username}**'s registration? This will clean up all pilots, roles, and nicknames.",
-                "success": "✅ **Success!** Records for **{username}** deleted."
+                "noRegistration": "❌ This user has no valid registration records.",
+                "confirm": "⚠️ Permanently remove **{username}**'s registration? This will clear all pilots, roles, and nicknames.",
+                "success": "✅ **Success!** All records for **{username}** have been removed."
             },
 
             "manage": {
                 "noUsers": "❌ No registered users found.",
                 "pageInfo": "Page **{current}**/**{total}** — {count} users",
                 "listPlaceholder": "Select a player to manage...",
-                "actionPrompt": "👇 **Manage {username}** — Select an action:",
+                "actionPrompt": "👇 **Manage {username}** — Choose an action:",
                 "actionRemove": "🗑️ Remove registration",
                 "actionRemoveDesc": "Permanently delete this user's profile",
                 "actionPilot": "✈️ Remove pilot",
@@ -267,61 +268,61 @@
                 "actionClanDesc": "Manually assign a clan",
                 "pilotSelectPlaceholder": "Select a pilot to remove...",
                 "noPilots": "❌ **{username}** has no registered pilots.",
-                "actionRemoveConfirm": "⚠️ Are you sure you want to completely remove **{username}**'s registration?",
+                "actionRemoveConfirm": "⚠️ Permanently remove **{username}**'s registration?",
                 "removePilotConfirm": "⚠️ Remove pilot from **{username}**?",
                 "back": "🔙 Back"
             },
             "setwelcome": {
                 "noPermission": "❌ You must be an Administrator to execute this command.",
-                "success": "✅ **Success!** The welcome destination has been configured to {channel}."
+                "success": "✅ **Success!** Welcome channel configured to {channel}."
             },
             "selectClanMenu": {
                 "noPermission": "❌ You must be an Administrator to interact with this menu.",
                 "prompt": "Select a clan for **{nickname}**:",
-                "success": "✅ **Success!** The player has been manually registered and locked into the **{clan}** clan.",
+                "success": "✅ **Success!** Player registered and locked into **{clan}**.",
                 "error": "❌ Error processing manual registration."
             }
         },
         "welcome": {
-            "message": "👋 Hello {member}, welcome to our server!\n\n⚠️ **Important Requirement:** Your character **MUST** be visible in the official server ranking (Top 1000) for the bot to find you and assign roles.\n\n🔄 **Ranking Updates:** The bot updates the database cache and synchronizes roles every day at **22:00 (EU Server Time)**.\n\n📌 **How to request and acquire your roles automatically:**\n1️⃣ Execute the `/register` command to open the popup form and type your in-game nickname exactly.\n2️⃣ Do you have employees or pilots handling your characters? You can grant them matching roles easily using `/pilot` and mentioning their Discord account (**Limit of up to 4 pilots total**).\n3️⃣ If you ever need to disassociate an employee, simply use `/removepilot` and select the target from the menu.\n\nEnjoy your stay and have a great game! 🚀"
+            "message": "👋 Hello {member}, welcome to our server!\n\n⚠️ **Important:** Your character **MUST** be visible in the official server ranking (Top 1000) for the bot to find you and assign roles.\n\n🔄 **Ranking Updates:** The database cache and role assignments refresh daily at **22:00 (EU Server Time)**.\n\n📌 **How to get your roles automatically:**\n1️⃣ Use `/register` to open the form and type your in-game name exactly.\n2️⃣ Have pilots handling your characters? Grant them roles using `/pilot` (**Limit of up to 4 pilots**).\n3️⃣ Need to remove a pilot? Use `/removepilot` and select them from the menu.\n\nEnjoy your stay! 🚀"
         },
         "salary": {
-            "setupSuccess": "✅ Salary poll channel configured! The poll will open automatically every Monday 12:30 (BRT).",
+            "setupSuccess": "✅ Salary poll channel configured! Voting opens every Monday at 12:30 (BRT).",
             "setupError": "❌ You need Manage Server permission to configure this.",
-            "spreadsheetSuccess": "✅ Payment spreadsheet ID configured! Votes will be exported automatically when the poll closes.",
+            "spreadsheetSuccess": "✅ Payment spreadsheet linked! Votes will be exported automatically when the poll closes.",
             "spreadsheetError": "❌ You need Manage Server permission to configure this.",
             "spreadsheetFormatError": "❌ Invalid format. Use: `!salaryspreadsheet <SPREADSHEET_ID>`",
             "noChannel": "❌ No salary channel configured. Use `!setsalary` first.",
-            "exportSuccess": "✅ Votes exported to spreadsheet successfully!",
+            "exportSuccess": "✅ Votes exported to spreadsheet successfully.",
             "exportError": "❌ No votes recorded to export.",
-            "votedSuccess": "✅ Vote registered! You can change it until Wednesday 13:00 (BRT).",
-            "pollClosed": "❌ The poll is closed. Wait for next Monday 12:30 (BRT).",
-            "invalidSelection": "❌ Select the percentages of both stones before confirming.",
-            "exceedsTotal": "❌ The sum exceeds 100%! Adjust the values."
+            "votedSuccess": "✅ Vote registered! You can change it until Wednesday at 13:00 (BRT).",
+            "pollClosed": "❌ Voting is closed. Next poll opens Monday at 12:30 (BRT).",
+            "invalidSelection": "❌ Please select percentages for both stone types before confirming.",
+            "exceedsTotal": "❌ The combined values exceed 100%. Please adjust."
         },
         "logs": {
             "syncStart": "⏳ [Sync] Starting role and nickname update routine...",
-            "syncAbort": "❌ [Sync] Aborting sync cycle: Member list unavailable.",
+            "syncAbort": "❌ [Sync] Aborting sync: Member list unavailable.",
             "syncComplete": "🏁 [MIR4] Synchronization complete.",
-            "syncError": "❌ Error during synchronization: {error}",
+            "syncError": "❌ Sync error: {error}",
             "fetchStart": "🚀 [MIR4] Fetching Top 1000 from the official website...",
-            "fetchPageError": "❌ Error on page {page}: {error}",
-            "gatewayWarning": "⚠️ [Gateway Warning] Gateway busy. Falling back safely to cached members list.",
-            "autoLink": "🔗 [Auto-Link] {username} automatically linked as pilot ({count}/4) for {baseNick}",
-            "imposterDetected": "⚠️ [Security] Resetting imposter nickname for {username} trying to clone {nickname}",
+            "fetchPageError": "❌ Page {page} error: {error}",
+            "gatewayWarning": "⚠️ [Gateway] Gateway busy. Falling back to cached member list.",
+            "autoLink": "🔗 [Auto-Link] {username} linked as pilot ({count}/4) for {baseNick}",
+            "imposterDetected": "⚠️ [Security] Resetting impersonator nickname for {username} trying to impersonate {nickname}",
             "roleAdded": "✅ [Automation] Role [{clan}] added to {username}",
             "roleRemoved": "❌ [Automation] Role [{clan}] removed from {username}",
-            "memberLeave": "🏃‍♂️ [Leave-Handler] Registered member {tag} left the server. Cleaning up registration and unlinking pilots.",
-            "pilotCleaned": "🗑️ [Leave-Handler] Pilot {tag} cleaned due to account owner leaving.",
-            "manualLink": "👑 [Manual] Administrator locked user {targetId} into clan {selectedClan}",
-            "welcomeError": "❌ Error sending welcome greeting: {error}",
-            "leaveError": "❌ Error executing guildMemberRemove sweep: {error}",
-            "subsystemInit": "Sub-system initialized and panels auto-refreshed inside global Client.",
+            "memberLeave": "🏃‍♂️ [Leave-Handler] Registered member {tag} left the server. Cleaning up registration and pilots.",
+            "pilotCleaned": "🗑️ [Leave-Handler] Pilot {tag} removed due to owner leaving.",
+            "manualLink": "👑 [Manual] Admin locked user {targetId} into clan {selectedClan}",
+            "welcomeError": "❌ Failed to send welcome message: {error}",
+            "leaveError": "❌ Error executing member leave cleanup: {error}",
+            "subsystemInit": "Sub-system initialized and panels auto-refreshed.",
             "panelRecovery": "Starting automatic panel recovery and chat cleanup...",
             "panelRestoreFailed": "Failed to restore panel {key}: {error}",
-            "floorReleased": "{title} completely released/closed.",
-            "commandsRegistered": "✅ All slash commands registered successfully with administrative guards.",
-            "commandsError": "❌ Error registering slash commands: {error}"
+            "floorReleased": "{title} fully released and closed.",
+            "commandsRegistered": "✅ All slash commands registered successfully.",
+            "commandsError": "❌ Slash command registration failed: {error}"
         }
     }
 }
