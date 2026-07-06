@@ -244,6 +244,8 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'register_modal') {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            } else if (interaction.customId === 'mgmt-salary-spreadsheet-modal') {
+                return await handleManagementInteraction(interaction);
             } else {
                 return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
             }

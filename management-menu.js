@@ -8,7 +8,10 @@ import {
     ButtonBuilder as n,
     ButtonStyle as a,
     StringSelectMenuBuilder as i,
-    EmbedBuilder as e
+    EmbedBuilder as e,
+    ModalBuilder as m,
+    TextInputBuilder as ti,
+    TextInputStyle as tis
 } from "discord.js";
 import { execSync, exec } from "child_process";
 import { getMsg } from "./lang.js";
@@ -16,6 +19,15 @@ import { db, dailyLogs, saveLocalStorage } from "./state.js";
 import { refreshVisualPanel, resetPanelData, notifyUserDM } from "./panel-utils.js";
 import { pushToDailyLogs, saveDailyLogs, dispatchDailyLogs } from "./daily-logs.js";
 import { setupTicketPanel } from "./ticket-system.js";
+import {
+    setSalaryChannelId,
+    setSalarySpreadsheetId,
+    createOrUpdatePollMessage,
+    forceExportToSheets,
+    postSalaryReport,
+    getSalaryState
+} from "./salary-poll.js";
+import { getLocalTime } from "./time-utils.js";
 import { STATUS_CLAIMED } from "./constants.js";
 import { freeAntidemonRoom, getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 
@@ -154,7 +166,18 @@ export async function handleManagementInteraction(interaction, uid, extra) {
     if (cid === "mgmt-tickets") return handleMgmtTickets(interaction);
     if (cid === "mgmt-logs") return handleMgmtLogs(interaction);
     if (cid === "mgmt-salary") return handleMgmtSalary(interaction);
+    if (cid === "mgmt-salary-channel") return handleMgmtSalaryChannel(interaction);
+    if (cid === "mgmt-salary-spreadsheet") return handleMgmtSalarySpreadsheet(interaction);
+    if (cid === "mgmt-salary-spreadsheet-modal") return handleMgmtSalarySpreadsheetSubmit(interaction);
+    if (cid === "mgmt-salary-export") return handleMgmtSalaryExport(interaction);
+    if (cid === "mgmt-salary-report") return handleMgmtSalaryReport(interaction);
     if (cid === "mgmt-players") return handleMgmtPlayers(interaction);
+    if (cid === "mgmt-players-register") return handleMgmtPlayersRegister(interaction);
+    if (cid === "mgmt-players-sync") return handleMgmtPlayersSync(interaction);
+    if (cid === "mgmt-players-sync-confirm") return handleMgmtPlayersSyncConfirm(interaction);
+    if (cid === "mgmt-players-pilot") return handleMgmtPlayersPilot(interaction);
+    if (cid === "mgmt-players-remove-pilot") return handleMgmtPlayersRemovePilot(interaction);
+    if (cid === "mgmt-players-sync-cancel") return handleMgmtPlayersSyncCancel(interaction);
     if (cid === "mgmt-logs-dispatch") return handleMgmtLogsDispatch(interaction);
     if (cid === "mgmt-panels-reset-execute") return handleMgmtPanelsResetExecute(interaction);
     if (cid === "mgmt-panels-kick-execute") return handleMgmtPanelsKickExecute(interaction);
@@ -699,7 +722,7 @@ async function handleMgmtLogs(interaction) {
 }
 
 // ==========================================
-// 💰 SALARY MANAGEMENT
+// 💰 SALARY MANAGEMENT — Interactive
 // ==========================================
 
 async function handleMgmtSalary(interaction) {
@@ -710,15 +733,44 @@ async function handleMgmtSalary(interaction) {
         }).catch(() => {});
     }
 
+    const state = getSalaryState();
+    const statusEmoji = state.status === "open" ? "🟢" : state.status === "closed" ? "🔴" : "⚪";
+    const weekStr = state.currentWeek || "—";
+    const channelStr = state.channelId ? `<#${state.channelId}>` : "❌ Not configured";
+    const spreadsheetStr = state.spreadsheetId ? `✅ ${state.spreadsheetId.slice(0, 12)}...` : "❌ Not set (default used)";
+    const voteCount = Object.keys(state.votes).length;
+
+    // Calculate next event
+    const now = getLocalTime();
+    const day = now.getDay();
+    const currMin = now.getHours() * 60 + now.getMinutes();
+    let nextEvent = "";
+    if (day <= 1 && (day < 1 || currMin < 12*60+30)) {
+        nextEvent = "📅 Poll opens **Monday 12:30 BRT**";
+    } else if (day < 3 || (day === 3 && currMin < 13*60)) {
+        nextEvent = "📅 Poll closes **Wednesday 13:00 BRT**";
+    } else if (day === 3 && currMin < 16*60) {
+        nextEvent = "📅 Salary report **Wednesday 16:00 BRT**";
+    } else {
+        nextEvent = "📅 Next poll opens **Monday 12:30 BRT**";
+    }
+
     const embed = new e()
         .setTitle("💰 Salary Poll Management")
-        .setColor("#2b2d31")
+        .setColor(state.status === "open" ? "#57F287" : "#2b2d31")
         .setDescription(
-            `Manage the weekly salary vote system.\n\n` +
-            `• **Configure Channel** — Set up the salary poll in this channel\n` +
-            `• Use \`!setsalary\` text command for detailed setup\n` +
-            `• Use \`!salaryspreadsheet <ID>\` to link a Google Sheet\n\n` +
-            `*The poll opens automatically every Monday at 12:30 (BRT).*`
+            `**📊 Current Status**\n` +
+            `${statusEmoji} **Status:** ${state.status === "open" ? "Open" : state.status === "closed" ? "Closed" : "Idle"}\n` +
+            `📅 **Week:** ${weekStr}\n` +
+            `🗳️ **Votes:** ${voteCount} member(s)\n` +
+            `💬 **Channel:** ${channelStr}\n` +
+            `📈 **Spreadsheet:** ${spreadsheetStr}\n` +
+            `${nextEvent}\n\n` +
+            `**Actions:**\n` +
+            `• **Set Channel** — Configure salary poll in this channel\n` +
+            `• **Set Spreadsheet** — Link a Google Sheet ID\n` +
+            `• **Export** — Force-export votes to spreadsheet\n` +
+            `• **Post Report** — Post salary report message`
         )
         .setTimestamp();
 
@@ -726,9 +778,122 @@ async function handleMgmtSalary(interaction) {
         embeds: [embed],
         components: [
             new t().addComponents(
+                new n().setCustomId("mgmt-salary-channel").setEmoji("📢").setLabel("Set Channel").setStyle(a.Primary),
+                new n().setCustomId("mgmt-salary-spreadsheet").setEmoji("📈").setLabel("Set Spreadsheet").setStyle(a.Primary),
+                new n().setCustomId("mgmt-salary-export").setEmoji("📤").setLabel("Export").setStyle(a.Secondary),
+                new n().setCustomId("mgmt-salary-report").setEmoji("📊").setLabel("Post Report").setStyle(a.Secondary),
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
             )
         ]
+    }).catch(() => {});
+}
+
+async function handleMgmtSalaryChannel(interaction) {
+    if (!interaction.member.permissions.has("ManageGuild")) {
+        return await interaction.update({
+            content: "❌ You need **Manage Server** permission to set the salary channel.",
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+    setSalaryChannelId(interaction.channelId);
+    await createOrUpdatePollMessage(true);
+    return await interaction.update({
+        content: `✅ Salary poll channel set to <#${interaction.channelId}> and poll message created!`,
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtSalarySpreadsheet(interaction) {
+    if (!interaction.member.permissions.has("ManageGuild")) {
+        return await interaction.update({
+            content: "❌ You need **Manage Server** permission.",
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    const state = getSalaryState();
+    const currentId = state.spreadsheetId || "Not set";
+
+    const modal = new m()
+        .setCustomId("mgmt-salary-spreadsheet-modal")
+        .setTitle("📈 Link Google Spreadsheet");
+
+    const input = new ti()
+        .setCustomId("spreadsheet_id")
+        .setLabel("Spreadsheet ID (from URL)")
+        .setStyle(tis.Short)
+        .setPlaceholder("e.g. 1ePa0Ws55-KrJpFUELebuPOJ...")
+        .setValue(currentId !== "Not set" ? currentId : "")
+        .setRequired(true);
+
+    modal.addComponents(new t().addComponents(input));
+    return await interaction.showModal(modal).catch(() => {});
+}
+
+async function handleMgmtSalarySpreadsheetSubmit(interaction) {
+    const sid = interaction.fields.getTextInputValue("spreadsheet_id").trim();
+    if (!sid) {
+        return await interaction.reply({
+            content: "❌ Spreadsheet ID cannot be empty.",
+            flags: 64
+        }).catch(() => {});
+    }
+    setSalarySpreadsheetId(sid);
+    return await interaction.reply({
+        content: `✅ Spreadsheet ID set to \`${sid}\`. Next export will use this sheet.`,
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtSalaryExport(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    const result = await forceExportToSheets();
+    return await interaction.update({
+        content: result.message,
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtSalaryReport(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    if (!getSalaryState().channelId) {
+        return await interaction.update({
+            content: "❌ No salary channel configured. Set it first via **Set Channel**.",
+            components: [
+                new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+            ],
+            flags: 64
+        }).catch(() => {});
+    }
+
+    await postSalaryReport();
+    return await interaction.update({
+        content: "📊 Salary report posted in the configured salary channel!",
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+        ],
+        flags: 64
     }).catch(() => {});
 }
 
@@ -755,7 +920,7 @@ async function handleMgmtTickets(interaction) {
 }
 
 // ==========================================
-// 👥 PLAYER MANAGEMENT (redirect to ranking /manage)
+// 👥 PLAYER MANAGEMENT — Interactive
 // ==========================================
 
 async function handleMgmtPlayers(interaction) {
@@ -770,16 +935,14 @@ async function handleMgmtPlayers(interaction) {
         .setTitle("👥 Player Management")
         .setColor("#2b2d31")
         .setDescription(
-            `This redirects to the ranking player management system.\n\n` +
-            `Use the existing **/manage** slash command directly for:\n` +
-            `• **Register** players via modal\n` +
-            `• **Manage pilots** (add/remove)\n` +
-            `• **Change clans**\n` +
-            `• **Remove registrations**\n` +
-            `• **Force sync** with the official ranking portal\n\n` +
-            `Or use text commands:\n` +
-            `• \`!kick\` — Remove a claim\n` +
-            `• \`!logs\` — Dispatch daily reports`
+            `**Actions:**\n\n` +
+            `• **📝 Register** — Open modal to register your character name\n` +
+            `• **👤 Pilot** — Add a pilot to your account\n` +
+            `• **🗑️ Remove Pilot** — Remove a pilot from your account\n` +
+            `• **🔄 Force Sync** — Force sync with official ranking portal\n` +
+            `• **📊 Status** — View your account status\n\n` +
+            `*Use the buttons below or the slash commands directly:*\n` +
+            `\`/register\`, \`/pilot @user\`, \`/removepilot\`, \`/forcesync\``
         )
         .setTimestamp();
 
@@ -787,9 +950,149 @@ async function handleMgmtPlayers(interaction) {
         embeds: [embed],
         components: [
             new t().addComponents(
+                new n().setCustomId("mgmt-players-register").setEmoji("📝").setLabel("Register").setStyle(a.Primary),
+                new n().setCustomId("mgmt-players-pilot").setEmoji("👤").setLabel("Pilot").setStyle(a.Primary),
+                new n().setCustomId("mgmt-players-remove-pilot").setEmoji("🗑️").setLabel("Remove Pilot").setStyle(a.Danger),
+                new n().setCustomId("mgmt-players-sync").setEmoji("🔄").setLabel("Force Sync").setStyle(a.Secondary)
+            ),
+            new t().addComponents(
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
             )
         ]
+    }).catch(() => {});
+}
+
+async function handleMgmtPlayersRegister(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    // Show the same register modal as /register command
+    const modal = new m()
+        .setCustomId("register_modal")
+        .setTitle("📝 Character Registration");
+
+    const nicknameInput = new ti()
+        .setCustomId("character_nickname")
+        .setLabel("Your character nickname (exact)")
+        .setStyle(tis.Short)
+        .setPlaceholder("e.g. YourIngameName")
+        .setMinLength(2)
+        .setMaxLength(30)
+        .setRequired(true);
+
+    modal.addComponents(new t().addComponents(nicknameInput));
+    return await interaction.showModal(modal).catch(() => {});
+}
+
+async function handleMgmtPlayersSync(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    return sendTimedConfirm(
+        interaction,
+        "⚠️ **Are you sure?**\n\nThis will force a **full synchronization** with the official MIR4 ranking portal.\n\nAll registered player data (nicknames, clans) will be updated according to the current ranking data.\n\nThis may take a few moments.",
+        [
+            new t().addComponents(
+                new n().setCustomId("mgmt-players-sync-confirm").setEmoji("🔄").setLabel("Yes, sync now").setStyle(a.Danger),
+                new n().setCustomId("mgmt-players-sync-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
+            )
+        ]
+    );
+}
+
+async function handleMgmtPlayersSyncConfirm(interaction) {
+    clearConfirmTimeout(interaction);
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    await interaction.update({
+        content: "🔄 **Force sync started...**\n\nSynchronizing with the official ranking portal. This may take a few moments.",
+        components: []
+    }).catch(() => {});
+
+    // Import and run daily sync as a forced sync
+    try {
+        // We need client and rankingDb from state, and the sync function
+        const { runDailySynchronization } = await import("./ranking-sync-engine.js");
+        const { client, rankingDb: rDb } = await import("./state.js");
+        await runDailySynchronization(client, rDb, () => {}, () => {}, true);
+        await interaction.editReply({
+            content: "✅ **Force sync completed!** Player data has been updated from the ranking portal.",
+            components: [
+                new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Back to Players").setStyle(a.Secondary))
+            ]
+        }).catch(() => {});
+    } catch (e) {
+        await interaction.editReply({
+            content: `❌ **Force sync failed:**\n\`\`\`\n${(e.message || String(e)).slice(0, 1900)}\n\`\`\``,
+            components: [
+                new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Back to Players").setStyle(a.Secondary))
+            ]
+        }).catch(() => {});
+    }
+}
+
+async function handleMgmtPlayersPilot(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    return await interaction.update({
+        content: "👤 **Add a Pilot**\n\n" +
+            "A pilot is another Discord user who can claim panels on your behalf.\n\n" +
+            "To add a pilot, use the slash command:\n" +
+            "➡️ `/pilot @user`\n\n" +
+            "*Replace @user with the Discord member you want to add as a pilot.*",
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel("Back to Players").setStyle(a.Secondary))
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtPlayersRemovePilot(interaction) {
+    if (!interaction.member.permissions.has("ManageMessages")) {
+        return await interaction.update({
+            content: getMsg("system.permissionDeniedAdminDropped"),
+            components: [], flags: 64
+        }).catch(() => {});
+    }
+
+    return await interaction.update({
+        content: "🗑️ **Remove a Pilot**\n\n" +
+            "To remove a pilot from your account, use the slash command:\n" +
+            "➡️ `/removepilot`\n\n" +
+            "This will open a menu where you can select which pilot to remove.",
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel("Back to Players").setStyle(a.Secondary))
+        ],
+        flags: 64
+    }).catch(() => {});
+}
+
+async function handleMgmtPlayersSyncCancel(interaction) {
+    clearConfirmTimeout(interaction);
+    return await interaction.update({
+        content: "❌ Force sync cancelled.",
+        components: [
+            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Back to Players").setStyle(a.Secondary))
+        ],
+        flags: 64
     }).catch(() => {});
 }
 
