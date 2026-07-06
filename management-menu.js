@@ -101,10 +101,10 @@ export async function handleMgmtSlash(interaction) {
                     new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Reservations").setStyle(a.Primary),
                     new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel("Channels").setStyle(a.Primary),
                     new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Players").setStyle(a.Primary),
-                    new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary),
-                    new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary)
+                    new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary)
                 ),
                 new t().addComponents(
+                    new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary),
                     new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel("Tickets").setStyle(a.Secondary),
                     new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel("Update Bot").setStyle(a.Danger)
                 )
@@ -183,9 +183,7 @@ async function handleMgmtMain(interaction) {
             "**🔴 Inactive** — System needs configuration\n" +
             "**ℹ️ Status** — Click to view details"
         )
-        .setTimestamp();
-
-    return await interaction.update({
+        .setTimestamp();        return await interaction.update({
         embeds: [embed],
         components: [
             new t().addComponents(
@@ -193,10 +191,10 @@ async function handleMgmtMain(interaction) {
                 new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Reservations").setStyle(a.Primary),
                 new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel("Channels").setStyle(a.Primary),
                 new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Players").setStyle(a.Primary),
-                new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary),
-                new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary)
             ),
             new t().addComponents(
+                new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary),
                 new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel("Tickets").setStyle(a.Secondary),
                 new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel("Update Bot").setStyle(a.Danger)
             )
