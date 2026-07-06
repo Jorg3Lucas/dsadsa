@@ -1,5 +1,7 @@
 import { chromium } from 'playwright';
 
+/* global document */
+
 // ==========================================
 // 🤖 PLAYWRIGHT HELPER (Cloudflare bypass)
 // ==========================================
