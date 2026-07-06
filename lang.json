@@ -326,15 +326,34 @@
     },
     "reserve": {
         "success": "✅ **{event}** has been reserved for **{userName}**. No one else can claim it until reopened.",
+        "successSlots": "✅ **{event}** in **{floors}** at **{hours}** reserved for **{userName}**.\n\nTo revert, use the interactive `!reserve` menu or `!{eventName}open`.",
         "openSuccess": "✅ **{event}** is now open for everyone to claim.",
         "notReserved": "ℹ️ **{event}** is not currently reserved for anyone.",
         "noEvent": "❌ Could not find **{event}** in any panel.",
         "reservedNotice": "🔒 Reserved for {userName}",
         "blockedOther": "🔒 **{event}** is currently reserved for **{userName}**. Only they can claim it.",
+        "blockedSlot": "🔒 **{event}** at this hour is reserved for **{userName}**. Only they can claim it.",
         "usageFury": "Usage: `!furyreserve @user` or `!furyopen`",
         "usageFrenzy": "Usage: `!frenzyreserve @user` or `!frenzyopen`",
         "userNotFound": "❌ Please mention a valid user. {usage}",
-        "permissionDenied": "🛡️ Only Staff members can reserve events."
+        "permissionDenied": "🛡️ Only Staff members can reserve events.",
+        "interactive": {
+            "noUser": "❌ Please mention the target user. Example: `!reserve @user`",
+            "selectEvent": "🔒 **Select the event to reserve:**",
+            "selectFloors": "🏛️ **Select the floor(s):**",
+            "selectHours": "⏰ **Select the time slot(s):**\n\nCurrently reserving **{event}** in **{floors}** for **{userName}**.",
+            "confirm": "✅ **Confirm reservation?**\n\n**Event:** {event}\n**Floors:** {floors}\n**Hours:** {hours}\n**User:** {userName}\n\nClick ✅ Confirm to apply, or ❌ Cancel to abort.",
+            "applied": "✅ **Reservation applied!**\n\n**{event}** in **{floors}** at **{hours}** reserved for **{userName}**.",
+            "cancelled": "❌ Reservation cancelled.",
+            "btnConfirm": "✅ Confirm",
+            "btnCancel": "❌ Cancel",
+            "optFury": "🔴 Fury",
+            "optFrenzy": "🟣 Frenzy",
+            "optMS11": "MS11 Events",
+            "optMS12": "MS12 Events",
+            "optAll": "All Hours",
+            "hourFormat": "{hour}:00 - {nextHour}:00"
+        }
     }
 }
 }

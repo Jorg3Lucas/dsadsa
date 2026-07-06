@@ -46,7 +46,7 @@ export async function handleClaimInteractions(interaction) {
         return await handleDmOptOut(interaction, uid);
     }
 
-    // 1. Admin interactions (reset menu, kick menu, reset logs)
+    // 1. Admin interactions (reset menu, kick menu, reset logs, reserve flow)
     if (canHandleAdminInteraction(interaction)) {
         return await handleAdminInteraction(interaction, uid);
     }

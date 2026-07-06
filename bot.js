@@ -214,7 +214,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                     name: "🔴 Fury", type: "fixed",
                     status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                     timeWindow: "", _claimTimestamp: null,
-                    reservedFor: null, reservedByName: null,
+                    reservedFor: null, reservedByName: null, reservations: null,
                     schedules: [0, 3, 6, 9, 12, 15, 18, 21],
                     scheduleMinutes: 30
                 },
@@ -222,7 +222,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                     name: "🟣 Frenzy", type: "fixed",
                     status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                     timeWindow: "", _claimTimestamp: null,
-                    reservedFor: null, reservedByName: null,
+                    reservedFor: null, reservedByName: null, reservations: null,
                     schedules: [2, 5, 8, 11, 14, 17, 20, 23]
                 }
             };

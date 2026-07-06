@@ -129,13 +129,42 @@ export function renderEmbed(key) {
                 }
             } else if (evData.type === "fixed") {
                 // Fixed event (Fury/Frenzy/Random Event) — show open/closed/reserved with countdown
-                // Format: status line, "Next in:" label, timer value — separate lines
                 const minuteOffset = evData.scheduleMinutes || 0;
                 let statusLine, timerLabel, timerValue;
                 
-                // Check if reserved
+                // Check if reserved (all slots or specific slot)
                 if (evData.reservedFor && !evData.ownerId) {
                     statusLine = `🔒 ${getMsg("reserve.reservedNotice", { userName: evData.reservedByName || evData.reservedFor })}`;
+                } else if (evData.reservations && !evData.ownerId) {
+                    // Show per-slot reservations
+                    const nowHour = now.getHours();
+                    const currentSlotRes = evData.reservations[String(nowHour)];
+                    const hasAllRes = evData.reservations._all;
+                    if (hasAllRes) {
+                        statusLine = `🔒 ${getMsg("reserve.reservedNotice", { userName: hasAllRes.userName })}`;
+                    } else if (currentSlotRes) {
+                        statusLine = `🔒 ${getMsg("reserve.reservedNotice", { userName: currentSlotRes.userName })}`;
+                    } else {
+                        // Check if ANY reservation exists for today
+                        const resHours = Object.keys(evData.reservations).filter(k => !k.startsWith("_"));
+                        if (resHours.length > 1) {
+                            // Multiple slots reserved for different users — show compact status
+                            const nextRes = resHours.find(h => parseInt(h) >= nowHour) || resHours[0];
+                            if (nextRes) {
+                                const slotUser = evData.reservations[nextRes].userName;
+                                statusLine = `🔒 ${nextRes}:00 reserved for ${slotUser}`;
+                            } else {
+                                statusLine = "🟢 Open now";
+                            }
+                        } else if (resHours.length === 1) {
+                            const slotRes = evData.reservations[resHours[0]];
+                            const hour = parseInt(resHours[0]);
+                            const nextHour = (hour + 1) % 24;
+                            statusLine = `🔒 ${hour}:00-${nextHour}:00: ${slotRes.userName}`;
+                        } else {
+                            statusLine = "🟢 Open now";
+                        }
+                    }
                 } else if (isRoomOpen(evData.schedules, minuteOffset)) {
                     const nowMinutes = now.getHours() * 60 + now.getMinutes();
                     const endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;

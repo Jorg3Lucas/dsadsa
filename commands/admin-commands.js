@@ -19,6 +19,7 @@ import { setupTicketPanel } from "../ticket-system.js";
 import { refreshVisualPanel, resetPanelData } from "../panel-utils.js";
 import { STATUS_CLAIMED } from "../constants.js";
 import { getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "../claim-core.js";
+import { reserveFlowCache } from "../interactions/admin-interactions.js";
 
 // ==========================================
 // 🎯 MAIN DISPATCH
@@ -75,6 +76,9 @@ export async function handleAdminCommand(msg) {
     }
     if ("!frenzyopen" === lowerContent) {
         return handleOpenEvent(msg, "frenzy");
+    }
+    if ("!reserve" === lowerContent || lowerContent.startsWith("!reserve ")) {
+        return handleReserveInteractive(msg);
     }
 
     return false; // not handled
@@ -417,6 +421,53 @@ async function handleReserveEvent(msg, eventName, userArg) {
     }
 
     return msg.reply({ content: getMsg("reserve.success", { event: eventLabel, userName: targetName }) }).catch(() => {});
+}
+
+// ==========================================
+// 🔒 RESERVE INTERACTIVE — Multi-step menu
+// ==========================================
+
+async function handleReserveInteractive(msg) {
+    if (!msg.member.permissions.has("ManageMessages")) {
+        return msg.reply({ content: getMsg("reserve.permissionDenied") }).catch(() => {});
+    }
+
+    const userArg = msg.content.replace("!reserve", "").trim();
+    if (!userArg) {
+        return msg.reply({ content: getMsg("reserve.interactive.noUser") }).catch(() => {});
+    }
+
+    let targetId = userArg.replace(/[<@!>]/g, "").trim();
+    let targetMember;
+    try {
+        targetMember = await msg.guild.members.fetch(targetId).catch(() => null);
+    } catch (e) {}
+
+    if (!targetMember) {
+        return msg.reply({ content: getMsg("reserve.userNotFound", { usage: "`!reserve @user`" }) }).catch(() => {});
+    }
+
+    // Initialize flow state
+    reserveFlowCache[msg.author.id] = {
+        targetUserId: targetId,
+        targetUserName: targetMember.displayName,
+        step: "event"
+    };
+
+    return msg.reply({
+        content: getMsg("reserve.interactive.selectEvent"),
+        components: [
+            new t().addComponents(
+                new i()
+                    .setCustomId("reserve-select-event")
+                    .setPlaceholder("Choose event...")
+                    .addOptions([
+                        { label: "🔴 Fury", value: "fury", emoji: "🔴" },
+                        { label: "🟣 Frenzy", value: "frenzy", emoji: "🟣" }
+                    ])
+            )
+        ]
+    }).catch(() => {});
 }
 
 // ==========================================

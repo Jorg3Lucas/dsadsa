@@ -591,20 +591,12 @@ async function handleEGFixClaim(interaction, uid, uName) {
         }).catch(() => {});
     }
 
-    // 🚫 Check if reserved for another user
-    if (evData.reservedFor && evData.reservedFor !== uid) {
-        return await interaction.reply({
-            content: getMsg("reserve.blockedOther", { event: evData.name, userName: evData.reservedByName || evData.reservedFor }),
-            flags: 64
-        }).catch(() => {});
-    }
-
     const now = getLocalTime();
     const minuteOffset = evData.scheduleMinutes || 0;
     let eventStart;
+    let claimedHour = null;
 
     if (isRoomOpen(evData.schedules, minuteOffset)) {
-        // Event is currently open — use current event start
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
         let foundHour = null;
         for (const h of evData.schedules) {
@@ -615,18 +607,44 @@ async function handleEGFixClaim(interaction, uid, uName) {
         if (foundHour !== null) {
             eventStart = new Date(now.getTime());
             eventStart.setHours(foundHour, minuteOffset, 0, 0);
+            claimedHour = foundHour;
         } else {
             eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+            claimedHour = eventStart.getHours();
         }
     } else {
-        // Event not yet open — 5 min pre-window check
         eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+        claimedHour = eventStart.getHours();
         const fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
         if (now < fiveMinBefore) {
             const diffMs = eventStart.getTime() - now.getTime();
             const diffMins = Math.ceil(diffMs / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
+                flags: 64
+            }).catch(() => {});
+        }
+    }
+
+    // 🚫 Check reservations (per-slot or all)
+    const hourKey = String(claimedHour);
+    if (typeof evData.reservedFor === "string" && evData.reservedFor !== uid) {
+        return await interaction.reply({
+            content: getMsg("reserve.blockedOther", { event: evData.name, userName: evData.reservedByName || evData.reservedFor }),
+            flags: 64
+        }).catch(() => {});
+    }
+    if (evData.reservations) {
+        if (evData.reservations._all && evData.reservations._all.userId !== uid) {
+            return await interaction.reply({
+                content: getMsg("reserve.blockedOther", { event: evData.name, userName: evData.reservations._all.userName }),
+                flags: 64
+            }).catch(() => {});
+        }
+        const slotRes = evData.reservations[hourKey];
+        if (slotRes && slotRes.userId !== uid) {
+            return await interaction.reply({
+                content: getMsg("reserve.blockedSlot", { event: evData.name, userName: slotRes.userName }),
                 flags: 64
             }).catch(() => {});
         }
@@ -700,6 +718,7 @@ async function handleEGSlide(interaction, uid, uName) {
         const now = getLocalTime();
         const minuteOffset = evData.scheduleMinutes || 0;
         let eventStart;
+        let claimedHour = null;
         
         if (isRoomOpen(evData.schedules, minuteOffset)) {
             const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -712,11 +731,38 @@ async function handleEGSlide(interaction, uid, uName) {
             if (foundHour !== null) {
                 eventStart = new Date(now.getTime());
                 eventStart.setHours(foundHour, minuteOffset, 0, 0);
+                claimedHour = foundHour;
             } else {
                 eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+                claimedHour = eventStart.getHours();
             }
         } else {
             eventStart = calculateNextOpening(evData.schedules, minuteOffset);
+            claimedHour = eventStart.getHours();
+        }
+
+        // 🚫 Check reservations (per-slot or all)
+        const hourKey = String(claimedHour);
+        if (typeof evData.reservedFor === "string" && evData.reservedFor !== uid) {
+            return await interaction.update({
+                content: getMsg("reserve.blockedOther", { event: evData.name, userName: evData.reservedByName || evData.reservedFor }),
+                components: [], flags: 64
+            }).catch(() => {});
+        }
+        if (evData.reservations) {
+            if (evData.reservations._all && evData.reservations._all.userId !== uid) {
+                return await interaction.update({
+                    content: getMsg("reserve.blockedOther", { event: evData.name, userName: evData.reservations._all.userName }),
+                    components: [], flags: 64
+                }).catch(() => {});
+            }
+            const slotRes = evData.reservations[hourKey];
+            if (slotRes && slotRes.userId !== uid) {
+                return await interaction.update({
+                    content: getMsg("reserve.blockedSlot", { event: evData.name, userName: slotRes.userName }),
+                    components: [], flags: 64
+                }).catch(() => {});
+            }
         }
         
         const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
