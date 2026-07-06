@@ -19,6 +19,46 @@ import { setupTicketPanel } from "./ticket-system.js";
 import { STATUS_CLAIMED } from "./constants.js";
 import { freeAntidemonRoom, getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 
+const confirmTimeouts = new Map();
+
+// ==========================================
+// ⏰ TIMED CONFIRMATION HELPER
+// Auto-expires after 30s and disables buttons
+// ==========================================
+
+async function sendTimedConfirm(interaction, content, buttons, timeoutMs = 30000) {
+    await interaction.update({ content, components: buttons, flags: 64 }).catch(() => {});
+
+    const key = interaction.id;
+    const timeout = setTimeout(async () => {
+        try {
+            const reply = await interaction.fetchReply();
+            const disabledRows = reply.components.map(row =>
+                new t().addComponents(
+                    ...row.components.map(btn =>
+                        n.from(btn).setDisabled(true)
+                    )
+                )
+            );
+            await interaction.editReply({
+                content: content + "\n\n⏰ **Prompt expired (30s). Please try again.**",
+                components: disabledRows
+            }).catch(() => {});
+        } catch (e) {}
+        confirmTimeouts.delete(key);
+    }, timeoutMs);
+
+    confirmTimeouts.set(key, timeout);
+}
+
+function clearConfirmTimeout(interaction) {
+    const key = interaction.message?.interaction?.id || interaction.id;
+    if (confirmTimeouts.has(key)) {
+        clearTimeout(confirmTimeouts.get(key));
+        confirmTimeouts.delete(key);
+    }
+}
+
 // ==========================================
 // 🎯 MAIN DISPATCH
 // ==========================================
@@ -441,19 +481,20 @@ async function handleMgmtReservationsClear(interaction) {
         }).catch(() => {});
     }
 
-    return await interaction.update({
-        content: `⚠️ **Are you sure?**\n\nThis will clear **${totalCount}** reservation(s) across Fury and Frenzy in all panels.\n\nThis action **cannot be undone** — all reserved slots will be opened for everyone.`,
-        components: [
+    return sendTimedConfirm(
+        interaction,
+        `⚠️ **Are you sure?**\n\nThis will clear **${totalCount}** reservation(s) across Fury and Frenzy in all panels.\n\nThis action **cannot be undone** — all reserved slots will be opened for everyone.`,
+        [
             new t().addComponents(
                 new n().setCustomId("mgmt-reservations-clear-confirm").setEmoji("✅").setLabel("Yes, clear all").setStyle(a.Danger),
                 new n().setCustomId("mgmt-reservations-clear-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
             )
-        ],
-        flags: 64
-    }).catch(() => {});
+        ]
+    );
 }
 
 async function handleMgmtReservationsClearExecute(interaction) {
+    clearConfirmTimeout(interaction);
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
@@ -498,6 +539,7 @@ async function handleMgmtReservationsClearExecute(interaction) {
 }
 
 async function handleMgmtReservationsClearCancel(interaction) {
+    clearConfirmTimeout(interaction);
     return await interaction.update({
         content: "❌ Clear cancelled. No reservations were changed.",
         components: [
@@ -921,19 +963,20 @@ async function handleMgmtUpdate(interaction) {
         }).catch(() => {});
     }
 
-    return await interaction.update({
-        content: "⚠️ **Are you sure?**\n\nThis will:\n1. Pull the latest code from Git\n2. Run `npm install`\n3. **Restart the bot** via pm2\n\nThe bot will be **offline for a few seconds** during restart.\n\nProceed with the update?",
-        components: [
+    return sendTimedConfirm(
+        interaction,
+        "⚠️ **Are you sure?**\n\nThis will:\n1. Pull the latest code from Git\n2. Run `npm install`\n3. **Restart the bot** via pm2\n\nThe bot will be **offline for a few seconds** during restart.\n\nProceed with the update?",
+        [
             new t().addComponents(
                 new n().setCustomId("mgmt-update-confirm").setEmoji("🔄").setLabel("Yes, update and restart").setStyle(a.Danger),
                 new n().setCustomId("mgmt-update-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
             )
-        ],
-        flags: 64
-    }).catch(() => {});
+        ]
+    );
 }
 
 async function handleMgmtUpdateConfirm(interaction) {
+    clearConfirmTimeout(interaction);
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
@@ -959,6 +1002,7 @@ async function handleMgmtUpdateConfirm(interaction) {
 }
 
 async function handleMgmtUpdateCancel(interaction) {
+    clearConfirmTimeout(interaction);
     return await interaction.update({
         content: "❌ Update cancelled.",
         components: [
