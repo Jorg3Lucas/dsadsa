@@ -28,7 +28,6 @@ import { handleGoldSlashCommand } from './commands/gold-commands.js';
 import { initGoldShop, startExpiredOrdersCheck, startQrCodeCleanup, startGoldDailyReport, startPaymentPolling } from './gold-shop.js';
 import { initMercadoPago, checkGoldEnvVars } from './mercadopago.js';
 import { startWebhookServer } from './webhook-server.js';
-import { startClaimWebServer } from './web-claim-server.js';
 
 const DISCORD_SERVER_ID = '1432320162278670440';
 
@@ -188,9 +187,6 @@ client.once('ready', async () => {
 
     // Start webhook server for automatic payment confirmation
     startWebhookServer(client);
-
-    // Start claim website server (for regions where Discord is blocked)
-    startClaimWebServer();
 
     // Auto-recover gold panel on restart
     try {
