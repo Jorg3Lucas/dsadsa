@@ -177,6 +177,8 @@ export function startTickInterval() {
                                 evData.ownerId = null;
                                 evData.ownerName = null;
                                 evData.timeWindow = "";
+                                evData.reservedFor = null;
+                                evData.reservedByName = null;
                                 if (evData._claimTimestamp) delete evData._claimTimestamp;
                                 panelUpdate = !0;
                                 updateNeeded = !0;

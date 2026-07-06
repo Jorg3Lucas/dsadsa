@@ -530,7 +530,7 @@ async function handleEventGroupCancel(interaction, uid, uName, targetObj, panelK
                         })).catch(() => {});
                     }
                 } else {
-                    // Schedule and fixed: just clear owner
+                    // Schedule and fixed: just clear owner (but preserve reservation)
                     evData.ownerId = null;
                     evData.ownerName = null;
                     evData.timeWindow = "";
@@ -587,6 +587,14 @@ async function handleEGFixClaim(interaction, uid, uName) {
     if (evData.ownerId) {
         return await interaction.reply({
             content: getMsg("rooms.slotAlreadyClaimed", { room: evData.name, ownerName: evData.ownerName || getMsg("render.unknownUser") }),
+            flags: 64
+        }).catch(() => {});
+    }
+
+    // 🚫 Check if reserved for another user
+    if (evData.reservedFor && evData.reservedFor !== uid) {
+        return await interaction.reply({
+            content: getMsg("reserve.blockedOther", { event: evData.name, userName: evData.reservedByName || evData.reservedFor }),
             flags: 64
         }).catch(() => {});
     }

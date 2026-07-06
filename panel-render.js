@@ -128,12 +128,15 @@ export function renderEmbed(key) {
                     block = `\`\`\`yaml\n🟢 Available\n\`\`\``;
                 }
             } else if (evData.type === "fixed") {
-                // Fixed event (Fury/Frenzy/Random Event) — show open/closed with countdown
+                // Fixed event (Fury/Frenzy/Random Event) — show open/closed/reserved with countdown
                 // Format: status line, "Next in:" label, timer value — separate lines
                 const minuteOffset = evData.scheduleMinutes || 0;
                 let statusLine, timerLabel, timerValue;
                 
-                if (isRoomOpen(evData.schedules, minuteOffset)) {
+                // Check if reserved
+                if (evData.reservedFor && !evData.ownerId) {
+                    statusLine = `🔒 ${getMsg("reserve.reservedNotice", { userName: evData.reservedByName || evData.reservedFor })}`;
+                } else if (isRoomOpen(evData.schedules, minuteOffset)) {
                     const nowMinutes = now.getHours() * 60 + now.getMinutes();
                     const endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
                     const endOfEvent = new Date(now.getTime());
@@ -442,11 +445,12 @@ export function renderButtons(key) {
         // 2. Individual claim buttons for fixed events (Fury/Frenzy only, not Random Event)
         fixedEvents.filter(ev => ev !== "randomevent").forEach(ev => {
             const isClaimed = !!current[ev].ownerId;
+            const isReserved = !!current[ev].reservedFor && !isClaimed;
             mainRow.addComponents(new n()
                 .setCustomId(`egfixclaim-${key}-${ev}`)
-                .setLabel(isClaimed ? `👑 ${current[ev].ownerName || "Claimed"}` : current[ev].name)
+                .setLabel(isClaimed ? `👑 ${current[ev].ownerName || "Claimed"}` : isReserved ? `🔒 ${current[ev].name}` : current[ev].name)
                 .setDisabled(isClaimed)
-                .setStyle(isClaimed ? a.Secondary : a.Success));
+                .setStyle(isClaimed ? a.Secondary : isReserved ? a.Secondary : a.Success));
         });
         
         // 3. Core action buttons
