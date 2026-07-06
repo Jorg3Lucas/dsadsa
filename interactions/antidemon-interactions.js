@@ -169,7 +169,7 @@ async function handleAntiTicket(interaction, uid, uName) {
             targetFloor[roomKey].nextName = null;
             targetFloor[roomKey].endLimit = null;
             targetFloor[roomKey].formattedTimeNext = "";
-            STATUS_OPEN === targetFloor[roomKey].status && (targetFloor[roomKey].status = STATUS_AVAILABLE);
+            if (STATUS_OPEN === targetFloor[roomKey].status) targetFloor[roomKey].status = STATUS_AVAILABLE;
         }
     }
 
@@ -286,7 +286,7 @@ async function handleAntiNextSide(interaction, uid, uName) {
 // 🔑 ANTIDEMON PASSWORD — Show Modal
 // ==========================================
 
-async function handleAntiPassword(interaction, uid, uName) {
+async function handleAntiPassword(interaction, uid, _uName) {
     if (!interaction.isButton()) return false;
 
     const [_, panelKey, room] = interaction.customId.split("-");

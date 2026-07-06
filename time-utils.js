@@ -74,7 +74,8 @@ export function calculateNextOpening(schedules, minuteOffset = 0) {
         checkDate <= base && checkDate.setDate(checkDate.getDate() + 1);
         datesList.push(checkDate);
     });
-    return datesList.sort((x, y) => x - y), datesList[0];
+    datesList.sort((x, y) => x - y);
+    return datesList[0];
 }
 
 export function getNextScheduleAfter(baseDate, schedules, minuteOffset = 0) {

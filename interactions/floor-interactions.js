@@ -441,8 +441,7 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
     // Build available options based on event type
     // Fixed-type events (Fury/Frenzy/Random Event) have their own individual buttons,
     // so they are excluded from the generic select menu.
-    const now = getLocalTime();
-    const options = [];
+    const now =    const options = [];
     
     for (const ev of eventKeys) {
         const evData = targetObj[ev];
@@ -934,7 +933,7 @@ async function handleEGNextSide(interaction, uid, uName) {
     let baseTime = getLocalTime();
     if (evData.timeWindow) {
         const calcLimit = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
-        calcLimit && (baseTime = calcLimit);
+        if (calcLimit) baseTime = calcLimit;
     }
     
     evData.nextId = uid;
@@ -1209,7 +1208,7 @@ async function handleSummonCancel(interaction, uid, uName, targetObj, panelKey) 
                 targetObj[loc].nextName = null;
                 targetObj[loc].endLimit = null;
                 targetObj[loc].formattedTimeNext = "";
-                STATUS_OPEN === targetObj[loc].status && (targetObj[loc].status = STATUS_AVAILABLE);
+                if (STATUS_OPEN === targetObj[loc].status) targetObj[loc].status = STATUS_AVAILABLE;
             }
         });
 
@@ -1361,7 +1360,7 @@ async function handleAntiCancel(interaction, uid, uName, targetObj, panelKey) {
                 targetObj[rm].nextName = null;
                 targetObj[rm].endLimit = null;
                 targetObj[rm].formattedTimeNext = "";
-                STATUS_OPEN === targetObj[rm].status && (targetObj[rm].status = STATUS_AVAILABLE);
+                if (STATUS_OPEN === targetObj[rm].status) targetObj[rm].status = STATUS_AVAILABLE;
             }
         });
 

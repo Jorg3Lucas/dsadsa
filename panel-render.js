@@ -130,7 +130,8 @@ export function renderEmbed(key) {
             } else if (evData.type === "fixed") {
                 // Fixed event (Fury/Frenzy/Random Event) — show open/closed/reserved with countdown
                 const minuteOffset = evData.scheduleMinutes || 0;
-                let lines = [], timerLine = "";
+                const lines = [];
+                let timerLine = "";
                 
                 if (evData.ownerId && evData.ownerName) {
                     // Claimed by someone — use # prefix for heading-style highlight in md code block

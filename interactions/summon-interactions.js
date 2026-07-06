@@ -147,7 +147,7 @@ async function handleSummonTicket(interaction, uid, uName) {
         targetFloor[selectedLoc].nextName = null;
         targetFloor[selectedLoc].endLimit = null;
         targetFloor[selectedLoc].formattedTimeNext = "";
-        STATUS_OPEN === targetFloor[selectedLoc].status && (targetFloor[selectedLoc].status = STATUS_AVAILABLE);
+        if (STATUS_OPEN === targetFloor[selectedLoc].status) targetFloor[selectedLoc].status = STATUS_AVAILABLE;
     }
 
     // RACE CONDITION GUARD: Re-verify location is still available before claiming
@@ -222,7 +222,7 @@ async function handleSummonNextSide(interaction, uid, uName) {
     let baseTime = getLocalTime();
     if (targetFloor[selectedLoc].timeWindow) {
         const calcLimit = parseStringToDate(targetFloor[selectedLoc].timeWindow.split(" ~ ")[1]);
-        calcLimit && (baseTime = calcLimit);
+        if (calcLimit) baseTime = calcLimit;
     }
 
     targetFloor[selectedLoc].nextId = uid;

@@ -29,7 +29,7 @@ import {
 } from "./salary-poll.js";
 import { getLocalTime } from "./time-utils.js";
 import { STATUS_CLAIMED } from "./constants.js";
-import { freeAntidemonRoom, getAntidemonRoomKeys, getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
+import { freeAntidemonRoom, getAntidemonRoomKeys, _getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 
 const confirmTimeouts = new Map();
 
@@ -141,7 +141,7 @@ export function canHandleManagementInteraction(interaction) {
         cid.startsWith("mgmt-");
 }
 
-export async function handleManagementInteraction(interaction, uid, extra) {
+export async function handleManagementInteraction(interaction, _uid, _extra) {
     const cid = interaction.customId;
 
     if (cid === "mgmt-main") return handleMgmtMain(interaction);
@@ -1397,7 +1397,7 @@ async function handleMgmtUpdateConfirm(interaction) {
     });
 
     try {
-        const output = execSync("git pull --rebase", { encoding: "utf8", cwd: process.cwd() });
+        execSync("git pull --rebase", { encoding: "utf8", cwd: process.cwd() });
         execSync("npm install", { encoding: "utf8", cwd: process.cwd(), stdio: "pipe" });
         exec("pm2 restart bot", () => process.exit());
     } catch (e) {

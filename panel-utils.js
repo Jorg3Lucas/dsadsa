@@ -229,7 +229,7 @@ export function resetPanelData(key) {
 // ==========================================
 
 export function migrateNamesCleanEmojis() {
-    let migrated = 0;
+    let migrated = 0; // eslint-disable-line no-useless-assignment // eslint-disable-line no-useless-assignment
     const emojiReplacements = [
         { from: "Left Boss", to: "⬅️ Left" },
         { from: "Red Boss", to: "🟥 Red" },
