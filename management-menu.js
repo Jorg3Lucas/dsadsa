@@ -53,7 +53,7 @@ async function sendTimedConfirm(interaction, content, buttons, timeoutMs = 30000
                 )
             );
             await interaction.editReply({
-                content: content + "\n\n⏰ **Prompt expired (30s). Please try again.**",
+                content: content + "\n\n" + getMsg("management.promptExpired"),
                 components: disabledRows
             }).catch(() => {});
         } catch (e) {}
@@ -90,35 +90,25 @@ export async function handleMgmtSlash(interaction) {
         }
 
         const embed = new e()
-            .setTitle("🛠️ Bot Management Panel")
+            .setTitle(getMsg("management.title"))
             .setColor("#2b2d31")
-            .setDescription(
-                "Select a category below to manage that system.\n\n" +
-                "**🏗️ Panels** — Reset panels, kick users\n" +
-                "**🔒 Reservations** — View/clear Fury/Frenzy reservations\n" +
-                "**📢 Channels** — Configure log/event channels\n" +
-                "**👥 Players** — Ranking user management\n" +
-                "**📋 Logs** — Dispatch daily reports\n" +
-                "**💰 Salary** — Manage salary polls\n" +
-                "**🎫 Tickets** — Create ticket panel\n" +
-                "**🔄 Update** — Git pull and restart"
-            )
+            .setDescription(getMsg("management.mainDesc"))
             .setTimestamp();
 
         return await interaction.reply({
             embeds: [embed],
             components: [
                 new t().addComponents(
-                    new n().setCustomId("mgmt-panels").setEmoji("🏗️").setLabel("Panels").setStyle(a.Primary),
-                    new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Reservations").setStyle(a.Primary),
-                    new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel("Channels").setStyle(a.Primary),
-                    new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Players").setStyle(a.Primary),
-                    new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary)
+                    new n().setCustomId("mgmt-panels").setEmoji("🏗️").setLabel(getMsg("management.btnPanels")).setStyle(a.Primary),
+                    new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel(getMsg("management.btnReservations")).setStyle(a.Primary),
+                    new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel(getMsg("management.btnChannels")).setStyle(a.Primary),
+                    new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnPlayers")).setStyle(a.Primary),
+                    new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel(getMsg("management.btnLogs")).setStyle(a.Secondary)
                 ),
                 new t().addComponents(
-                    new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary),
-                    new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel("Tickets").setStyle(a.Secondary),
-                    new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel("Update Bot").setStyle(a.Danger)
+                    new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnSalary")).setStyle(a.Secondary),
+                    new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel(getMsg("management.btnTickets")).setStyle(a.Secondary),
+                    new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel(getMsg("management.btnUpdate")).setStyle(a.Danger)
                 )
             ],
             flags: 64
@@ -127,9 +117,7 @@ export async function handleMgmtSlash(interaction) {
         console.error("❌ [handleMgmtSlash] CRASH:", err);
         if (err.stack) console.error("📋 [Stack]:", err.stack);
         try {
-            const errContent = "❌ **Internal error** in management panel.\n```\n" +
-                (err.message || String(err)).slice(0, 1500) +
-                "\n```\nCheck the bot console for full details.";
+            const errContent = getMsg("management.errorBody", { error: (err.message || String(err)).slice(0, 1500) });
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: errContent, flags: 64 });
             } else {
@@ -198,28 +186,23 @@ async function handleMgmtMain(interaction) {
     }
 
     const embed = new e()
-        .setTitle("🛠️ Bot Management Panel")
+        .setTitle(getMsg("management.title"))
         .setColor("#2b2d31")
-        .setDescription(
-            "Select a category below to manage that system.\n\n" +
-            "**🟢 Active** — System is configured and running\n" +
-            "**🔴 Inactive** — System needs configuration\n" +
-            "**ℹ️ Status** — Click to view details"
-        )
+        .setDescription(getMsg("management.mainDescCompact"))
         .setTimestamp();        return await interaction.update({
         embeds: [embed],
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-panels").setEmoji("🏗️").setLabel("Panels").setStyle(a.Primary),
-                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Reservations").setStyle(a.Primary),
-                new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel("Channels").setStyle(a.Primary),
-                new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Players").setStyle(a.Primary),
-                new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel("Logs").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-panels").setEmoji("🏗️").setLabel(getMsg("management.btnPanels")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel(getMsg("management.btnReservations")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-channels").setEmoji("📢").setLabel(getMsg("management.btnChannels")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnPlayers")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-logs").setEmoji("📋").setLabel(getMsg("management.btnLogs")).setStyle(a.Secondary)
             ),
             new t().addComponents(
-                new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Salary").setStyle(a.Secondary),
-                new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel("Tickets").setStyle(a.Secondary),
-                new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel("Update Bot").setStyle(a.Danger)
+                new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnSalary")).setStyle(a.Secondary),
+                new n().setCustomId("mgmt-tickets").setEmoji("🎫").setLabel(getMsg("management.btnTickets")).setStyle(a.Secondary),
+                new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel(getMsg("management.btnUpdate")).setStyle(a.Danger)
             )
         ]
     }).catch(() => {});
@@ -261,26 +244,18 @@ async function handleMgmtPanels(interaction) {
     }
 
     const embed = new e()
-        .setTitle("🏗️ Panel Management")
+        .setTitle(getMsg("management.panels.title"))
         .setColor("#2b2d31")
-        .setDescription(
-            `**📊 Overview**\n` +
-            `• **${totalPanels}** total panels\n` +
-            `• **${activeClaims}** active claims\n\n` +
-            `**Actions:**\n` +
-            `• **Reset Panel** — Select a panel to reset to defaults\n` +
-            `• **Kick User** — Remove a user from a claim\n` +
-            `• **Back** — Return to main menu`
-        )
+        .setDescription(getMsg("management.panels.desc", { total: totalPanels, active: activeClaims }))
         .setTimestamp();
 
     return await interaction.update({
         embeds: [embed],
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-panels-reset-menu").setEmoji("🔄").setLabel("Reset Panel").setStyle(a.Danger),
-                new n().setCustomId("mgmt-panels-kick-menu").setEmoji("👢").setLabel("Kick User").setStyle(a.Primary),
-                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-panels-reset-menu").setEmoji("🔄").setLabel(getMsg("management.panels.btnReset")).setStyle(a.Danger),
+                new n().setCustomId("mgmt-panels-kick-menu").setEmoji("👢").setLabel(getMsg("management.panels.btnKick")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
     }).catch(() => {});
@@ -310,13 +285,13 @@ async function handleMgmtPanelsResetMenu(interaction) {
         return await interaction.update({
             content: getMsg("system.resetNoPanels"),
             components: [
-                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
         }).catch(() => {});
     }
     if (optionsList.length > 1) {
-        optionsList.unshift({ label: "🔄 Reset ALL Panels", description: "Reset all panels to defaults", value: "__all__" });
+        optionsList.unshift({ label: getMsg("management.panels.resetAll"), description: getMsg("management.panels.resetAllDesc"), value: "__all__" });
     }
 
     return await interaction.update({
@@ -395,7 +370,7 @@ async function handleMgmtPanelsKickMenu(interaction) {
         return await interaction.update({
             content: getMsg("system.kickNoClaims"),
             components: [
-                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
         }).catch(() => {});
@@ -464,12 +439,13 @@ async function handleMgmtReservations(interaction) {
         }
     }
 
+    const noRes = getMsg("management.reservations.noRes");
     const embed = new e()
-        .setTitle("🔒 Reservation Management")
+        .setTitle(getMsg("management.reservations.title"))
         .setColor("#2b2d31")
         .setDescription(
-            `**🔴 Fury Reservations**\n${furyReservations.length > 0 ? furyReservations.map(r => `• ${r}`).join("\n") : "• No active reservations"}\n\n` +
-            `**🟣 Frenzy Reservations**\n${frenzyReservations.length > 0 ? frenzyReservations.map(r => `• ${r}`).join("\n") : "• No active reservations"}\n\n` +
+            `**🔴 Fury Reservations**\n${furyReservations.length > 0 ? furyReservations.map(r => `• ${r}`).join("\n") : noRes}\n\n` +
+            `**🟣 Frenzy Reservations**\n${frenzyReservations.length > 0 ? frenzyReservations.map(r => `• ${r}`).join("\n") : noRes}\n\n` +
             `Use \`!reserve @user\` to create new reservations, or clear all below.`
         )
         .setTimestamp();
@@ -478,8 +454,8 @@ async function handleMgmtReservations(interaction) {
         embeds: [embed],
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-reservations-clear").setEmoji("🗑️").setLabel("Clear All").setStyle(a.Danger),
-                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-reservations-clear").setEmoji("🗑️").setLabel(getMsg("management.reservations.btnClearAll")).setStyle(a.Danger),
+                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
     }).catch(() => {});
@@ -508,10 +484,10 @@ async function handleMgmtReservationsClear(interaction) {
 
     if (totalCount === 0) {
         return await interaction.update({
-            content: "ℹ️ No reservations to clear.",
+            content: getMsg("management.reservations.clearNone"),
             components: [
                 new t().addComponents(
-                    new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Back to Reservations").setStyle(a.Secondary)
+                    new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel(getMsg("management.btnBackReservations")).setStyle(a.Secondary)
                 )
             ],
             flags: 64
@@ -520,11 +496,11 @@ async function handleMgmtReservationsClear(interaction) {
 
     return sendTimedConfirm(
         interaction,
-        `⚠️ **Are you sure?**\n\nThis will clear **${totalCount}** reservation(s) across Fury and Frenzy in all panels.\n\nThis action **cannot be undone** — all reserved slots will be opened for everyone.`,
+        getMsg("management.reservations.clearConfirm", { count: totalCount }),
         [
             new t().addComponents(
-                new n().setCustomId("mgmt-reservations-clear-confirm").setEmoji("✅").setLabel("Yes, clear all").setStyle(a.Danger),
-                new n().setCustomId("mgmt-reservations-clear-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-reservations-clear-confirm").setEmoji("✅").setLabel(getMsg("management.reservations.clearYes")).setStyle(a.Danger),
+                new n().setCustomId("mgmt-reservations-clear-cancel").setEmoji("❌").setLabel(getMsg("management.reservations.clearCancel")).setStyle(a.Secondary)
             )
         ]
     );
@@ -565,10 +541,10 @@ async function handleMgmtReservationsClearExecute(interaction) {
     }
 
     return await interaction.update({
-        content: `✅ Cleared **${clearedCount}** reservation(s). All events are now open.`,
+        content: getMsg("management.reservations.clearDone", { count: clearedCount }),
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Back to Reservations").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel(getMsg("management.btnBackReservations")).setStyle(a.Secondary)
             )
         ],
         flags: 64
@@ -578,10 +554,10 @@ async function handleMgmtReservationsClearExecute(interaction) {
 async function handleMgmtReservationsClearCancel(interaction) {
     clearConfirmTimeout(interaction);
     return await interaction.update({
-        content: "❌ Clear cancelled. No reservations were changed.",
+        content: getMsg("management.reservations.clearCancelled"),
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel("Back to Reservations").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-reservations").setEmoji("🔒").setLabel(getMsg("management.btnBackReservations")).setStyle(a.Secondary)
             )
         ],
         flags: 64
@@ -600,32 +576,26 @@ async function handleMgmtChannels(interaction) {
         }).catch(() => {});
     }
 
-    const logsStatus = dailyLogs.configChannelId ? "✅ Configured" : "❌ Not set";
-    const bossStatus = dailyLogs.bossSpawnChannelId ? "✅ Configured" : "❌ Not set";
-    const eventStatus = dailyLogs.scheduledEventChannelId ? "✅ Configured" : "❌ Not set";
+    const logsStatus = dailyLogs.configChannelId ? getMsg("management.channels.configYes") : getMsg("management.channels.configNo");
+    const bossStatus = dailyLogs.bossSpawnChannelId ? getMsg("management.channels.configYes") : getMsg("management.channels.configNo");
+    const eventStatus = dailyLogs.scheduledEventChannelId ? getMsg("management.channels.configYes") : getMsg("management.channels.configNo");
 
     const embed = new e()
-        .setTitle("📢 Channel Configuration")
+        .setTitle(getMsg("management.channels.title"))
         .setColor("#2b2d31")
-        .setDescription(
-            `Click a button to set the current channel for that purpose.\n\n` +
-            `**📜 Daily Report Logs:** ${logsStatus}\n` +
-            `**🚨 Boss Spawn Alerts:** ${bossStatus}\n` +
-            `**📅 Event Notifications:** ${eventStatus}\n\n` +
-            `*Make sure you're in the desired channel before clicking.*`
-        )
+        .setDescription(getMsg("management.channels.desc", { logsStatus, bossStatus, eventStatus }))
         .setTimestamp();
 
     return await interaction.update({
         embeds: [embed],
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-channels-logs").setEmoji("📜").setLabel("Set Logs Channel").setStyle(a.Primary),
-                new n().setCustomId("mgmt-channels-boss").setEmoji("🚨").setLabel("Set Boss Channel").setStyle(a.Primary),
-                new n().setCustomId("mgmt-channels-events").setEmoji("📅").setLabel("Set Event Channel").setStyle(a.Primary)
+                new n().setCustomId("mgmt-channels-logs").setEmoji("📜").setLabel(getMsg("management.channels.btnSetLogs")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-channels-boss").setEmoji("🚨").setLabel(getMsg("management.channels.btnSetBoss")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-channels-events").setEmoji("📅").setLabel(getMsg("management.channels.btnSetEvents")).setStyle(a.Primary)
             ),
             new t().addComponents(
-                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
     }).catch(() => {});
@@ -634,16 +604,16 @@ async function handleMgmtChannels(interaction) {
 async function handleMgmtChannelsLogs(interaction) {
     if (!interaction.member.permissions.has("ManageGuild")) {
         return await interaction.update({
-            content: "❌ You need **Manage Server** permission.",
+            content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
         }).catch(() => {});
     }
     dailyLogs.configChannelId = interaction.channelId;
     saveDailyLogs();
     return await interaction.update({
-        content: `✅ Daily report channel set to <#${interaction.channelId}>.`,
+        content: getMsg("management.channels.logsDone", { channel: interaction.channelId }),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel(getMsg("management.btnBackChannels")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -652,16 +622,16 @@ async function handleMgmtChannelsLogs(interaction) {
 async function handleMgmtChannelsBoss(interaction) {
     if (!interaction.member.permissions.has("ManageGuild")) {
         return await interaction.update({
-            content: "❌ You need **Manage Server** permission.",
+            content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
         }).catch(() => {});
     }
     dailyLogs.bossSpawnChannelId = interaction.channelId;
     saveDailyLogs();
     return await interaction.update({
-        content: `✅ Boss spawn alert channel set to <#${interaction.channelId}>.`,
+        content: getMsg("management.channels.bossDone", { channel: interaction.channelId }),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel(getMsg("management.btnBackChannels")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -670,16 +640,16 @@ async function handleMgmtChannelsBoss(interaction) {
 async function handleMgmtChannelsEvents(interaction) {
     if (!interaction.member.permissions.has("ManageGuild")) {
         return await interaction.update({
-            content: "❌ You need **Manage Server** permission.",
+            content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
         }).catch(() => {});
     }
     dailyLogs.scheduledEventChannelId = interaction.channelId;
     saveDailyLogs();
     return await interaction.update({
-        content: `✅ Event notification channel set to <#${interaction.channelId}>.`,
+        content: getMsg("management.channels.eventsDone", { channel: interaction.channelId }),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel(getMsg("management.btnBackChannels")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -698,24 +668,22 @@ async function handleMgmtLogs(interaction) {
     }
 
     const logCount = (dailyLogs.queue || []).length;
-    const isConfigured = dailyLogs.configChannelId ? `✅ <#${dailyLogs.configChannelId}>` : "❌ Not configured";
+    const isConfigured = dailyLogs.configChannelId
+        ? `<#${dailyLogs.configChannelId}>`
+        : getMsg("management.logs.notConfigured");
 
     const embed = new e()
-        .setTitle("📋 Daily Logs")
+        .setTitle(getMsg("management.logs.title"))
         .setColor("#2b2d31")
-        .setDescription(
-            `**Log Channel:** ${isConfigured}\n` +
-            `**Pending Events:** ${logCount}\n\n` +
-            `Click **Dispatch Now** to send the report to the configured channel.`
-        )
+        .setDescription(getMsg("management.logs.desc", { channel: isConfigured, count: logCount }))
         .setTimestamp();
 
     return await interaction.update({
         embeds: [embed],
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-logs-dispatch").setEmoji("📤").setLabel("Dispatch Now").setStyle(a.Success),
-                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-logs-dispatch").setEmoji("📤").setLabel(getMsg("management.logs.btnDispatch")).setStyle(a.Success),
+                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
     }).catch(() => {});
@@ -736,9 +704,12 @@ async function handleMgmtSalary(interaction) {
     const state = getSalaryState();
     const statusEmoji = state.status === "open" ? "🟢" : state.status === "closed" ? "🔴" : "⚪";
     const weekStr = state.currentWeek || "—";
-    const channelStr = state.channelId ? `<#${state.channelId}>` : "❌ Not configured";
-    const spreadsheetStr = state.spreadsheetId ? `✅ ${state.spreadsheetId.slice(0, 12)}...` : "❌ Not set (default used)";
+    const channelStr = state.channelId ? `<#${state.channelId}>` : getMsg("management.salary.channelNotSet");
+    const spreadsheetStr = state.spreadsheetId
+        ? getMsg("management.salary.sheetSet", { id: state.spreadsheetId.slice(0, 12) })
+        : getMsg("management.salary.sheetNotSet");
     const voteCount = Object.keys(state.votes).length;
+    const statusLabel = state.status === "open" ? getMsg("management.salary.statusOpen") : state.status === "closed" ? getMsg("management.salary.statusClosed") : getMsg("management.salary.statusIdle");
 
     // Calculate next event
     const now = getLocalTime();
@@ -746,43 +717,38 @@ async function handleMgmtSalary(interaction) {
     const currMin = now.getHours() * 60 + now.getMinutes();
     let nextEvent = "";
     if (day <= 1 && (day < 1 || currMin < 12*60+30)) {
-        nextEvent = "📅 Poll opens **Monday 12:30 BRT**";
+        nextEvent = getMsg("management.salary.nextOpen");
     } else if (day < 3 || (day === 3 && currMin < 13*60)) {
-        nextEvent = "📅 Poll closes **Wednesday 13:00 BRT**";
+        nextEvent = getMsg("management.salary.nextClose");
     } else if (day === 3 && currMin < 16*60) {
-        nextEvent = "📅 Salary report **Wednesday 16:00 BRT**";
+        nextEvent = getMsg("management.salary.nextReport");
     } else {
-        nextEvent = "📅 Next poll opens **Monday 12:30 BRT**";
+        nextEvent = getMsg("management.salary.nextPoll");
     }
 
     const embed = new e()
-        .setTitle("💰 Salary Poll Management")
+        .setTitle(getMsg("management.salary.title"))
         .setColor(state.status === "open" ? "#57F287" : "#2b2d31")
-        .setDescription(
-            `**📊 Current Status**\n` +
-            `${statusEmoji} **Status:** ${state.status === "open" ? "Open" : state.status === "closed" ? "Closed" : "Idle"}\n` +
-            `📅 **Week:** ${weekStr}\n` +
-            `🗳️ **Votes:** ${voteCount} member(s)\n` +
-            `💬 **Channel:** ${channelStr}\n` +
-            `📈 **Spreadsheet:** ${spreadsheetStr}\n` +
-            `${nextEvent}\n\n` +
-            `**Actions:**\n` +
-            `• **Set Channel** — Configure salary poll in this channel\n` +
-            `• **Set Spreadsheet** — Link a Google Sheet ID\n` +
-            `• **Export** — Force-export votes to spreadsheet\n` +
-            `• **Post Report** — Post salary report message`
-        )
+        .setDescription(getMsg("management.salary.desc", {
+            statusEmoji,
+            status: statusLabel,
+            week: weekStr,
+            votes: voteCount,
+            channel: channelStr,
+            spreadsheet: spreadsheetStr,
+            nextEvent
+        }))
         .setTimestamp();
 
     return await interaction.update({
         embeds: [embed],
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-salary-channel").setEmoji("📢").setLabel("Set Channel").setStyle(a.Primary),
-                new n().setCustomId("mgmt-salary-spreadsheet").setEmoji("📈").setLabel("Set Spreadsheet").setStyle(a.Primary),
-                new n().setCustomId("mgmt-salary-export").setEmoji("📤").setLabel("Export").setStyle(a.Secondary),
-                new n().setCustomId("mgmt-salary-report").setEmoji("📊").setLabel("Post Report").setStyle(a.Secondary),
-                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-salary-channel").setEmoji("📢").setLabel(getMsg("management.salary.btnSetChannel")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-salary-spreadsheet").setEmoji("📈").setLabel(getMsg("management.salary.btnSetSpreadsheet")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-salary-export").setEmoji("📤").setLabel(getMsg("management.salary.btnExport")).setStyle(a.Secondary),
+                new n().setCustomId("mgmt-salary-report").setEmoji("📊").setLabel(getMsg("management.salary.btnPostReport")).setStyle(a.Secondary),
+                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
     }).catch(() => {});
@@ -791,16 +757,16 @@ async function handleMgmtSalary(interaction) {
 async function handleMgmtSalaryChannel(interaction) {
     if (!interaction.member.permissions.has("ManageGuild")) {
         return await interaction.update({
-            content: "❌ You need **Manage Server** permission to set the salary channel.",
+            content: getMsg("management.salary.channelPermDenied"),
             components: [], flags: 64
         }).catch(() => {});
     }
     setSalaryChannelId(interaction.channelId);
     await createOrUpdatePollMessage(true);
     return await interaction.update({
-        content: `✅ Salary poll channel set to <#${interaction.channelId}> and poll message created!`,
+        content: getMsg("management.salary.channelDone", { channel: interaction.channelId }),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -809,24 +775,25 @@ async function handleMgmtSalaryChannel(interaction) {
 async function handleMgmtSalarySpreadsheet(interaction) {
     if (!interaction.member.permissions.has("ManageGuild")) {
         return await interaction.update({
-            content: "❌ You need **Manage Server** permission.",
+            content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
         }).catch(() => {});
     }
 
     const state = getSalaryState();
-    const currentId = state.spreadsheetId || "Not set";
+    const notSetLabel = getMsg("management.salary.spreadsheetNotSet");
+    const currentId = state.spreadsheetId || notSetLabel;
 
     const modal = new m()
         .setCustomId("mgmt-salary-spreadsheet-modal")
-        .setTitle("📈 Link Google Spreadsheet");
+        .setTitle(getMsg("management.salary.spreadsheetTitle"));
 
     const input = new ti()
         .setCustomId("spreadsheet_id")
-        .setLabel("Spreadsheet ID (from URL)")
+        .setLabel(getMsg("management.salary.spreadsheetLabel"))
         .setStyle(tis.Short)
-        .setPlaceholder("e.g. 1ePa0Ws55-KrJpFUELebuPOJ...")
-        .setValue(currentId !== "Not set" ? currentId : "")
+        .setPlaceholder(getMsg("management.salary.spreadsheetPlaceholder"))
+        .setValue(currentId !== notSetLabel ? currentId : "")
         .setRequired(true);
 
     modal.addComponents(new t().addComponents(input));
@@ -837,15 +804,15 @@ async function handleMgmtSalarySpreadsheetSubmit(interaction) {
     const sid = interaction.fields.getTextInputValue("spreadsheet_id").trim();
     if (!sid) {
         return await interaction.reply({
-            content: "❌ Spreadsheet ID cannot be empty.",
+            content: getMsg("management.salary.spreadsheetEmpty"),
             flags: 64
         }).catch(() => {});
     }
     setSalarySpreadsheetId(sid);
     return await interaction.reply({
-        content: `✅ Spreadsheet ID set to \`${sid}\`. Next export will use this sheet.`,
+        content: getMsg("management.salary.spreadsheetDone", { id: sid }),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -863,7 +830,7 @@ async function handleMgmtSalaryExport(interaction) {
     return await interaction.update({
         content: result.message,
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -879,9 +846,9 @@ async function handleMgmtSalaryReport(interaction) {
 
     if (!getSalaryState().channelId) {
         return await interaction.update({
-            content: "❌ No salary channel configured. Set it first via **Set Channel**.",
+            content: getMsg("management.salary.reportNoChannel"),
             components: [
-                new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+                new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
             ],
             flags: 64
         }).catch(() => {});
@@ -889,9 +856,9 @@ async function handleMgmtSalaryReport(interaction) {
 
     await postSalaryReport();
     return await interaction.update({
-        content: "📊 Salary report posted in the configured salary channel!",
+        content: getMsg("management.salary.reportDone"),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel("Back to Salary").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -911,9 +878,9 @@ async function handleMgmtTickets(interaction) {
 
     await setupTicketPanel(interaction.channel);
     return await interaction.update({
-        content: "✅ **Ticket panel created in this channel!**\n\nUsers can now open tickets for support.",
+        content: getMsg("management.tickets.done"),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -932,31 +899,22 @@ async function handleMgmtPlayers(interaction) {
     }
 
     const embed = new e()
-        .setTitle("👥 Player Management")
+        .setTitle(getMsg("management.players.title"))
         .setColor("#2b2d31")
-        .setDescription(
-            `**Actions:**\n\n` +
-            `• **📝 Register** — Open modal to register your character name\n` +
-            `• **👤 Pilot** — Add a pilot to your account\n` +
-            `• **🗑️ Remove Pilot** — Remove a pilot from your account\n` +
-            `• **🔄 Force Sync** — Force sync with official ranking portal\n` +
-            `• **📊 Status** — View your account status\n\n` +
-            `*Use the buttons below or the slash commands directly:*\n` +
-            `\`/register\`, \`/pilot @user\`, \`/removepilot\`, \`/forcesync\``
-        )
+        .setDescription(getMsg("management.players.desc"))
         .setTimestamp();
 
     return await interaction.update({
         embeds: [embed],
         components: [
             new t().addComponents(
-                new n().setCustomId("mgmt-players-register").setEmoji("📝").setLabel("Register").setStyle(a.Primary),
-                new n().setCustomId("mgmt-players-pilot").setEmoji("👤").setLabel("Pilot").setStyle(a.Primary),
-                new n().setCustomId("mgmt-players-remove-pilot").setEmoji("🗑️").setLabel("Remove Pilot").setStyle(a.Danger),
-                new n().setCustomId("mgmt-players-sync").setEmoji("🔄").setLabel("Force Sync").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-players-register").setEmoji("📝").setLabel(getMsg("management.players.btnRegister")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-players-pilot").setEmoji("👤").setLabel(getMsg("management.players.btnPilot")).setStyle(a.Primary),
+                new n().setCustomId("mgmt-players-remove-pilot").setEmoji("🗑️").setLabel(getMsg("management.players.btnRemovePilot")).setStyle(a.Danger),
+                new n().setCustomId("mgmt-players-sync").setEmoji("🔄").setLabel(getMsg("management.players.btnForceSync")).setStyle(a.Secondary)
             ),
             new t().addComponents(
-                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
     }).catch(() => {});
@@ -973,13 +931,13 @@ async function handleMgmtPlayersRegister(interaction) {
     // Show the same register modal as /register command
     const modal = new m()
         .setCustomId("register_modal")
-        .setTitle("📝 Character Registration");
+        .setTitle(getMsg("management.players.registerTitle"));
 
     const nicknameInput = new ti()
         .setCustomId("character_nickname")
-        .setLabel("Your character nickname (exact)")
+        .setLabel(getMsg("management.players.registerLabel"))
         .setStyle(tis.Short)
-        .setPlaceholder("e.g. YourIngameName")
+        .setPlaceholder(getMsg("management.players.registerPlaceholder"))
         .setMinLength(2)
         .setMaxLength(30)
         .setRequired(true);
@@ -998,11 +956,11 @@ async function handleMgmtPlayersSync(interaction) {
 
     return sendTimedConfirm(
         interaction,
-        "⚠️ **Are you sure?**\n\nThis will force a **full synchronization** with the official MIR4 ranking portal.\n\nAll registered player data (nicknames, clans) will be updated according to the current ranking data.\n\nThis may take a few moments.",
+        getMsg("management.players.syncConfirm"),
         [
             new t().addComponents(
-                new n().setCustomId("mgmt-players-sync-confirm").setEmoji("🔄").setLabel("Yes, sync now").setStyle(a.Danger),
-                new n().setCustomId("mgmt-players-sync-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-players-sync-confirm").setEmoji("🔄").setLabel(getMsg("management.players.syncYes")).setStyle(a.Danger),
+                new n().setCustomId("mgmt-players-sync-cancel").setEmoji("❌").setLabel(getMsg("management.players.syncCancel")).setStyle(a.Secondary)
             )
         ]
     );
@@ -1018,27 +976,26 @@ async function handleMgmtPlayersSyncConfirm(interaction) {
     }
 
     await interaction.update({
-        content: "🔄 **Force sync started...**\n\nSynchronizing with the official ranking portal. This may take a few moments.",
+        content: getMsg("management.players.syncProgress"),
         components: []
     }).catch(() => {});
 
     // Import and run daily sync as a forced sync
     try {
-        // We need client and rankingDb from state, and the sync function
         const { runDailySynchronization } = await import("./ranking-sync-engine.js");
         const { client, rankingDb: rDb } = await import("./state.js");
         await runDailySynchronization(client, rDb, () => {}, () => {}, true);
         await interaction.editReply({
-            content: "✅ **Force sync completed!** Player data has been updated from the ranking portal.",
+            content: getMsg("management.players.syncDone"),
             components: [
-                new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Back to Players").setStyle(a.Secondary))
+                new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
             ]
         }).catch(() => {});
     } catch (e) {
         await interaction.editReply({
-            content: `❌ **Force sync failed:**\n\`\`\`\n${(e.message || String(e)).slice(0, 1900)}\n\`\`\``,
+            content: getMsg("management.players.syncFailed", { error: (e.message || String(e)).slice(0, 1900) }),
             components: [
-                new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Back to Players").setStyle(a.Secondary))
+                new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
             ]
         }).catch(() => {});
     }
@@ -1053,13 +1010,9 @@ async function handleMgmtPlayersPilot(interaction) {
     }
 
     return await interaction.update({
-        content: "👤 **Add a Pilot**\n\n" +
-            "A pilot is another Discord user who can claim panels on your behalf.\n\n" +
-            "To add a pilot, use the slash command:\n" +
-            "➡️ `/pilot @user`\n\n" +
-            "*Replace @user with the Discord member you want to add as a pilot.*",
+        content: getMsg("management.players.pilotInfo"),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel("Back to Players").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -1074,12 +1027,9 @@ async function handleMgmtPlayersRemovePilot(interaction) {
     }
 
     return await interaction.update({
-        content: "🗑️ **Remove a Pilot**\n\n" +
-            "To remove a pilot from your account, use the slash command:\n" +
-            "➡️ `/removepilot`\n\n" +
-            "This will open a menu where you can select which pilot to remove.",
+        content: getMsg("management.players.removePilotInfo"),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel("Back to Players").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -1088,9 +1038,9 @@ async function handleMgmtPlayersRemovePilot(interaction) {
 async function handleMgmtPlayersSyncCancel(interaction) {
     clearConfirmTimeout(interaction);
     return await interaction.update({
-        content: "❌ Force sync cancelled.",
+        content: getMsg("management.players.syncCancelled"),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel("Back to Players").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
@@ -1119,9 +1069,9 @@ async function handleMgmtPanelsResetExecute(interaction) {
             count++;
         }
         return await interaction.update({
-            content: `✅ Reset **${count}** panels to defaults.`,
+            content: getMsg("management.panels.resetDone", { count }),
             components: [
-                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ]
         }).catch(() => {});
     }
@@ -1130,7 +1080,7 @@ async function handleMgmtPanelsResetExecute(interaction) {
         return await interaction.update({
             content: getMsg("system.resetPanelNotFound", { key: resetKey }),
             components: [
-                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+                new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
         }).catch(() => {});
@@ -1141,7 +1091,7 @@ async function handleMgmtPanelsResetExecute(interaction) {
     return await interaction.update({
         content: getMsg("system.resetPanelSuccess", { key: resetKey }),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
         ]
     }).catch(() => {});
 }
@@ -1216,7 +1166,7 @@ async function handleMgmtPanelsKickExecute(interaction) {
     return await interaction.update({
         content: getMsg("system.kickSuccess"),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
         ]
     }).catch(() => {});
 }
@@ -1236,10 +1186,7 @@ async function handleMgmtLogsDispatch(interaction) {
     if (!dailyLogs.configChannelId) {
         return await interaction.update({
             content: getMsg("logs.noChannel"),
-            components: [
-                new t().addComponents(
-                    new n().setCustomId("mgmt-logs").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
-                )
+            components: [            new t().addComponents(new n().setCustomId("mgmt-logs").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
         }).catch(() => {});
@@ -1248,10 +1195,7 @@ async function handleMgmtLogsDispatch(interaction) {
     if (!await dispatchDailyLogs(true)) {
         return await interaction.update({
             content: getMsg("logs.dispatchError"),
-            components: [
-                new t().addComponents(
-                    new n().setCustomId("mgmt-logs").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
-                )
+            components: [            new t().addComponents(new n().setCustomId("mgmt-logs").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
         }).catch(() => {});
@@ -1282,11 +1226,11 @@ async function handleMgmtUpdate(interaction) {
 
     return sendTimedConfirm(
         interaction,
-        "⚠️ **Are you sure?**\n\nThis will:\n1. Pull the latest code from Git\n2. Run `npm install`\n3. **Restart the bot** via pm2\n\nThe bot will be **offline for a few seconds** during restart.\n\nProceed with the update?",
+        getMsg("management.update.confirm"),
         [
             new t().addComponents(
-                new n().setCustomId("mgmt-update-confirm").setEmoji("🔄").setLabel("Yes, update and restart").setStyle(a.Danger),
-                new n().setCustomId("mgmt-update-cancel").setEmoji("❌").setLabel("Cancel").setStyle(a.Secondary)
+                new n().setCustomId("mgmt-update-confirm").setEmoji("🔄").setLabel(getMsg("management.update.btnConfirm")).setStyle(a.Danger),
+                new n().setCustomId("mgmt-update-cancel").setEmoji("❌").setLabel(getMsg("management.update.btnCancel")).setStyle(a.Secondary)
             )
         ]
     );
@@ -1302,7 +1246,7 @@ async function handleMgmtUpdateConfirm(interaction) {
     }
 
     await interaction.update({
-        content: "🔄 **Updating bot...**\n\nPulling latest code and restarting.",
+        content: getMsg("management.update.progress"),
         components: []
     }).catch(() => {});
 
@@ -1312,7 +1256,7 @@ async function handleMgmtUpdateConfirm(interaction) {
         exec("pm2 restart bot", () => process.exit());
     } catch (e) {
         await interaction.followUp({
-            content: `❌ **Update failed:**\n\`\`\`\n${(e.message || e).slice(0, 1900)}\n\`\`\``,
+            content: getMsg("management.update.failed", { error: (e.message || e).slice(0, 1900) }),
             flags: 64
         }).catch(() => {});
     }
@@ -1321,9 +1265,9 @@ async function handleMgmtUpdateConfirm(interaction) {
 async function handleMgmtUpdateCancel(interaction) {
     clearConfirmTimeout(interaction);
     return await interaction.update({
-        content: "❌ Update cancelled.",
+        content: getMsg("management.update.cancelled"),
         components: [
-            new t().addComponents(new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel("Back to Menu").setStyle(a.Secondary))
+            new t().addComponents(new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBackMenu")).setStyle(a.Secondary))
         ],
         flags: 64
     }).catch(() => {});
