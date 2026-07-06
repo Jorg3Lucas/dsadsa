@@ -24,7 +24,9 @@ async function getBrowser() {
 
 export async function closeBrowser() {
     if (browserInstance) {
-        try { await browserInstance.close(); } catch {}
+        try { await browserInstance.close(); } catch {
+            // Silently ignored — browser may already be disconnected
+        }
         browserInstance = null;
     }
 }

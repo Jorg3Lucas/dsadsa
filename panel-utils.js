@@ -641,8 +641,12 @@ export async function processAutoRecoveryOnBoot() {
             if (!channel) continue;
             try {
                 const msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
-                msg && await msg.delete().catch(() => {});
-            } catch (i) {}
+                msg && await msg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+            } catch (i) {
+        // Silently ignored — non-critical operation
+    }
             const newMsg = await channel.send({
                 embeds: [renderEmbed(key)],
                 components: renderButtons(key)

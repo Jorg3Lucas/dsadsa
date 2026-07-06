@@ -39,7 +39,9 @@ const confirmTimeouts = new Map();
 // ==========================================
 
 async function sendTimedConfirm(interaction, content, buttons, timeoutMs = 30000) {
-    await interaction.update({ content, components: buttons, flags: 64 }).catch(() => {});
+    await interaction.update({ content, components: buttons, flags: 64 }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 
     const key = interaction.id;
     const timeout = setTimeout(async () => {
@@ -55,8 +57,12 @@ async function sendTimedConfirm(interaction, content, buttons, timeoutMs = 30000
             await interaction.editReply({
                 content: content + "\n\n" + getMsg("management.promptExpired"),
                 components: disabledRows
-            }).catch(() => {});
-        } catch (e) {}
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+        } catch (e) {
+        // Silently ignored — non-critical operation
+    }
         confirmTimeouts.delete(key);
     }, timeoutMs);
 
@@ -123,7 +129,9 @@ export async function handleMgmtSlash(interaction) {
             } else {
                 await interaction.followUp({ content: errContent, flags: 64 });
             }
-        } catch (e) {}
+        } catch (e) {
+        // Silently ignored — non-critical operation
+    }
     }
 }
 
@@ -182,7 +190,9 @@ async function handleMgmtMain(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const embed = new e()
@@ -205,7 +215,9 @@ async function handleMgmtMain(interaction) {
                 new n().setCustomId("mgmt-update").setEmoji("🔄").setLabel(getMsg("management.btnUpdate")).setStyle(a.Danger)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -217,7 +229,9 @@ async function handleMgmtPanels(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // Count total panels and active claims
@@ -258,7 +272,9 @@ async function handleMgmtPanels(interaction) {
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -270,7 +286,9 @@ async function handleMgmtPanelsResetMenu(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // Re-use the existing admin-reset-menu logic
@@ -288,7 +306,9 @@ async function handleMgmtPanelsResetMenu(interaction) {
                 new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
     if (optionsList.length > 1) {
         optionsList.unshift({ label: getMsg("management.panels.resetAll"), description: getMsg("management.panels.resetAllDesc"), value: "__all__" });
@@ -304,7 +324,9 @@ async function handleMgmtPanelsResetMenu(interaction) {
                 new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtPanelsKickMenu(interaction) {
@@ -312,7 +334,9 @@ async function handleMgmtPanelsKickMenu(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // Build kick options (same logic as !kick command)
@@ -373,7 +397,9 @@ async function handleMgmtPanelsKickMenu(interaction) {
                 new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     return await interaction.update({
@@ -386,7 +412,9 @@ async function handleMgmtPanelsKickMenu(interaction) {
                 new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -398,7 +426,9 @@ async function handleMgmtReservations(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // Scan all reservations
@@ -458,7 +488,9 @@ async function handleMgmtReservations(interaction) {
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtReservationsClear(interaction) {
@@ -466,7 +498,9 @@ async function handleMgmtReservationsClear(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // Count how many reservations exist
@@ -491,7 +525,9 @@ async function handleMgmtReservationsClear(interaction) {
                 )
             ],
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     return sendTimedConfirm(
@@ -512,7 +548,9 @@ async function handleMgmtReservationsClearExecute(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     let clearedCount = 0;
@@ -548,7 +586,9 @@ async function handleMgmtReservationsClearExecute(interaction) {
             )
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtReservationsClearCancel(interaction) {
@@ -561,7 +601,9 @@ async function handleMgmtReservationsClearCancel(interaction) {
             )
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -573,7 +615,9 @@ async function handleMgmtChannels(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const logsStatus = dailyLogs.configChannelId ? getMsg("management.channels.configYes") : getMsg("management.channels.configNo");
@@ -598,7 +642,9 @@ async function handleMgmtChannels(interaction) {
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtChannelsLogs(interaction) {
@@ -606,7 +652,9 @@ async function handleMgmtChannelsLogs(interaction) {
         return await interaction.update({
             content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
     dailyLogs.configChannelId = interaction.channelId;
     saveDailyLogs();
@@ -616,7 +664,9 @@ async function handleMgmtChannelsLogs(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel(getMsg("management.btnBackChannels")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtChannelsBoss(interaction) {
@@ -624,7 +674,9 @@ async function handleMgmtChannelsBoss(interaction) {
         return await interaction.update({
             content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
     dailyLogs.bossSpawnChannelId = interaction.channelId;
     saveDailyLogs();
@@ -634,7 +686,9 @@ async function handleMgmtChannelsBoss(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel(getMsg("management.btnBackChannels")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtChannelsEvents(interaction) {
@@ -642,7 +696,9 @@ async function handleMgmtChannelsEvents(interaction) {
         return await interaction.update({
             content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
     dailyLogs.scheduledEventChannelId = interaction.channelId;
     saveDailyLogs();
@@ -652,7 +708,9 @@ async function handleMgmtChannelsEvents(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-channels").setEmoji("🔙").setLabel(getMsg("management.btnBackChannels")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -664,7 +722,9 @@ async function handleMgmtLogs(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const logCount = (dailyLogs.queue || []).length;
@@ -686,7 +746,9 @@ async function handleMgmtLogs(interaction) {
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -698,7 +760,9 @@ async function handleMgmtSalary(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const state = getSalaryState();
@@ -751,7 +815,9 @@ async function handleMgmtSalary(interaction) {
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtSalaryChannel(interaction) {
@@ -759,7 +825,9 @@ async function handleMgmtSalaryChannel(interaction) {
         return await interaction.update({
             content: getMsg("management.salary.channelPermDenied"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
     setSalaryChannelId(interaction.channelId);
     await createOrUpdatePollMessage(true);
@@ -769,7 +837,9 @@ async function handleMgmtSalaryChannel(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtSalarySpreadsheet(interaction) {
@@ -777,7 +847,9 @@ async function handleMgmtSalarySpreadsheet(interaction) {
         return await interaction.update({
             content: getMsg("management.channels.permDenied"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const state = getSalaryState();
@@ -797,7 +869,9 @@ async function handleMgmtSalarySpreadsheet(interaction) {
         .setRequired(true);
 
     modal.addComponents(new t().addComponents(input));
-    return await interaction.showModal(modal).catch(() => {});
+    return await interaction.showModal(modal).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtSalarySpreadsheetSubmit(interaction) {
@@ -806,7 +880,9 @@ async function handleMgmtSalarySpreadsheetSubmit(interaction) {
         return await interaction.reply({
             content: getMsg("management.salary.spreadsheetEmpty"),
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
     setSalarySpreadsheetId(sid);
     return await interaction.reply({
@@ -815,7 +891,9 @@ async function handleMgmtSalarySpreadsheetSubmit(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtSalaryExport(interaction) {
@@ -823,7 +901,9 @@ async function handleMgmtSalaryExport(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const result = await forceExportToSheets();
@@ -833,7 +913,9 @@ async function handleMgmtSalaryExport(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtSalaryReport(interaction) {
@@ -841,7 +923,9 @@ async function handleMgmtSalaryReport(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     if (!getSalaryState().channelId) {
@@ -851,7 +935,9 @@ async function handleMgmtSalaryReport(interaction) {
                 new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
             ],
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     await postSalaryReport();
@@ -861,7 +947,9 @@ async function handleMgmtSalaryReport(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-salary").setEmoji("💰").setLabel(getMsg("management.btnBackSalary")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -873,7 +961,9 @@ async function handleMgmtTickets(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     await setupTicketPanel(interaction.channel);
@@ -883,7 +973,9 @@ async function handleMgmtTickets(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -895,7 +987,9 @@ async function handleMgmtPlayers(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const embed = new e()
@@ -917,7 +1011,9 @@ async function handleMgmtPlayers(interaction) {
                 new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary)
             )
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtPlayersRegister(interaction) {
@@ -925,7 +1021,9 @@ async function handleMgmtPlayersRegister(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // Show the same register modal as /register command
@@ -943,7 +1041,9 @@ async function handleMgmtPlayersRegister(interaction) {
         .setRequired(true);
 
     modal.addComponents(new t().addComponents(nicknameInput));
-    return await interaction.showModal(modal).catch(() => {});
+    return await interaction.showModal(modal).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtPlayersSync(interaction) {
@@ -951,7 +1051,9 @@ async function handleMgmtPlayersSync(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     return sendTimedConfirm(
@@ -972,13 +1074,17 @@ async function handleMgmtPlayersSyncConfirm(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     await interaction.update({
         content: getMsg("management.players.syncProgress"),
         components: []
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 
     // Import and run daily sync as a forced sync
     try {
@@ -990,14 +1096,18 @@ async function handleMgmtPlayersSyncConfirm(interaction) {
             components: [
                 new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
             ]
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     } catch (e) {
         await interaction.editReply({
             content: getMsg("management.players.syncFailed", { error: (e.message || String(e)).slice(0, 1900) }),
             components: [
                 new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
             ]
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 }
 
@@ -1006,7 +1116,9 @@ async function handleMgmtPlayersPilot(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     return await interaction.update({
@@ -1015,7 +1127,9 @@ async function handleMgmtPlayersPilot(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtPlayersRemovePilot(interaction) {
@@ -1023,7 +1137,9 @@ async function handleMgmtPlayersRemovePilot(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     return await interaction.update({
@@ -1032,7 +1148,9 @@ async function handleMgmtPlayersRemovePilot(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("🔙").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 async function handleMgmtPlayersSyncCancel(interaction) {
@@ -1043,7 +1161,9 @@ async function handleMgmtPlayersSyncCancel(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-players").setEmoji("👥").setLabel(getMsg("management.btnBackPlayers")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -1055,7 +1175,9 @@ async function handleMgmtPanelsResetExecute(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const resetKey = interaction.values[0];
@@ -1073,7 +1195,9 @@ async function handleMgmtPanelsResetExecute(interaction) {
             components: [
                 new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ]
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     if (!db[resetKey]) {
@@ -1083,7 +1207,9 @@ async function handleMgmtPanelsResetExecute(interaction) {
                 new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     resetPanelData(resetKey);
@@ -1093,7 +1219,9 @@ async function handleMgmtPanelsResetExecute(interaction) {
         components: [
             new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -1105,7 +1233,9 @@ async function handleMgmtPanelsKickExecute(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     const value = interaction.values[0];
@@ -1168,7 +1298,9 @@ async function handleMgmtPanelsKickExecute(interaction) {
         components: [
             new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
         ]
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -1180,7 +1312,9 @@ async function handleMgmtLogsDispatch(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     if (!dailyLogs.configChannelId) {
@@ -1189,7 +1323,9 @@ async function handleMgmtLogsDispatch(interaction) {
             components: [            new t().addComponents(new n().setCustomId("mgmt-logs").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     if (!await dispatchDailyLogs(true)) {
@@ -1198,7 +1334,9 @@ async function handleMgmtLogsDispatch(interaction) {
             components: [            new t().addComponents(new n().setCustomId("mgmt-logs").setEmoji("🔙").setLabel(getMsg("management.btnBack")).setStyle(a.Secondary))
             ],
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     return await interaction.update({
@@ -1209,7 +1347,9 @@ async function handleMgmtLogsDispatch(interaction) {
             )
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }
 
 // ==========================================
@@ -1221,7 +1361,9 @@ async function handleMgmtUpdate(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     return sendTimedConfirm(
@@ -1242,13 +1384,17 @@ async function handleMgmtUpdateConfirm(interaction) {
         return await interaction.update({
             content: getMsg("system.permissionDeniedAdminDropped"),
             components: [], flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     await interaction.update({
         content: getMsg("management.update.progress"),
         components: []
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 
     try {
         const output = execSync("git pull --rebase", { encoding: "utf8", cwd: process.cwd() });
@@ -1258,7 +1404,9 @@ async function handleMgmtUpdateConfirm(interaction) {
         await interaction.followUp({
             content: getMsg("management.update.failed", { error: (e.message || e).slice(0, 1900) }),
             flags: 64
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 }
 
@@ -1270,5 +1418,7 @@ async function handleMgmtUpdateCancel(interaction) {
             new t().addComponents(new n().setCustomId("mgmt-main").setEmoji("🔙").setLabel(getMsg("management.btnBackMenu")).setStyle(a.Secondary))
         ],
         flags: 64
-    }).catch(() => {});
+    }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 }

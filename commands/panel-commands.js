@@ -46,8 +46,12 @@ async function handleMS(msg, lowerContent) {
             if (db._panelMapping[item] && db._panelMapping[item].channelId === msg.channel.id) {
                 try {
                     const oldMsg = await msg.channel.messages.fetch(db._panelMapping[item].messageId).catch(() => null);
-                    oldMsg && await oldMsg.delete().catch(() => {});
-                } catch (M) {}
+                    oldMsg && await oldMsg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+                } catch (M) {
+        // Silently ignored — non-critical operation
+    }
             }
             const sent = await msg.channel.send({
                 embeds: [renderEmbed(item)],
@@ -57,7 +61,9 @@ async function handleMS(msg, lowerContent) {
             db._panelMapping[item] = { channelId: msg.channel.id, messageId: sent.id };
         }
         saveLocalStorage();
-        try { await msg.delete() } catch (M) {}
+        try { await msg.delete() } catch (M) {
+        // Silently ignored — non-critical operation
+    }
         return;
     }
 
@@ -80,8 +86,12 @@ async function handleMS(msg, lowerContent) {
         if (db._panelMapping[key] && db._panelMapping[key].channelId === msg.channel.id) {
             try {
                 const oldMsg = await msg.channel.messages.fetch(db._panelMapping[key].messageId).catch(() => null);
-                oldMsg && await oldMsg.delete().catch(() => {});
-            } catch (L) {}
+                oldMsg && await oldMsg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+            } catch (L) {
+        // Silently ignored — non-critical operation
+    }
         }
     }
 
@@ -102,7 +112,9 @@ async function handleMS(msg, lowerContent) {
     }
 
     saveLocalStorage();
-    try { await msg.delete() } catch (L) {}
+    try { await msg.delete() } catch (L) {
+        // Silently ignored — non-critical operation
+    }
 }
 
 // ==========================================
@@ -119,8 +131,12 @@ async function handleSP(msg, lowerContent) {
         if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
             try {
                 const oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
-                oldMsg && await oldMsg.delete().catch(() => {});
-            } catch (C) {}
+                oldMsg && await oldMsg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+            } catch (C) {
+        // Silently ignored — non-critical operation
+    }
         }
         const pMsg = await msg.channel.send({
             embeds: [renderEmbed(pKey)],
@@ -135,8 +151,12 @@ async function handleSP(msg, lowerContent) {
             if (db._panelMapping[rKey] && db._panelMapping[rKey].channelId === msg.channel.id) {
                 try {
                     const oldRMsg = await msg.channel.messages.fetch(db._panelMapping[rKey].messageId).catch(() => null);
-                    oldRMsg && await oldRMsg.delete().catch(() => {});
-                } catch (C) {}
+                    oldRMsg && await oldRMsg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+                } catch (C) {
+        // Silently ignored — non-critical operation
+    }
             }
             const rMsg = await msg.channel.send({
                 embeds: [renderEmbed(rKey)],
@@ -151,8 +171,12 @@ async function handleSP(msg, lowerContent) {
         if (db._panelMapping[gKey] && db._panelMapping[gKey].channelId === msg.channel.id) {
             try {
                 const oldGMsg = await msg.channel.messages.fetch(db._panelMapping[gKey].messageId).catch(() => null);
-                oldGMsg && await oldGMsg.delete().catch(() => {});
-            } catch (C) {}
+                oldGMsg && await oldGMsg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+            } catch (C) {
+        // Silently ignored — non-critical operation
+    }
         }
         const gMsg = await msg.channel.send({
             embeds: [renderEmbed(gKey)],
@@ -162,7 +186,9 @@ async function handleSP(msg, lowerContent) {
         db._panelMapping[gKey] = { channelId: msg.channel.id, messageId: gMsg.id };
         
         saveLocalStorage();
-        try { await msg.delete() } catch (C) {}
+        try { await msg.delete() } catch (C) {
+        // Silently ignored — non-critical operation
+    }
         return;
     }
 
@@ -174,8 +200,12 @@ async function handleSP(msg, lowerContent) {
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
         try {
             const oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
-            oldMsg && await oldMsg.delete().catch(() => {});
-        } catch (C) {}
+            oldMsg && await oldMsg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+        } catch (C) {
+        // Silently ignored — non-critical operation
+    }
     }
 
     const pMsg = await msg.channel.send({
@@ -185,7 +215,9 @@ async function handleSP(msg, lowerContent) {
     lastMessages[pKey] = pMsg;
     db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
     saveLocalStorage();
-    try { await msg.delete() } catch (C) {}
+    try { await msg.delete() } catch (C) {
+        // Silently ignored — non-critical operation
+    }
 }
 
 // ==========================================
@@ -199,8 +231,12 @@ async function handleSummon(msg) {
     if (db._panelMapping[pKey] && db._panelMapping[pKey].channelId === msg.channel.id) {
         try {
             const oldMsg = await msg.channel.messages.fetch(db._panelMapping[pKey].messageId).catch(() => null);
-            oldMsg && await oldMsg.delete().catch(() => {});
-        } catch (C) {}
+            oldMsg && await oldMsg.delete().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+        } catch (C) {
+        // Silently ignored — non-critical operation
+    }
     }
 
     const pMsg = await msg.channel.send({
@@ -210,5 +246,7 @@ async function handleSummon(msg) {
     lastMessages[pKey] = pMsg;
     db._panelMapping[pKey] = { channelId: msg.channel.id, messageId: pMsg.id };
     saveLocalStorage();
-    try { await msg.delete() } catch (C) {}
+    try { await msg.delete() } catch (C) {
+        // Silently ignored — non-critical operation
+    }
 }

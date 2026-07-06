@@ -46,7 +46,9 @@ export function loadPunishmentsFromDisk() {
     if (o.existsSync(punishmentsPath)) {
         try {
             punishments = JSON.parse(o.readFileSync(punishmentsPath, "utf8"));
-        } catch (s) {}
+        } catch (s) {
+        // Silently ignored — non-critical operation
+    }
     }
 }
 
@@ -56,7 +58,9 @@ export function savePunishmentsToDisk() {
         runBackup(["./punishments.json"]);
 
         o.writeFileSync(punishmentsPath, JSON.stringify(punishments, null, 2));
-    } catch (e) {}
+    } catch (e) {
+        // Silently ignored — non-critical operation
+    }
 }
 
 // ── DM Opt-Out Persistence ────────────────────────────────

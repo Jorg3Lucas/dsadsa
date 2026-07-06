@@ -30,9 +30,13 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         if (ownerMember.roles.cache.has(roleId)) {
                             for (const [, rId] of Object.entries(CLAN_ROLES)) {
                                 if (rId === roleId) {
-                                    if (!targetMember.roles.cache.has(rId)) await targetMember.roles.add(rId).catch(() => {});
+                                    if (!targetMember.roles.cache.has(rId)) await targetMember.roles.add(rId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                                 } else {
-                                    if (targetMember.roles.cache.has(rId)) await targetMember.roles.remove(rId).catch(() => {});
+                                    if (targetMember.roles.cache.has(rId)) await targetMember.roles.remove(rId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                                 }
                             }
                             logEvent(getMsg('ranking.logs.roleAdded', { clan: clanName, username: targetMember.user.username }));
@@ -40,7 +44,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         }
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+        // Silently ignored — non-critical operation
+    }
         }
 
         const currentRanking = await fetchMir4RankingData(false); 
@@ -51,9 +57,13 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         for (const roleId of Object.values(CLAN_ROLES)) {
             if (roleId === idealRoleId) {
-                if (!targetMember.roles.cache.has(roleId)) await targetMember.roles.add(roleId).catch(() => {});
+                if (!targetMember.roles.cache.has(roleId)) await targetMember.roles.add(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             } else {
-                if (targetMember.roles.cache.has(roleId)) await targetMember.roles.remove(roleId).catch(() => {});
+                if (targetMember.roles.cache.has(roleId)) await targetMember.roles.remove(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
         }
     };
@@ -76,10 +86,16 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         interaction.guild.members.fetch(interaction.user.id)
             .then(async (member) => {
                 if (member) {
-                    await member.setNickname(nickname).catch(() => {});
-                    await applyImmediateRoleWithCache(member, nickname, interaction.user.id).catch(() => {});
+                    await member.setNickname(nickname).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+                    await applyImmediateRoleWithCache(member, nickname, interaction.user.id).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                 }
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 
         return interaction.editReply(getMsg('ranking.responses.register.success', { nickname }));
     }
@@ -103,11 +119,17 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
             if (member) {
                 const normalizedNick = db.users[targetId].nickname.trim().normalize('NFC');
-                await member.setNickname(normalizedNick).catch(() => {});
+                await member.setNickname(normalizedNick).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                 const idealRoleId = CLAN_ROLES[selectedClan];
                 for (const rId of Object.values(CLAN_ROLES)) {
-                    if (rId === idealRoleId) await member.roles.add(rId).catch(() => {});
-                    else await member.roles.remove(rId).catch(() => {});
+                    if (rId === idealRoleId) await member.roles.add(rId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+                    else await member.roles.remove(rId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                 }
             }
             logEvent(getMsg('ranking.logs.manualLink', { targetId, selectedClan }));
@@ -133,17 +155,25 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         await interaction.webhook.editMessage(interaction.message.id, {
             content: getMsg('ranking.responses.removepilot.success'),
             components: []
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 
         interaction.guild.members.fetch(pilotToRemoveId)
             .then(async (pilotMember) => {
                 if (pilotMember) {
                     for (const roleId of Object.values(CLAN_ROLES)) {
-                        if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {});
+                        if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                     }
-                    await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                    await pilotMember.setNickname(pilotMember.user.username).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                 }
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         return;
     }
 
@@ -157,7 +187,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.update({
                 content: '⌛ This confirmation has expired. Please run the command again.',
                 components: []
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (result === 'no') {
@@ -165,7 +197,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.update({
                 content: '❌ Action cancelled.',
                 components: []
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         delete confirmationCache[cacheKey];
@@ -174,7 +208,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             const guild = interaction.guild;
             const targetMember = await guild.members.fetch(cached.targetId).catch(() => null);
             if (!targetMember || !db.users[cached.targetId]) {
-                return interaction.update({ content: '❌ Target user no longer available.', components: [] }).catch(() => {});
+                return interaction.update({ content: '❌ Target user no longer available.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             const userData = db.users[cached.targetId];
@@ -182,15 +218,23 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 for (const pId of userData.pilotIds) {
                     const pilotMember = await guild.members.fetch(pId).catch(() => null);
                     if (pilotMember) {
-                        for (const roleId of Object.values(CLAN_ROLES)) await pilotMember.roles.remove(roleId).catch(() => {});
-                        await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                        for (const roleId of Object.values(CLAN_ROLES)) await pilotMember.roles.remove(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+                        await pilotMember.setNickname(pilotMember.user.username).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                     }
                 }
             }
             for (const roleId of Object.values(CLAN_ROLES)) {
-                if (targetMember.roles.cache.has(roleId)) await targetMember.roles.remove(roleId).catch(() => {});
+                if (targetMember.roles.cache.has(roleId)) await targetMember.roles.remove(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
-            await targetMember.setNickname(targetMember.user.username).catch(() => {});
+            await targetMember.setNickname(targetMember.user.username).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             delete db.users[cached.targetId];
             saveLocalStorage();
 
@@ -198,7 +242,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.update({
                 content: getMsg('ranking.responses.manualremove.success', { username: cached.targetName }),
                 components: []
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (action === 'manualremovepilot') {
@@ -207,11 +253,15 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             const pilotMember = await guild.members.fetch(cached.pilotId).catch(() => null);
 
             if (!ownerMember || !db.users[cached.ownerId]) {
-                return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
+                return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             if (!db.users[cached.ownerId].pilotIds || !db.users[cached.ownerId].pilotIds.includes(cached.pilotId)) {
-                return interaction.update({ content: '❌ This pilot is no longer linked.', components: [] }).catch(() => {});
+                return interaction.update({ content: '❌ This pilot is no longer linked.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             db.users[cached.ownerId].pilotIds = db.users[cached.ownerId].pilotIds.filter(id => id !== cached.pilotId);
@@ -219,16 +269,22 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
             if (pilotMember) {
                 for (const roleId of Object.values(CLAN_ROLES)) {
-                    if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {});
+                    if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                 }
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                await pilotMember.setNickname(pilotMember.user.username).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             logEvent(`Admin ${interaction.user.tag} removed pilot ${cached.pilotName} from ${cached.ownerName}`);
             return interaction.update({
                 content: getMsg('ranking.responses.manualremovepilot.success', { ownerDisplay: cached.ownerName, pilotDisplay: cached.pilotName }),
                 components: []
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (action === 'manualpilot') {
@@ -237,7 +293,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             const pilotMember = await guild.members.fetch(cached.pilotId).catch(() => null);
 
             if (!ownerMember || !db.users[cached.ownerId]) {
-                return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
+                return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             if (!db.users[cached.ownerId].pilotIds) db.users[cached.ownerId].pilotIds = [];
@@ -247,18 +305,24 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             saveLocalStorage();
 
             if (pilotMember) {
-                await pilotMember.setNickname(`${cached.ownerNick} - Pilot`).catch(() => {});
+                await pilotMember.setNickname(`${cached.ownerNick} - Pilot`).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             if (pilotMember) {
-                applyImmediateRoleWithCache(pilotMember, cached.ownerNick, cached.ownerId).catch(() => {});
+                applyImmediateRoleWithCache(pilotMember, cached.ownerNick, cached.ownerId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             logEvent(`Admin ${interaction.user.tag} manually linked pilot ${cached.pilotName} to ${cached.ownerName}`);
             return interaction.update({
                 content: getMsg('ranking.responses.manualpilot.success', { pilotMember: cached.pilotName, nick: cached.ownerNick }),
                 components: []
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (action === 'manualregister') {
@@ -266,7 +330,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             const targetMember = await guild.members.fetch(cached.targetId).catch(() => null);
 
             if (!targetMember) {
-                return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
+                return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             db.users[cached.targetId] = {
@@ -278,33 +344,47 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
             saveLocalStorage();
 
-            await targetMember.setNickname(cached.nickname).catch(() => {});
+            await targetMember.setNickname(cached.nickname).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             const idealRoleId = CLAN_ROLES[cached.clan];
             for (const [clanName, roleId] of Object.entries(CLAN_ROLES)) {
-                if (roleId === idealRoleId) await targetMember.roles.add(roleId).catch(() => {});
-                else await targetMember.roles.remove(roleId).catch(() => {});
+                if (roleId === idealRoleId) await targetMember.roles.add(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
+                else await targetMember.roles.remove(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}`);
             return interaction.update({
                 content: getMsg('ranking.responses.manualregister.cacheFound', { nickname: cached.nickname, clan: cached.clan }),
                 components: []
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
-        return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {});
+        return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // E. MANAGE MENU HANDLERS
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('manage_user_page_')) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         const targetUserId = interaction.values[0];
         const userData = db.users[targetUserId];
         if (!userData) {
-            return interaction.update({ content: '❌ User no longer registered.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ User no longer registered.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         const actionOptions = [
@@ -336,19 +416,25 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 new ActionRowBuilder().addComponents(actionMenu),
                 new ActionRowBuilder().addComponents(backButton)
             ]
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // F. MANAGE ACTION HANDLER
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('manage_action_')) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         const [actionType, targetUserId] = interaction.values[0].split('_', 2);
         const userData = db.users[targetUserId];
         if (!userData) {
-            return interaction.update({ content: '❌ User no longer registered.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ User no longer registered.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (actionType === 'remove') {
@@ -365,7 +451,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
                     )
                 ]
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (actionType === 'clan') {
@@ -385,12 +473,16 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
                     )
                 ]
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (actionType === 'pilot') {
             if (!userData.pilotIds || userData.pilotIds.length === 0) {
-                return interaction.update({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {});
+                return interaction.update({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
 
             const pilotOptions = [];
@@ -413,16 +505,22 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
                     )
                 ]
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
-        return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {});
+        return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // G. MANAGE PILOT REMOVAL HANDLER
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('manage_pilot_')) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         const targetUserId = interaction.customId.replace('manage_pilot_', '');
@@ -430,7 +528,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const userData = db.users[targetUserId];
 
         if (!userData || !userData.pilotIds || !userData.pilotIds.includes(pilotToRemoveId)) {
-            return interaction.update({ content: '❌ This pilot is no longer linked.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ This pilot is no longer linked.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         userData.pilotIds = userData.pilotIds.filter(id => id !== pilotToRemoveId);
@@ -439,29 +539,41 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         interaction.guild.members.fetch(pilotToRemoveId).then(async (pilotMember) => {
             if (pilotMember) {
                 for (const roleId of Object.values(CLAN_ROLES)) {
-                    if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {});
+                    if (pilotMember.roles.cache.has(roleId)) await pilotMember.roles.remove(roleId).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
                 }
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                await pilotMember.setNickname(pilotMember.user.username).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 
         logEvent(`Admin ${interaction.user.tag} removed pilot ${pilotToRemoveId} from ${targetUserId} via manage menu`);
         return interaction.update({
             content: '✅ Pilot removed successfully.',
             components: []
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     // H. MANAGE NAVIGATION BUTTONS
     if (interaction.isButton() && (interaction.customId.startsWith('manage_user_prev_') || interaction.customId.startsWith('manage_user_next_') || interaction.customId === 'manage_back')) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         if (interaction.customId === 'manage_back') {
             const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
             if (userEntries.length === 0) {
-                return interaction.update({ content: getMsg('ranking.responses.manage.noUsers'), components: [] }).catch(() => {});
+                return interaction.update({ content: getMsg('ranking.responses.manage.noUsers'), components: [] }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
             }
             const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
             const PAGE_SIZE = 25;
@@ -487,7 +599,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.update({
                 content: getMsg('ranking.responses.manage.pageInfo', { current: 1, total: totalPages, count: sorted.length }),
                 components
-            }).catch(() => {});
+            }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         }
 
         const [, , , pageStr] = interaction.customId.split('_');
@@ -499,7 +613,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const PAGE_SIZE = 25;
         const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
 
-        if (newPage < 0 || newPage >= totalPages) return interaction.deferUpdate().catch(() => {});
+        if (newPage < 0 || newPage >= totalPages) return interaction.deferUpdate().catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
 
         const pageItems = sorted.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE);
         const selectOptions = pageItems.map(([id, data]) => ({
@@ -521,7 +637,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.update({
             content: getMsg('ranking.responses.manage.pageInfo', { current: newPage + 1, total: totalPages, count: sorted.length }),
             components: [new ActionRowBuilder().addComponents(selectMenu), navRow]
-        }).catch(() => {});
+        }).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
     }
 
     if (!interaction.isCommand()) return;
@@ -575,7 +693,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         saveLocalStorage();
 
         const ownerNick = db.users[user.id].nickname.trim().normalize('NFC');
-        await pilotMember.setNickname(`${ownerNick} - Pilot`).catch(() => {});
+        await pilotMember.setNickname(`${ownerNick} - Pilot`).catch(() => {
+        // Silently ignore — Discord API errors are non-critical
+    });
         await applyImmediateRoleWithCache(pilotMember, ownerNick, user.id);
 
         return interaction.editReply(getMsg('ranking.responses.pilot.success', { pilotMember: pilotMember.toString(), count: db.users[user.id].pilotIds.length, nick: ownerNick }));
