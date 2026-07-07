@@ -7,9 +7,9 @@ export const confirmationCache = {};
 export const DISCORD_SERVER_ID = '1432320162278670440';
 
 export const CLAN_ROLES = {
-    "浪人・AEON・": "1503933709756141620",
-    "浪人・MMM・": "1503933709756141620",
-    "浪人・Kitty・": "1503933844909326478",
+    "GearsofWar シ": "1503933709756141620",
+    "GearsofWar79": "1503933709756141620",
+    "GearsofWar ツ": "1503933844909326478",
     "・URSUS・": "1503933886260969472"
 };
 
@@ -17,10 +17,10 @@ export const CLAN_POWER_ROLE = "1503934305922191450"; // 10F (400K+)
 export const CLAN_POWER_THRESHOLD = 400000;
 
 export const HOFGAMER_CLAN_URLS = {
-    "浪人・AEON・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBAEON%E3%83%BB",
-    "浪人・MMM・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBMMM%E3%83%BB",
+    "GearsofWar シ": "https://www.hofgamer.com/clan/detail/?clan=GearsofWar%20%E3%82%B7",
+    "GearsofWar79": "https://www.hofgamer.com/clan/detail/?clan=GearsofWar79",
     "・URSUS・": "https://www.hofgamer.com/clan/detail/?clan=%E3%83%BBURSUS%E3%83%BB",
-    "浪人・Kitty・": "https://www.hofgamer.com/clan/detail/?clan=%E6%B5%AA%E4%BA%BA%E3%83%BBKitty%E3%83%BB"
+    "GearsofWar ツ": "https://www.hofgamer.com/clan/detail/?clan=GearsofWar%20%E3%83%84"
 };
 
 // Normalize a name for fuzzy matching by stripping only decorative/symbol characters.
