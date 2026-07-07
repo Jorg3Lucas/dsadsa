@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "./state.js";
-import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migrateMS1112, migrateSPLegacyToUnified, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
+import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateMS1112, migrateSPLegacyToUnified, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
 import { startTickInterval } from "./panel-tick.js";
 import { STATUS_AVAILABLE } from "./constants.js";
 
@@ -293,6 +293,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     migrateBossCooldowns();
     migrateNamesCleanEmojis();
     migrateLastKilledAt();
+    migratePlantOreCooldown();
     migrateMS1112();
     migrateSPLegacyToUnified();
 

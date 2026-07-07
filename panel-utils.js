@@ -330,6 +330,30 @@ export function migrateBossCooldowns() {
 }
 
 // ==========================================
+// 🔄 MIGRATION: Update plant/ore cooldown from 60→30 on MS (normal) panels
+// ==========================================
+
+export function migratePlantOreCooldown() {
+    let migrated = 0;
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        const current = db[key];
+        if ("normal" !== current.type) continue;
+
+        ["plant", "ore"].forEach(prop => {
+            if (current[prop] && current[prop].cooldown === 60) {
+                current[prop].cooldown = 30;
+                migrated++;
+            }
+        });
+    }
+    if (migrated > 0) {
+        saveLocalStorage();
+        logEvent(`Migrated plant/ore cooldown from 60→30 for ${migrated} entries on MS panels.`);
+    }
+}
+
+// ==========================================
 // 🔄 MIGRATION: Backfill _lastKilledAt timestamp for existing entries
 // ==========================================
 
