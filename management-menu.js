@@ -29,7 +29,7 @@ import {
 } from "./salary-poll.js";
 import { getLocalTime } from "./time-utils.js";
 import { STATUS_CLAIMED } from "./constants.js";
-import { freeAntidemonRoom, getAntidemonRoomKeys, _getAntidemonRoomName, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
+import { freeAntidemonRoom, getAntidemonRoomKeys, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 
 const confirmTimeouts = new Map();
 
