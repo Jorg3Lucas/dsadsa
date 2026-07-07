@@ -52,18 +52,26 @@ export function getSummonRoomKeys(panelKey) {
     return SUMMON_PROPS_INTERNAL;
 }
 
-// Rooms for expanded antidemon panels (MS11 and MS12: 1-1, 1-2, 1-3 each with LEFT/MID/RIGHT)
+// Rooms for expanded antidemon panels
+// MS9/MS10: 1-1, 1-2 each with LEFT/MID/RIGHT (6 rooms)
+// MS11/MS12: 1-1, 1-2, 1-3 each with LEFT/MID/RIGHT (9 rooms)
+const ANTIDEMON_9_10_ROOMS = [
+    { key: "v1l", name: "1-1 LEFT" }, { key: "v1m", name: "1-1 MID" }, { key: "v1r", name: "1-1 RIGHT" },
+    { key: "v2l", name: "1-2 LEFT" }, { key: "v2m", name: "1-2 MID" }, { key: "v2r", name: "1-2 RIGHT" }
+];
 const ANTIDEMON_11_12_ROOMS = [
     { key: "v1l", name: "1-1 LEFT" }, { key: "v1m", name: "1-1 MID" }, { key: "v1r", name: "1-1 RIGHT" },
     { key: "v2l", name: "1-2 LEFT" }, { key: "v2m", name: "1-2 MID" }, { key: "v2r", name: "1-2 RIGHT" },
     { key: "v3l", name: "1-3 LEFT" }, { key: "v3m", name: "1-3 MID" }, { key: "v3r", name: "1-3 RIGHT" }
 ];
+const ANTIDEMON_9_10_KEYS = ANTIDEMON_9_10_ROOMS.map(r => r.key);
 const ANTIDEMON_11_12_KEYS = ANTIDEMON_11_12_ROOMS.map(r => r.key);
 
 // Returns room key array for an antidemon panel based on its key
 export function getAntidemonRoomKeys(panelKey) {
     const floor = panelKey?.match(/^(\d+)/)?.[1];
-    if (floor === "9" || floor === "10" || floor === "11" || floor === "12") return ANTIDEMON_11_12_KEYS;
+    if (floor === "9" || floor === "10") return ANTIDEMON_9_10_KEYS;
+    if (floor === "11" || floor === "12") return ANTIDEMON_11_12_KEYS;
     return ["left", "mid", "right"];
 }
 

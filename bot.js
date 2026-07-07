@@ -200,12 +200,15 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // Antidemon panels for MS9-MS12: single panel with all 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
+    // Antidemon panels for MS9-MS12
+    // Floors 9/10: 6 rooms (1-1, 1-2 × LEFT/MID/RIGHT)
+    // Floors 11/12: 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
     ["9", "10", "11", "12"].forEach(floor => {
         const key = `${floor}squareantidemon`;
         if (!db[key]) {
             const rooms = {};
-            const versions = ["1-1", "1-2", "1-3"];
+            const is9or10 = floor === "9" || floor === "10";
+            const versions = is9or10 ? ["1-1", "1-2"] : ["1-1", "1-2", "1-3"];
             const sides = [
                 { k: "l", n: "LEFT" },
                 { k: "m", n: "MID" },
