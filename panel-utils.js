@@ -59,7 +59,25 @@ export async function refreshVisualPanel(key) {
             components: renderButtons(key)
         })
     } catch (n) {
-        delete lastMessages[key]
+        // Edit failed (rate limit, msg deleted, permissions lost) — try to recover via panel mapping
+        delete lastMessages[key];
+        try {
+            const mapping = db._panelMapping && db._panelMapping[key];
+            if (mapping && mapping.channelId && mapping.messageId) {
+                const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+                if (channel) {
+                    const newMsg = await channel.send({
+                        embeds: [renderEmbed(key)],
+                        components: renderButtons(key)
+                    });
+                    lastMessages[key] = newMsg;
+                    db._panelMapping[key] = { channelId: channel.id, messageId: newMsg.id };
+                    saveLocalStorage();
+                }
+            }
+        } catch (e) {
+            logEvent(`Failed to recover panel ${key}: ${e.message}`);
+        }
     }}
 }
 

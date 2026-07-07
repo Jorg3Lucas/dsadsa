@@ -187,6 +187,27 @@ export function startTickInterval() {
                         }
                     }
                     
+                    // Handle fixed-type events (Fury/Frenzy) time limit
+                    if (evData.type === "fixed" && evData.timeWindow && evData.ownerId) {
+                        const limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
+                        if (limitTime && now >= limitTime) {
+                            evData.ownerName && pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
+                            await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
+                                title: `${current.title} - ${evData.name}`,
+                                reason: getMsg("logs.timeout")
+                            })).catch(() => {});
+                            evData.ownerId = null;
+                            evData.ownerName = null;
+                            evData.timeWindow = "";
+                            evData.reservedFor = null;
+                            evData.reservedByName = null;
+                            evData.reservations = null;
+                            if (evData._claimTimestamp) delete evData._claimTimestamp;
+                            panelUpdate = !0;
+                            updateNeeded = !0;
+                        }
+                    }
+                    
                     // Handle summon-type events (Goblin) time limit
                     if (evData.type === "summon" && evData.timeWindow && evData.ownerId) {
                         const limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
