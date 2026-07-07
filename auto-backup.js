@@ -13,11 +13,7 @@ const MAX_BACKUPS = 7; // keep last 7 backups per file
 
 // All JSON files that should be backed up
 const BACKUP_FILES = [
-  "./database.json",
   "./database_ranking.json",
-  "./salary-poll-db.json",
-  "./daily-logs.json",
-  "./punishments.json",
   "./ranking_cache.json"
 ];
 
