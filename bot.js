@@ -86,14 +86,14 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
             plant: {
                 name: "🌱 Plant",
                 status: STATUS_AVAILABLE,
-                cooldown: 60,
+                cooldown: 30,
                 _freeSince: 0,
                 _lastKilledTimeStr: ""
             },
             ore: {
                 name: "⛏️ Ore",
                 status: STATUS_AVAILABLE,
-                cooldown: 60,
+                cooldown: 30,
                 _freeSince: 0,
                 _lastKilledTimeStr: ""
             }
