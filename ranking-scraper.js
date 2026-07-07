@@ -1,9 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { HOFGAMER_CLAN_URLS } from './ranking-constants.js';
 import { saveRankingCache, getLocalRankingCache } from './ranking-cache.js';
 import { getMsg } from './lang.js';
-import { fetchWithBrowser, closeBrowser } from './hofgamer-scraper.js';
 
 // ==========================================
 // 🌐 WEB SCRAPING (MIR4 Official Ranking)
@@ -56,45 +54,6 @@ export async function fetchMir4RankingData(forceRefresh = false) {
     if (Object.keys(rankingMap).length === 0) return getLocalRankingCache() || {};
     saveRankingCache(rankingMap);
     return rankingMap;
-}
-
-export async function fetchClanPowerData(logEvent) {
-    const powerMap = {};
-    try {
-        for (const [clanName, url] of Object.entries(HOFGAMER_CLAN_URLS)) {
-            try {
-                const html = await fetchWithBrowser(url, { timeout: 60000 });
-                const $ = cheerio.load(html);
-
-                let count = 0;
-                $('table').first().find('tr').each((i, el) => {
-                    const cells = $(el).find('td');
-                    if (cells.length >= 3) {
-                        const rawNick = cells.eq(0).text().trim().normalize('NFC');
-                        let nick = rawNick.split(/[\n\r]+/)[0].trim();
-                        // Strip impersonation suffix (冒用) added by hofgamer.com
-                        nick = nick.replace(/\(冒用\)/g, '').trim();
-                        const powerText = cells.eq(2).text().replace(/[\n\t\r,]/g, '').trim();
-                        const power = parseInt(powerText, 10);
-                        if (nick && !isNaN(power) && power > 0) {
-                            powerMap[nick] = power;
-                            count++;
-                        }
-                    }
-                });
-                logEvent(`Scraped clan ${clanName}: ${count} members found (${Object.keys(powerMap).length} total)`);
-                await new Promise(resolve => setTimeout(resolve, 2500));
-            } catch (err) {
-                logEvent(`Error scraping clan ${clanName}: ${err.message}`);
-            }
-        }
-        if (Object.keys(powerMap).length === 0) {
-            logEvent('WARNING: No power data found from any clan page! Selector may need adjustment.');
-        }
-        return powerMap;
-    } finally {
-        await closeBrowser();
-    }
 }
 
 export async function safelyFetchGuildMembers(guild, logEvent) {

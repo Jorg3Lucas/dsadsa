@@ -1,5 +1,5 @@
-import { DISCORD_SERVER_ID, CLAN_ROLES, CLAN_POWER_ROLE, CLAN_POWER_THRESHOLD, normalizeForMatch } from './ranking-constants.js';
-import { fetchMir4RankingData, fetchClanPowerData, safelyFetchGuildMembers } from './ranking-scraper.js';
+import { DISCORD_SERVER_ID, CLAN_ROLES } from './ranking-constants.js';
+import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getMsg } from './lang.js';
 
 // ==========================================
@@ -125,63 +125,6 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             if ((member.nickname || '').normalize('NFC') !== desiredNickname) {
                 await member.setNickname(desiredNickname).catch(() => {});
             }
-        }
-
-        // 4. 10F POWER ROLE SYNCHRONIZATION
-        try {
-            const powerData = await fetchClanPowerData(logEvent);
-            let powerRoleAdded = 0, powerRoleRemoved = 0;
-            for (const [memberId, member] of members) {
-                if (member.user.bot) continue;
-
-                const ownerIdOfThisPilot = Object.keys(db.users).find(id => db.users[id].pilotIds && db.users[id].pilotIds.includes(memberId));
-                const isPilot = !!ownerIdOfThisPilot;
-                const effectiveOwnerId = isPilot ? ownerIdOfThisPilot : memberId;
-                const ownerData = db.users[effectiveOwnerId];
-
-                if (ownerData && ownerData.nickname) {
-                    const normalizedNick = ownerData.nickname.trim().normalize('NFC');
-                    // Step 1: Try exact match first
-                    let matchKey = Object.keys(powerData).find(k => k.normalize('NFC').toLowerCase() === normalizedNick.toLowerCase());
-                    // Step 2: If no exact match, try fuzzy match by stripping decorative chars
-                    if (!matchKey) {
-                        const cleanReg = normalizeForMatch(normalizedNick);
-                        matchKey = Object.keys(powerData).find(k => normalizeForMatch(k) === cleanReg);
-                        if (matchKey) {
-                            logEvent(`10F Power: Fuzzy matched "${normalizedNick}" -> "${matchKey}"`);
-                        }
-                    }
-                    const power = matchKey ? powerData[matchKey] : undefined;
-                    if (!matchKey && powerData && Object.keys(powerData).length > 0) {
-                        if (Math.random() < 0.1) {
-                            const sampleKeys = Object.keys(powerData).slice(0, 3).map(k => `"${k}"`).join(', ');
-                            logEvent(`10F Power: No match for "${normalizedNick}" in powerData. Sample keys: ${sampleKeys}`);
-                        }
-                    }
-
-                    if (power !== undefined) {
-                        const hasRole = member.roles.cache.has(CLAN_POWER_ROLE);
-                        if (power >= CLAN_POWER_THRESHOLD) {
-                            if (!hasRole) {
-                                await member.roles.add(CLAN_POWER_ROLE).catch(() => {});
-                                powerRoleAdded++;
-                                logEvent(`10F Power: Added role to ${member.user.username} (${normalizedNick} - Power: ${power})`);
-                            }
-                        } else {
-                            if (hasRole) {
-                                await member.roles.remove(CLAN_POWER_ROLE).catch(() => {});
-                                powerRoleRemoved++;
-                                logEvent(`10F Power: Removed role from ${member.user.username} (${normalizedNick} - Power: ${power})`);
-                            }
-                        }
-                    }
-                }
-            }
-            if (powerRoleAdded > 0) logEvent(`10F Power Sync: Added role to ${powerRoleAdded} members (Power >= ${CLAN_POWER_THRESHOLD})`);
-            if (powerRoleRemoved > 0) logEvent(`10F Power Sync: Removed role from ${powerRoleRemoved} members (Power < ${CLAN_POWER_THRESHOLD})`);
-            logEvent(`10F Power Sync completed.`);
-        } catch (powerError) {
-            logEvent(`10F Power Sync error: ${powerError.message}`);
         }
 
         saveLocalStorage();
