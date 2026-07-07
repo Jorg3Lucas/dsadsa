@@ -441,7 +441,8 @@ async function handleEventGroupClaim(interaction, uid, uName, targetObj, panelKe
     // Build available options based on event type
     // Fixed-type events (Fury/Frenzy/Random Event) have their own individual buttons,
     // so they are excluded from the generic select menu.
-    const now =    const options = [];
+    const now = getLocalTime();
+    const options = [];
     
     for (const ev of eventKeys) {
         const evData = targetObj[ev];
