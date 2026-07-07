@@ -1,4 +1,4 @@
-import { DISCORD_SERVER_ID, CLAN_ROLES } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, MEMBER_ROLE_ID } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getMsg } from './lang.js';
 
@@ -58,15 +58,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (memberId !== registeredOwnerId && (!ownerData.pilotIds || !ownerData.pilotIds.includes(memberId))) {
                     logEvent(getMsg('ranking.logs.imposterDetected', { username: member.user.username, nickname: ownerData.nickname }));
                     await member.setNickname(member.user.username).catch(() => {});
-                    for (const roleId of Object.values(CLAN_ROLES)) {
-                        if (member.roles.cache.has(roleId)) await member.roles.remove(roleId).catch(() => {});
-                    }
+                    if (member.roles.cache.has(MEMBER_ROLE_ID)) await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                     continue; 
                 }
             }
         }
 
-        // 3. ROLE AND NICKNAME SYNCHRONIZATION
+        // 3. NICKNAME SYNCHRONIZATION + MEMBER ROLE
         for (const [memberId, member] of members) {
             if (member.user.bot) continue;
 
@@ -75,6 +73,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             
             const effectiveOwnerId = isPilot ? ownerIdOfThisPilot : memberId;
             const ownerData = db.users[effectiveOwnerId];
+            const isRegistered = !!(ownerData && (ownerData.registeredAt || ownerData.manual === true));
 
             let inGameNick = "";
             if (ownerData) {
@@ -88,29 +87,14 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 db.users[memberId] = { nickname: inGameNick, pilotIds: [], registeredAt: new Date().toISOString() };
             }
 
-            let currentClanInGame = "No Clan";
-            if (ownerData && ownerData.clanManual) {
-                currentClanInGame = ownerData.clanManual; 
-            } else {
-                const exactMatchNick = Object.keys(currentRanking).find(k => k.normalize('NFC').toLowerCase() === inGameNick.toLowerCase());
-                currentClanInGame = exactMatchNick ? currentRanking[exactMatchNick] : "No Clan";
-            }
-
-            const idealRoleId = CLAN_ROLES[currentClanInGame];
-
-            for (const [clanName, roleId] of Object.entries(CLAN_ROLES)) {
-                const hasRole = member.roles.cache.has(roleId);
-                if (roleId === idealRoleId) {
-                    if (!hasRole) {
-                        await member.roles.add(roleId).catch(() => {});
-                        logEvent(getMsg('ranking.logs.roleAdded', { clan: clanName, username: member.user.username }));
-                    }
-                } else {
-                    if (hasRole) {
-                        await member.roles.remove(roleId).catch(() => {});
-                        logEvent(getMsg('ranking.logs.roleRemoved', { clan: clanName, username: member.user.username }));
-                    }
-                }
+            // Assign member role to registered users, remove from non-registered
+            const hasMemberRole = member.roles.cache.has(MEMBER_ROLE_ID);
+            if (isRegistered && !hasMemberRole) {
+                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
+            } else if (!isRegistered && hasMemberRole) {
+                await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
             }
 
             let desiredNickname = "";

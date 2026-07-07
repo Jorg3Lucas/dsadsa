@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { PermissionFlagsBits } from 'discord.js';
-import { CLAN_ROLES } from './ranking-constants.js';
+import { MEMBER_ROLE_ID } from './ranking-constants.js';
 import { getMsg } from './lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -71,7 +71,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         for (const pId of userData.pilotIds) {
                             const pilotMember = await member.guild.members.fetch(pId).catch(() => null);
                             if (pilotMember) {
-                                for (const roleId of Object.values(CLAN_ROLES)) await pilotMember.roles.remove(roleId).catch(() => {});
+                                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                                 await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
                                 logEvent(getMsg('ranking.logs.pilotCleaned', { tag: pilotMember.user.tag }));
                             }

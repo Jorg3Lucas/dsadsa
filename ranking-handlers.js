@@ -9,9 +9,8 @@ import {
     ButtonStyle
 } from 'discord.js';
 import { getMsg } from './lang.js';
-import { confirmationCache, CLAN_ROLES } from './ranking-constants.js';
+import { confirmationCache, MEMBER_ROLE_ID } from './ranking-constants.js';
 import { getLocalRankingCache } from './ranking-cache.js';
-import { fetchMir4RankingData } from './ranking-scraper.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
 // ==========================================
@@ -21,50 +20,11 @@ import { runDailySynchronization } from './ranking-sync-engine.js';
 export async function handleMir4Interactions(interaction, db, saveLocalStorage, logEvent) {
     if (!db.users) db.users = {};
 
-    const applyImmediateRoleWithCache = async (targetMember, ownerNick, ownerId) => {
-        if (ownerId) {
-            try {
-                const ownerMember = await interaction.guild.members.fetch(ownerId).catch(() => null);
-                if (ownerMember) {
-                    for (const [clanName, roleId] of Object.entries(CLAN_ROLES)) {
-                        if (ownerMember.roles.cache.has(roleId)) {
-                            for (const [, rId] of Object.entries(CLAN_ROLES)) {
-                                if (rId === roleId) {
-                                    if (!targetMember.roles.cache.has(rId)) {await targetMember.roles.add(rId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
-                                } else {
-                                    if (targetMember.roles.cache.has(rId)) {await targetMember.roles.remove(rId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
-                                }
-                            }
-                            logEvent(getMsg('ranking.logs.roleAdded', { clan: clanName, username: targetMember.user.username }));
-                            return;
-                        }
-                    }
-                }
-            } catch (e) {
-        // Silently ignored — non-critical operation
-    }
-        }
-
-        const currentRanking = await fetchMir4RankingData(false); 
-        const normalizedOwner = ownerNick.trim().normalize('NFC').toLowerCase();
-        const exactMatch = Object.keys(currentRanking).find(k => k.normalize('NFC').toLowerCase() === normalizedOwner);
-        const clanName = exactMatch ? currentRanking[exactMatch] : "No Clan";
-        const idealRoleId = CLAN_ROLES[clanName];
-
-        for (const roleId of Object.values(CLAN_ROLES)) {
-            if (roleId === idealRoleId) {
-                if (!targetMember.roles.cache.has(roleId)) {await targetMember.roles.add(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
-            } else {
-                if (targetMember.roles.cache.has(roleId)) {await targetMember.roles.remove(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
-            }
+    const applyImmediateRoleWithCache = async (targetMember, _ownerNick, _ownerId) => {
+        // Assign the general member role for verified players
+        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+            logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
         }
     };
 
@@ -122,14 +82,8 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 await member.setNickname(normalizedNick).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
-                const idealRoleId = CLAN_ROLES[selectedClan];
-                for (const rId of Object.values(CLAN_ROLES)) {
-                    if (rId === idealRoleId) {await member.roles.add(rId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
-                    else {await member.roles.remove(rId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
+                if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                 }
             }
             logEvent(getMsg('ranking.logs.manualLink', { targetId, selectedClan }));
@@ -157,15 +111,11 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             components: []
         }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
-    });
-
-        interaction.guild.members.fetch(pilotToRemoveId)
+    });            interaction.guild.members.fetch(pilotToRemoveId)
             .then(async (pilotMember) => {
                 if (pilotMember) {
-                    for (const roleId of Object.values(CLAN_ROLES)) {
-                        if (pilotMember.roles.cache.has(roleId)) {await pilotMember.roles.remove(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
+                    if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                        await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                     }
                     await pilotMember.setNickname(pilotMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -218,19 +168,17 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 for (const pId of userData.pilotIds) {
                     const pilotMember = await guild.members.fetch(pId).catch(() => null);
                     if (pilotMember) {
-                        for (const roleId of Object.values(CLAN_ROLES)) {await pilotMember.roles.remove(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
+                        if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                            await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        }
                         await pilotMember.setNickname(pilotMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
                     }
                 }
             }
-            for (const roleId of Object.values(CLAN_ROLES)) {
-                if (targetMember.roles.cache.has(roleId)) {await targetMember.roles.remove(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
+            if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                await targetMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
             }
             await targetMember.setNickname(targetMember.user.username).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -268,14 +216,10 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             saveLocalStorage();
 
             if (pilotMember) {
-                for (const roleId of Object.values(CLAN_ROLES)) {
-                    if (pilotMember.roles.cache.has(roleId)) {await pilotMember.roles.remove(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
+                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                 }
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
+                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
             }
 
             logEvent(`Admin ${interaction.user.tag} removed pilot ${cached.pilotName} from ${cached.ownerName}`);
@@ -344,17 +288,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
             saveLocalStorage();
 
-            await targetMember.setNickname(cached.nickname).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
-            const idealRoleId = CLAN_ROLES[cached.clan];
-            for (const [clanName, roleId] of Object.entries(CLAN_ROLES)) {
-                if (roleId === idealRoleId) {await targetMember.roles.add(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
-                else {await targetMember.roles.remove(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
+            await targetMember.setNickname(cached.nickname).catch(() => {});
+            if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
             }
 
             logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}`);
@@ -457,25 +393,19 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         if (actionType === 'clan') {
-            const clanOptions = Object.keys(CLAN_ROLES).map(clanName => ({
-                label: clanName,
-                value: clanName
-            }));
-            const clanMenu = new StringSelectMenuBuilder()
-                .setCustomId(`select_clan_manual_${targetUserId}`)
-                .setPlaceholder('Select a clan...')
-                .addOptions(clanOptions);
+            // Clan selection no longer applies — just assign member role
+            const clanTarget = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+            if (clanTarget && !clanTarget.roles.cache.has(MEMBER_ROLE_ID)) {
+                await clanTarget.roles.add(MEMBER_ROLE_ID).catch(() => {});
+            }
             return interaction.update({
-                content: getMsg('ranking.responses.selectClanMenu.prompt', { nickname: userData.nickname }),
+                content: '✅ Member role assigned.',
                 components: [
-                    new ActionRowBuilder().addComponents(clanMenu),
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
                     )
                 ]
-            }).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
+            }).catch(() => {});
         }
 
         if (actionType === 'pilot') {
@@ -538,18 +468,12 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         interaction.guild.members.fetch(pilotToRemoveId).then(async (pilotMember) => {
             if (pilotMember) {
-                for (const roleId of Object.values(CLAN_ROLES)) {
-                    if (pilotMember.roles.cache.has(roleId)) {await pilotMember.roles.remove(roleId).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });}
+                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                 }
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
+                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
             }
-        }).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
+        }).catch(() => {});
 
         logEvent(`Admin ${interaction.user.tag} removed pilot ${pilotToRemoveId} from ${targetUserId} via manage menu`);
         return interaction.update({
@@ -780,22 +704,13 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
         saveLocalStorage();
 
-        const selectOptions = Object.keys(CLAN_ROLES).map(clanName => ({
-            label: clanName,
-            description: getMsg('ranking.responses.manualregister.optionDescription', { clanName }),
-            value: clanName
-        }));
-
-        const menuComponent = new StringSelectMenuBuilder()
-            .setCustomId(`select_clan_manual_${targetMember.id}`)
-            .setPlaceholder(getMsg('ranking.responses.manualregister.menuPlaceholder'))
-            .addOptions(selectOptions);
-
-        const actionRow = new ActionRowBuilder().addComponents(menuComponent);
+        // Assign member role directly (no clan selection for alliance server)
+        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        }
 
         return interaction.reply({
-            content: getMsg('ranking.responses.manualregister.cacheNotFound', { nickname }),
-            components: [actionRow],
+            content: getMsg('ranking.responses.manualregister.success', { nickname }),
             flags: 64
         });
     }
