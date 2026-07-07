@@ -63,7 +63,7 @@ const ANTIDEMON_11_12_KEYS = ANTIDEMON_11_12_ROOMS.map(r => r.key);
 // Returns room key array for an antidemon panel based on its key
 export function getAntidemonRoomKeys(panelKey) {
     const floor = panelKey?.match(/^(\d+)/)?.[1];
-    if (floor === "11" || floor === "12") return ANTIDEMON_11_12_KEYS;
+    if (floor === "9" || floor === "10" || floor === "11" || floor === "12") return ANTIDEMON_11_12_KEYS;
     return ["left", "mid", "right"];
 }
 
