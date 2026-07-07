@@ -447,17 +447,26 @@ export function startTickInterval() {
                 } else if ("fixed" === current.type) {
                     panelUpdate = !0; // Next opening countdown always changes
                 } else {
-                    // Check for boss respawn countdowns
+                    // Check for boss respawn countdowns or elapsed time counters
                     for (const prop in current) {
                         if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) {
                             if (current[prop].status.startsWith("🔴 Killed at") && current[prop].cooldown) {
                                 panelUpdate = !0;
                                 break;
                             }
+                            // Keep "🟢 Xm ago" elapsed time counter updated each tick
+                            if (current[prop]._freeSince > 0) {
+                                panelUpdate = !0;
+                                break;
+                            }
                         }
                     }
-                    // Also check for endLimit countdown on peak/square floors
-                    if (!panelUpdate && current.next && current.next.endLimit) {
+                    // Keep claimed panels fresh (embed timestamp, visible claim state)
+                    if (!panelUpdate && current.ownerId) {
+                        panelUpdate = !0;
+                    }
+                    // Also check for queue ETA or endLimit countdown on peak/square floors
+                    if (!panelUpdate && current.next) {
                         panelUpdate = !0;
                     }
                 }
