@@ -141,8 +141,8 @@ export function resetPanelData(key) {
         const version = isAnti[2] || "";
         const title = version ? `Antidemon ${floor}F ${version.slice(0,1)}-${version.slice(1)}` : `Antidemon ${floor}F`;
         
-        // MS11 and MS12: expanded panel with 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
-        if (floor === "11" || floor === "12") {
+        // MS9-MS12: expanded panel with 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
+        if (floor === "9" || floor === "10" || floor === "11" || floor === "12") {
             const rooms = {};
             const names = ["1-1", "1-2", "1-3"];
             const sides = [
@@ -622,6 +622,135 @@ export function migrateMS1112() {
         };
         migrated++;
         logEvent(`Fixed db.summon: was wrongly set as Random Event, restored to Summon panel.`);
+    }
+}
+
+// ==========================================
+// 🔄 MIGRATION: Convert MS9/MS10 antidemon from 3-panel to single 9-room format
+// ==========================================
+
+export function migrateAntidemon9e10() {
+    let migrated = 0;
+
+    // Step 1: Convert existing 9squareantidemon/10squareantidemon from 3-room to 9-room format
+    ["9", "10"].forEach(floor => {
+        const key = `${floor}squareantidemon`;
+        const existing = db[key];
+
+        if (!existing) {
+            // Panel doesn't exist — will be created by init on next boot
+            return;
+        }
+
+        // Check if already in 9-room format (has v1l, v1m, etc.)
+        if (existing.v1l) {
+            return; // Already migrated
+        }
+
+        // Must be old 3-room format (left/mid/right) — convert to 9-room preserving claims
+        if (!existing.left || typeof existing.left !== "object") {
+            return; // Unexpected format, skip
+        }
+
+        const oldRooms = { left: existing.left, mid: existing.mid, right: existing.right };
+        const rooms = {};
+        const versions = ["1-1", "1-2", "1-3"];
+        const sides = [
+            { k: "l", n: "LEFT" },
+            { k: "m", n: "MID" },
+            { k: "r", n: "RIGHT" }
+        ];
+
+        versions.forEach((ver, vi) => {
+            sides.forEach(side => {
+                const rk = `v${ver.replace("1-", "")}${side.k}`;
+                if (vi === 0) {
+                    // Version 1-1: preserve old claim data from left/mid/right
+                    const oldRoom = oldRooms[side.k === "l" ? "left" : side.k === "m" ? "mid" : "right"];
+                    if (oldRoom && oldRoom.ownerId) {
+                        rooms[rk] = {
+                            name: `${ver} ${side.n}`,
+                            status: oldRoom.status || STATUS_AVAILABLE,
+                            ownerId: oldRoom.ownerId,
+                            ownerName: oldRoom.ownerName,
+                            time: oldRoom.time || "",
+                            timeWindow: oldRoom.timeWindow || "",
+                            nextId: oldRoom.nextId || null,
+                            nextName: oldRoom.nextName || null,
+                            formattedTimeNext: oldRoom.formattedTimeNext || "",
+                            endLimit: oldRoom.endLimit || null,
+                            password: oldRoom.password || ""
+                        };
+                        return;
+                    }
+                }
+                rooms[rk] = {
+                    name: `${ver} ${side.n}`,
+                    status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
+                    time: "", timeWindow: "", nextId: null, nextName: null,
+                    formattedTimeNext: "", endLimit: null, password: ""
+                };
+            });
+        });
+
+        db[key] = { type: existing.type || "antidemon", title: existing.title || `Antidemon ${floor}F`, ...rooms };
+        migrated++;
+        logEvent(`Migrated MS${floor} antidemon from 3-room to 9-room format, preserving v1-1 claims.`);
+    });
+
+    // Step 2: Migrate claims from old squareantidemon11/12 into v2-* and v3-*, then delete them
+    ["9", "10"].forEach(floor => {
+        const mainKey = `${floor}squareantidemon`;
+        const mainPanel = db[mainKey];
+        if (!mainPanel) return;
+
+        [
+            { oldKey: `${floor}squareantidemon11`, ver: "1-2", vi: 1 },
+            { oldKey: `${floor}squareantidemon12`, ver: "1-3", vi: 2 }
+        ].forEach(({ oldKey, ver, vi }) => {
+            const oldPanel = db[oldKey];
+            if (!oldPanel) return;
+
+            // Map old left/mid/right claims into v{vi+1}l/v{vi+1}m/v{vi+1}r
+            const sides = [
+                { oldSide: "left", k: "l" },
+                { oldSide: "mid", k: "m" },
+                { oldSide: "right", k: "r" }
+            ];
+            sides.forEach(({ oldSide, k }) => {
+                const rk = `v${vi + 1}${k}`;
+                const oldRoom = oldPanel[oldSide];
+                if (oldRoom && oldRoom.ownerId && !mainPanel[rk].ownerId) {
+                    // Only migrate if target room is empty (v1-1 claims already preserved)
+                    mainPanel[rk] = {
+                        name: `${ver} ${oldSide.toUpperCase()}`,
+                        status: oldRoom.status || STATUS_AVAILABLE,
+                        ownerId: oldRoom.ownerId,
+                        ownerName: oldRoom.ownerName,
+                        time: oldRoom.time || "",
+                        timeWindow: oldRoom.timeWindow || "",
+                        nextId: oldRoom.nextId || null,
+                        nextName: oldRoom.nextName || null,
+                        formattedTimeNext: oldRoom.formattedTimeNext || "",
+                        endLimit: oldRoom.endLimit || null,
+                        password: oldRoom.password || ""
+                    };
+                    migrated++;
+                    logEvent(`Migrated claim from ${oldKey}.${oldSide} to ${mainKey}.${rk}.`);
+                }
+            });
+
+            // Delete old panel and its tracking data
+            delete db[oldKey];
+            delete lastMessages[oldKey];
+            if (db._panelMapping) delete db._panelMapping[oldKey];
+            logEvent(`Removed old antidemon panel ${oldKey} from DB.`);
+        });
+    });
+
+    if (migrated > 0) {
+        saveLocalStorage();
+        logEvent(`MS9/MS10 antidemon migration complete: ${migrated} entries migrated.`);
     }
 }
 

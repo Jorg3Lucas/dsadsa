@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "./state.js";
-import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateMS1112, migrateSPLegacyToUnified, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
+import { migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateAntidemon9e10, migrateMS1112, migrateSPLegacyToUnified, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
 import { startTickInterval } from "./panel-tick.js";
 import { STATUS_AVAILABLE } from "./constants.js";
 
@@ -98,78 +98,49 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
                 _lastKilledTimeStr: ""
             }
         });
-        db[`${floor}squareantidemon`] || (db[`${floor}squareantidemon`] = {
-            type: "antidemon",
-            title: `Antidemon ${floor}F`,
-            left: {
-                name: "LEFT ROOM",
-                status: STATUS_AVAILABLE,
-                ownerId: null,
-                ownerName: null,
-                time: "",
-                timeWindow: "",
-                nextId: null,
-                nextName: null,
-                formattedTimeNext: "",
-                endLimit: null,
-                password: ""
-            },
-            mid: {
-                name: "MID ROOM",
-                status: STATUS_AVAILABLE,
-                ownerId: null,
-                ownerName: null,
-                time: "",
-                timeWindow: "",
-                nextId: null,
-                nextName: null,
-                formattedTimeNext: "",
-                endLimit: null,
-                password: ""
-            },
-            right: {
-                name: "RIGHT ROOM",
-                status: STATUS_AVAILABLE,
-                ownerId: null,
-                ownerName: null,
-                time: "",
-                timeWindow: "",
-                nextId: null,
-                nextName: null,
-                formattedTimeNext: "",
-                endLimit: null,
-                password: ""
-            }
-        });
-
-        // Extra antidemon panels for MS9 and MS10: 1-1 and 1-2
-        if (floor === "9" || floor === "10") {
-            const antiRoomTemplate = {
-                name: "LEFT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
-            };
-            const antiMidTemplate = {
-                name: "MID ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
-            };
-            const antiRightTemplate = {
-                name: "RIGHT ROOM", status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: ""
-            };
-
-            db[`${floor}squareantidemon11`] || (db[`${floor}squareantidemon11`] = {
+        if (floor !== "9" && floor !== "10") {
+            db[`${floor}squareantidemon`] || (db[`${floor}squareantidemon`] = {
                 type: "antidemon",
-                title: `Antidemon ${floor}F 1-1`,
-                left: { ...antiRoomTemplate },
-                mid: { ...antiMidTemplate },
-                right: { ...antiRightTemplate }
-            });
-            db[`${floor}squareantidemon12`] || (db[`${floor}squareantidemon12`] = {
-                type: "antidemon",
-                title: `Antidemon ${floor}F 1-2`,
-                left: { ...antiRoomTemplate },
-                mid: { ...antiMidTemplate },
-                right: { ...antiRightTemplate }
+                title: `Antidemon ${floor}F`,
+                left: {
+                    name: "LEFT ROOM",
+                    status: STATUS_AVAILABLE,
+                    ownerId: null,
+                    ownerName: null,
+                    time: "",
+                    timeWindow: "",
+                    nextId: null,
+                    nextName: null,
+                    formattedTimeNext: "",
+                    endLimit: null,
+                    password: ""
+                },
+                mid: {
+                    name: "MID ROOM",
+                    status: STATUS_AVAILABLE,
+                    ownerId: null,
+                    ownerName: null,
+                    time: "",
+                    timeWindow: "",
+                    nextId: null,
+                    nextName: null,
+                    formattedTimeNext: "",
+                    endLimit: null,
+                    password: ""
+                },
+                right: {
+                    name: "RIGHT ROOM",
+                    status: STATUS_AVAILABLE,
+                    ownerId: null,
+                    ownerName: null,
+                    time: "",
+                    timeWindow: "",
+                    nextId: null,
+                    nextName: null,
+                    formattedTimeNext: "",
+                    endLimit: null,
+                    password: ""
+                }
             });
         }
     });
@@ -229,8 +200,8 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         }
     });
 
-    // Antidemon panels for MS11 and MS12: single panel with all 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
-    ["11", "12"].forEach(floor => {
+    // Antidemon panels for MS9-MS12: single panel with all 9 rooms (1-1, 1-2, 1-3 × LEFT/MID/RIGHT)
+    ["9", "10", "11", "12"].forEach(floor => {
         const key = `${floor}squareantidemon`;
         if (!db[key]) {
             const rooms = {};
@@ -294,6 +265,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     migrateNamesCleanEmojis();
     migrateLastKilledAt();
     migratePlantOreCooldown();
+    migrateAntidemon9e10();
     migrateMS1112();
     migrateSPLegacyToUnified();
 

@@ -72,13 +72,7 @@ async function handleMS(msg, lowerContent) {
 
     const norm = `${sub}squarenormal`;
 
-    // MS9 and MS10 have two antidemon panels (1-1 and 1-2)
-    let antiKeys;
-    if (sub === "9" || sub === "10") {
-        antiKeys = [`${sub}squareantidemon11`, `${sub}squareantidemon12`];
-    } else {
-        antiKeys = [`${sub}squareantidemon`];
-    }
+    const antiKeys = [`${sub}squareantidemon`];
 
     db._panelMapping || (db._panelMapping = {});
 

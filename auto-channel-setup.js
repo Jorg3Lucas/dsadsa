@@ -27,14 +27,14 @@ const CATEGORY_CONFIG = {
         name: "9F",
         channels: [
             { name: "🔸┃sp9", panels: ["9peak"] },
-            { name: "🔹┃ms9", panels: ["9squarenormal", "9squareantidemon11", "9squareantidemon12"] }
+            { name: "🔹┃ms9", panels: ["9squarenormal", "9squareantidemon"] }
         ]
     },
     "1499857572453421159": {
         name: "10F",
         channels: [
             { name: "🔸┃sp10", panels: ["10peak"] },
-            { name: "🔹┃ms10", panels: ["10squarenormal", "10squareantidemon11", "10squareantidemon12"] }
+            { name: "🔹┃ms10", panels: ["10squarenormal", "10squareantidemon"] }
         ]
     },
     "1511063558224613396": {
