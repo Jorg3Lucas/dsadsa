@@ -115,14 +115,7 @@ export async function setupAllChannels(client, guildId) {
                 newChannel = await guild.channels.create({
                     name: chanDef.name,
                     type: 0, // GuildText
-                    parent: catId,
-                    permissionOverwrites: [
-                        {
-                            id: guild.roles.everyone,
-                            deny: ["SendMessages", "AddReactions"],
-                            allow: ["ViewChannel", "ReadMessageHistory"]
-                        }
-                    ]
+                    parent: catId
                 });
                 console.log(`✅ [Auto Setup] Created #${chanDef.name} in ${catConfig.name}.`);
             } catch (err) {
