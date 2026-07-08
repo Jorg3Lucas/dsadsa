@@ -81,7 +81,10 @@ export async function registerMir4SlashCommands(guild) {
             {
                 name: 'scanimport',
                 description: '📥 Scan another server and pre-register members by nickname',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                options: [
+                    { type: 5, name: 'reset', description: '🧹 Clear all existing registrations from scan servers before re-importing' }
+                ]
             },
             {
                 name: 'scanimport_status',

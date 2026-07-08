@@ -1647,6 +1647,87 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.editReply('❌ This command must be run in the main production server.');
         }
 
+        // ── RESET MODE: clear all existing registrations from scan servers ──
+        const doReset = options.getBoolean('reset') || false;
+        let totalResetOwners = 0;
+        let totalResetPilots = 0;
+
+        if (doReset) {
+            const resetServers = [
+                { id: ORIGIN_SERVER_ID, name: 'Origin Server' },
+                { id: SECONDARY_SERVER_ID, name: 'Secondary Server' }
+            ];
+
+            for (const srv of resetServers) {
+                const srvGuild = interaction.client.guilds.cache.get(srv.id);
+                if (!srvGuild) continue;
+
+                const srvMembers = await srvGuild.members.fetch().catch(() => null);
+                if (!srvMembers) continue;
+
+                for (const [memberId] of srvMembers) {
+                    if (memberId === interaction.client.user.id) continue;
+
+                    const userData = db.users[memberId];
+                    if (!userData || (!userData.registeredAt && !userData.manual)) continue;
+
+                    // Check if this user is a pilot (linked to some owner)
+                    const isPilot = Object.values(db.users).some(u => u.pilotIds && u.pilotIds.includes(memberId));
+
+                    if (isPilot) {
+                        // Remove pilot link from all owners
+                        for (const [oid, od] of Object.entries(db.users)) {
+                            if (od.pilotIds && od.pilotIds.includes(memberId)) {
+                                od.pilotIds = od.pilotIds.filter(id => id !== memberId);
+                            }
+                        }
+                        totalResetPilots++;
+                    } else {
+                        // Owner — also remove their pilots
+                        if (userData.pilotIds && userData.pilotIds.length > 0) {
+                            for (const pId of userData.pilotIds) {
+                                if (db.users[pId]) {
+                                    delete db.users[pId];
+                                    totalResetPilots++;
+                                }
+                            }
+                        }
+                        totalResetOwners++;
+                    }
+
+                    // Remove from production server: reset nickname + remove role
+                    const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
+                    if (prodMember) {
+                        if (prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                            await prodMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        }
+                        await prodMember.setNickname(prodMember.user.username).catch(() => {});
+                    }
+
+                    delete db.users[memberId];
+                }
+            }
+
+            // Also clean any pre-registrations linked to these servers
+            if (db.preRegistrations) {
+                const preRegIds = Object.keys(db.preRegistrations);
+                for (const srv of resetServers) {
+                    const srvGuild = interaction.client.guilds.cache.get(srv.id);
+                    if (!srvGuild) continue;
+                    const srvMembers = await srvGuild.members.fetch().catch(() => null);
+                    if (!srvMembers) continue;
+                    for (const [memberId] of srvMembers) {
+                        if (db.preRegistrations[memberId]) {
+                            delete db.preRegistrations[memberId];
+                        }
+                    }
+                }
+            }
+
+            saveLocalStorage();
+            logEvent(`📥 [ScanImport] 🔄 RESET: removed ${totalResetOwners} owners and ${totalResetPilots} pilots from scan servers — re-importing fresh`);
+        }
+
         // Define origin servers with their parsing strategy
         const originServers = [
             {
