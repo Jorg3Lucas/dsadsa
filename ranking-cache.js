@@ -34,8 +34,11 @@ export function getLocalRankingCache() {
 
 // Find which world a nickname belongs to across all worlds
 // Returns { worldId: "611", clanName: "GearsofWar シ" } or null
-export function findNicknameInCache(nickname) {
-    const cache = getLocalRankingCache();
+// If cache is provided (pre-loaded from getLocalRankingCache()), uses it instead of reading from disk
+export function findNicknameInCache(nickname, cache) {
+    if (!cache) {
+        cache = getLocalRankingCache();
+    }
     if (!cache) return null;
 
     const normalized = nickname.trim().normalize('NFC').toLowerCase();

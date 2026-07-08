@@ -72,10 +72,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         if (rankingCache) {
             const toRemove = new Set();
 
+            // Pre-load cache once — reuse to avoid reading the JSON file from disk for every user
+            const cache = rankingCache;
+
             for (const [memberId, userData] of Object.entries(db.users)) {
                 if (!userData.nickname) continue;
                 const nickname = userData.nickname.trim().normalize('NFC');
-                const inRanking = findNicknameInCache(nickname);
+                const inRanking = findNicknameInCache(nickname, cache);
                 if (!inRanking) {
                     toRemove.add(memberId);
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
@@ -125,10 +128,6 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             } else {
                 inGameNick = (member.nickname || member.user.username).trim().normalize('NFC');
                 if (inGameNick.endsWith(' - Pilot')) inGameNick = inGameNick.replace(' - Pilot', '').trim();
-            }
-
-            if (!db.users[memberId] && !isPilot) {
-                db.users[memberId] = { nickname: inGameNick, pilotIds: [], registeredAt: new Date().toISOString() };
             }
 
             // Assign member role to registered users, remove from non-registered
