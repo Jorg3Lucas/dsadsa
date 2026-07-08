@@ -8,8 +8,20 @@ import {
     ButtonBuilder,
     ButtonStyle
 } from 'discord.js';
-import { getMsg } from './lang.js';
-import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId, APPROVER_ROLE_IDS, WELCOME_PANEL_MESSAGE, PENDING_MAX_AGE_MS } from './ranking-constants.js';
+import { getMsg } from './lang.js';import { 
+    confirmationCache, 
+    MEMBER_ROLE_ID, 
+    WORLD_IDS, 
+    DISCORD_SERVER_ID, 
+    ORIGIN_SERVER_ID, 
+    pendingRegistrations, 
+    pendingPilotApprovals, 
+    adminChannelId, 
+    APPROVER_ROLE_IDS, 
+    WELCOME_PANEL_MESSAGE, 
+    PENDING_MAX_AGE_MS,
+    PRE_REGISTER_MAX_AGE_MS 
+} from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -1622,6 +1634,121 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots)`);
+        return interaction.editReply(report);
+    }
+
+    // ── SCAN IMPORT ──
+    if (commandName === 'scanimport') {
+        await interaction.deferReply({ flags: 64 });
+
+        const originGuild = interaction.client.guilds.cache.get(ORIGIN_SERVER_ID);
+        if (!originGuild) {
+            logEvent(`❌ [ScanImport] ${interaction.user.tag} tried to scan but origin server not found`);
+            return interaction.editReply('❌ Origin server not found. Make sure the bot is in both servers.');
+        }
+
+        const prodGuild = interaction.guild;
+        if (prodGuild.id !== DISCORD_SERVER_ID) {
+            return interaction.editReply('❌ This command must be run in the main production server.');
+        }
+
+        // Fetch all members from both servers
+        const originMembers = await originGuild.members.fetch().catch(() => null);
+        if (!originMembers || originMembers.size === 0) {
+            return interaction.editReply('❌ Could not fetch members from the origin server.');
+        }
+
+        let registered = 0;
+        let preReg = 0;
+        let skipped = 0;
+        const results = [];
+
+        for (const [memberId, member] of originMembers) {
+            if (member.user.bot) continue;
+
+            const displayName = member.nickname || member.user.displayName;
+            // Parse nickname from format: [123] - NAME | POWER or Pilot - NAME | POWER
+            const nickMatch = displayName.match(/-\s*(.+?)\s*\|/);
+            if (!nickMatch) {
+                skipped++;
+                continue;
+            }
+            const gameNick = nickMatch[1].trim();
+            if (!gameNick) {
+                skipped++;
+                continue;
+            }
+
+            // Skip if nickname already taken
+            const existingUser = Object.entries(db.users).find(([id, data]) =>
+                data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === gameNick.toLowerCase()
+            );
+            if (existingUser) {
+                skipped++;
+                if (results.length < 20) results.push(`⏭️ ${member.user.tag} — "${gameNick}" already registered by another user`);
+                continue;
+            }
+
+            // Skip if user already registered
+            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
+                skipped++;
+                if (results.length < 20) results.push(`⏭️ ${member.user.tag} — already registered as "${db.users[memberId].nickname}"`);
+                continue;
+            }
+
+            // Check if this user is in the production server
+            const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
+
+            if (prodMember) {
+                // Register immediately
+                db.users[memberId] = {
+                    nickname: gameNick,
+                    registeredAt: new Date().toISOString(),
+                    pilotIds: []
+                };
+                saveLocalStorage();
+
+                await prodMember.setNickname(gameNick).catch(() => {});
+                if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                }
+
+                registered++;
+                if (results.length < 20) results.push(`✅ ${member.user.tag} → registered as "${gameNick}"`);
+                logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) auto-registered as "${gameNick}"`);
+            } else {
+                // Pre-register (expires in 7 days)
+                if (!db.preRegistrations) db.preRegistrations = {};
+                const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
+                db.preRegistrations[memberId] = {
+                    nickname: gameNick,
+                    pilotIds: [],
+                    registeredAt: new Date().toISOString(),
+                    expiresAt
+                };
+                saveLocalStorage();
+
+                preReg++;
+                if (results.length < 20) results.push(`⏳ ${member.user.tag} → pre-registered as "${gameNick}" (expires in 7d)`);
+                logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) pre-registered as "${gameNick}"`);
+            }
+        }
+
+        let report = `📥 **Scan Import Complete**\n\n`;
+        report += `✅ **Registered:** ${registered}\n`;
+        report += `⏳ **Pre-registered:** ${preReg}\n`;
+        report += `⏭️ **Skipped:** ${skipped}\n\n`;
+
+        if (results.length > 0) {
+            report += `📋 **Details:**\n`;
+            report += results.join('\n');
+        }
+
+        if (report.length > 1900) {
+            report = report.substring(0, 1900) + '\n\n... (truncated)';
+        }
+
+        logEvent(`📥 [ScanImport] ${interaction.user.tag} scanned origin server: ${registered} registered, ${preReg} pre-registered, ${skipped} skipped`);
         return interaction.editReply(report);
     }
 }

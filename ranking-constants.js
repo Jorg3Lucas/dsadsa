@@ -49,6 +49,15 @@ export const WORLD_IDS = {
 
 export const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// ==========================================
+// 📥 ORIGIN SERVER FOR SCAN IMPORT
+// ==========================================
+
+export const ORIGIN_SERVER_ID = '1301149441171914785';
+
+// Pre-registration validity (7 days)
+export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Remove pending registrations older than 24h */
 export function cleanExpiredPendingRegistrations() {
     const now = Date.now();

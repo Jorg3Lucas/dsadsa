@@ -256,6 +256,23 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         setAdminChannelId(db.config.adminChannelId);
     }
 
+    // Clean up expired pre-registrations on startup
+    if (db.preRegistrations) {
+        const now = Date.now();
+        const entries = Object.entries(db.preRegistrations);
+        let cleaned = 0;
+        for (const [userId, preReg] of entries) {
+            if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < now) {
+                delete db.preRegistrations[userId];
+                cleaned++;
+            }
+        }
+        if (cleaned > 0) {
+            saveLocalStorage();
+            logEvent(`🧹 [PreReg] Cleaned up ${cleaned} expired pre-registration(s) on startup`);
+        }
+    }
+
     // Restore the welcome/fixed panel on startup if it was deleted
     restoreWelcomePanel(client, db, saveLocalStorage, logEvent).catch(err => {
         logEvent(`❌ [Panel Restore] Unexpected error: ${err.message}`);
@@ -279,6 +296,36 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
 
     client.on('guildMemberAdd', async (member) => {
         try {
+            // ── Check for pre-registration first ──
+            if (member.guild.id === DISCORD_SERVER_ID && db.preRegistrations && db.preRegistrations[member.id]) {
+                const preReg = db.preRegistrations[member.id];
+                const expiresAt = new Date(preReg.expiresAt).getTime();
+
+                if (expiresAt > Date.now()) {
+                    // Valid pre-registration — register immediately
+                    db.users[member.id] = {
+                        nickname: preReg.nickname,
+                        registeredAt: new Date().toISOString(),
+                        pilotIds: preReg.pilotIds || []
+                    };
+                    delete db.preRegistrations[member.id];
+                    saveLocalStorage();
+
+                    await member.setNickname(preReg.nickname).catch(() => {});
+                    if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
+                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                    }
+
+                    logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
+                } else {
+                    // Expired — remove pre-registration
+                    delete db.preRegistrations[member.id];
+                    saveLocalStorage();
+                    logEvent(`📥 [PreReg] ${member.user.tag} joined — pre-registration expired (was "${preReg.nickname}")`);
+                }
+            }
+
+            // ── Send welcome message ──
             if (!db.config || !db.config.welcomeChannelId) return;
 
             const welcomeChannel = member.guild.channels.cache.get(db.config.welcomeChannelId);
