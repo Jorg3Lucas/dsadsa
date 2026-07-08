@@ -23,7 +23,7 @@ import { getMsg } from './lang.js';import {
     PENDING_MAX_AGE_MS,
     PRE_REGISTER_MAX_AGE_MS 
 } from './ranking-constants.js';
-import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache } from './ranking-cache.js';
+import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, levenshteinDistance, cleanNickname } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
 // ==========================================
@@ -423,12 +423,67 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         const ownerNick = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
 
-        const ownerEntry = Object.entries(db.users).find(([id, data]) =>
+        let ownerEntry = Object.entries(db.users).find(([id, data]) =>
             data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === ownerNick.toLowerCase()
         );
 
+        // ── Fuzzy matching: if exact owner not found, try closest match ──
+        let fuzzyCorrectedNick = null;
         if (!ownerEntry) {
-            return interaction.editReply('❌ Owner not found. Verify the nickname is correct and the owner is already registered.');
+            const cleanedInput = cleanNickname(ownerNick);
+
+            if (cleanedInput.length >= 2) {
+                // Build set of pilot IDs to exclude (skip pilots, match only owners)
+                const pilotIds = new Set();
+                for (const [, data] of Object.entries(db.users)) {
+                    if (data.pilotIds && data.pilotIds.length > 0) {
+                        for (const pid of data.pilotIds) {
+                            pilotIds.add(pid);
+                        }
+                    }
+                }
+
+                let bestMatch = null;
+                let bestScore = 0;
+
+                for (const [id, data] of Object.entries(db.users)) {
+                    if (!data.nickname) continue;
+                    // Skip pilots — only match actual owners
+                    if (pilotIds.has(id)) continue;
+                    const cleanedNick = cleanNickname(data.nickname);
+                    if (cleanedNick.length < 2) continue;
+
+                    // Character overlap pre-filter
+                    const inputChars = new Set(cleanedInput);
+                    const nickChars = new Set(cleanedNick);
+                    let commonChars = 0;
+                    for (const c of inputChars) {
+                        if (nickChars.has(c)) commonChars++;
+                    }
+                    const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+                    if (overlap < 0.3) continue;
+
+                    // Levenshtein distance
+                    const distance = levenshteinDistance(cleanedInput, cleanedNick);
+                    const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+                    const similarity = 1 - (distance / maxLen);
+
+                    if (similarity > bestScore && similarity >= 0.55) {
+                        bestScore = similarity;
+                        bestMatch = { id, nickname: data.nickname };
+                    }
+                }
+
+                if (bestMatch) {
+                    fuzzyCorrectedNick = bestMatch.nickname;
+                    ownerEntry = [bestMatch.id, db.users[bestMatch.id]];
+                    logEvent(`✈️ ${interaction.user.tag} — fuzzy matched owner "${ownerNick}" → "${bestMatch.nickname}" for pilot registration`);
+                }
+            }
+        }
+
+        if (!ownerEntry) {
+            return interaction.editReply('❌ Owner not found. Verify the nickname is spelled correctly and the owner is already registered.');
         }
 
         const [ownerId, ownerData] = ownerEntry;
@@ -470,7 +525,10 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             });
 
             logEvent(`✈️ ${interaction.user.tag} requested to be pilot of ${ownerData.nickname} — DM sent to owner for approval`);
-            return interaction.editReply(`✅ **Request sent!** The owner **${ownerData.nickname}** received a DM to approve your pilot registration.`);
+            const fuzzyReply = fuzzyCorrectedNick
+                ? `\n🔍 **Corrected:** you typed \"${ownerNick}\" → using \"${fuzzyCorrectedNick}\"`
+                : '';
+            return interaction.editReply(`✅ **Request sent!** The owner **${ownerData.nickname}** received a DM to approve your pilot registration.${fuzzyReply}`);
         } catch (error) {
             logEvent(`❌ Failed to send pilot DM: ${interaction.user.tag} → owner ${ownerData.nickname} (${ownerId}): ${error.message}`);
             delete pendingPilotApprovals[pilotId];

@@ -60,12 +60,19 @@ export function findNicknameInCache(nickname, cache) {
 // Strips common formatting characters and finds the closest match in the ranking cache
 // Uses Levenshtein distance normalized by string length (threshold: >= 0.6 similarity)
 
+// Clean helper: strips formatting characters for comparison
+function cleanNickname(s) {
+    return s.trim().normalize('NFC').toLowerCase()
+        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,.]/g, '')
+        .replace(/\s+/g, '');
+}
+
+export { cleanNickname };
+
 export function findClosestNicknameInCache(displayName, cache) {
     if (!cache) return null;
 
-    const clean = (s) => s.trim().normalize('NFC').toLowerCase()
-        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,.]/g, '')
-        .replace(/\s+/g, '');
+    const clean = cleanNickname;
 
     const cleanedInput = clean(displayName);
     if (cleanedInput.length < 2) return null;
@@ -124,7 +131,7 @@ export function findClosestNicknameInCache(displayName, cache) {
     return bestMatch && bestScore >= threshold ? bestMatch : null;
 }
 
-function levenshteinDistance(a, b) {
+export function levenshteinDistance(a, b) {
     if (a.length === 0) return b.length;
     if (b.length === 0) return a.length;
 
