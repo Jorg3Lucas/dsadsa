@@ -73,6 +73,11 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 5, name: 'notify', description: 'Send a DM to each unregistered member asking them to register (5s delay each)' }
                 ]
             },
+            {
+                name: 'pending',
+                description: getMsg('ranking.commands.pending.description'),
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log(getMsg('ranking.logs.commandsRegistered'));
     } catch (error) { console.error(getMsg('ranking.logs.commandsError'), error); }

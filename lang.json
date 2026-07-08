@@ -42,6 +42,9 @@
             },
             "listunregistered": {
                 "description": "📋 [Admin] List members with role but no registration, optionally DM them."
+            },
+            "pending": {
+                "description": "⏳ [Admin] List all pending registration requests with time remaining."
             }
         },
         "responses": {

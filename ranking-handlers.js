@@ -1557,4 +1557,61 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         return interaction.editReply(report);
     }
+
+    if (commandName === 'pending') {
+        await interaction.deferReply({ flags: 64 });
+
+        const ownerEntries = Object.entries(pendingRegistrations);
+        const pilotEntries = Object.entries(pendingPilotApprovals);
+
+        if (ownerEntries.length === 0 && pilotEntries.length === 0) {
+            return interaction.editReply('✅ **No pending registration requests.**');
+        }
+
+        let report = `⏳ **Pending Registrations**\n\n`;
+
+        // ── Owner registrations ──
+        if (ownerEntries.length > 0) {
+            report += `👑 **Owner Registrations (${ownerEntries.length})**\n`;
+            for (const [userId, pending] of ownerEntries) {
+                const member = await guild.members.fetch(userId).catch(() => null);
+                const userTag = member ? member.toString() : `<@${userId}>`;
+                const hoursLeft = pending.timestamp
+                    ? ((Date.now() - pending.timestamp) / (1000 * 60 * 60)).toFixed(1)
+                    : '?';
+                const expiresIn = pending.timestamp
+                    ? `${Math.max(0, 24 - hoursLeft).toFixed(1)}h`
+                    : 'Unknown';
+                const hasMessage = pending.channelId && pending.messageId ? '✅' : '❌';
+                report += `\n${userTag} — **${pending.nickname}**\n`;
+                report += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
+            }
+        }
+
+        // ── Pilot approvals ──
+        if (pilotEntries.length > 0) {
+            if (ownerEntries.length > 0) report += '\n';
+            report += `✈️ **Pilot Approvals (${pilotEntries.length})**\n`;
+            for (const [pilotId, pending] of pilotEntries) {
+                const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
+                const pilotTag = pilotMember ? pilotMember.toString() : `<@${pilotId}>`;
+                const hoursLeft = pending.timestamp
+                    ? ((Date.now() - pending.timestamp) / (1000 * 60 * 60)).toFixed(1)
+                    : '?';
+                const expiresIn = pending.timestamp
+                    ? `${Math.max(0, 24 - hoursLeft).toFixed(1)}h`
+                    : 'Unknown';
+                report += `\n${pilotTag} → Owner **${pending.ownerNick}**\n`;
+                report += `   ⏰ Expires in: ${expiresIn}\n`;
+            }
+        }
+
+        // Truncate if too long
+        if (report.length > 1900) {
+            report = report.substring(0, 1900) + '\n\n... (truncated)';
+        }
+
+        logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots)`);
+        return interaction.editReply(report);
+    }
 }
