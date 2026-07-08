@@ -8,7 +8,7 @@ import { runDailySynchronization } from './ranking-sync-engine.js';
 // 💬 TEXT COMMANDS (!setadminchannel)
 // ==========================================
 
-async function handleTextCommands(message) {
+async function handleTextCommands(message, db, saveLocalStorage) {
     if (message.author.bot || !message.content.startsWith('!')) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
@@ -21,6 +21,17 @@ async function handleTextCommands(message) {
 
         setAdminChannelId(message.channel.id);
         return message.reply(`✅ Canal de aprovação configurado para ${message.channel.toString()}.`);
+    }
+
+    if (command === 'setwelcome') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply('❌ Você precisa ser Administrador para usar este comando.');
+        }
+
+        if (!db.config) db.config = {};
+        db.config.welcomeChannelId = message.channel.id;
+        saveLocalStorage();
+        return message.reply(`✅ Canal de boas-vindas configurado para ${message.channel.toString()}.`);
     }
 }
 
@@ -37,7 +48,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
     });
 
     client.on('messageCreate', async (message) => {
-        await handleTextCommands(message);
+        await handleTextCommands(message, db, saveLocalStorage);
     });
 
     client.on('guildMemberAdd', async (member) => {
