@@ -115,7 +115,8 @@ client.on('interactionCreate', async (interaction) => {
         // C. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'register_owner_modal' ||
-                interaction.customId === 'register_pilot_modal') {
+                interaction.customId === 'register_pilot_modal' ||
+                interaction.customId === 'manage_allied_add_modal') {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
         }

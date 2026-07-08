@@ -227,6 +227,33 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.editReply('✅ **Registration sent for approval!** An administrator will review it shortly.');
     }
 
+    // ── Allied Clans: Add Clan Modal Submit ──
+    if (interaction.isModalSubmit() && interaction.customId === 'manage_allied_add_modal') {
+        await interaction.deferReply({ flags: 64 });
+
+        const clanName = interaction.fields.getTextInputValue('clan_name').trim();
+        const worldId = interaction.fields.getTextInputValue('world_id').trim();
+        const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+
+        if (!db.config) db.config = {};
+        if (!db.config.alliedClans) db.config.alliedClans = {};
+        if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+
+        const alreadyExists = db.config.alliedClans[worldId].some(
+            c => c.toLowerCase() === clanName.toLowerCase()
+        );
+
+        if (alreadyExists) {
+            return interaction.editReply(`❌ **${clanName}** is already configured as an allied clan for **${worldName}**.`);
+        }
+
+        db.config.alliedClans[worldId].push(clanName);
+        saveLocalStorage();
+
+        logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${clanName}" to ${worldName}`);
+        return interaction.editReply(`✅ **${clanName}** added as an allied clan for **${worldName}**!`);
+    }
+
     // ── Pilot Registration Modal ──
     if (interaction.isModalSubmit() && interaction.customId === 'register_pilot_modal') {
         await interaction.deferReply({ flags: 64 });
@@ -679,8 +706,179 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     });
     }
 
+    // I. ALLIED CLANS MANAGEMENT
+
+    // ── Allied Clans: Show world selector ──
+    if (interaction.isButton() && interaction.customId === 'manage_allied') {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+        }
+
+        const worldOptions = Object.entries(WORLD_IDS).map(([id, name]) => ({
+            label: name,
+            description: `World ID ${id}`,
+            value: id
+        }));
+
+        const worldMenu = new StringSelectMenuBuilder()
+            .setCustomId('manage_allied_world')
+            .setPlaceholder('Select a server to manage allied clans...')
+            .addOptions(worldOptions);
+
+        return interaction.update({
+            content: '🌍 **Allied Clans Configuration**\n\nSelect a server to view and manage its allied clans.\n\nMembers will only keep their role if they are in an allied clan of any configured server.',
+            components: [
+                new ActionRowBuilder().addComponents(worldMenu),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('manage_allied_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
+                )
+            ]
+        }).catch(() => {});
+    }
+
+    // ── Allied Clans: World selected → show clans ──
+    if (interaction.isStringSelectMenu() && interaction.customId === 'manage_allied_world') {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+        }
+
+        const worldId = interaction.values[0];
+        const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+
+        if (!db.config) db.config = {};
+        if (!db.config.alliedClans) db.config.alliedClans = {};
+        if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+
+        const clans = db.config.alliedClans[worldId];
+
+        let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
+        if (clans.length === 0) {
+            content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
+        } else {
+            content += '**Allied Clans:**\n';
+            clans.forEach((clan, i) => {
+                content += `\n${i + 1}. **${clan}**`;
+            });
+        }
+
+        const removeOptions = clans.map((clan, i) => ({
+            label: `🗑️ ${clan}`,
+            value: `${worldId}_${i}`
+        }));
+
+        const components = [];
+
+        if (removeOptions.length > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('manage_allied_remove')
+                    .setPlaceholder('Select a clan to remove...')
+                    .addOptions(removeOptions)
+            ));
+        }
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
+        ));
+
+        return interaction.update({ content, components }).catch(() => {});
+    }
+
+    // ── Allied Clans: Add clan button → modal ──
+    if (interaction.isButton() && interaction.customId.startsWith('manage_allied_add_')) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+        }
+
+        const worldId = interaction.customId.replace('manage_allied_add_', '');
+        const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+
+        const modal = new ModalBuilder()
+            .setCustomId('manage_allied_add_modal')
+            .setTitle(`➕ Add Clan - ${worldName}`);
+
+        const clanInput = new TextInputBuilder()
+            .setCustomId('clan_name')
+            .setLabel('Clan name (exactly as in the ranking)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g. ToxicFamily')
+            .setMinLength(1)
+            .setMaxLength(50)
+            .setRequired(true);
+
+        const worldInput = new TextInputBuilder()
+            .setCustomId('world_id')
+            .setLabel('World ID (do not change)')
+            .setStyle(TextInputStyle.Short)
+            .setValue(worldId)
+            .setRequired(true);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(clanInput),
+            new ActionRowBuilder().addComponents(worldInput)
+        );
+
+        return interaction.showModal(modal);
+    }
+
+    // ── Allied Clans: Remove clan from select menu ──
+    if (interaction.isStringSelectMenu() && interaction.customId === 'manage_allied_remove') {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+        }
+
+        const value = interaction.values[0];
+        const [worldId, indexStr] = value.split('_');
+        const index = parseInt(indexStr, 10);
+        const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+
+        if (db.config?.alliedClans?.[worldId]?.[index]) {
+            const removedClan = db.config.alliedClans[worldId][index];
+            db.config.alliedClans[worldId].splice(index, 1);
+            if (db.config.alliedClans[worldId].length === 0) {
+                delete db.config.alliedClans[worldId];
+            }
+            saveLocalStorage();
+            logEvent(`🗑️ Admin ${interaction.user.tag} removed allied clan "${removedClan}" from ${worldName}`);
+        }
+
+        // Refresh the world view
+        const clans = db.config?.alliedClans?.[worldId] || [];
+        let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
+        if (clans.length === 0) {
+            content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
+        } else {
+            content += '**Allied Clans:**\n';
+            clans.forEach((clan, i) => {
+                content += `\n${i + 1}. **${clan}**`;
+            });
+        }
+
+        const removeOptions = clans.map((clan, i) => ({
+            label: `🗑️ ${clan}`,
+            value: `${worldId}_${i}`
+        }));
+
+        const components = [];
+        if (removeOptions.length > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('manage_allied_remove')
+                    .setPlaceholder('Select a clan to remove...')
+                    .addOptions(removeOptions)
+            ));
+        }
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
+        ));
+
+        return interaction.update({ content, components }).catch(() => {});
+    }
+
     // H. MANAGE NAVIGATION BUTTONS
-    if (interaction.isButton() && (interaction.customId.startsWith('manage_user_prev_') || interaction.customId.startsWith('manage_user_next_') || interaction.customId === 'manage_back')) {
+    if (interaction.isButton() && (interaction.customId.startsWith('manage_user_prev_') || interaction.customId.startsWith('manage_user_next_') || interaction.customId === 'manage_back' || interaction.customId === 'manage_allied_back')) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -998,6 +1196,10 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             );
             components.push(navRow);
         }
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary)
+        ));
 
         return interaction.reply({
             content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),
