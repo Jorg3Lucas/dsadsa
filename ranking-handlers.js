@@ -1800,6 +1800,17 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         if (pilotEntries.length > 0) {
             if (ownerEntries.length > 0) report += '\n';
             report += `✈️ **Pilot Approvals (${pilotEntries.length})**\n`;
+
+            // Build set of pilot IDs to exclude from fuzzy matching
+            const pilotIdSet = new Set();
+            for (const [, data] of Object.entries(db.users || {})) {
+                if (data.pilotIds && data.pilotIds.length > 0) {
+                    for (const pid of data.pilotIds) {
+                        pilotIdSet.add(pid);
+                    }
+                }
+            }
+
             for (const [pilotId, pending] of pilotEntries) {
                 const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
                 const pilotTag = pilotMember ? pilotMember.toString() : `<@${pilotId}>`;
@@ -1809,8 +1820,54 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 const expiresIn = pending.timestamp
                     ? `${Math.max(0, 24 - hoursLeft).toFixed(1)}h`
                     : 'Unknown';
-                report += `\n${pilotTag} → Owner **${pending.ownerNick}**\n`;
-                report += `   ⏰ Expires in: ${expiresIn}\n`;
+
+                // Check if ownerNick matches a registered owner
+                const ownerMatch = Object.entries(db.users || {}).find(([id, data]) =>
+                    data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === pending.ownerNick.toLowerCase()
+                );
+
+                let line = `\n${pilotTag} → Owner **${pending.ownerNick}**\n`;
+                line += `   ⏰ Expires in: ${expiresIn}\n`;
+
+                // ── Fuzzy suggestion if owner not found ──
+                if (!ownerMatch) {
+                    const cleanedInput = cleanNickname(pending.ownerNick);
+                    if (cleanedInput.length >= 2) {
+                        let bestMatch = null;
+                        let bestScore = 0;
+
+                        for (const [id, data] of Object.entries(db.users || {})) {
+                            if (!data.nickname) continue;
+                            if (pilotIdSet.has(id)) continue;
+                            const cleanedNick = cleanNickname(data.nickname);
+                            if (cleanedNick.length < 2) continue;
+
+                            const inputChars = new Set(cleanedInput);
+                            const nickChars = new Set(cleanedNick);
+                            let commonChars = 0;
+                            for (const c of inputChars) {
+                                if (nickChars.has(c)) commonChars++;
+                            }
+                            const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+                            if (overlap < 0.3) continue;
+
+                            const distance = levenshteinDistance(cleanedInput, cleanedNick);
+                            const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+                            const similarity = 1 - (distance / maxLen);
+
+                            if (similarity > bestScore && similarity >= 0.55) {
+                                bestScore = similarity;
+                                bestMatch = data.nickname;
+                            }
+                        }
+
+                        if (bestMatch) {
+                            line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${bestMatch}"\n`;
+                        }
+                    }
+                }
+
+                report += line;
             }
         }
 
