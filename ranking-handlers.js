@@ -1771,17 +1771,27 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     continue;
                 }
 
-                // User already registered — update Discord nickname if needed
+                // User already registered — update Discord nickname + DB if needed
                 if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
                     const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
                     if (prodMember) {
                         const expectedNick = isPilot && gameNick
                             ? `${gameNick} - Pilot`
                             : gameNick || db.users[memberId].nickname;
+
+                        // Update DB nickname if different
+                        if (gameNick && db.users[memberId].nickname !== gameNick) {
+                            const oldNick = db.users[memberId].nickname;
+                            db.users[memberId].nickname = gameNick;
+                            saveLocalStorage();
+                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) DB nickname updated: "${oldNick}" → "${gameNick}"`);
+                        }
+
+                        // Update Discord nickname if different
                         if (prodMember.nickname !== expectedNick) {
                             await prodMember.setNickname(expectedNick).catch(() => {});
-                            if (results.length < 20) results.push(`🔄 ${member.user.tag} → nickname updated to "${expectedNick}"`);
-                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) nickname updated to "${expectedNick}"`);
+                            if (results.length < 20) results.push(`🔄 ${member.user.tag} → updated to "${expectedNick}"`);
+                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) Discord nickname updated to "${expectedNick}"`);
                         }
                     }
                     totalSkipped++;
