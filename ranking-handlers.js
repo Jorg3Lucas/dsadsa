@@ -1519,7 +1519,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             for (let i = 0; i < unregistered.length; i++) {
                 const member = unregistered[i];
                 try {
-                    await member.send(`👋 Hey **${member.displayName}**, you currently have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click **👑 Register as Owner** to register your character.\n\nThis helps us keep the server organized. Thanks! 🚀`);
+                    await member.send(`👋 Hey **${member.displayName}**, you currently have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀`);
                     sent++;
                 } catch (e) {
                     failed++;
