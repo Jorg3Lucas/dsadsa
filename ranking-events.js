@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID, setAdminChannelId } from './ranking-constants.js';
+import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId } from './ranking-constants.js';
 import { getMsg } from './lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -19,6 +19,9 @@ async function handleTextCommands(message, db, saveLocalStorage) {
             return message.reply('❌ You must be an Administrator to use this command.');
         }
 
+        if (!db.config) db.config = {};
+        db.config.adminChannelId = message.channel.id;
+        saveLocalStorage();
         setAdminChannelId(message.channel.id);
         return message.reply(`✅ Admin approval channel set to ${message.channel.toString()}.`);
     }
@@ -62,6 +65,11 @@ async function handleTextCommands(message, db, saveLocalStorage) {
 // ==========================================
 
 export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
+    // Load persisted admin channel ID on startup
+    if (db.config?.adminChannelId && !adminChannelId) {
+        setAdminChannelId(db.config.adminChannelId);
+    }
+
     client.on('error', (err) => {
         console.error('⚠️ [Discord Client Error Handled Safely]:', err.message);
         if (err.stack) {
