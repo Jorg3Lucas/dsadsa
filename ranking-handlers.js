@@ -107,7 +107,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 .setCustomId('reject_reason')
                 .setLabel('Reason — explain how to resolve')
                 .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('e.g. Your character was not found in ranking. Please make sure you are in the Top 1000 of an EU server.')
+                .setPlaceholder('e.g. Not found in ranking. Must be in Top 1000 of an EU server.')
                 .setMinLength(1)
                 .setMaxLength(500)
                 .setRequired(true);
