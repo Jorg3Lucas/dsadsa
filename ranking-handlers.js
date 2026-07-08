@@ -38,9 +38,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         const nicknameInput = new TextInputBuilder()
             .setCustomId('owner_nickname')
-            .setLabel('Character name (exactly as in-game)')
+            .setLabel('Your EXACT in-game name — one account only')
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('e.g. xVraeL')
+            .setPlaceholder('Type your exact character name as shown in MIR4')
             .setMinLength(2)
             .setMaxLength(30)
             .setRequired(true);
@@ -70,31 +70,44 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
     // ── Admin Approval: Owner Registration ──
     if (interaction.isButton() && interaction.customId.startsWith('approve_owner_')) {
+        const rest = interaction.customId.replace('approve_owner_', '');
+        const [userId, result] = rest.split('-');
+        const pending = pendingRegistrations[userId];
+
+        if (!pending) {
+            return interaction.update({ content: '⌛ This registration has expired or was already processed.', components: [] });
+        }
+
+        if (result === 'no') {
+            // Show a modal so the admin can write a rejection reason
+            const modal = new ModalBuilder()
+                .setCustomId(`reject_owner_${userId}`)
+                .setTitle('❌ Reject Registration');
+
+            const reasonInput = new TextInputBuilder()
+                .setCustomId('reject_reason')
+                .setLabel('Reason — explain how to resolve')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('e.g. Your character was not found in ranking. Please make sure you are in the Top 1000 of an EU server.')
+                .setMinLength(1)
+                .setMaxLength(500)
+                .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+            return interaction.showModal(modal);
+        }
+
         await interaction.deferUpdate();
 
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.followUp({ content: '❌ Only administrators can approve registrations.', flags: 64 });
         }
 
-        const rest = interaction.customId.replace('approve_owner_', '');
-        const [userId, result] = rest.split('-');
-        const pending = pendingRegistrations[userId];
-
         if (!pending) {
             return interaction.editReply({ content: '⌛ This registration has expired or was already processed.', components: [] });
         }
 
         delete pendingRegistrations[userId];
-
-        if (result === 'no') {
-            await interaction.editReply({
-                content: `❌ **Registration Rejected**\n\n👤 **User:** <@${userId}>\n📝 **Nickname:** ${pending.nickname}\n🕐 **Processed by:** ${interaction.user.tag}`,
-                components: []
-            });
-            logEvent(`❌ Admin ${interaction.user.tag} REJECTED registration for ${userId} (nickname: ${pending.nickname})`);
-            try { const user = await interaction.client.users.fetch(userId); await user.send('❌ Your registration was rejected by an administrator.'); } catch (e) {}
-            return;
-        }
 
         const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
         if (!targetMember) {
@@ -138,6 +151,47 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         try { await targetMember.send(dmMsg); } catch (e) {}
         return;
+    }
+
+    // ── Admin Rejection Modal Submit ──
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('reject_owner_')) {
+        await interaction.deferReply({ flags: 64 });
+
+        const userId = interaction.customId.replace('reject_owner_', '');
+        const reason = interaction.fields.getTextInputValue('reject_reason').trim();
+        const pending = pendingRegistrations[userId];
+
+        if (!pending) {
+            return interaction.editReply('⌛ This registration has expired or was already processed.');
+        }
+
+        delete pendingRegistrations[userId];
+
+        logEvent(`❌ Admin ${interaction.user.tag} REJECTED registration for ${userId} (nickname: ${pending.nickname}) — reason: ${reason}`);
+
+        // Update the admin channel message to show the rejection reason
+        if (pending.channelId && pending.messageId) {
+            const adminChannel = interaction.guild.channels.cache.get(pending.channelId);
+            if (adminChannel) {
+                const adminMsg = await adminChannel.messages.fetch(pending.messageId).catch(() => null);
+                if (adminMsg) {
+                    await adminMsg.edit({
+                        content: `❌ **Registration Rejected**\n\n👤 **User:** <@${userId}>\n📝 **Nickname:** ${pending.nickname}\n📝 **Reason:** ${reason}\n🕐 **Processed by:** ${interaction.user.tag}`,
+                        components: []
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        // Send DM to the user with the reason
+        try {
+            const user = await interaction.client.users.fetch(userId);
+            await user.send(`❌ **Registration Rejected**\n\nYour registration was rejected by an administrator.\n\n📝 **Reason:** ${reason}\n\nIf you need further assistance, please contact an administrator.`);
+        } catch (e) {
+            logEvent(`⚠️ Could not send rejection DM to ${userId} (DMs closed or user not found)`);
+        }
+
+        return interaction.editReply(`❌ **Registration rejected.** The user was notified via DM with the reason.`);
     }
 
     // ── Owner DM Approval: Pilot Registration ──
@@ -1375,7 +1429,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     if (commandName === 'sendpanel') {
         await interaction.deferReply({ flags: 64 });
 
-        const panelMsg = '📋 **MIR4 Account Registration**\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.';
+        const panelMsg = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.';
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
