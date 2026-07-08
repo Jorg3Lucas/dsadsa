@@ -302,21 +302,44 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                 const expiresAt = new Date(preReg.expiresAt).getTime();
 
                 if (expiresAt > Date.now()) {
-                    // Valid pre-registration — register immediately
-                    db.users[member.id] = {
-                        nickname: preReg.nickname,
-                        registeredAt: new Date().toISOString(),
-                        pilotIds: preReg.pilotIds || []
-                    };
-                    delete db.preRegistrations[member.id];
-                    saveLocalStorage();
+                    // Valid pre-registration — check if pilot (has ownerNick/ownerId)
+                    if (preReg.ownerNick && preReg.ownerId && db.users[preReg.ownerId]) {
+                        // ── Pilot pre-registration: link to owner ──
+                        if (!db.users[preReg.ownerId].pilotIds) db.users[preReg.ownerId].pilotIds = [];
+                        if (!db.users[preReg.ownerId].pilotIds.includes(member.id)) {
+                            db.users[preReg.ownerId].pilotIds.push(member.id);
+                        }
+                        db.users[member.id] = {
+                            nickname: preReg.nickname,
+                            registeredAt: new Date().toISOString(),
+                            pilotIds: []
+                        };
+                        delete db.preRegistrations[member.id];
+                        saveLocalStorage();
 
-                    await member.setNickname(preReg.nickname).catch(() => {});
-                    if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        await member.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                        if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
+                            await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        }
+
+                        logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
+                    } else {
+                        // ── Owner pre-registration ──
+                        db.users[member.id] = {
+                            nickname: preReg.nickname,
+                            registeredAt: new Date().toISOString(),
+                            pilotIds: preReg.pilotIds || []
+                        };
+                        delete db.preRegistrations[member.id];
+                        saveLocalStorage();
+
+                        await member.setNickname(preReg.nickname).catch(() => {});
+                        if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
+                            await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        }
+
+                        logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                     }
-
-                    logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                 } else {
                     // Expired — remove pre-registration
                     delete db.preRegistrations[member.id];
