@@ -1521,23 +1521,26 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             report += `\n\n✉️ **Sending DMs to ${unregistered.length} members...**`;
             await interaction.editReply(report);
 
-            let sent = 0;
-            let failed = 0;
-            for (let i = 0; i < unregistered.length; i++) {
-                const member = unregistered[i];
-                try {
-                    await member.send(`👋 Hey **${member.displayName}**, you currently have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀`);
-                    sent++;
-                } catch (e) {
-                    failed++;
-                }
-                // 5-second delay between each DM
-                if (i < unregistered.length - 1) {
-                    await new Promise(r => setTimeout(r, 5000));
-                }
+        let sent = 0;
+        let failed = 0;
+        logEvent(`📋 Admin ${interaction.user.tag} started sending DMs to ${unregistered.length} unregistered members...`);
+        for (let i = 0; i < unregistered.length; i++) {
+            const member = unregistered[i];
+            try {
+                await member.send(`👋 Hey **${member.displayName}**, you currently have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀`);
+                sent++;
+                logEvent(`✅ DM sent to ${member.user.tag} (${member.id}) — ${sent}/${unregistered.length}`);
+            } catch (e) {
+                failed++;
+                logEvent(`❌ DM failed for ${member.user.tag} (${member.id}) — ${e.message}`);
             }
+            // 5-second delay between each DM
+            if (i < unregistered.length - 1) {
+                await new Promise(r => setTimeout(r, 5000));
+            }
+        }
 
-            logEvent(`📋 Admin ${interaction.user.tag} notified ${sent} unregistered member(s) via DM (${failed} failed)`);
+        logEvent(`📋 Admin ${interaction.user.tag} finished notifying — ${sent} sent, ${failed} failed`);
 
             // Send feedback to the admin channel
             if (adminChannelId) {
