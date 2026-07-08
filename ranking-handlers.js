@@ -1782,31 +1782,41 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     continue;
                 }
 
-                // User already registered — update Discord nickname + DB if needed
+                // User already registered — check if wrongly registered as owner (should be pilot)
                 if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
-                    const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
-                    if (prodMember) {
-                        const expectedNick = isPilot && gameNick
-                            ? `${gameNick} - Pilot`
-                            : gameNick || db.users[memberId].nickname;
+                    const isWronglyRegisteredOwner = isPilot && gameNick && 
+                        !Object.values(db.users || {}).some(u => u.pilotIds && u.pilotIds.includes(memberId));
 
-                        // Update DB nickname if different
-                        if (gameNick && db.users[memberId].nickname !== gameNick) {
-                            const oldNick = db.users[memberId].nickname;
-                            db.users[memberId].nickname = gameNick;
-                            saveLocalStorage();
-                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) DB nickname updated: "${oldNick}" → "${gameNick}"`);
-                        }
+                    if (isWronglyRegisteredOwner) {
+                        // Fix: remove the wrong owner registration — will be properly handled below
+                        delete db.users[memberId];
+                        saveLocalStorage();
+                        logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) FIXED: wrong owner registration removed — now processing as pilot`);
+                        // Fall through to isPilot / owner logic below
+                    } else {
+                        // Normal already-registered: update Discord nickname + DB if needed
+                        const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
+                        if (prodMember) {
+                            const expectedNick = isPilot && gameNick
+                                ? `${gameNick} - Pilot`
+                                : gameNick || db.users[memberId].nickname;
 
-                        // Update Discord nickname if different
-                        if (prodMember.nickname !== expectedNick) {
-                            await prodMember.setNickname(expectedNick).catch(() => {});
-                            if (results.length < 20) results.push(`🔄 ${member.user.tag} → updated to "${expectedNick}"`);
-                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) Discord nickname updated to "${expectedNick}"`);
+                            if (gameNick && db.users[memberId].nickname !== gameNick) {
+                                const oldNick = db.users[memberId].nickname;
+                                db.users[memberId].nickname = gameNick;
+                                saveLocalStorage();
+                                logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) DB nickname updated: "${oldNick}" → "${gameNick}"`);
+                            }
+
+                            if (prodMember.nickname !== expectedNick) {
+                                await prodMember.setNickname(expectedNick).catch(() => {});
+                                if (results.length < 20) results.push(`🔄 ${member.user.tag} → updated to "${expectedNick}"`);
+                                logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) Discord nickname updated to "${expectedNick}"`);
+                            }
                         }
+                        totalSkipped++;
+                        continue;
                     }
-                    totalSkipped++;
-                    continue;
                 }
 
                 if (isPilot) {
@@ -1829,11 +1839,33 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 }
 
                 // ── Owner registration ──
-                // Skip if nickname already taken
-                if (isNicknameTaken(gameNick, null)) {
-                    totalSkipped++;
-                    if (results.length < 20) results.push(`⏭️ ${member.user.tag} — "${gameNick}" already registered`);
-                    continue;
+                // Check if nickname already taken
+                const takenEntry = Object.entries(db.users).find(([id, data]) =>
+                    data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === gameNick.toLowerCase()
+                );
+                if (takenEntry) {
+                    const [existingId] = takenEntry;
+                    // Check if the existing user is a wrongly registered pilot (has pilot format in this server)
+                    const existingOriginMember = members.get(existingId);
+                    if (existingOriginMember) {
+                        const existingDisplay = existingOriginMember.nickname || existingOriginMember.user.displayName;
+                        if (server.isPilot(existingDisplay)) {
+                            // Wrongly registered owner — fix and free the nickname
+                            delete db.users[existingId];
+                            saveLocalStorage();
+                            logEvent(`📥 [ScanImport] ${member.user.tag} FIXED: removed wrong owner ${existingOriginMember.user.tag} — freeing nickname "${gameNick}"`);
+                            // Fall through to register the real owner
+                        } else {
+                            totalSkipped++;
+                            if (results.length < 20) results.push(`⏭️ ${member.user.tag} — "${gameNick}" already registered by ${existingOriginMember.user.tag}`);
+                            continue;
+                        }
+                    } else {
+                        // Existing user not in this server — can't verify, skip
+                        totalSkipped++;
+                        if (results.length < 20) results.push(`⏭️ ${member.user.tag} — "${gameNick}" already registered`);
+                        continue;
+                    }
                 }
 
                 const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
