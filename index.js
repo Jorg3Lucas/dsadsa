@@ -12,8 +12,7 @@ import {
     runDailySynchronization
 } from './ranking_sync.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
-
-const DISCORD_SERVER_ID = '1432320162278670440';
+import { DISCORD_SERVER_ID } from './ranking-constants.js';
 
 const client = new Client({
     intents: [
