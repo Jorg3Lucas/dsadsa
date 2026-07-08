@@ -23,7 +23,7 @@ import { getMsg } from './lang.js';import {
     PENDING_MAX_AGE_MS,
     PRE_REGISTER_MAX_AGE_MS 
 } from './ranking-constants.js';
-import { findNicknameInCache } from './ranking-cache.js';
+import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
 // ==========================================
@@ -1902,6 +1902,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }
         };
 
+        // Load ranking cache for fuzzy matching
+        const rankingCache = getLocalRankingCache();
+
         // Track processed members across servers — server 1 (origin) takes priority
         const processedMemberIds = new Set();
 
@@ -1926,10 +1929,32 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
                 const displayName = member.nickname || member.user.displayName;
                 const isPilot = server.isPilot(displayName);
-                const gameNick = server.parseNick(displayName);
+                let gameNick = server.parseNick(displayName);
+
+                // ── Fuzzy nickname matching: if parseNick failed, try closest match in ranking cache ──
+                if (!gameNick) {
+                    const fuzzyMatch = findClosestNicknameInCache(displayName, rankingCache);
+                    if (fuzzyMatch) {
+                        gameNick = fuzzyMatch.nickname;
+                        if (results.length < 20) results.push(`🔍 ${member.user.tag} — fuzzy matched "${displayName}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
+                        logEvent(`📥 [ScanImport] ${member.user.tag} — fuzzy matched "${displayName}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
+                    }
+                }
+
                 if (!gameNick) {
                     totalSkipped++;
                     continue;
+                }
+
+                // ── Also try fuzzy matching if extracted nickname is not found in cache ──
+                if (rankingCache && !findNicknameInCache(gameNick, rankingCache)) {
+                    const fuzzyMatch = findClosestNicknameInCache(gameNick, rankingCache);
+                    if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== gameNick.toLowerCase()) {
+                        const oldNick = gameNick;
+                        gameNick = fuzzyMatch.nickname;
+                        if (results.length < 20) results.push(`🔍 ${member.user.tag} — fuzzy corrected "${oldNick}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
+                        logEvent(`📥 [ScanImport] ${member.user.tag} — fuzzy corrected "${oldNick}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
+                    }
                 }
 
                 // Mark as processed — server 1 (origin) nickname takes priority over server 2

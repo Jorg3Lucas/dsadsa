@@ -55,3 +55,99 @@ export function findNicknameInCache(nickname, cache) {
     }
     return null;
 }
+
+// ── Fuzzy nickname matching ──
+// Strips common formatting characters and finds the closest match in the ranking cache
+// Uses Levenshtein distance normalized by string length (threshold: >= 0.6 similarity)
+
+export function findClosestNicknameInCache(displayName, cache) {
+    if (!cache) return null;
+
+    const clean = (s) => s.trim().normalize('NFC').toLowerCase()
+        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,.]/g, '')
+        .replace(/\s+/g, '');
+
+    const cleanedInput = clean(displayName);
+    if (cleanedInput.length < 2) return null;
+
+    let bestMatch = null;
+    let bestScore = 0;
+    const threshold = 0.55;
+
+    for (const [worldId, players] of Object.entries(cache)) {
+        for (const [nickname, clanName] of Object.entries(players)) {
+            const cleanedNick = clean(nickname);
+            if (cleanedNick.length < 2) continue;
+
+            // Pre-filter: check if they share any common characters
+            const inputChars = new Set(cleanedInput);
+            const nickChars = new Set(cleanedNick);
+            let commonChars = 0;
+            for (const c of inputChars) {
+                if (nickChars.has(c)) commonChars++;
+            }
+            const overlapScore = (2 * commonChars) / (inputChars.size + nickChars.size);
+            if (overlapScore < 0.3) continue; // Skip if too few common characters
+
+            // Levenshtein distance for similarity
+            const distance = levenshteinDistance(cleanedInput, cleanedNick);
+            const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+            const similarity = 1 - (distance / maxLen);
+
+            if (similarity > bestScore) {
+                bestScore = similarity;
+                bestMatch = { worldId, nickname, clanName, score: similarity };
+            }
+        }
+    }
+
+    // Also try matching with just the first/last parts (in case of combined names)
+    if (!bestMatch || bestScore < threshold) {
+        const parts = cleanedInput.split(/[\s_]+/).filter(p => p.length > 2);
+        for (const part of parts) {
+            for (const [worldId, players] of Object.entries(cache)) {
+                for (const [nickname, clanName] of Object.entries(players)) {
+                    const cleanedNick = clean(nickname);
+                    if (cleanedNick.length < 2) continue;
+                    if (cleanedNick.includes(part) && cleanedNick.length > part.length) {
+                        const score = part.length / cleanedNick.length;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMatch = { worldId, nickname, clanName, score };
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return bestMatch && bestScore >= threshold ? bestMatch : null;
+}
+
+function levenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+        matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+        matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b[i - 1] === a[j - 1]) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
