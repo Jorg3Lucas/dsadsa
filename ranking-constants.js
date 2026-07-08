@@ -47,7 +47,7 @@ export const WORLD_IDS = {
 // ⏳ PENDING REGISTRATION EXPIRY (24h)
 // ==========================================
 
-const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** Remove pending registrations older than 24h */
 export function cleanExpiredPendingRegistrations() {

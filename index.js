@@ -12,7 +12,7 @@ import {
     runDailySynchronization
 } from './ranking_sync.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
-import { DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, cleanExpiredPendingRegistrations } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals } from './ranking-constants.js';
 
 const client = new Client({
     intents: [
@@ -42,14 +42,25 @@ function logRankingEvent(message) {
 
 function saveRankingStorage() {
     try {
-        runBackup(['./database_ranking.json']);
+        // Backup is non-fatal — save first, then try to backup
+        try { runBackup(['./database_ranking.json']); } catch (e) {
+            console.error('⚠️ [Save] Backup failed (non-fatal):', e.message);
+        }
+
         const dbToSave = { ...rankingDb };
-        // Persist pending registrations so they survive bot restarts
-        dbToSave._pendingRegistrations = pendingRegistrations;
-        dbToSave._pendingPilotApprovals = pendingPilotApprovals;
+        // Persist pending registrations (deep copy to avoid reference issues)
+        dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
+        dbToSave._pendingPilotApprovals = JSON.parse(JSON.stringify(pendingPilotApprovals));
         fs.writeFileSync(dbRankingPath, JSON.stringify(dbToSave, null, 2), 'utf8');
+        
+        const pendCount = Object.keys(dbToSave._pendingRegistrations).length;
+        const pilotCount = Object.keys(dbToSave._pendingPilotApprovals).length;
+        if (pendCount > 0 || pilotCount > 0) {
+            console.log(`💾 [Save] Saved ${pendCount} pending + ${pilotCount} pilot approvals`);
+        }
     } catch (error) {
         console.error('❌ Error saving ranking database:', error);
+        if (error.stack) console.error('📋 [Stack]:', error.stack);
     }
 }
 
@@ -70,15 +81,8 @@ function loadLocalStorageRanking() {
                 delete rankingDb._pendingPilotApprovals;
             }
 
-            // Clean expired pending registrations (older than 24h)
-            const beforeClean = Object.keys(pendingRegistrations).length + Object.keys(pendingPilotApprovals).length;
-            cleanExpiredPendingRegistrations();
-            const afterClean = Object.keys(pendingRegistrations).length + Object.keys(pendingPilotApprovals).length;
-            const removed = beforeClean - afterClean;
-
             console.log('✅ Ranking database loaded successfully.');
             console.log(`📋 Restored ${Object.keys(pendingRegistrations).length} pending registration(s), ${Object.keys(pendingPilotApprovals).length} pending pilot approval(s)`);
-            if (removed > 0) console.log(`🧹 Cleaned ${removed} expired pending registration(s) (>24h)`);
         } else {
             saveRankingStorage();
             console.log('📝 New database_ranking.json file created.');
@@ -114,6 +118,17 @@ client.once('ready', async () => {
     // Start auto-backup scheduler
     startAutoBackup(6);
 });
+
+// Graceful shutdown handlers (top-level, not inside ready callback)
+function handleShutdown(signal) {
+    console.log(`\n🛑 [${signal}] Shutting down gracefully...`);
+    saveRankingStorage();
+    logRankingEvent(`[Ranking Bot] Shutting down (${signal})`);
+    process.exit(0);
+}
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
 // ==========================================
 // 🖱️ INTERACTION CREATE EVENT

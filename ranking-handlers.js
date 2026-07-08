@@ -9,7 +9,7 @@ import {
     ButtonStyle
 } from 'discord.js';
 import { getMsg } from './lang.js';
-import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId, APPROVER_ROLE_IDS, WELCOME_PANEL_MESSAGE } from './ranking-constants.js';
+import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId, APPROVER_ROLE_IDS, WELCOME_PANEL_MESSAGE, PENDING_MAX_AGE_MS } from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -75,7 +75,18 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const pending = pendingRegistrations[userId];
 
         if (!pending) {
-            return interaction.update({ content: '⌛ This registration has expired or was already processed.', components: [] });
+            return interaction.update({ content: '⌛ This request was already processed.', components: [] });
+        }
+
+        // Check if the registration has expired (>24h since submission)
+        const timeSinceSubmission = Date.now() - (pending.timestamp || 0);
+        if (timeSinceSubmission > PENDING_MAX_AGE_MS) {
+            delete pendingRegistrations[userId];
+            saveLocalStorage();
+            return interaction.update({ 
+                content: `⌛ **This registration has expired.** (>24h since submission)\n\n👤 **User:** <@${userId}>\n📝 **Nickname:** ${pending.nickname}\n🕐 **Submitted:** ${new Date(pending.timestamp).toLocaleString('en-US')}\n\nThe user must submit a new registration request.`,
+                components: [] 
+            });
         }
 
         if (result === 'no') {
@@ -111,10 +122,6 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
         if (!canApprove) {
             return interaction.followUp({ content: '❌ You do not have permission to approve registrations.', flags: 64 });
-        }
-
-        if (!pending) {
-            return interaction.editReply({ content: '⌛ This registration has expired or was already processed.', components: [] });
         }
 
         delete pendingRegistrations[userId];

@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, WORLD_IDS } from './ranking-constants.js';
+import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, WORLD_IDS, PENDING_MAX_AGE_MS } from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
 import { getMsg } from './lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
@@ -94,18 +94,41 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
         }
 
         let restoredCount = 0;
+        let expiredCount = 0;
 
         for (const [userId, pending] of pendingEntries) {
             if (!pending.nickname) continue;
+
+            // Check if this registration has expired (>24h) while the bot was offline
+            const timeSinceSubmission = Date.now() - (pending.timestamp || 0);
+            const isExpired = timeSinceSubmission > PENDING_MAX_AGE_MS;
 
             // Try to fetch the existing admin message
             if (pending.channelId && pending.messageId) {
                 try {
                     const existingMsg = await adminChannel.messages.fetch(pending.messageId).catch(() => null);
-                    if (existingMsg) continue; // Message still exists
+                    if (existingMsg) {
+                        if (isExpired) {
+                            // Update the message to show it's expired, remove buttons
+                            await existingMsg.edit({
+                                content: `⌛ **This registration has expired.** (>24h since submission)\n\n👤 **User:** <@${userId}>\n📝 **Nickname:** ${pending.nickname}\n🕐 **Submitted:** ${new Date(pending.timestamp).toLocaleString('en-US')}\n\nThe user must submit a new registration request.`,
+                                components: []
+                            }).catch(() => {});
+                            delete pendingRegistrations[userId];
+                            expiredCount++;
+                        }
+                        continue; // Message still exists
+                    }
                 } catch (e) {
                     // Message not found — will re-send
                 }
+            }
+
+            // If expired and message was deleted, just remove from memory
+            if (isExpired) {
+                delete pendingRegistrations[userId];
+                expiredCount++;
+                continue;
             }
 
             // Fetch the user to display their info
@@ -160,9 +183,10 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
             restoredCount++;
         }
 
-        if (restoredCount > 0) {
+        if (restoredCount > 0 || expiredCount > 0) {
             saveLocalStorage();
-            logEvent(`🔄 [Admin Panel Restore] Restored ${restoredCount} missing admin approval message(s)`);
+            if (restoredCount > 0) logEvent(`🔄 [Admin Panel Restore] Restored ${restoredCount} missing admin approval message(s)`);
+            if (expiredCount > 0) logEvent(`🧹 [Admin Panel Restore] Marked ${expiredCount} expired registration(s) (>24h)`);
         }
     } catch (error) {
         logEvent(`❌ [Admin Panel Restore] Error: ${error.message}`);
