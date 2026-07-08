@@ -1771,10 +1771,20 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     continue;
                 }
 
-                // Skip if user already registered
+                // User already registered — update Discord nickname if needed
                 if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
+                    const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
+                    if (prodMember) {
+                        const expectedNick = isPilot && gameNick
+                            ? `${gameNick} - Pilot`
+                            : gameNick || db.users[memberId].nickname;
+                        if (prodMember.nickname !== expectedNick) {
+                            await prodMember.setNickname(expectedNick).catch(() => {});
+                            if (results.length < 20) results.push(`🔄 ${member.user.tag} → nickname updated to "${expectedNick}"`);
+                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) nickname updated to "${expectedNick}"`);
+                        }
+                    }
                     totalSkipped++;
-                    if (results.length < 20) results.push(`⏭️ ${member.user.tag} — already registered`);
                     continue;
                 }
 
