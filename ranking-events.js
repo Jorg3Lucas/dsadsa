@@ -93,11 +93,11 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('welcome_register_owner')
-                    .setLabel('👑 Registrar como Dono')
+                    .setLabel('👑 Register as Owner')
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
                     .setCustomId('welcome_register_pilot')
-                    .setLabel('✈️ Registrar como Piloto')
+                    .setLabel('✈️ Register as Pilot')
                     .setStyle(ButtonStyle.Secondary)
             );
 
