@@ -305,7 +305,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         const userId = interaction.user.id;
-        pendingRegistrations[userId] = { nickname, timestamp: Date.now() };
+        // Use fuzzy-corrected nickname if available
+        const effectiveNickname = correctedNickname || nickname;
+        pendingRegistrations[userId] = { nickname: effectiveNickname, timestamp: Date.now() };
 
         if (!adminChannelId) {
             logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but admin channel not configured`);
@@ -321,13 +323,34 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         // Look up nickname in ranking cache and check allied clan status
-        const cacheHit = findNicknameInCache(nickname);
+        let correctedNickname = null;
+        let cacheHit = findNicknameInCache(nickname);
+
+        // ── Fuzzy matching: if exact nickname not found, try closest match ──
+        if (!cacheHit) {
+            const rankingCache = getLocalRankingCache();
+            if (rankingCache) {
+                const fuzzyMatch = findClosestNicknameInCache(nickname, rankingCache);
+                if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== nickname.toLowerCase()) {
+                    correctedNickname = fuzzyMatch.nickname;
+                    // Re-check with the corrected name
+                    cacheHit = fuzzyMatch;
+                    logEvent(`👑 ${interaction.user.tag} — fuzzy corrected "${nickname}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
+                }
+            }
+        }
+
         let rankingStatus = '❌ Not found in ranking';
         let alliedClanStatus = '❌ Not in allied clan';
+        let fuzzyNote = '';
 
         if (cacheHit) {
             const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
             rankingStatus = `✅ Found — ${serverName} (${cacheHit.clanName})`;
+
+            if (correctedNickname) {
+                fuzzyNote = `\n🔍 **Fuzzy match:** "${nickname}" → "${correctedNickname}"`;
+            }
 
             // Check if the clan is an allied clan
             const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
@@ -353,7 +376,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         );
 
         const adminMsg = await adminChannel.send({
-            content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+            content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${effectiveNickname}${fuzzyNote ? ` (original: "${nickname}")` : ''}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
             components: [
                 new ActionRowBuilder().addComponents(approveButtons)
             ]
@@ -1902,9 +1925,6 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }
         };
 
-        // Load ranking cache for fuzzy matching
-        const rankingCache = getLocalRankingCache();
-
         // Track processed members across servers — server 1 (origin) takes priority
         const processedMemberIds = new Set();
 
@@ -1931,30 +1951,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 const isPilot = server.isPilot(displayName);
                 let gameNick = server.parseNick(displayName);
 
-                // ── Fuzzy nickname matching: if parseNick failed, try closest match in ranking cache ──
-                if (!gameNick) {
-                    const fuzzyMatch = findClosestNicknameInCache(displayName, rankingCache);
-                    if (fuzzyMatch) {
-                        gameNick = fuzzyMatch.nickname;
-                        if (results.length < 20) results.push(`🔍 ${member.user.tag} — fuzzy matched "${displayName}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
-                        logEvent(`📥 [ScanImport] ${member.user.tag} — fuzzy matched "${displayName}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
-                    }
-                }
-
                 if (!gameNick) {
                     totalSkipped++;
                     continue;
-                }
-
-                // ── Also try fuzzy matching if extracted nickname is not found in cache ──
-                if (rankingCache && !findNicknameInCache(gameNick, rankingCache)) {
-                    const fuzzyMatch = findClosestNicknameInCache(gameNick, rankingCache);
-                    if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== gameNick.toLowerCase()) {
-                        const oldNick = gameNick;
-                        gameNick = fuzzyMatch.nickname;
-                        if (results.length < 20) results.push(`🔍 ${member.user.tag} — fuzzy corrected "${oldNick}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
-                        logEvent(`📥 [ScanImport] ${member.user.tag} — fuzzy corrected "${oldNick}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
-                    }
                 }
 
                 // Mark as processed — server 1 (origin) nickname takes priority over server 2
