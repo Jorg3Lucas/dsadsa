@@ -91,12 +91,14 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 content: `❌ **Registro Recusado**\n\n👤 **Usuário:** <@${userId}>\n📝 **Nickname:** ${pending.nickname}\n🕐 **Processado por:** ${interaction.user.tag}`,
                 components: []
             });
+            logEvent(`❌ Admin ${interaction.user.tag} REJECTED registration for ${userId} (nickname: ${pending.nickname})`);
             try { const user = await interaction.client.users.fetch(userId); await user.send('❌ Seu registro foi recusado por um administrador.'); } catch (e) {}
             return;
         }
 
         const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
         if (!targetMember) {
+            logEvent(`❌ Admin ${interaction.user.tag} tried to approve ${userId} (${pending.nickname}) but user is no longer in the server`);
             return interaction.editReply({ content: '❌ Usuário não está mais no servidor.', components: [] });
         }
 
@@ -139,6 +141,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         delete pendingPilotApprovals[pilotUserId];
 
         if (result === 'no') {
+            logEvent(`❌ ${pending.ownerNick} REJECTED pilot ${pilotUserId} (${pending.pilotTag})`);
             await interaction.editReply({ content: '❌ **Solicitação recusada.**', components: [] });
             try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('❌ O dono recusou seu registro como piloto.'); } catch (e) {}
             return;
@@ -146,6 +149,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
         if (!guild) {
+            logEvent(`❌ Pilot approval failed: guild not found for owner ${pending.ownerNick} approving pilot ${pilotUserId}`);
             return interaction.editReply({ content: '❌ Erro ao encontrar o servidor.', components: [] });
         }
 
@@ -153,6 +157,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const ownerMember = await guild.members.fetch(pending.ownerId).catch(() => null);
 
         if (!pilotMember || !ownerMember) {
+            logEvent(`❌ Pilot approval failed: owner ${pending.ownerId} or pilot ${pilotUserId} no longer in server`);
             return interaction.editReply({ content: '❌ Um dos membros não está mais no servidor.', components: [] });
         }
 
@@ -185,6 +190,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
         );
         if (existingUser) {
+            logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${existingUser[0]}`);
             return interaction.editReply('❌ Este nome de personagem já está registrado por outro usuário.');
         }
 
@@ -192,11 +198,15 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         pendingRegistrations[userId] = { nickname, timestamp: Date.now() };
 
         if (!adminChannelId) {
+            logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but admin channel not configured`);
+            delete pendingRegistrations[userId];
             return interaction.editReply('❌ O canal de aprovação não foi configurado. Use !setadminchannel primeiro.');
         }
 
         const adminChannel = interaction.guild.channels.cache.get(adminChannelId);
         if (!adminChannel) {
+            logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but admin channel ${adminChannelId} not found`);
+            delete pendingRegistrations[userId];
             return interaction.editReply('❌ Canal de aprovação não encontrado. Contacte um administrador.');
         }
 
@@ -213,6 +223,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         pendingRegistrations[userId].channelId = adminChannel.id;
         pendingRegistrations[userId].messageId = adminMsg.id;
 
+        logEvent(`👑 ${interaction.user.tag} submitted owner registration for "${nickname}" — awaiting admin approval`);
         return interaction.editReply('✅ **Registro enviado para aprovação!** Um administrador irá revisar seu cadastro em breve.');
     }
 
@@ -267,8 +278,10 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 ]
             });
 
+            logEvent(`✈️ ${interaction.user.tag} requested to be pilot of ${ownerData.nickname} — DM sent to owner for approval`);
             return interaction.editReply(`✅ **Solicitação enviada!** O dono **${ownerData.nickname}** recebeu uma DM para aprovar seu registro como piloto.`);
         } catch (error) {
+            logEvent(`❌ Failed to send pilot DM: ${interaction.user.tag} → owner ${ownerData.nickname} (${ownerId}): ${error.message}`);
             delete pendingPilotApprovals[pilotId];
             return interaction.editReply('❌ Não foi possível enviar DM para o dono. Verifique se ele permite mensagens privadas no servidor.');
         }
