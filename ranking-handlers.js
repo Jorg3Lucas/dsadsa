@@ -9,7 +9,7 @@ import {
     ButtonStyle
 } from 'discord.js';
 import { getMsg } from './lang.js';
-import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId, APPROVER_ROLE_IDS } from './ranking-constants.js';
+import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId, APPROVER_ROLE_IDS, WELCOME_PANEL_MESSAGE } from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -182,6 +182,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         delete pendingRegistrations[userId];
+        saveLocalStorage(); // Persist rejection so it doesn't reappear on bot restart
 
         logEvent(`❌ Admin ${interaction.user.tag} REJECTED registration for ${userId} (nickname: ${pending.nickname}) — reason: ${reason}`);
 
@@ -227,6 +228,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         delete pendingPilotApprovals[pilotUserId];
+        saveLocalStorage(); // Persist pilot approval response
 
         if (result === 'no') {
             logEvent(`❌ ${pending.ownerNick} REJECTED pilot ${pilotUserId} (${pending.pilotTag})`);
@@ -339,6 +341,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         pendingRegistrations[userId].channelId = adminChannel.id;
         pendingRegistrations[userId].messageId = adminMsg.id;
+        saveLocalStorage(); // Persist pending registration to survive bot restarts
 
         logEvent(`👑 ${interaction.user.tag} submitted owner registration for "${nickname}" — awaiting admin approval`);
         return interaction.editReply('✅ **Registration sent for approval!** An administrator will review it shortly.');
@@ -407,6 +410,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             pilotTag: interaction.user.tag,
             timestamp: Date.now()
         };
+        saveLocalStorage(); // Persist pending pilot approval to survive bot restarts
 
         try {
             const ownerMember = await interaction.guild.members.fetch(ownerId);
@@ -427,6 +431,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         } catch (error) {
             logEvent(`❌ Failed to send pilot DM: ${interaction.user.tag} → owner ${ownerData.nickname} (${ownerId}): ${error.message}`);
             delete pendingPilotApprovals[pilotId];
+            saveLocalStorage();
             return interaction.editReply('❌ Could not send DM to the owner. Make sure they have DMs enabled on this server.');
         }
     }
@@ -1445,8 +1450,6 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     if (commandName === 'sendpanel') {
         await interaction.deferReply({ flags: 64 });
 
-        const panelMsg = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.';
-
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('welcome_register_owner')
@@ -1458,7 +1461,14 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 .setStyle(ButtonStyle.Secondary)
         );
 
-        await interaction.channel.send({ content: panelMsg, components: [row] });
+        const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });
+
+        // Save panel info so it can be restored on bot restart
+        if (!db.config) db.config = {};
+        db.config.panelChannelId = interaction.channelId;
+        db.config.panelMessageId = panelMessage.id;
+        saveLocalStorage();
+
         logEvent(`📋 Admin ${interaction.user.tag} sent registration panel in #${interaction.channel.name}`);
         return interaction.editReply('✅ **Registration panel sent!**');
     }

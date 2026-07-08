@@ -12,7 +12,7 @@ import {
     runDailySynchronization
 } from './ranking_sync.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
-import { DISCORD_SERVER_ID } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, cleanExpiredPendingRegistrations } from './ranking-constants.js';
 
 const client = new Client({
     intents: [
@@ -43,7 +43,11 @@ function logRankingEvent(message) {
 function saveRankingStorage() {
     try {
         runBackup(['./database_ranking.json']);
-        fs.writeFileSync(dbRankingPath, JSON.stringify(rankingDb, null, 2), 'utf8');
+        const dbToSave = { ...rankingDb };
+        // Persist pending registrations so they survive bot restarts
+        dbToSave._pendingRegistrations = pendingRegistrations;
+        dbToSave._pendingPilotApprovals = pendingPilotApprovals;
+        fs.writeFileSync(dbRankingPath, JSON.stringify(dbToSave, null, 2), 'utf8');
     } catch (error) {
         console.error('❌ Error saving ranking database:', error);
     }
@@ -55,7 +59,26 @@ function loadLocalStorageRanking() {
             const data = fs.readFileSync(dbRankingPath, 'utf8');
             rankingDb = JSON.parse(data);
             if (!rankingDb.users) rankingDb.users = {};
+
+            // Restore pending registrations from disk (survive bot restarts)
+            if (rankingDb._pendingRegistrations) {
+                Object.assign(pendingRegistrations, rankingDb._pendingRegistrations);
+                delete rankingDb._pendingRegistrations;
+            }
+            if (rankingDb._pendingPilotApprovals) {
+                Object.assign(pendingPilotApprovals, rankingDb._pendingPilotApprovals);
+                delete rankingDb._pendingPilotApprovals;
+            }
+
+            // Clean expired pending registrations (older than 24h)
+            const beforeClean = Object.keys(pendingRegistrations).length + Object.keys(pendingPilotApprovals).length;
+            cleanExpiredPendingRegistrations();
+            const afterClean = Object.keys(pendingRegistrations).length + Object.keys(pendingPilotApprovals).length;
+            const removed = beforeClean - afterClean;
+
             console.log('✅ Ranking database loaded successfully.');
+            console.log(`📋 Restored ${Object.keys(pendingRegistrations).length} pending registration(s), ${Object.keys(pendingPilotApprovals).length} pending pilot approval(s)`);
+            if (removed > 0) console.log(`🧹 Cleaned ${removed} expired pending registration(s) (>24h)`);
         } else {
             saveRankingStorage();
             console.log('📝 New database_ranking.json file created.');

@@ -43,4 +43,33 @@ export const WORLD_IDS = {
     653: "BEU031"
 };
 
+// ==========================================
+// ⏳ PENDING REGISTRATION EXPIRY (24h)
+// ==========================================
+
+const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/** Remove pending registrations older than 24h */
+export function cleanExpiredPendingRegistrations() {
+    const now = Date.now();
+
+    for (const [userId, pending] of Object.entries(pendingRegistrations)) {
+        if (pending.timestamp && (now - pending.timestamp > PENDING_MAX_AGE_MS)) {
+            delete pendingRegistrations[userId];
+        }
+    }
+
+    for (const [pilotUserId, pending] of Object.entries(pendingPilotApprovals)) {
+        if (pending.timestamp && (now - pending.timestamp > PENDING_MAX_AGE_MS)) {
+            delete pendingPilotApprovals[pilotUserId];
+        }
+    }
+}
+
+// ==========================================
+// 📋 WELCOME PANEL MESSAGE
+// ==========================================
+
+export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.';
+
 
