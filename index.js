@@ -154,7 +154,8 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'register_owner_modal' ||
                 interaction.customId === 'register_pilot_modal' ||
-                interaction.customId === 'manage_allied_add_modal') {
+                interaction.customId === 'manage_allied_add_modal' ||
+                interaction.customId.startsWith('reject_owner_')) {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
         }
