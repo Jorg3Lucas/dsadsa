@@ -92,6 +92,15 @@ export async function registerMir4SlashCommands(guild) {
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
             {
+                name: 'fixnick',
+                description: getMsg('ranking.commands.fixnick.description'),
+                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                options: [
+                    { type: 6, name: 'member', description: getMsg('ranking.commands.fixnick.options.member'), required: true },
+                    { type: 3, name: 'nickname', description: getMsg('ranking.commands.fixnick.options.nickname'), required: false }
+                ]
+            },
+            {
                 name: 'elderguide',
                 description: '📋 Guide: how to approve/reject owner registrations'
             },

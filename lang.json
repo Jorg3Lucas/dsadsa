@@ -45,6 +45,13 @@
             },
             "pending": {
                 "description": "⏳ [Admin] List all pending registration requests with time remaining."
+            },
+            "fixnick": {
+                "description": "🔍 [Admin] Auto-correct a member's nickname via fuzzy ranking match.",
+                "options": {
+                    "member": "The member whose nickname needs fixing.",
+                    "nickname": "Optional: the correct nickname. If omitted, auto-detect from ranking."
+                }
             }
         },
         "responses": {
