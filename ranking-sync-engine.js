@@ -1,5 +1,6 @@
 import { DISCORD_SERVER_ID, MEMBER_ROLE_ID } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
+import { getLocalRankingCache, findNicknameInCache } from './ranking-cache.js';
 import { getMsg } from './lang.js';
 
 // ==========================================
@@ -62,6 +63,47 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     if (member.roles.cache.has(MEMBER_ROLE_ID)) await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                     continue; 
                 }
+            }
+        }
+
+        // 2.5. RANKING VALIDATION — remove registration if nickname not in any world's ranking
+        const rankingCache = getLocalRankingCache();
+        if (rankingCache) {
+            const toRemove = new Set();
+
+            for (const [memberId, userData] of Object.entries(db.users)) {
+                if (!userData.nickname) continue;
+                const nickname = userData.nickname.trim().normalize('NFC');
+                const inRanking = findNicknameInCache(nickname);
+                if (!inRanking) {
+                    toRemove.add(memberId);
+                    if (userData.pilotIds && userData.pilotIds.length > 0) {
+                        for (const pId of userData.pilotIds) {
+                            toRemove.add(pId);
+                        }
+                    }
+                }
+            }
+
+            if (toRemove.size > 0) {
+                for (const memberId of toRemove) {
+                    const member = members.get(memberId);
+                    const userData = db.users[memberId];
+                    if (!userData) continue;
+
+                    if (member) {
+                        const displayName = userData.nickname || member.user.username;
+                        logEvent(`⚠️ [Ranking Validation] ${member.user.tag} (${displayName}) not found in any EU ranking — removing role`);
+
+                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        }
+                        await member.setNickname(member.user.username).catch(() => {});
+                    }
+                    delete db.users[memberId];
+                }
+                saveLocalStorage();
+                logEvent(`🧹 [Ranking Validation] Removed ${toRemove.size} member(s) not found in any EU ranking`);
             }
         }
 
