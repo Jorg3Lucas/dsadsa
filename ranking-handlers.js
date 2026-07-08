@@ -9,7 +9,7 @@ import {
     ButtonStyle
 } from 'discord.js';
 import { getMsg } from './lang.js';
-import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId } from './ranking-constants.js';
+import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId, APPROVER_ROLE_IDS } from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -79,6 +79,14 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         if (result === 'no') {
+            // Check permission: admin or approver role
+            const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+                interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+            if (!canApprove) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ You do not have permission to reject registrations.', flags: 64 });
+            }
+
             // Show a modal so the admin can write a rejection reason
             const modal = new ModalBuilder()
                 .setCustomId(`reject_owner_${userId}`)
@@ -99,8 +107,10 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         await interaction.deferUpdate();
 
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.followUp({ content: '❌ Only administrators can approve registrations.', flags: 64 });
+        const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+            interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+        if (!canApprove) {
+            return interaction.followUp({ content: '❌ You do not have permission to approve registrations.', flags: 64 });
         }
 
         if (!pending) {
@@ -155,6 +165,12 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
     // ── Admin Rejection Modal Submit ──
     if (interaction.isModalSubmit() && interaction.customId.startsWith('reject_owner_')) {
+        const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+            interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+        if (!canApprove) {
+            return interaction.reply({ content: '❌ You do not have permission to reject registrations.', flags: 64 });
+        }
+
         await interaction.deferReply({ flags: 64 });
 
         const userId = interaction.customId.replace('reject_owner_', '');

@@ -22,6 +22,14 @@ export const DISCORD_SERVER_ID = '1481566364631044119';
 
 export const MEMBER_ROLE_ID = '1481568299966926879';
 
+// Roles that can approve/reject member registrations (in addition to Administrator)
+export const APPROVER_ROLE_IDS = [
+    '1481568277254639626',
+    '1483532193987956817',
+    '1500208456945106944',
+    '1481568065081573467'
+];
+
 export const WORLD_IDS = {
     611: "EU011",
     612: "EU012",
