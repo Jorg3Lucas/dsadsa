@@ -60,39 +60,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.editReply(getMsg('ranking.responses.register.success', { nickname }));
     }
 
-    // B. MANUAL CLAN SELECTION DROPDOWN (ADMIN)
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_clan_manual_')) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: getMsg('ranking.responses.selectClanMenu.noPermission'), flags: 64 });
-        }
-
-        await interaction.deferReply({ flags: 64 });
-        const targetId = interaction.customId.replace('select_clan_manual_', '');
-        const selectedClan = interaction.values[0];
-
-        if (db.users[targetId]) {
-            db.users[targetId].clanManual = selectedClan;
-            saveLocalStorage();
-
-            const guild = interaction.guild;
-            const member = await guild.members.fetch(targetId).catch(() => null);
-
-            if (member) {
-                const normalizedNick = db.users[targetId].nickname.trim().normalize('NFC');
-                await member.setNickname(normalizedNick).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
-                if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                    await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                }
-            }
-            logEvent(getMsg('ranking.logs.manualLink', { targetId, selectedClan }));
-            return interaction.editReply(getMsg('ranking.responses.selectClanMenu.success', { clan: selectedClan }));
-        }
-        return interaction.editReply(getMsg('ranking.responses.selectClanMenu.error'));
-    }
-
-    // C. PILOT REMOVAL HANDLER (user removing their own pilot)
+    // B. PILOT REMOVAL HANDLER (user removing their own pilot)
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_pilot_to_remove') {
         await interaction.deferUpdate();
         

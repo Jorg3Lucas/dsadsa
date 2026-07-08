@@ -105,7 +105,7 @@ client.on('interactionCreate', async (interaction) => {
 
         // B. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
-            const rankingMenus = ['select_pilot_to_remove', 'select_clan_manual_', 'manage_'];
+            const rankingMenus = ['select_pilot_to_remove', 'manage_'];
             const isRankingMenu = rankingMenus.some(id => interaction.customId.startsWith(id));
 
             if (isRankingMenu) {

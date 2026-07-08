@@ -97,26 +97,6 @@ function rotateBackups(baseName) {
   }
 }
 
-// ─── Pre-write backup (quick backup before saving) ───
-
-export function backupBeforeWrite(filePath) {
-  ensureBackupDir();
-
-  const resolvedPath = path.resolve(filePath);
-  if (!fs.existsSync(resolvedPath)) return;
-
-  try {
-    const baseName = safeFileName(filePath);
-    const backupName = `${baseName}_prewrite_${Date.now()}.json`;
-    const backupPath = path.join(BACKUP_DIR, backupName);
-
-    fs.copyFileSync(resolvedPath, backupPath);
-    rotateBackups(baseName);
-  } catch (err) {
-    console.error(`❌ [Auto-Backup] Pre-write backup failed for ${filePath}:`, err.message);
-  }
-}
-
 // ─── Start scheduled backups ─────────────────
 
 export function startAutoBackup(intervalHours = 6) {
@@ -140,31 +120,4 @@ export function startAutoBackup(intervalHours = 6) {
   }, intervalMs);
 
   console.log(`📅 [Auto-Backup] Scheduled: every ${intervalHours} hour(s) — keeping last ${MAX_BACKUPS} backups`);
-}
-
-// ─── Stop scheduled backups ──────────────────
-
-export function stopAutoBackup() {
-  if (backupInterval) {
-    clearInterval(backupInterval);
-    backupInterval = null;
-    console.log("🛑 [Auto-Backup] Stopped.");
-  }
-}
-
-// ─── List available backups ──────────────────
-
-export function listBackups() {
-  ensureBackupDir();
-
-  const files = fs.readdirSync(BACKUP_DIR)
-    .filter(f => f.endsWith(".json"))
-    .map(f => ({
-      name: f,
-      size: fs.statSync(path.join(BACKUP_DIR, f)).size,
-      time: fs.statSync(path.join(BACKUP_DIR, f)).mtime
-    }))
-    .sort((a, b) => b.time - a.time);
-
-  return files;
 }

@@ -24,22 +24,3 @@ export function getMsg(pathStr, vars = {}) {
     return output;
 }
 
-export function reloadLanguage() {
-    try {
-        langDict = JSON.parse(fs.readFileSync(langPath, 'utf8'));
-        return true;
-    } catch (e) {
-        console.error('❌ Error reloading language file:', e.message);
-        return false;
-    }
-}
-
-export function getArray(pathStr) {
-    const keys = pathStr.split('.');
-    let target = langDict;
-    for (const key of keys) {
-        if (target === undefined || target === null) return [];
-        target = target[key];
-    }
-    return Array.isArray(target) ? target : [];
-}
