@@ -14,6 +14,7 @@ import { getMsg } from './lang.js';import {
     WORLD_IDS, 
     DISCORD_SERVER_ID, 
     ORIGIN_SERVER_ID, 
+    SECONDARY_SERVER_ID, 
     pendingRegistrations, 
     pendingPilotApprovals, 
     adminChannelId, 
@@ -1641,103 +1642,124 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     if (commandName === 'scanimport') {
         await interaction.deferReply({ flags: 64 });
 
-        const originGuild = interaction.client.guilds.cache.get(ORIGIN_SERVER_ID);
-        if (!originGuild) {
-            logEvent(`❌ [ScanImport] ${interaction.user.tag} tried to scan but origin server not found`);
-            return interaction.editReply('❌ Origin server not found. Make sure the bot is in both servers.');
-        }
-
         const prodGuild = interaction.guild;
         if (prodGuild.id !== DISCORD_SERVER_ID) {
             return interaction.editReply('❌ This command must be run in the main production server.');
         }
 
-        // Fetch all members from both servers
-        const originMembers = await originGuild.members.fetch().catch(() => null);
-        if (!originMembers || originMembers.size === 0) {
-            return interaction.editReply('❌ Could not fetch members from the origin server.');
-        }
+        // Define origin servers with their parsing strategy
+        const originServers = [
+            {
+                id: ORIGIN_SERVER_ID,
+                name: 'Origin Server',
+                parseNick(displayName) {
+                    // Format: [123] - NAME | POWER or Pilot - NAME | POWER
+                    const match = displayName.match(/-\s*(.+?)\s*\|/);
+                    return match ? match[1].trim() : null;
+                }
+            },
+            {
+                id: SECONDARY_SERVER_ID,
+                name: 'Secondary Server',
+                parseNick(displayName) {
+                    // Format: NAME (owner) or NAME - Pilot (pilot)
+                    const pilotSuffix = ' - Pilot';
+                    if (displayName.endsWith(pilotSuffix)) {
+                        return displayName.slice(0, -pilotSuffix.length).trim();
+                    }
+                    return displayName.trim();
+                }
+            }
+        ];
 
-        let registered = 0;
-        let preReg = 0;
-        let skipped = 0;
+        let totalRegistered = 0;
+        let totalPreReg = 0;
+        let totalSkipped = 0;
         const results = [];
 
-        for (const [memberId, member] of originMembers) {
-            if (member.user.bot) continue;
-
-            const displayName = member.nickname || member.user.displayName;
-            // Parse nickname from format: [123] - NAME | POWER or Pilot - NAME | POWER
-            const nickMatch = displayName.match(/-\s*(.+?)\s*\|/);
-            if (!nickMatch) {
-                skipped++;
-                continue;
-            }
-            const gameNick = nickMatch[1].trim();
-            if (!gameNick) {
-                skipped++;
+        for (const server of originServers) {
+            const guild = interaction.client.guilds.cache.get(server.id);
+            if (!guild) {
+                results.push(`⚠️ Server "${server.name}" (${server.id}) not found — skipping`);
                 continue;
             }
 
-            // Skip if nickname already taken
-            const existingUser = Object.entries(db.users).find(([id, data]) =>
-                data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === gameNick.toLowerCase()
-            );
-            if (existingUser) {
-                skipped++;
-                if (results.length < 20) results.push(`⏭️ ${member.user.tag} — "${gameNick}" already registered by another user`);
+            const members = await guild.members.fetch().catch(() => null);
+            if (!members || members.size === 0) {
+                results.push(`⚠️ Server "${server.name}" (${server.id}) has no members — skipping`);
                 continue;
             }
 
-            // Skip if user already registered
-            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
-                skipped++;
-                if (results.length < 20) results.push(`⏭️ ${member.user.tag} — already registered as "${db.users[memberId].nickname}"`);
-                continue;
-            }
+            for (const [memberId, member] of members) {
+                if (member.user.bot) continue;
 
-            // Check if this user is in the production server
-            const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
-
-            if (prodMember) {
-                // Register immediately
-                db.users[memberId] = {
-                    nickname: gameNick,
-                    registeredAt: new Date().toISOString(),
-                    pilotIds: []
-                };
-                saveLocalStorage();
-
-                await prodMember.setNickname(gameNick).catch(() => {});
-                if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                const displayName = member.nickname || member.user.displayName;
+                const gameNick = server.parseNick(displayName);
+                if (!gameNick) {
+                    totalSkipped++;
+                    continue;
                 }
 
-                registered++;
-                if (results.length < 20) results.push(`✅ ${member.user.tag} → registered as "${gameNick}"`);
-                logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) auto-registered as "${gameNick}"`);
-            } else {
-                // Pre-register (expires in 7 days)
-                if (!db.preRegistrations) db.preRegistrations = {};
-                const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
-                db.preRegistrations[memberId] = {
-                    nickname: gameNick,
-                    pilotIds: [],
-                    registeredAt: new Date().toISOString(),
-                    expiresAt
-                };
-                saveLocalStorage();
+                // Skip if nickname already taken
+                const existingUser = Object.entries(db.users).find(([id, data]) =>
+                    data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === gameNick.toLowerCase()
+                );
+                if (existingUser) {
+                    totalSkipped++;
+                    if (results.length < 20) results.push(`⏭️ ${member.user.tag} — "${gameNick}" already registered`);
+                    continue;
+                }
 
-                preReg++;
-                if (results.length < 20) results.push(`⏳ ${member.user.tag} → pre-registered as "${gameNick}" (expires in 7d)`);
-                logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) pre-registered as "${gameNick}"`);
+                // Skip if user already registered
+                if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
+                    totalSkipped++;
+                    if (results.length < 20) results.push(`⏭️ ${member.user.tag} — already registered as "${db.users[memberId].nickname}"`);
+                    continue;
+                }
+
+                // Check if this user is in the production server
+                const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
+
+                if (prodMember) {
+                    // Register immediately
+                    db.users[memberId] = {
+                        nickname: gameNick,
+                        registeredAt: new Date().toISOString(),
+                        pilotIds: []
+                    };
+                    saveLocalStorage();
+
+                    await prodMember.setNickname(gameNick).catch(() => {});
+                    if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                        await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                    }
+
+                    totalRegistered++;
+                    if (results.length < 20) results.push(`✅ ${member.user.tag} → registered as "${gameNick}"`);
+                    logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) auto-registered as "${gameNick}"`);
+                } else {
+                    // Pre-register (expires in 7 days)
+                    if (!db.preRegistrations) db.preRegistrations = {};
+                    const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
+                    db.preRegistrations[memberId] = {
+                        nickname: gameNick,
+                        pilotIds: [],
+                        registeredAt: new Date().toISOString(),
+                        expiresAt
+                    };
+                    saveLocalStorage();
+
+                    totalPreReg++;
+                    if (results.length < 20) results.push(`⏳ ${member.user.tag} → pre-registered as "${gameNick}" (expires in 7d)`);
+                    logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) pre-registered as "${gameNick}"`);
+                }
             }
         }
 
         let report = `📥 **Scan Import Complete**\n\n`;
-        report += `✅ **Registered:** ${registered}\n`;
-        report += `⏳ **Pre-registered:** ${preReg}\n`;
-        report += `⏭️ **Skipped:** ${skipped}\n\n`;
+        report += `✅ **Registered:** ${totalRegistered}\n`;
+        report += `⏳ **Pre-registered:** ${totalPreReg}\n`;
+        report += `⏭️ **Skipped:** ${totalSkipped}\n\n`;
 
         if (results.length > 0) {
             report += `📋 **Details:**\n`;
@@ -1748,7 +1770,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             report = report.substring(0, 1900) + '\n\n... (truncated)';
         }
 
-        logEvent(`📥 [ScanImport] ${interaction.user.tag} scanned origin server: ${registered} registered, ${preReg} pre-registered, ${skipped} skipped`);
+        logEvent(`📥 [ScanImport] ${interaction.user.tag} scanned origin servers: ${totalRegistered} registered, ${totalPreReg} pre-registered, ${totalSkipped} skipped`);
         return interaction.editReply(report);
     }
 }
