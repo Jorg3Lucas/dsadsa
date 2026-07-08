@@ -2301,6 +2301,6 @@ let report = `📥 **Scan Import Complete**\n\n`;
             `━━━━━━━━━━━━━━━━━━━━━━\n` +
             `❓ Need help? Contact an Administrator.`;
 
-        return interaction.reply({ content: guide, flags: 64 });
+        return interaction.reply({ content: guide });
     }
 }
