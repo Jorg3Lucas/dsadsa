@@ -305,6 +305,25 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         const userId = interaction.user.id;
+
+        // Look up nickname in ranking cache and check allied clan status
+        let correctedNickname = null;
+        let cacheHit = findNicknameInCache(nickname);
+
+        // ── Fuzzy matching: if exact nickname not found, try closest match ──
+        if (!cacheHit) {
+            const rankingCache = getLocalRankingCache();
+            if (rankingCache) {
+                const fuzzyMatch = findClosestNicknameInCache(nickname, rankingCache);
+                if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== nickname.toLowerCase()) {
+                    correctedNickname = fuzzyMatch.nickname;
+                    // Re-check with the corrected name
+                    cacheHit = fuzzyMatch;
+                    logEvent(`👑 ${interaction.user.tag} — fuzzy corrected "${nickname}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
+                }
+            }
+        }
+
         // Use fuzzy-corrected nickname if available
         const effectiveNickname = correctedNickname || nickname;
         pendingRegistrations[userId] = { nickname: effectiveNickname, timestamp: Date.now() };
@@ -321,10 +340,6 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             delete pendingRegistrations[userId];
             return interaction.editReply('❌ Admin approval channel not found. Contact an administrator.');
         }
-
-        // Look up nickname in ranking cache and check allied clan status
-        let correctedNickname = null;
-        let cacheHit = findNicknameInCache(nickname);
 
         // ── Fuzzy matching: if exact nickname not found, try closest match ──
         if (!cacheHit) {
