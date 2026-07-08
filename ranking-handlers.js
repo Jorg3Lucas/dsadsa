@@ -231,6 +231,73 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.editReply(`❌ **Registration rejected.** The user was notified via DM with the reason.`);
     }
 
+    // ── Register as Pilot from owner registration conflict (skip modal) ──
+    if (interaction.isButton() && interaction.customId === 'reg_pilot_conflict_cancel') {
+        return interaction.update({ content: '❌ Operação cancelada.', components: [] });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('reg_pilot_conflict_')) {
+        await interaction.deferUpdate();
+
+        const ownerId = interaction.customId.replace('reg_pilot_conflict_', '');
+        const ownerData = db.users[ownerId];
+
+        if (!ownerData) {
+            logEvent(`❌ Conflict pilot request failed: owner ${ownerId} no longer registered`);
+            return interaction.editReply({ content: '❌ O dono desta conta não está mais registrado.', components: [] });
+        }
+
+        const pilotId = interaction.user.id;
+        const ownerNick = ownerData.nickname;
+
+        if (ownerId === pilotId) {
+            return interaction.editReply({ content: '❌ Você não pode se registrar como seu próprio piloto.', components: [] });
+        }
+
+        if (!ownerData.pilotIds) ownerData.pilotIds = [];
+        if (ownerData.pilotIds.length >= 4) {
+            return interaction.editReply({ content: '❌ Este dono já atingiu o limite máximo de 4 pilotos.', components: [] });
+        }
+        if (ownerData.pilotIds.includes(pilotId)) {
+            return interaction.editReply({ content: '❌ Você já está registrado como piloto deste dono.', components: [] });
+        }
+
+        pendingPilotApprovals[pilotId] = {
+            ownerId,
+            ownerNick,
+            pilotId,
+            pilotTag: interaction.user.tag,
+            timestamp: Date.now()
+        };
+        saveLocalStorage();
+
+        try {
+            const ownerMember = await interaction.guild.members.fetch(ownerId);
+            const dmChannel = await ownerMember.createDM();
+
+            await dmChannel.send({
+                content: `✈️ **Aprovação de Piloto**\n\n👤 **${interaction.user.tag}** quer se registrar como seu piloto.\n📝 **Seu personagem:** ${ownerNick}\n\nVocê aprova este piloto?`,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-yes`).setLabel('✅ Aprovar').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-no`).setLabel('❌ Rejeitar').setStyle(ButtonStyle.Danger)
+                    )
+                ]
+            });
+
+            logEvent(`✈️ ${interaction.user.tag} requested to be pilot of ${ownerNick} (from registration conflict) — DM sent to owner`);
+            return interaction.editReply({
+                content: `✅ **Solicitação enviada!** O dono **${ownerNick}** recebeu uma mensagem no privado para aprovar seu registro como piloto.`,
+                components: []
+            });
+        } catch (error) {
+            logEvent(`❌ Failed to send pilot DM from conflict: ${interaction.user.tag} → owner ${ownerNick} (${ownerId}): ${error.message}`);
+            delete pendingPilotApprovals[pilotId];
+            saveLocalStorage();
+            return interaction.editReply({ content: '❌ Não foi possível enviar mensagem para o dono. Certifique-se de que ele tem as DMs ativadas neste servidor.', components: [] });
+        }
+    }
+
     // ── Owner DM Approval: Pilot Registration ──
     if (interaction.isButton() && interaction.customId.startsWith('approve_pilot_')) {
         await interaction.deferUpdate();
@@ -300,8 +367,124 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
         );
         if (existingUser) {
-            logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${existingUser[0]}`);
-            return interaction.editReply('❌ This character name is already registered by another user.');
+            const [ownerId, ownerData] = existingUser;
+
+            // Same user — already registered as this character
+            if (ownerId === interaction.user.id) {
+                logEvent(`⚠️ ${interaction.user.tag} tried to register as "${nickname}" but they already own this nickname`);
+                return interaction.editReply(`⚠️ **Você já está registrado como \`${nickname}\`.** Seu personagem já está vinculado à sua conta.`);
+            }
+
+            // Different user — show who is registered
+            logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${ownerId}`);
+
+            // Look up the owner's Discord member info
+            const ownerMember = await interaction.guild.members.fetch(ownerId).catch(() => null);
+            const ownerDisplay = ownerMember ? ownerMember.toString() : `<@${ownerId}>`;
+
+            const responseMsg = `⚠️ **Este personagem \`${nickname}\` já está registrado por ${ownerDisplay}.**\n\n` +
+                `Se você é o **dono desta conta**, entre em contato com **@Sourvessel** para resolver a situação.\n\n` +
+                `Caso contrário, você pode se registrar como **piloto** desta conta — o dono receberá uma mensagem no privado para aprovar.`;
+
+            return interaction.editReply({
+                content: responseMsg,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`reg_pilot_conflict_${ownerId}`)
+                            .setLabel('✈️ Registrar como Piloto')
+                            .setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder()
+                            .setCustomId('reg_pilot_conflict_cancel')
+                            .setLabel('❌ Cancelar')
+                            .setStyle(ButtonStyle.Secondary)
+                    )
+                ]
+            });
+        }
+
+        // ── Fuzzy matching: if exact match not found, try closest match in db.users ──
+        let fuzzyRegisteredMatch = null;
+        const cleanedInput = cleanNickname(nickname);
+        if (cleanedInput.length >= 2) {
+            // Build set of pilot IDs to exclude (skip pilots, match only owners)
+            const fuzzyPilotIds = new Set();
+            for (const [, data] of Object.entries(db.users)) {
+                if (data.pilotIds && data.pilotIds.length > 0) {
+                    for (const pid of data.pilotIds) {
+                        fuzzyPilotIds.add(pid);
+                    }
+                }
+            }
+
+            let bestFuzzyMatch = null;
+            let bestFuzzyScore = 0;
+
+            for (const [id, data] of Object.entries(db.users)) {
+                if (!data.nickname) continue;
+                // Skip pilots — only match actual owners
+                if (fuzzyPilotIds.has(id)) continue;
+                const cleanedNick = cleanNickname(data.nickname);
+                if (cleanedNick.length < 2) continue;
+
+                // Character overlap pre-filter
+                const inputChars = new Set(cleanedInput);
+                const nickChars = new Set(cleanedNick);
+                let commonChars = 0;
+                for (const c of inputChars) {
+                    if (nickChars.has(c)) commonChars++;
+                }
+                const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+                if (overlap < 0.3) continue;
+
+                // Levenshtein distance
+                const distance = levenshteinDistance(cleanedInput, cleanedNick);
+                const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+                const similarity = 1 - (distance / maxLen);
+
+                if (similarity > bestFuzzyScore && similarity >= 0.55) {
+                    bestFuzzyScore = similarity;
+                    bestFuzzyMatch = { id, nickname: data.nickname };
+                }
+            }
+
+            if (bestFuzzyMatch) {
+                fuzzyRegisteredMatch = bestFuzzyMatch;
+                logEvent(`👑 ${interaction.user.tag} — fuzzy conflict detected: "${nickname}" → "${bestFuzzyMatch.nickname}" (user ${bestFuzzyMatch.id})`);
+            }
+        }
+
+        if (fuzzyRegisteredMatch) {
+            const [ownerId, ownerData] = [fuzzyRegisteredMatch.id, db.users[fuzzyRegisteredMatch.id]];
+
+            // Same user — fuzzy matched themselves
+            if (ownerId === interaction.user.id) {
+                return interaction.editReply(`⚠️ **Você já está registrado como \`${ownerData.nickname}\`** (você digitou "${nickname}"). Seu personagem já está vinculado à sua conta.`);
+            }
+
+            // Different user — fuzzy match found
+            const ownerMember = await interaction.guild.members.fetch(ownerId).catch(() => null);
+            const ownerDisplay = ownerMember ? ownerMember.toString() : `<@${ownerId}>`;
+
+            const responseMsg = `⚠️ **O nome "${nickname}" é muito semelhante a "${ownerData.nickname}", que já está registrado por ${ownerDisplay}.**\n\n` +
+                `Se você é o **dono desta conta**, entre em contato com **@Sourvessel** para resolver a situação.\n\n` +
+                `Caso contrário, você pode se registrar como **piloto** desta conta — o dono receberá uma mensagem no privado para aprovar.`;
+
+            return interaction.editReply({
+                content: responseMsg,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`reg_pilot_conflict_${ownerId}`)
+                            .setLabel('✈️ Registrar como Piloto')
+                            .setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder()
+                            .setCustomId('reg_pilot_conflict_cancel')
+                            .setLabel('❌ Cancelar')
+                            .setStyle(ButtonStyle.Secondary)
+                    )
+                ]
+            });
         }
 
         const userId = interaction.user.id;
