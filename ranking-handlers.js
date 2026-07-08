@@ -1735,8 +1735,8 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
                 report += line;
 
-                // ── Re-send admin panel if missing ──
-                if (!hasMessage && adminChannelId) {
+                // ── Re-send admin panel (always, even if one already exists) ──
+                if (adminChannelId) {
                     const adminChannel = interaction.guild.channels.cache.get(adminChannelId);
                     if (adminChannel) {
                         // Build ranking status and allied clan status like the original registration flow
@@ -1873,7 +1873,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         // Summary line for re-sent panels
         if (panelsRestored > 0) {
-            report += `\n📤 **Re-sent ${panelsRestored} missing admin panel(s).**`;
+            report += `\n📤 **Re-sent ${panelsRestored} admin panel(s) for review.**`;
         }
 
         // Truncate if too long
