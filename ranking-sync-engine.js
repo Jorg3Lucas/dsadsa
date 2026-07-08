@@ -201,6 +201,74 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         }
         }
 
+        // 2.85. PRE-REGISTRATION AUTO-CONVERSION — convert pre-registered users who are now in allied clans
+        if (db.preRegistrations && Object.keys(db.preRegistrations).length > 0) {
+            const preRegCache = getLocalRankingCache();
+            if (preRegCache) {
+                let converted = 0;
+                let expired = 0;
+
+                for (const [memberId, preReg] of Object.entries(db.preRegistrations)) {
+                    // Check expiry
+                    if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < Date.now()) {
+                        delete db.preRegistrations[memberId];
+                        expired++;
+                        logEvent(`🧹 [PreReg Sync] Removed expired pre-registration for "${preReg.nickname}" (${memberId})`);
+                        continue;
+                    }
+
+                    // Check if user is in the production server
+                    const prodMember = members.get(memberId);
+                    if (!prodMember) continue;
+
+                    // Check ranking + allied clan
+                    const cacheHit = findNicknameInCache(preReg.nickname, preRegCache);
+                    if (!cacheHit) continue;
+
+                    const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
+                    const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+                    if (!inAlliedClan) continue;
+
+                    // Auto-convert!
+                    if (preReg.ownerNick && preReg.ownerId && db.users[preReg.ownerId]) {
+                        // Pilot
+                        if (!db.users[preReg.ownerId].pilotIds) db.users[preReg.ownerId].pilotIds = [];
+                        if (!db.users[preReg.ownerId].pilotIds.includes(memberId)) {
+                            db.users[preReg.ownerId].pilotIds.push(memberId);
+                        }
+                        db.users[memberId] = {
+                            nickname: preReg.nickname,
+                            registeredAt: new Date().toISOString(),
+                            pilotIds: []
+                        };
+                        await prodMember.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                        logEvent(`✅ [PreReg Sync] Auto-converted pilot "${preReg.nickname}" (${memberId}) → pilot of "${preReg.ownerNick}"`);
+                    } else {
+                        // Owner
+                        db.users[memberId] = {
+                            nickname: preReg.nickname,
+                            registeredAt: new Date().toISOString(),
+                            pilotIds: preReg.pilotIds || []
+                        };
+                        await prodMember.setNickname(preReg.nickname).catch(() => {});
+                        logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${cacheHit.clanName}`);
+                    }
+
+                    if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                        await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                    }
+
+                    delete db.preRegistrations[memberId];
+                    converted++;
+                }
+
+                if (converted > 0 || expired > 0) {
+                    saveLocalStorage();
+                    logEvent(`🧹 [PreReg Sync] ${converted} auto-converted, ${expired} expired pre-registrations cleaned up`);
+                }
+            }
+        }
+
         // 3. NICKNAME SYNCHRONIZATION + MEMBER ROLE
         for (const [memberId, member] of members) {
             if (member.user.bot) continue;

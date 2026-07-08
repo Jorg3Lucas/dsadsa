@@ -1954,4 +1954,141 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         logEvent(`📥 [ScanImport] ${interaction.user.tag} scan: ${totalRegistered} owners, ${totalPilotsLinked} pilots, ${totalPreReg} pre-reg, ${totalSkipped} skipped`);
         return interaction.editReply(report);
     }
+
+    // ── SCAN IMPORT STATUS — check pre-registrations and auto-convert ──
+    if (commandName === 'scanimport_status') {
+        await interaction.deferReply({ flags: 64 });
+
+        if (guild.id !== DISCORD_SERVER_ID) {
+            return interaction.editReply('❌ This command must be run in the main production server.');
+        }
+
+        // Load ranking cache
+        const { getLocalRankingCache } = await import('./ranking-cache.js');
+        const rankingCache = getLocalRankingCache();
+
+        if (!rankingCache) {
+            return interaction.editReply('❌ No ranking cache available. Wait for the daily sync or run /forcesync first to populate the cache.');
+        }
+
+        if (!db.preRegistrations || Object.keys(db.preRegistrations).length === 0) {
+            return interaction.editReply('✅ **No pre-registrations found.** Everything is clean!');
+        }
+
+        let totalChecked = 0;
+        let totalExpired = 0;
+        let totalConverted = 0;
+        let totalInAlliedClan = 0;
+        let totalNotFound = 0;
+        let totalNotInProd = 0;
+        const results = [];
+        const prodGuild = guild;
+
+        // Fetch all prod members once
+        const prodMembers = await prodGuild.members.fetch().catch(() => null);
+
+        for (const [memberId, preReg] of Object.entries(db.preRegistrations)) {
+            totalChecked++;
+
+            // ── Check expiry ──
+            if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < Date.now()) {
+                delete db.preRegistrations[memberId];
+                totalExpired++;
+                if (results.length < 30) results.push(`🗑️ **${preReg.nickname}** — expired, removed`);
+                logEvent(`📊 [ScanImportStatus] Removed expired pre-registration for "${preReg.nickname}" (${memberId})`);
+                continue;
+            }
+
+            // ── Check if user is in production server ──
+            const prodMember = prodMembers ? prodMembers.get(memberId) : null;
+
+            if (!prodMember) {
+                totalNotInProd++;
+                if (results.length < 30) results.push(`⏳ **${preReg.nickname}** — not in prod server yet`);
+                continue;
+            }
+
+            // ── Check ranking cache ──
+            const cacheHit = findNicknameInCache(preReg.nickname, rankingCache);
+
+            if (!cacheHit) {
+                totalNotFound++;
+                if (results.length < 30) results.push(`❌ **${preReg.nickname}** — not found in ranking`);
+                continue;
+            }
+
+            // ── Check if in allied clan ──
+            const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
+            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+            const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
+
+            if (!inAlliedClan) {
+                totalInAlliedClan++;
+                if (results.length < 30) results.push(`⚠️ **${preReg.nickname}** — found in ${serverName} (${cacheHit.clanName}) but NOT allied clan`);
+                continue;
+            }
+
+            // ── AUTO-CONVERT: in prod server + in ranking + in allied clan ──
+            // Check if this is a pilot pre-registration
+            if (preReg.ownerNick && preReg.ownerId && db.users[preReg.ownerId]) {
+                // Pilot auto-conversion
+                if (!db.users[preReg.ownerId].pilotIds) db.users[preReg.ownerId].pilotIds = [];
+                if (!db.users[preReg.ownerId].pilotIds.includes(memberId)) {
+                    db.users[preReg.ownerId].pilotIds.push(memberId);
+                }
+                db.users[memberId] = {
+                    nickname: preReg.nickname,
+                    registeredAt: new Date().toISOString(),
+                    pilotIds: []
+                };
+
+                await prodMember.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                }
+                delete db.preRegistrations[memberId];
+                totalConverted++;
+                if (results.length < 30) results.push(`✈️ **${preReg.nickname}** → CONVERTED as pilot of **${preReg.ownerNick}** (${serverName} — ${cacheHit.clanName})`);
+                logEvent(`📊 [ScanImportStatus] Auto-converted pilot "${preReg.nickname}" (${memberId}) — linked to owner "${preReg.ownerNick}" (${serverName} — ${cacheHit.clanName})`);
+            } else {
+                // Owner auto-conversion
+                db.users[memberId] = {
+                    nickname: preReg.nickname,
+                    registeredAt: new Date().toISOString(),
+                    pilotIds: preReg.pilotIds || []
+                };
+
+                await prodMember.setNickname(preReg.nickname).catch(() => {});
+                if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                }
+                delete db.preRegistrations[memberId];
+                totalConverted++;
+                if (results.length < 30) results.push(`✅ **${preReg.nickname}** → CONVERTED to permanent (${serverName} — ${cacheHit.clanName})`);
+                logEvent(`📊 [ScanImportStatus] Auto-converted owner "${preReg.nickname}" (${memberId}) — found in allied clan ${cacheHit.clanName} (${serverName})`);
+            }
+        }
+
+        saveLocalStorage();
+
+        let report = `📊 **Pre-Registration Status**\n\n`;
+        report += `📋 **Total checked:** ${totalChecked}\n`;
+        report += `🗑️ **Expired (removed):** ${totalExpired}\n`;
+        report += `⏳ **Not in prod server:** ${totalNotInProd}\n`;
+        report += `❌ **Not found in ranking:** ${totalNotFound}\n`;
+        report += `⚠️ **Not in allied clan:** ${totalInAlliedClan}\n`;
+        report += `✅ **CONVERTED to permanent:** ${totalConverted}\n\n`;
+
+        if (results.length > 0) {
+            report += `📋 **Details:**\n`;
+            report += results.join('\n');
+        }
+
+        if (report.length > 1900) {
+            report = report.substring(0, 1900) + '\n\n... (truncated)';
+        }
+
+        logEvent(`📊 [ScanImportStatus] ${interaction.user.tag} checked ${totalChecked} pre-registrations — ${totalConverted} auto-converted, ${totalExpired} expired`);
+        return interaction.editReply(report);
+    }
 }

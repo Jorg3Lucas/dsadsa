@@ -83,6 +83,11 @@ export async function registerMir4SlashCommands(guild) {
                 description: '📥 Scan another server and pre-register members by nickname',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'scanimport_status',
+                description: '📊 Show pre-registration status and auto-convert eligible members',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log(getMsg('ranking.logs.commandsRegistered'));
     } catch (error) { console.error(getMsg('ranking.logs.commandsError'), error); }
