@@ -88,6 +88,10 @@ export async function registerMir4SlashCommands(guild) {
                 description: '📊 Show pre-registration status and auto-convert eligible members',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'elderguide',
+                description: '📋 Guide: how to approve/reject owner registrations'
+            },
         ]);
         console.log(getMsg('ranking.logs.commandsRegistered'));
     } catch (error) { console.error(getMsg('ranking.logs.commandsError'), error); }

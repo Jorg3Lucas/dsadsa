@@ -2091,4 +2091,38 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         logEvent(`📊 [ScanImportStatus] ${interaction.user.tag} checked ${totalChecked} pre-registrations — ${totalConverted} auto-converted, ${totalExpired} expired`);
         return interaction.editReply(report);
     }
+
+    // ── ELDER GUIDE ──
+    if (commandName === 'elderguide') {
+        const isApprover = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+            interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+
+        if (!isApprover) {
+            return interaction.reply({ content: '❌ You do not have permission to view this guide.', flags: 64 });
+        }
+
+        const guide = `📋 **Elder Guide**\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `📩 **1. How approvals appear**\n\n` +
+            `When someone clicks **👑 Register as Owner**, a message appears in the admin channel with the user info, ranking status, and allied clan status.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `✅ **2. Approve (permanent)**\n\n` +
+            `Click **✅ Approve** when the nickname is in the ranking AND in an allied clan. → Permanent role + nickname set automatically.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `⏳ **3. Approve Temporarily (3 days)**\n\n` +
+            `Click **⏳ Approve Temporarily** when NOT in ranking or NOT in allied clan yet. → Temporary role (3 days). Auto-converts to permanent once found in an allied clan during daily sync.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `❌ **4. Reject with reason**\n\n` +
+            `Click **❌ Reject** → write the reason. The user gets a DM explaining why. Always write a clear reason so the user can fix it.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `✈️ **5. Pilot Registration**\n\n` +
+            `When someone clicks **✈️ Register as Pilot**, the bot DMs the owner to approve/reject directly. Elders do NOT approve pilots.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `⏰ **6. Expiration**\n\n` +
+            `Pending approvals expire after **24h**. The message updates showing "expired". User must re-submit.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `❓ Need help? Contact an Administrator.`;
+
+        return interaction.reply({ content: guide, flags: 64 });
+    }
 }
