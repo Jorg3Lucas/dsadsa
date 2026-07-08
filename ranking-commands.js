@@ -60,7 +60,11 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 6, name: 'pilot', description: getMsg('ranking.commands.manualremovepilot.options.pilot'), required: true }
                 ]
             },
-
+            {
+                name: 'sendpanel',
+                description: getMsg('ranking.commands.sendpanel.description'),
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log(getMsg('ranking.logs.commandsRegistered'));
     } catch (error) { console.error(getMsg('ranking.logs.commandsError'), error); }

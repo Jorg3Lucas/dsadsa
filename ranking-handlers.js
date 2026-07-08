@@ -102,7 +102,20 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.editReply({ content: '❌ User is no longer in the server.', components: [] });
         }
 
-        db.users[userId] = { ...db.users[userId], nickname: pending.nickname, registeredAt: new Date().toISOString() };
+        const isTempApproval = result === 'temp';
+
+        db.users[userId] = {
+            ...db.users[userId],
+            nickname: pending.nickname,
+            registeredAt: new Date().toISOString()
+        };
+
+        if (isTempApproval) {
+            const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+            db.users[userId].tempUntil = threeDaysFromNow.toISOString();
+            db.users[userId].tempRegisteredAt = db.users[userId].registeredAt;
+        }
+
         if (!db.users[userId].pilotIds) db.users[userId].pilotIds = [];
         saveLocalStorage();
 
@@ -111,14 +124,19 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }
 
-        logEvent(`Admin ${interaction.user.tag} approved registration for ${userId} as ${pending.nickname}`);
+        const approvalLabel = isTempApproval ? '⏳ TEMPORARILY APPROVED (3 days)' : '✅ APPROVED';
+        const dmMsg = isTempApproval
+            ? '⏳ **Temporary registration approved!** You have 3 days to join an allied clan and appear in the ranking. After that, your role will be removed if you\'re not in an allied clan.'
+            : '✅ **Registration approved!** You received the member role.';
+
+        logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${pending.nickname}`);
 
         await interaction.editReply({
-            content: `✅ **Registration Approved**\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${pending.nickname}\n✅ **Approved by:** ${interaction.user.tag}`,
+            content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${pending.nickname}\n✅ **Approved by:** ${interaction.user.tag}`,
             components: []
         });
 
-        try { await targetMember.send('✅ **Registration approved!** You received the member role.'); } catch (e) {}
+        try { await targetMember.send(dmMsg); } catch (e) {}
         return;
     }
 
@@ -210,13 +228,42 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.editReply('❌ Admin approval channel not found. Contact an administrator.');
         }
 
+        // Look up nickname in ranking cache and check allied clan status
+        const cacheHit = findNicknameInCache(nickname);
+        let rankingStatus = '❌ Not found in ranking';
+        let alliedClanStatus = '❌ Not in allied clan';
+
+        if (cacheHit) {
+            const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
+            rankingStatus = `✅ Found — ${serverName} (${cacheHit.clanName})`;
+
+            // Check if the clan is an allied clan
+            const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
+            if (worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase())) {
+                alliedClanStatus = '✅ Yes — Allied clan';
+            }
+        }
+
+        const isMissingRankingOrAllied = !cacheHit || alliedClanStatus === '❌ Not in allied clan';
+
+        const approveButtons = [
+            new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
+        ];
+
+        if (isMissingRankingOrAllied) {
+            approveButtons.push(
+                new ButtonBuilder().setCustomId(`approve_owner_${userId}-temp`).setLabel('⏳ Approve Temporarily (3 days)').setStyle(ButtonStyle.Primary)
+            );
+        }
+
+        approveButtons.push(
+            new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+        );
+
         const adminMsg = await adminChannel.send({
-            content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+            content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
             components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
-                )
+                new ActionRowBuilder().addComponents(approveButtons)
             ]
         });
 
@@ -506,6 +553,13 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 nickname: cached.nickname,
                 registeredAt: new Date().toISOString()
             };
+
+            if (cached.needsTempApproval) {
+                const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+                db.users[cached.targetId].tempUntil = threeDaysFromNow.toISOString();
+                db.users[cached.targetId].tempRegisteredAt = db.users[cached.targetId].registeredAt;
+            }
+
             if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
             if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
             saveLocalStorage();
@@ -515,9 +569,15 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
             }
 
-            logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}`);
+            const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
+            logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}${tempLabel}`);
+
+            const responseMsg = cached.needsTempApproval
+                ? `⏳ **${cached.nickname}** registered as temporary (3 days) in **${cached.clan}**. Will be converted to permanent once found in an allied clan.`
+                : getMsg('ranking.responses.manualregister.cacheFound', { nickname: cached.nickname, clan: cached.clan });
+
             return interaction.update({
-                content: getMsg('ranking.responses.manualregister.cacheFound', { nickname: cached.nickname, clan: cached.clan }),
+                content: responseMsg,
                 components: []
             }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
@@ -547,6 +607,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         const actionOptions = [
             { label: getMsg('ranking.responses.manage.actionRemove'), description: getMsg('ranking.responses.manage.actionRemoveDesc'), value: `remove_${targetUserId}` },
+            { label: '📋 View Status', description: 'View detailed registration status and ranking info', value: `status_${targetUserId}` },
             { label: getMsg('ranking.responses.manage.actionClan'), description: getMsg('ranking.responses.manage.actionClanDesc'), value: `clan_${targetUserId}` }
         ];
 
@@ -555,6 +616,14 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 label: getMsg('ranking.responses.manage.actionPilot'),
                 description: getMsg('ranking.responses.manage.actionPilotDesc'),
                 value: `pilot_${targetUserId}`
+            });
+        }
+
+        if (userData.tempUntil) {
+            actionOptions.push({
+                label: '🗑️ Remove Temp',
+                description: 'Remove this temporary registration immediately',
+                value: `removetemp_${targetUserId}`
             });
         }
 
@@ -660,6 +729,63 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }).catch(() => {
         // Silently ignore — Discord API errors are non-critical
     });
+        }
+
+        // ── View Status ──
+        if (actionType === 'status') {
+            const cacheHit = findNicknameInCache(userData.nickname);
+
+            let statusLines = `📋 **User Status: ${userData.nickname}**\n\n`;
+            statusLines += `🆔 **ID:** ${targetUserId}\n`;
+            statusLines += `${userData.tempUntil ? '⏳ **Type:** Temporary' : '✅ **Type:** Permanent'}\n`;
+            statusLines += `📅 **Registered:** ${new Date(userData.registeredAt).toLocaleString('en-US')}\n`;
+
+            if (userData.tempUntil) {
+                const expires = new Date(userData.tempUntil);
+                const hoursLeft = (expires - new Date()) / (1000 * 60 * 60);
+                statusLines += `⏳ **Temp Expires:** ${expires.toLocaleString('en-US')}\n`;
+                statusLines += `⏰ **Time Left:** ${hoursLeft > 0 ? `${hoursLeft.toFixed(1)}h` : 'Expired'}\n`;
+            }
+
+            statusLines += `✈️ **Pilots:** ${userData.pilotIds ? userData.pilotIds.length : 0}\n`;
+
+            if (cacheHit) {
+                const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
+                const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
+                const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+                statusLines += `\n🔍 **Ranking:** ✅ Found — ${serverName}\n`;
+                statusLines += `🏰 **Clan:** ${cacheHit.clanName}\n`;
+                statusLines += `${inAlliedClan ? '✅ **Allied Clan:** Yes' : '❌ **Allied Clan:** No'}\n`;
+            } else {
+                statusLines += `\n🔍 **Ranking:** ❌ Not found\n`;
+            }
+
+            return interaction.update({
+                content: statusLines,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
+                    )
+                ]
+            }).catch(() => {});
+        }
+
+        // ── Remove Temp ──
+        if (actionType === 'removetemp') {
+            confirmationCache[`${interaction.user.id}-manualremove`] = {
+                targetId: targetUserId,
+                targetName: userData.nickname
+            };
+            return interaction.update({
+                content: `⚠️ Remove temporary registration for **${userData.nickname}**?`,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('confirm-manualremove-yes').setLabel('✅ Yes, remove').setStyle(ButtonStyle.Danger),
+                        new ButtonBuilder().setCustomId('confirm-manualremove-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
+                    )
+                ]
+            }).catch(() => {});
         }
 
         return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {
@@ -1013,15 +1139,24 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         if (cacheHit) {
             const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
 
+            // Check if this clan is an allied clan
+            const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
+            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+
             confirmationCache[`${user.id}-manualregister`] = {
                 targetId: targetMember.id,
                 nickname: cacheHit.nickname,
                 clan: cacheHit.clanName,
-                worldId: cacheHit.worldId
+                worldId: cacheHit.worldId,
+                needsTempApproval: !inAlliedClan
             };
 
+            const statusLine = inAlliedClan
+                ? `🌍 Server: **${serverName}** — ✅ Allied clan`
+                : `🌍 Server: **${serverName}** (${cacheHit.clanName}) — ⏳ Will be temporary (3 days)`;
+
             return interaction.reply({
-                content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n🌍 Server: **${serverName}**`,
+                content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n${statusLine}`,
                 components: [
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
@@ -1032,11 +1167,15 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             });
         }
 
+        // Not found in ranking — register as temporary (3 days)
+        const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+
         db.users[targetMember.id] = {
             ...db.users[targetMember.id],
             nickname: nickname,
             registeredAt: new Date().toISOString(),
-            manual: true 
+            tempUntil: threeDaysFromNow.toISOString(),
+            tempRegisteredAt: new Date().toISOString()
         };
         if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
         saveLocalStorage();
@@ -1047,8 +1186,10 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }
 
+        logEvent(`👑 Admin ${interaction.user.tag} manually registered ${targetMember.id} as ${nickname} (temporary — not in ranking)`);
+
         return interaction.reply({
-            content: getMsg('ranking.responses.manualregister.success', { nickname }),
+            content: `⏳ **${nickname}** registered as temporary (3 days). They will be converted to permanent once found in an allied clan in the ranking.`,
             flags: 64
         });
     }
@@ -1179,7 +1320,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
         const selectOptions = pageItems.map(([id, data]) => ({
             label: data.nickname.substring(0, 100),
-            description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
+            description: `${data.tempUntil ? '⏳ Temp' : '✅ Perm'} | ${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
             value: id
         }));
 
@@ -1229,5 +1370,26 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             ],
             flags: 64
         });
+    }
+
+    if (commandName === 'sendpanel') {
+        await interaction.deferReply({ flags: 64 });
+
+        const panelMsg = '📋 **MIR4 Account Registration**\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.';
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('welcome_register_owner')
+                .setLabel('👑 Register as Owner')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('welcome_register_pilot')
+                .setLabel('✈️ Register as Pilot')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.channel.send({ content: panelMsg, components: [row] });
+        logEvent(`📋 Admin ${interaction.user.tag} sent registration panel in #${interaction.channel.name}`);
+        return interaction.editReply('✅ **Registration panel sent!**');
     }
 }

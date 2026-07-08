@@ -1,4 +1,4 @@
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, WORLD_IDS } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache, findNicknameInCache } from './ranking-cache.js';
 import { getMsg } from './lang.js';
@@ -77,6 +77,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             for (const [memberId, userData] of Object.entries(db.users)) {
                 if (!userData.nickname) continue;
+                // Skip temp users — they get handled by the temp cleanup step below
+                if (userData.tempUntil) continue;
                 const nickname = userData.nickname.trim().normalize('NFC');
                 const inRanking = findNicknameInCache(nickname, cache);
                 if (!inRanking) {
@@ -108,6 +110,93 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 }
                 saveLocalStorage();
                 logEvent(`🧹 [Ranking Validation] Removed ${toRemove.size} member(s) not found in any EU ranking`);
+            }
+        }
+
+        // 2.75. TEMP REGISTRATION CLEANUP — convert to permanent or remove on expiry
+        const tempCache = getLocalRankingCache();
+        if (tempCache) {
+            // Check if we're in the clan expedition grace period (Fri 00:01 BRT → Sun 17:00 BRT)
+            // During this window, don't remove temp users for not being in an allied clan
+            const brtDay = new Date().toLocaleDateString('en-US', { timeZone: 'America/Sao_Paulo', weekday: 'short' });
+            const brtHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }), 10);
+            const isGracePeriod = (brtDay === 'Fri' || brtDay === 'Sat') || (brtDay === 'Sun' && brtHour < 17);
+
+            for (const [memberId, userData] of Object.entries(db.users)) {
+                if (!userData.tempUntil) continue;
+                if (!userData.nickname) continue;
+
+                const tempUntil = new Date(userData.tempUntil);
+                const now = new Date();
+
+                // Look up in ranking cache
+                const cacheHit = findNicknameInCache(userData.nickname, tempCache);
+
+                let inAlliedClan = false;
+                if (cacheHit) {
+                    const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
+                    inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+                }
+
+                if (inAlliedClan) {
+                    // Found in an allied clan — convert to permanent
+                    delete userData.tempUntil;
+                    delete userData.tempRegisteredAt;
+                    delete userData.tempNotified24h;
+                    saveLocalStorage();
+                    const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
+                    logEvent(`✅ [Temp→Permanent] ${memberId} (${userData.nickname}) found in allied clan ${cacheHit.clanName} (${serverName}) — converted to permanent`);
+                } else {
+                    // Send 24h reminder DM if not yet notified and expiring soon
+                    const hoursLeft = (tempUntil - now) / (1000 * 60 * 60);
+                    if (hoursLeft > 0 && hoursLeft <= 30 && !userData.tempNotified24h) {
+                        const guildMember = members.get(memberId);
+                        if (guildMember) {
+                            try {
+                                await guildMember.user.send('⏳ **Reminder:** Your temporary registration expires in less than 24 hours.\n\nMake sure you are in an **allied clan** that appears in the EU ranking to keep your role permanently!\n\nIf you need more time, contact an administrator.');
+                                userData.tempNotified24h = true;
+                                saveLocalStorage();
+                                logEvent(`📧 [Temp Reminder] ${memberId} (${userData.nickname}) sent 24h expiry reminder (${hoursLeft.toFixed(1)}h remaining)`);
+                            } catch (e) {
+                                logEvent(`⚠️ [Temp Reminder] Failed to send DM to ${memberId} (${userData.nickname}): ${e.message}`);
+                            }
+                        }
+                    }
+
+                    if (now >= tempUntil) {
+                    // Expired and not in allied clan — check expedition grace period
+                    if (isGracePeriod) {
+                        logEvent(`⏸️ [Temp Grace] ${memberId} (${userData.nickname}) expired but in expedition grace period (${brtDay} ${brtHour}h BRT) — deferring removal`);
+                        continue;
+                    }
+
+                    // Remove
+                    const member = members.get(memberId);
+                    if (member) {
+                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        }
+                        await member.setNickname(member.user.username).catch(() => {});
+                    }
+
+                    // Also remove any pilots linked to this owner
+                    if (userData.pilotIds && userData.pilotIds.length > 0) {
+                        for (const pId of userData.pilotIds) {
+                            const pilotMember = members.get(pId);
+                            if (pilotMember) {
+                                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                                }
+                                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                            }
+                            delete db.users[pId];
+                        }
+                    }
+
+                    logEvent(`⏳ [Temp Expired] ${memberId} (${userData.nickname}) temp registration expired — removing role and registration`);
+                    delete db.users[memberId];
+                    saveLocalStorage();
+                }
             }
         }
 

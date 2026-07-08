@@ -36,6 +36,9 @@
                     "owner": "Select the character owner.",
                     "pilot": "Select the pilot to remove."
                 }
+            },
+            "sendpanel": {
+                "description": "📋 [Admin] Send a fixed registration panel to this channel."
             }
         },
         "responses": {
@@ -98,7 +101,7 @@
             }
         },
         "welcome": {
-            "message": "👋 Hello {member}, welcome to our server!\n\n⚠️ **Important:** Your character **MUST** be visible in the official server ranking (Top 1000) for the bot to find you.\n\n📌 **How to get your roles:**\n1️⃣ Click **👑 Register as Owner** below and type your in-game name.\n2️⃣ Have pilots? The owner will receive a DM to approve them.\n3️⃣ Need to remove a pilot? Use `/removepilot`.\n\nEnjoy your stay! 🚀"
+            "message": "👋 Hello {member}, welcome to our server!\n\n📌 **How to get your roles:**\n1️⃣ Click **👑 Register as Owner** below and type your in-game name.\n2️⃣ Have pilots? The owner will receive a DM to approve them.\n3️⃣ Need to remove a pilot? Use `/removepilot`.\n\nEnjoy your stay! 🚀"
         },
         "logs": {
             "syncStart": "⏳ [Sync] Starting role and nickname update routine...",
