@@ -1317,8 +1317,72 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     if (commandName === 'forcesync') {
         await interaction.deferReply({ flags: 64 });
         logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
-        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true); 
-        return interaction.editReply(getMsg('ranking.responses.forcesync.success'));
+        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
+
+        // ── Auto-correct wrong nicknames using fuzzy matching ──
+        const rankingCache = getLocalRankingCache();
+        let fuzzyCorrected = 0;
+        const correctedList = [];
+
+        if (rankingCache) {
+            // Build set of pilot IDs to skip
+            const pilotIdSet = new Set();
+            for (const [, data] of Object.entries(db.users || {})) {
+                if (data.pilotIds && data.pilotIds.length > 0) {
+                    for (const pid of data.pilotIds) {
+                        pilotIdSet.add(pid);
+                    }
+                }
+            }
+
+            for (const [memberId, userData] of Object.entries(db.users || {})) {
+                // Skip pilots — only correct owners
+                if (pilotIdSet.has(memberId)) continue;
+                if (!userData.nickname) continue;
+
+                const currentNick = userData.nickname;
+                // Check if current nickname is in ranking cache
+                const exactHit = findNicknameInCache(currentNick, rankingCache);
+                if (exactHit) continue; // Already correct
+
+                // Try fuzzy matching
+                const fuzzyHit = findClosestNicknameInCache(currentNick, rankingCache);
+                if (!fuzzyHit || fuzzyHit.nickname.toLowerCase() === currentNick.toLowerCase()) continue;
+
+                // Found a correction!
+                const oldNick = currentNick;
+                const newNick = fuzzyHit.nickname;
+                const serverName = WORLD_IDS[fuzzyHit.worldId] || fuzzyHit.worldId;
+
+                // Update database
+                db.users[memberId].nickname = newNick;
+
+                // Update Discord nickname — always set it since the DB was wrong
+                const targetMember = await guild.members.fetch(memberId).catch(() => null);
+                if (targetMember) {
+                    await targetMember.setNickname(newNick).catch(() => {});
+                }
+
+                fuzzyCorrected++;
+                correctedList.push(`${oldNick} → ${newNick} (${serverName})`);
+                logEvent(`🔄 [ForceSync] Fuzzy corrected "${oldNick}" → "${newNick}" for user ${memberId}`);
+            }
+
+            if (fuzzyCorrected > 0) {
+                saveLocalStorage();
+            }
+        }
+
+        let responseMsg = getMsg('ranking.responses.forcesync.success') || '✅ **Force sync completed!**';
+        if (fuzzyCorrected > 0) {
+            const details = correctedList.slice(0, 10).join('\n');
+            responseMsg += `\n\n🔍 **Fuzzy auto-corrected ${fuzzyCorrected} nickname(s):**\n${details}`;
+            if (correctedList.length > 10) {
+                responseMsg += `\n... and ${correctedList.length - 10} more`;
+            }
+        }
+
+        return interaction.editReply(responseMsg);
     }
 
     if (commandName === 'manualregister') {
