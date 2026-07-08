@@ -1652,8 +1652,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             {
                 id: ORIGIN_SERVER_ID,
                 name: 'Origin Server',
-                // Always treat as owner (no owner info in the format)
-                isPilot: () => false,
+                isPilot(displayName) {
+                    return displayName.startsWith('Pilot -');
+                },
                 parseNick(displayName) {
                     const match = displayName.match(/-\s*(.+?)\s*\|/);
                     return match ? match[1].trim() : null;
