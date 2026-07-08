@@ -67,7 +67,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         }
 
         // 2.5. RANKING VALIDATION — remove registration if nickname not in any world's ranking
-        const rankingCache = getLocalRankingCache();
+        const rankingValidationEnabled = db.config?.rankingValidationEnabled === true;
+        const rankingCache = rankingValidationEnabled ? getLocalRankingCache() : null;
         if (rankingCache) {
             const toRemove = new Set();
 
