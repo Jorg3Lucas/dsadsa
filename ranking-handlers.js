@@ -1310,7 +1310,21 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const targetMember = options.getMember('member');
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
-        const cacheHit = findNicknameInCache(nickname);
+        let cacheHit = findNicknameInCache(nickname);
+
+        // ── Fuzzy matching: if exact nickname not found, try closest match ──
+        let fuzzyManualNick = null;
+        if (!cacheHit) {
+            const rankingCache = getLocalRankingCache();
+            if (rankingCache) {
+                const fuzzyMatch = findClosestNicknameInCache(nickname, rankingCache);
+                if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== nickname.toLowerCase()) {
+                    fuzzyManualNick = fuzzyMatch.nickname;
+                    cacheHit = fuzzyMatch;
+                    logEvent(`👑 Admin ${interaction.user.tag} — fuzzy corrected "${nickname}" → "${fuzzyMatch.nickname}" in /manualregister`);
+                }
+            }
+        }
 
         if (cacheHit) {
             const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
@@ -1331,8 +1345,11 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 ? `🌍 Server: **${serverName}** — ✅ Allied clan`
                 : `🌍 Server: **${serverName}** (${cacheHit.clanName}) — ⏳ Will be temporary (3 days)`;
 
+            const fuzzyManualNote = fuzzyManualNick
+                ? `\n🔍 **Fuzzy match:** "${nickname}" → "${fuzzyManualNick}"`
+                : '';
             return interaction.reply({
-                content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n${statusLine}`,
+                content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}`,
                 components: [
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
@@ -1673,6 +1690,8 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
 
         let report = `⏳ **Pending Registrations**\n\n`;
+        const rankingCache = getLocalRankingCache();
+        let panelsRestored = 0;
 
         // ── Owner registrations ──
         if (ownerEntries.length > 0) {
@@ -1687,8 +1706,78 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     ? `${Math.max(0, 24 - hoursLeft).toFixed(1)}h`
                     : 'Unknown';
                 const hasMessage = pending.channelId && pending.messageId ? '✅' : '❌';
-                report += `\n${userTag} — **${pending.nickname}**\n`;
-                report += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
+                let line = `\n${userTag} — **${pending.nickname}**\n`;
+                line += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
+
+                // ── Fuzzy suggestion for pending nicknames not found in ranking ──
+                const cacheHit = findNicknameInCache(pending.nickname);
+                if (!cacheHit && rankingCache) {
+                    const fuzzyMatch = findClosestNicknameInCache(pending.nickname, rankingCache);
+                    if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== pending.nickname.toLowerCase()) {
+                        line += `   🔍 **Fuzzy suggestion:** "${pending.nickname}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})\n`;
+                    }
+                }
+
+                report += line;
+
+                // ── Re-send admin panel if missing ──
+                if (!hasMessage && adminChannelId) {
+                    const adminChannel = interaction.guild.channels.cache.get(adminChannelId);
+                    if (adminChannel) {
+                        // Build ranking status and allied clan status like the original registration flow
+                        let rankingStatus = '❌ Not found in ranking';
+                        let alliedClanStatus = '❌ Not in allied clan';
+                        let fuzzyNote = '';
+
+                        const freshCacheHit = findNicknameInCache(pending.nickname) ||
+                            (rankingCache ? findClosestNicknameInCache(pending.nickname, rankingCache) : null);
+
+                        if (freshCacheHit) {
+                            const serverName = WORLD_IDS[freshCacheHit.worldId] || `World ${freshCacheHit.worldId}`;
+                            rankingStatus = `✅ Found — ${serverName} (${freshCacheHit.clanName})`;
+                            if (freshCacheHit.nickname.toLowerCase() !== pending.nickname.toLowerCase()) {
+                                fuzzyNote = `\n🔍 **Fuzzy match:** "${pending.nickname}" → "${freshCacheHit.nickname}"`;
+                            }
+                            const worldAlliedClans = db.config?.alliedClans?.[freshCacheHit.worldId];
+                            if (worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === freshCacheHit.clanName.toLowerCase())) {
+                                alliedClanStatus = '✅ Yes — Allied clan';
+                            }
+                        }
+
+                        const isMissingRankingOrAllied = !freshCacheHit || alliedClanStatus === '❌ Not in allied clan';
+
+                        const approveButtons = [
+                            new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
+                        ];
+
+                        if (isMissingRankingOrAllied) {
+                            approveButtons.push(
+                                new ButtonBuilder().setCustomId(`approve_owner_${userId}-temp`).setLabel('⏳ Approve Temporarily (3 days)').setStyle(ButtonStyle.Primary)
+                            );
+                        }
+
+                        approveButtons.push(
+                            new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+                        );
+
+                        try {
+                            const adminMsg = await adminChannel.send({
+                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${pending.nickname}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+                                components: [
+                                    new ActionRowBuilder().addComponents(approveButtons)
+                                ]
+                            });
+
+                            pending.channelId = adminChannel.id;
+                            pending.messageId = adminMsg.id;
+                            saveLocalStorage();
+                            panelsRestored++;
+                            logEvent(`📤 [Pending] Re-sent admin panel for ${userId} (${pending.nickname})`);
+                        } catch (e) {
+                            logEvent(`⚠️ [Pending] Failed to re-send admin panel for ${userId}: ${e.message}`);
+                        }
+                    }
+                }
             }
         }
 
@@ -1710,12 +1799,17 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }
         }
 
+        // Summary line for re-sent panels
+        if (panelsRestored > 0) {
+            report += `\n📤 **Re-sent ${panelsRestored} missing admin panel(s).**`;
+        }
+
         // Truncate if too long
         if (report.length > 1900) {
             report = report.substring(0, 1900) + '\n\n... (truncated)';
         }
 
-        logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots)`);
+        logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots, ${panelsRestored} panels restored)`);
         return interaction.editReply(report);
     }
 
