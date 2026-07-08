@@ -16,44 +16,44 @@ async function handleTextCommands(message, db, saveLocalStorage) {
 
     if (command === 'setadminchannel') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ Você precisa ser Administrador para usar este comando.');
+            return message.reply('❌ You must be an Administrator to use this command.');
         }
 
         setAdminChannelId(message.channel.id);
-        return message.reply(`✅ Canal de aprovação configurado para ${message.channel.toString()}.`);
+        return message.reply(`✅ Admin approval channel set to ${message.channel.toString()}.`);
     }
 
     if (command === 'setwelcome') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ Você precisa ser Administrador para usar este comando.');
+            return message.reply('❌ You must be an Administrator to use this command.');
         }
 
         if (!db.config) db.config = {};
         db.config.welcomeChannelId = message.channel.id;
         saveLocalStorage();
-        return message.reply(`✅ Canal de boas-vindas configurado para ${message.channel.toString()}.`);
+        return message.reply(`✅ Welcome channel set to ${message.channel.toString()}.`);
     }
 
     if (command === 'enablevalidation') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ Você precisa ser Administrador para usar este comando.');
+            return message.reply('❌ You must be an Administrator to use this command.');
         }
 
         if (!db.config) db.config = {};
         db.config.rankingValidationEnabled = true;
         saveLocalStorage();
-        return message.reply('✅ **Validação de ranking ativada!** A partir da próxima sincronização, membros que não estiverem em nenhum ranking EU perderão o cargo.');
+        return message.reply('✅ **Ranking validation ENABLED!** Members not found in any EU ranking will lose their role on next sync.');
     }
 
     if (command === 'disablevalidation') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ Você precisa ser Administrador para usar este comando.');
+            return message.reply('❌ You must be an Administrator to use this command.');
         }
 
         if (!db.config) db.config = {};
         db.config.rankingValidationEnabled = false;
         saveLocalStorage();
-        return message.reply('🔓 **Validação de ranking desativada!** Membros fora do ranking não perderão mais o cargo automaticamente.');
+        return message.reply('🔓 **Ranking validation DISABLED!** Members won\'t lose roles automatically.');
     }
 }
 
