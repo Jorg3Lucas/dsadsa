@@ -1902,6 +1902,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }
         };
 
+        // Track processed members across servers — server 1 (origin) takes priority
+        const processedMemberIds = new Set();
+
         for (const server of originServers) {
             const guild = interaction.client.guilds.cache.get(server.id);
             if (!guild) {
@@ -1918,6 +1921,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             for (const [memberId, member] of members) {
                 if (member.user.bot) continue;
 
+                // Skip if already processed by server 1 (Origin Server takes priority)
+                if (processedMemberIds.has(memberId)) continue;
+
                 const displayName = member.nickname || member.user.displayName;
                 const isPilot = server.isPilot(displayName);
                 const gameNick = server.parseNick(displayName);
@@ -1925,6 +1931,9 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     totalSkipped++;
                     continue;
                 }
+
+                // Mark as processed — server 1 (origin) nickname takes priority over server 2
+                processedMemberIds.add(memberId);
 
                 // User already registered — check if wrongly registered as owner (should be pilot)
                 if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
