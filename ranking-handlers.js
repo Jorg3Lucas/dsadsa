@@ -1782,6 +1782,69 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             );
         };
 
+        // Helper to register a pilot whose owner is not yet in Discord (pending link)
+        const registerPilotPendingOwner = async (ownerNick, pilotMemberId, pilotMember) => {
+            db.users[pilotMemberId] = {
+                nickname: ownerNick,
+                registeredAt: new Date().toISOString(),
+                pilotIds: [],
+                pendingOwnerNick: ownerNick
+            };
+            saveLocalStorage();
+
+            // Also create pre-registration to track the pending link
+            if (!db.preRegistrations) db.preRegistrations = {};
+            const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
+            db.preRegistrations[pilotMemberId] = {
+                nickname: ownerNick,
+                pilotIds: [],
+                ownerNick,
+                ownerId: null,
+                registeredAt: new Date().toISOString(),
+                expiresAt
+            };
+            saveLocalStorage();
+
+            const prodPilot = await prodGuild.members.fetch(pilotMemberId).catch(() => null);
+            if (prodPilot) {
+                await prodPilot.setNickname(`${ownerNick} - Pilot`).catch(() => {});
+                if (!prodPilot.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await prodPilot.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                }
+                logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} registered as pilot — awaiting owner "${ownerNick}"`);
+                return `✈️ registered as pilot of "${ownerNick}" (awaiting owner)`;
+            } else {
+                logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} pre-registered as pilot — awaiting owner "${ownerNick}"`);
+                return `⏳ pre-registered as pilot of "${ownerNick}" (awaiting owner)`;
+            }
+        };
+
+        // Helper to link a pending pilot to an owner who just registered
+        const linkPendingPilotToOwner = (ownerId, ownerNick) => {
+            const ownerNickLower = ownerNick.toLowerCase();
+            let linkedCount = 0;
+            for (const [pid, pdata] of Object.entries(db.users)) {
+                if (pdata.pendingOwnerNick && pdata.pendingOwnerNick.toLowerCase() === ownerNickLower) {
+                    delete pdata.pendingOwnerNick;
+                    if (!db.users[ownerId].pilotIds) db.users[ownerId].pilotIds = [];
+                    if (!db.users[ownerId].pilotIds.includes(pid) && db.users[ownerId].pilotIds.length < 4) {
+                        db.users[ownerId].pilotIds.push(pid);
+                        // Update pre-registration with ownerId
+                        if (db.preRegistrations && db.preRegistrations[pid]) {
+                            db.preRegistrations[pid].ownerId = ownerId;
+                        }
+                        // Update Discord nickname to reflect proper link
+                        const member = prodGuild.members.cache.get(pid);
+                        if (member) {
+                            member.setNickname(`${ownerNick} - Pilot`).catch(() => {});
+                        }
+                        linkedCount++;
+                    }
+                }
+            }
+            return linkedCount;
+        };
+
         // Helper to register or pre-register a pilot
         const registerPilot = async (ownerId, ownerNick, pilotMemberId, pilotMember) => {
             if (!db.users[ownerId].pilotIds) db.users[ownerId].pilotIds = [];
@@ -1866,6 +1929,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 // User already registered — check if wrongly registered as owner (should be pilot)
                 if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
                     const isWronglyRegisteredOwner = isPilot && gameNick && 
+                        !db.users[memberId].pendingOwnerNick &&
                         !Object.values(db.users || {}).some(u => u.pilotIds && u.pilotIds.includes(memberId));
 
                     if (isWronglyRegisteredOwner) {
@@ -1912,9 +1976,14 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                         else { totalSkipped++; }
                         if (results.length < 20) results.push(`${member.user.tag} ${status}`);
                     } else {
-                        // Owner not found yet — might be registered later in the scan
+                        // Owner not found yet — register pilot as pending owner link
+                        const status = await registerPilotPendingOwner(gameNick, memberId, member);
+                        if (status.startsWith('✈️')) totalPilotsLinked++;
+                        else if (status.startsWith('⏳')) totalPilotPreReg++;
+                        else { totalSkipped++; }
+                        if (results.length < 20) results.push(`${member.user.tag} ${status}`);
+                        // Also keep in pendingPilots in case owner registers later in the same scan
                         pendingPilots.push({ memberId, ownerNick: gameNick, member, displayName });
-                        if (results.length < 20) results.push(`⏳ ${member.user.tag} → pilot of "${gameNick}" (awaiting owner)`);
                     }
                     continue;
                 }
@@ -1965,6 +2034,15 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     }
 
                     ownerNickLowerToId[gameNick.toLowerCase()] = memberId;
+
+                    // Link any pending pilots waiting for this owner
+                    const pilotsLinked = linkPendingPilotToOwner(memberId, gameNick);
+                    if (pilotsLinked > 0) {
+                        totalPilotsLinked += pilotsLinked;
+                        if (results.length < 20) results.push(`🔗 ${member.user.tag} → ${pilotsLinked} pending pilot(s) linked`);
+                        logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) linked ${pilotsLinked} pending pilot(s) for "${gameNick}"`);
+                    }
+
                     totalRegistered++;
                     if (results.length < 20) results.push(`✅ ${member.user.tag} → registered as "${gameNick}"`);
                     logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) registered as owner "${gameNick}"`);
@@ -1998,25 +2076,35 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }
         }
 
-        // Resolve pending pilots — check if their owner was registered during the scan
+                // Resolve pending pilots — check if their owner was registered during the scan
         for (const pilot of pendingPilots) {
             const ownerNickLower = pilot.ownerNick.toLowerCase();
             const ownerId = ownerNickLowerToId[ownerNickLower];
 
-            if (ownerId && db.users[ownerId]) {
-                const status = await registerPilot(ownerId, pilot.ownerNick, pilot.memberId, pilot.member);
-                if (status.startsWith('✈️')) totalPilotsLinked++;
-                else if (status.startsWith('⏳')) totalPilotPreReg++;
-                else { totalSkipped++; }
-                if (results.length < 20) results.push(`${pilot.member.user.tag} ${status} (resolve)`);
-            } else {
-                totalSkipped++;
-                if (results.length < 20) results.push(`⏭️ ${pilot.member.user.tag} — pilot owner "${pilot.ownerNick}" not found`);
-                logEvent(`📥 [ScanImport] ${pilot.member.user.tag} — pilot owner "${pilot.ownerNick}" not found, skipped`);
+            if (ownerId && db.users[ownerId] && db.users[pilot.memberId]) {
+                if (db.users[pilot.memberId].pendingOwnerNick) {
+                    delete db.users[pilot.memberId].pendingOwnerNick;
+                    if (!db.users[ownerId].pilotIds) db.users[ownerId].pilotIds = [];
+                    if (!db.users[ownerId].pilotIds.includes(pilot.memberId) && db.users[ownerId].pilotIds.length < 4) {
+                        db.users[ownerId].pilotIds.push(pilot.memberId);
+                        if (db.preRegistrations && db.preRegistrations[pilot.memberId]) {
+                            db.preRegistrations[pilot.memberId].ownerId = ownerId;
+                        }
+                        saveLocalStorage();
+                        const prodPilot = await prodGuild.members.fetch(pilot.memberId).catch(() => null);
+                        if (prodPilot) {
+                            await prodPilot.setNickname(`${pilot.ownerNick} - Pilot`).catch(() => {});
+                        }
+                        logEvent(`📥 [ScanImport] ${pilot.member.user.tag} — linked to owner "${pilot.ownerNick}" (resolve)`);
+                        if (results.length < 20) results.push(`🔗 ${pilot.member.user.tag} — linked to owner "${pilot.ownerNick}" (resolve)`);
+                    }
+                }
+            } else if (!ownerId || !db.users[ownerId]) {
+                logEvent(`📥 [ScanImport] ${pilot.member.user.tag} — still awaiting owner "${pilot.ownerNick}" (already registered as pilot)`);
             }
         }
 
-        let report = `📥 **Scan Import Complete**\n\n`;
+let report = `📥 **Scan Import Complete**\n\n`;
         report += `✅ **Registered (owners):** ${totalRegistered}\n`;
         report += `✈️ **Pilots linked:** ${totalPilotsLinked}\n`;
         report += `⏳ **Pre-registered (owners):** ${totalPreReg}\n`;

@@ -302,29 +302,64 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                 const expiresAt = new Date(preReg.expiresAt).getTime();
 
                 if (expiresAt > Date.now()) {
-                    // Valid pre-registration — check if pilot (has ownerNick/ownerId)
-                    if (preReg.ownerNick && preReg.ownerId && db.users[preReg.ownerId]) {
-                        // ── Pilot pre-registration: link to owner ──
-                        if (!db.users[preReg.ownerId].pilotIds) db.users[preReg.ownerId].pilotIds = [];
-                        if (!db.users[preReg.ownerId].pilotIds.includes(member.id)) {
-                            db.users[preReg.ownerId].pilotIds.push(member.id);
-                        }
-                        db.users[member.id] = {
-                            nickname: preReg.nickname,
-                            registeredAt: new Date().toISOString(),
-                            pilotIds: []
-                        };
-                        delete db.preRegistrations[member.id];
-                        saveLocalStorage();
-
-                        await member.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
-                        if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                    // Valid pre-registration — check if pilot (has ownerNick)
+                    if (preReg.ownerNick) {
+                        // Try to find the owner: by ownerId or by nickname lookup
+                        let ownerId = preReg.ownerId;
+                        if (!ownerId || !db.users[ownerId]) {
+                            // Owner not in db.users yet — look up by nickname
+                            const ownerEntry = Object.entries(db.users).find(([id, data]) =>
+                                data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === preReg.ownerNick.toLowerCase()
+                            );
+                            if (ownerEntry) {
+                                ownerId = ownerEntry[0];
+                            }
                         }
 
-                        logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
+                        if (ownerId && db.users[ownerId]) {
+                            // ── Pilot pre-registration: link to owner ──
+                            if (!db.users[ownerId].pilotIds) db.users[ownerId].pilotIds = [];
+                            if (!db.users[ownerId].pilotIds.includes(member.id)) {
+                                db.users[ownerId].pilotIds.push(member.id);
+                            }
+                            db.users[member.id] = {
+                                nickname: preReg.nickname,
+                                registeredAt: new Date().toISOString(),
+                                pilotIds: []
+                            };
+                            delete db.preRegistrations[member.id];
+                            saveLocalStorage();
+
+                            await member.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                            if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
+                                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                            }
+
+                            logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
+                        } else {
+                            // ── Owner not in Discord yet — register pilot with pending owner link ──
+                            db.users[member.id] = {
+                                nickname: preReg.nickname,
+                                registeredAt: new Date().toISOString(),
+                                pilotIds: [],
+                                pendingOwnerNick: preReg.ownerNick
+                            };
+                            // Update pre-registration - mark that user joined but owner still pending
+                            if (db.preRegistrations[member.id]) {
+                                db.preRegistrations[member.id].ownerNick = preReg.ownerNick;
+                                db.preRegistrations[member.id].registeredAt = new Date().toISOString();
+                            }
+                            saveLocalStorage();
+
+                            await member.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                            if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
+                                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                            }
+
+                            logEvent(`📥 [PreReg] ${member.user.tag} joined — registered as pilot awaiting owner "${preReg.ownerNick}"`);
+                        }
                     } else {
-                        // ── Owner pre-registration ──
+                        // ── Owner pre-registration (no ownerNick) ──
                         db.users[member.id] = {
                             nickname: preReg.nickname,
                             registeredAt: new Date().toISOString(),
