@@ -140,17 +140,18 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
             }
 
-            let desiredNickname = "";
-            if (isPilot) {
-                desiredNickname = `${db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC')} - Pilot`;
-            } else if (db.users[memberId]) {
-                desiredNickname = db.users[memberId].nickname.trim().normalize('NFC');
-            } else {
-                desiredNickname = inGameNick;
-            }
+            // Only change nickname for registered members and pilots — never touch existing members' nicknames
+            if (isRegistered || isPilot) {
+                let desiredNickname = "";
+                if (isPilot) {
+                    desiredNickname = `${db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC')} - Pilot`;
+                } else {
+                    desiredNickname = db.users[memberId].nickname.trim().normalize('NFC');
+                }
 
-            if ((member.nickname || '').normalize('NFC') !== desiredNickname) {
-                await member.setNickname(desiredNickname).catch(() => {});
+                if ((member.nickname || '').normalize('NFC') !== desiredNickname) {
+                    await member.setNickname(desiredNickname).catch(() => {});
+                }
             }
         }
 
