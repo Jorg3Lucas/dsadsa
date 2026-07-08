@@ -135,7 +135,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             if (isRegistered && !hasMemberRole) {
                 await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                 logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
-            } else if (!isRegistered && hasMemberRole) {
+            } else if (!isRegistered && hasMemberRole && rankingValidationEnabled) {
                 await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                 logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
             }

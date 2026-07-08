@@ -84,8 +84,8 @@ client.once('ready', async () => {
     initMir4BotEvents(client, rankingDb, saveRankingStorage, logRankingEvent);
 
     setTimeout(async () => {
-        console.log('🧪 [Test] Starting forced validation scan...');
-        await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, true);
+        console.log('🧪 [Startup] Checking if ranking needs sync...');
+        await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, false);
     }, 10000);
 
     // Start auto-backup scheduler

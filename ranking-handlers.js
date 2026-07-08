@@ -1041,7 +1041,8 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
         saveLocalStorage();
 
-        // Assign member role directly
+        // Assign nickname and member role directly
+        await targetMember.setNickname(nickname).catch(() => {});
         if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }
