@@ -9,8 +9,8 @@ import {
     ButtonStyle
 } from 'discord.js';
 import { getMsg } from './lang.js';
-import { confirmationCache, MEMBER_ROLE_ID } from './ranking-constants.js';
-import { getLocalRankingCache } from './ranking-cache.js';
+import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS } from './ranking-constants.js';
+import { findNicknameInCache } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
 // ==========================================
@@ -671,20 +671,20 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         const targetMember = options.getMember('member');
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
-        const localCache = getLocalRankingCache() || {};
-        const exactMatchKey = Object.keys(localCache).find(k => k.normalize('NFC').toLowerCase() === nickname.toLowerCase());
+        const cacheHit = findNicknameInCache(nickname);
 
-        if (exactMatchKey) {
-            const foundClan = localCache[exactMatchKey];
+        if (cacheHit) {
+            const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
 
             confirmationCache[`${user.id}-manualregister`] = {
                 targetId: targetMember.id,
-                nickname: exactMatchKey,
-                clan: foundClan
+                nickname: cacheHit.nickname,
+                clan: cacheHit.clanName,
+                worldId: cacheHit.worldId
             };
 
             return interaction.reply({
-                content: getMsg('ranking.responses.manualregister.confirm', { nickname: exactMatchKey, clan: foundClan, username: targetMember.displayName }),
+                content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n🌍 Server: **${serverName}**`,
                 components: [
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
@@ -704,7 +704,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
         saveLocalStorage();
 
-        // Assign member role directly (no clan selection for alliance server)
+        // Assign member role directly
         if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }

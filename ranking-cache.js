@@ -18,8 +18,37 @@ export function saveRankingCache(data) {
 export function getLocalRankingCache() {
     try {
         if (fs.existsSync('./ranking_cache.json')) {
-            return JSON.parse(fs.readFileSync('./ranking_cache.json', 'utf8')).ranking || null;
+            const data = JSON.parse(fs.readFileSync('./ranking_cache.json', 'utf8')).ranking;
+            if (!data || typeof data !== 'object') return null;
+            // Detect old flat format { nickname: clanName } — discard, re-fetch
+            const firstVal = Object.values(data)[0];
+            if (typeof firstVal === 'string') {
+                console.log('⚠️ [Ranking Cache] Old flat format detected. Re-fetching with multi-world format...');
+                return null;
+            }
+            return data;
         }
     } catch (err) { console.error('❌ Error reading cache:', err.message); }
+    return null;
+}
+
+// Find which world a nickname belongs to across all worlds
+// Returns { worldId: "611", clanName: "GearsofWar シ" } or null
+export function findNicknameInCache(nickname) {
+    const cache = getLocalRankingCache();
+    if (!cache) return null;
+
+    const normalized = nickname.trim().normalize('NFC').toLowerCase();
+
+    for (const [worldId, players] of Object.entries(cache)) {
+        const matchKey = Object.keys(players).find(k => k.normalize('NFC').toLowerCase() === normalized);
+        if (matchKey) {
+            return {
+                worldId,
+                nickname: matchKey,
+                clanName: players[matchKey]
+            };
+        }
+    }
     return null;
 }

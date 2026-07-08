@@ -9,7 +9,8 @@ import { getMsg } from './lang.js';
 export async function runDailySynchronization(client, db, saveLocalStorage, logEvent, forceRefresh = false) {
     logEvent(getMsg('ranking.logs.syncStart'));
     try {
-        const currentRanking = await fetchMir4RankingData(forceRefresh); 
+        // Fetch ranking data to populate cache (used by /manualregister)
+        await fetchMir4RankingData(forceRefresh);
         const activeGuild = client.guilds.cache.get(DISCORD_SERVER_ID);
         if (!activeGuild) return;
 
