@@ -1730,18 +1730,29 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} linked as pilot of "${ownerNick}"`);
                 return `✈️ linked as pilot of "${ownerNick}"`;
             } else {
-                // Pre-register pilot
+                // Pre-register pilot — update if already exists
                 if (!db.preRegistrations) db.preRegistrations = {};
-                const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
-                db.preRegistrations[pilotMemberId] = {
-                    nickname: ownerNick,
-                    pilotIds: [],
-                    ownerNick,
-                    ownerId,
-                    registeredAt: new Date().toISOString(),
-                    expiresAt
-                };
-                saveLocalStorage();
+                const existing = db.preRegistrations[pilotMemberId];
+                if (existing && (existing.nickname !== ownerNick || existing.ownerNick !== ownerNick)) {
+                    existing.nickname = ownerNick;
+                    existing.ownerNick = ownerNick;
+                    existing.ownerId = ownerId;
+                    existing.registeredAt = new Date().toISOString();
+                    existing.expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
+                    saveLocalStorage();
+                    logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} pre-registration updated as pilot of "${ownerNick}"`);
+                } else if (!existing) {
+                    const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
+                    db.preRegistrations[pilotMemberId] = {
+                        nickname: ownerNick,
+                        pilotIds: [],
+                        ownerNick,
+                        ownerId,
+                        registeredAt: new Date().toISOString(),
+                        expiresAt
+                    };
+                    saveLocalStorage();
+                }
                 logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} pre-registered as pilot of "${ownerNick}"`);
                 return `⏳ pre-registered as pilot of "${ownerNick}" (expires in 7d)`;
             }
@@ -1845,15 +1856,26 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                     if (results.length < 20) results.push(`✅ ${member.user.tag} → registered as "${gameNick}"`);
                     logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) registered as owner "${gameNick}"`);
                 } else {
+                    // Check if already pre-registered, update nickname if changed
                     if (!db.preRegistrations) db.preRegistrations = {};
-                    const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
-                    db.preRegistrations[memberId] = {
-                        nickname: gameNick,
-                        pilotIds: [],
-                        registeredAt: new Date().toISOString(),
-                        expiresAt
-                    };
-                    saveLocalStorage();
+                    const existing = db.preRegistrations[memberId];
+                    if (existing && existing.nickname !== gameNick) {
+                        const oldNick = existing.nickname;
+                        existing.nickname = gameNick;
+                        existing.registeredAt = new Date().toISOString();
+                        existing.expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
+                        saveLocalStorage();
+                        logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) pre-registration updated: "${oldNick}" → "${gameNick}"`);
+                    } else if (!existing) {
+                        const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
+                        db.preRegistrations[memberId] = {
+                            nickname: gameNick,
+                            pilotIds: [],
+                            registeredAt: new Date().toISOString(),
+                            expiresAt
+                        };
+                        saveLocalStorage();
+                    }
 
                     ownerNickLowerToId[gameNick.toLowerCase()] = memberId;
                     totalPreReg++;
