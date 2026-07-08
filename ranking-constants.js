@@ -18,7 +18,7 @@ export function setAdminChannelId(id) {
     adminChannelId = id;
 }
 
-export const DISCORD_SERVER_ID = '1522269191833387018';
+export const DISCORD_SERVER_ID = '1481566364631044119';
 
 export const MEMBER_ROLE_ID = '1481568299966926879';
 
