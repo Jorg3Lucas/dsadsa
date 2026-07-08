@@ -39,6 +39,9 @@
             },
             "sendpanel": {
                 "description": "📋 [Admin] Send a fixed registration panel to this channel."
+            },
+            "listunregistered": {
+                "description": "📋 [Admin] List members with role but no registration, optionally DM them."
             }
         },
         "responses": {

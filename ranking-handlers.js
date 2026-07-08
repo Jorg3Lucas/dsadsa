@@ -1392,4 +1392,89 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         logEvent(`📋 Admin ${interaction.user.tag} sent registration panel in #${interaction.channel.name}`);
         return interaction.editReply('✅ **Registration panel sent!**');
     }
+
+    if (commandName === 'listunregistered') {
+        await interaction.deferReply({ flags: 64 });
+
+        const doNotify = options.getBoolean('notify') || false;
+        const REGISTRATION_CHANNEL_ID = '1524296969521070120';
+
+        // Fetch all guild members
+        const allMembers = await guild.members.fetch().catch(() => null);
+        if (!allMembers || allMembers.size === 0) {
+            return interaction.editReply('❌ Could not fetch guild members.');
+        }
+
+        const unregistered = [];
+        for (const [memberId, member] of allMembers) {
+            if (member.user.bot) continue;
+            if (!member.roles.cache.has(MEMBER_ROLE_ID)) continue;
+            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) continue;
+            unregistered.push(member);
+        }
+
+        if (unregistered.length === 0) {
+            logEvent(`📋 Admin ${interaction.user.tag} checked unregistered members — none found`);
+            return interaction.editReply('✅ **All members with the role are registered!** No unregistered members found.');
+        }
+
+        // Build the list message
+        const listLines = unregistered.map((m, i) => `${i + 1}. ${m.toString()} — ${m.user.tag}`);
+        let report = `📋 **Unregistered Members — ${unregistered.length} total**\n\n`;
+        report += listLines.join('\n');
+
+        if (report.length > 1900) {
+            // Truncate if too long
+            report = `📋 **Unregistered Members — ${unregistered.length} total**\n\n`;
+            report += listLines.slice(0, 30).join('\n');
+            report += `\n\n... and ${unregistered.length - 30} more`;
+        }
+
+        if (doNotify) {
+            report += `\n\n✉️ **Sending DMs to ${unregistered.length} members...**`;
+            await interaction.editReply(report);
+
+            let sent = 0;
+            let failed = 0;
+            for (let i = 0; i < unregistered.length; i++) {
+                const member = unregistered[i];
+                try {
+                    await member.send(`👋 Hey **${member.displayName}**, you currently have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click **👑 Register as Owner** to register your character.\n\nThis helps us keep the server organized. Thanks! 🚀`);
+                    sent++;
+                } catch (e) {
+                    failed++;
+                }
+                // 5-second delay between each DM
+                if (i < unregistered.length - 1) {
+                    await new Promise(r => setTimeout(r, 5000));
+                }
+            }
+
+            logEvent(`📋 Admin ${interaction.user.tag} notified ${sent} unregistered member(s) via DM (${failed} failed)`);
+
+            // Send feedback to the admin channel
+            if (adminChannelId) {
+                const adminCh = interaction.guild.channels.cache.get(adminChannelId);
+                if (adminCh) {
+                    const summary = `📋 **Bulk DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total unregistered:** ${unregistered.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('en-US')}`;
+                    await adminCh.send({ content: summary }).catch(() => {});
+                }
+            }
+
+            return interaction.editReply(`📋 **Unregistered Members — ${unregistered.length} total**\n\n✉️ DMs sent: **${sent}** ✅\n❌ Failed: **${failed}**`);
+        }
+
+        logEvent(`📋 Admin ${interaction.user.tag} listed ${unregistered.length} unregistered member(s)`);
+
+        // Send summary to admin channel
+        if (adminChannelId) {
+            const adminCh = interaction.guild.channels.cache.get(adminChannelId);
+            if (adminCh) {
+                const summary = `📋 **Unregistered Members Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total unregistered:** ${unregistered.length}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`;
+                await adminCh.send({ content: summary }).catch(() => {});
+            }
+        }
+
+        return interaction.editReply(report);
+    }
 }

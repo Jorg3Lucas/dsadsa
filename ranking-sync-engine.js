@@ -199,6 +199,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 }
             }
         }
+        }
 
         // 3. NICKNAME SYNCHRONIZATION + MEMBER ROLE
         for (const [memberId, member] of members) {

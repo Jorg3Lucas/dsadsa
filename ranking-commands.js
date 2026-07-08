@@ -65,6 +65,14 @@ export async function registerMir4SlashCommands(guild) {
                 description: getMsg('ranking.commands.sendpanel.description'),
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'listunregistered',
+                description: getMsg('ranking.commands.listunregistered.description'),
+                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                options: [
+                    { type: 5, name: 'notify', description: 'Send a DM to each unregistered member asking them to register (5s delay each)' }
+                ]
+            },
         ]);
         console.log(getMsg('ranking.logs.commandsRegistered'));
     } catch (error) { console.error(getMsg('ranking.logs.commandsError'), error); }
