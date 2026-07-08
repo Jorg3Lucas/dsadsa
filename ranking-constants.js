@@ -4,6 +4,20 @@
 
 export const confirmationCache = {};
 
+// Pending owner registrations awaiting admin approval
+// key: userId, value: { nickname, channelId, messageId, timestamp }
+export const pendingRegistrations = {};
+
+// Pending pilot approvals awaiting owner approval via DM
+// key: cacheKey, value: { ownerId, pilotId, pilotName, ownerNick, timestamp }
+export const pendingPilotApprovals = {};
+
+export let adminChannelId = null;
+
+export function setAdminChannelId(id) {
+    adminChannelId = id;
+}
+
 export const DISCORD_SERVER_ID = '1432320162278670440';
 
 export const MEMBER_ROLE_ID = '1481568299966926879';

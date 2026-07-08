@@ -8,16 +8,7 @@ import { getMsg } from './lang.js';
 export async function registerMir4SlashCommands(guild) {
     try {
         await guild.commands.set([
-            // ── Ranking commands ──
-            {
-                name: 'register',
-                description: getMsg('ranking.commands.register.description')
-            },
-            {
-                name: 'pilot',
-                description: getMsg('ranking.commands.pilot.description'),
-                options: [{ type: 6, name: 'member', description: getMsg('ranking.commands.pilot.options.member'), required: true }]
-            },
+            // ── Ranking commands (registration via welcome buttons only) ──
             {
                 name: 'removepilot',
                 description: getMsg('ranking.commands.removepilot.description')
@@ -52,7 +43,7 @@ export async function registerMir4SlashCommands(guild) {
             },
             {
                 name: 'manage',
-                description: '🛠️ Bot Management Panel — Configure all bot systems'
+                description: '🛠️ Bot Management Panel'
             },
             {
                 name: 'manualremove',

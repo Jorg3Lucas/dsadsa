@@ -115,14 +115,18 @@ client.on('interactionCreate', async (interaction) => {
 
         // C. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'register_modal') {
+            if (interaction.customId === 'register_owner_modal' ||
+                interaction.customId === 'register_pilot_modal') {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
         }
 
         // D. BUTTON CLICKS
         if (interaction.isButton()) {
-            if (interaction.customId.startsWith('confirm-manual') || interaction.customId.startsWith('manage_')) {
+            if (interaction.customId.startsWith('confirm-manual') ||
+                interaction.customId.startsWith('manage_') ||
+                interaction.customId.startsWith('welcome_') ||
+                interaction.customId.startsWith('approve_')) {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
         }

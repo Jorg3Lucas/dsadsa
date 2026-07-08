@@ -1,29 +1,26 @@
 import cron from 'node-cron';
-import { PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID } from './ranking-constants.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
+import { MEMBER_ROLE_ID, setAdminChannelId } from './ranking-constants.js';
 import { getMsg } from './lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
 // ==========================================
-// 💬 TEXT COMMANDS (!setwelcome)
+// 💬 TEXT COMMANDS (!setadminchannel)
 // ==========================================
 
-async function handleTextCommands(message, db, saveLocalStorage) {
+async function handleTextCommands(message) {
     if (message.author.bot || !message.content.startsWith('!')) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    if (command === 'setwelcome') {
+    if (command === 'setadminchannel') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply(getMsg('ranking.responses.setwelcome.noPermission'));
+            return message.reply('❌ Você precisa ser Administrador para usar este comando.');
         }
 
-        if (!db.config) db.config = {};
-        db.config.welcomeChannelId = message.channel.id;
-        saveLocalStorage();
-
-        return message.reply(getMsg('ranking.responses.setwelcome.success', { channel: message.channel.toString() }));
+        setAdminChannelId(message.channel.id);
+        return message.reply(`✅ Canal de aprovação configurado para ${message.channel.toString()}.`);
     }
 }
 
@@ -40,7 +37,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
     });
 
     client.on('messageCreate', async (message) => {
-        await handleTextCommands(message, db, saveLocalStorage);
+        await handleTextCommands(message);
     });
 
     client.on('guildMemberAdd', async (member) => {
@@ -52,7 +49,18 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
 
             const welcomeMsg = getMsg('ranking.welcome.message', { member: member.toString() });
 
-            await welcomeChannel.send(welcomeMsg);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('welcome_register_owner')
+                    .setLabel('👑 Registrar como Dono')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('welcome_register_pilot')
+                    .setLabel('✈️ Registrar como Piloto')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            await welcomeChannel.send({ content: welcomeMsg, components: [row] });
         } catch (error) {
             console.error(getMsg('ranking.logs.welcomeError', { error: error.message }));
         }

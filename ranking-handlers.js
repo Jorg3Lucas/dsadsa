@@ -9,7 +9,7 @@ import {
     ButtonStyle
 } from 'discord.js';
 import { getMsg } from './lang.js';
-import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS } from './ranking-constants.js';
+import { confirmationCache, MEMBER_ROLE_ID, WORLD_IDS, DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals, adminChannelId } from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -28,36 +28,250 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         }
     };
 
-    // A. MODAL SUBMIT HANDLER
-    if (interaction.isModalSubmit() && interaction.customId === 'register_modal') {
-        await interaction.deferReply({ flags: 64 });
-        
-        const nickname = interaction.fields.getTextInputValue('character_nickname').trim().normalize('NFC');
+    // A0. WELCOME & APPROVAL BUTTONS
 
-        const databaseRecord = Object.entries(db.users).find(([id, data]) => data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase());
-        if (databaseRecord && databaseRecord[0] !== interaction.user.id) {
-            return interaction.editReply(getMsg('ranking.responses.register.alreadyRegistered'));
+    // ── Welcome: Register as Owner ──
+    if (interaction.isButton() && interaction.customId === 'welcome_register_owner') {
+        const modal = new ModalBuilder()
+            .setCustomId('register_owner_modal')
+            .setTitle('📝 Registrar Conta Principal');
+
+        const nicknameInput = new TextInputBuilder()
+            .setCustomId('owner_nickname')
+            .setLabel('Nome do personagem (exatamente como no jogo)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Ex: xVraeL')
+            .setMinLength(2)
+            .setMaxLength(30)
+            .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(nicknameInput));
+        return interaction.showModal(modal);
+    }
+
+    // ── Welcome: Register as Pilot ──
+    if (interaction.isButton() && interaction.customId === 'welcome_register_pilot') {
+        const modal = new ModalBuilder()
+            .setCustomId('register_pilot_modal')
+            .setTitle('✈️ Registrar como Piloto');
+
+        const ownerNickInput = new TextInputBuilder()
+            .setCustomId('owner_nickname')
+            .setLabel('Nickname do DONO da conta no jogo')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Digite o nickname do dono')
+            .setMinLength(2)
+            .setMaxLength(30)
+            .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(ownerNickInput));
+        return interaction.showModal(modal);
+    }
+
+    // ── Admin Approval: Owner Registration ──
+    if (interaction.isButton() && interaction.customId.startsWith('approve_owner_')) {
+        await interaction.deferUpdate();
+
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.followUp({ content: '❌ Apenas administradores podem aprovar registros.', flags: 64 });
         }
 
-        db.users[interaction.user.id] = { ...db.users[interaction.user.id], nickname, registeredAt: new Date().toISOString() };
-        if (!db.users[interaction.user.id].pilotIds) db.users[interaction.user.id].pilotIds = [];
+        const rest = interaction.customId.replace('approve_owner_', '');
+        const [userId, result] = rest.split('-');
+        const pending = pendingRegistrations[userId];
+
+        if (!pending) {
+            return interaction.editReply({ content: '⌛ Este registro já expirou ou foi processado.', components: [] });
+        }
+
+        delete pendingRegistrations[userId];
+
+        if (result === 'no') {
+            await interaction.editReply({
+                content: `❌ **Registro Recusado**\n\n👤 **Usuário:** <@${userId}>\n📝 **Nickname:** ${pending.nickname}\n🕐 **Processado por:** ${interaction.user.tag}`,
+                components: []
+            });
+            try { const user = await interaction.client.users.fetch(userId); await user.send('❌ Seu registro foi recusado por um administrador.'); } catch (e) {}
+            return;
+        }
+
+        const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
+        if (!targetMember) {
+            return interaction.editReply({ content: '❌ Usuário não está mais no servidor.', components: [] });
+        }
+
+        db.users[userId] = { ...db.users[userId], nickname: pending.nickname, registeredAt: new Date().toISOString() };
+        if (!db.users[userId].pilotIds) db.users[userId].pilotIds = [];
         saveLocalStorage();
 
-        interaction.guild.members.fetch(interaction.user.id)
-            .then(async (member) => {
-                if (member) {
-                    await member.setNickname(nickname).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
-                    await applyImmediateRoleWithCache(member, nickname, interaction.user.id).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
-                }
-            }).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
+        await targetMember.setNickname(pending.nickname).catch(() => {});
+        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        }
 
-        return interaction.editReply(getMsg('ranking.responses.register.success', { nickname }));
+        logEvent(`Admin ${interaction.user.tag} approved registration for ${userId} as ${pending.nickname}`);
+
+        await interaction.editReply({
+            content: `✅ **Registro Aprovado**\n\n👤 **Usuário:** ${targetMember.toString()}\n📝 **Nickname:** ${pending.nickname}\n✅ **Aprovado por:** ${interaction.user.tag}`,
+            components: []
+        });
+
+        try { await targetMember.send('✅ **Registro aprovado!** Você recebeu o cargo de membro.'); } catch (e) {}
+        return;
+    }
+
+    // ── Owner DM Approval: Pilot Registration ──
+    if (interaction.isButton() && interaction.customId.startsWith('approve_pilot_')) {
+        await interaction.deferUpdate();
+
+        const rest = interaction.customId.replace('approve_pilot_', '');
+        const [pilotUserId, result] = rest.split('-');
+        const pending = pendingPilotApprovals[pilotUserId];
+
+        if (!pending) {
+            return interaction.editReply({ content: '⌛ Esta solicitação já expirou ou foi processada.', components: [] });
+        }
+
+        if (interaction.user.id !== pending.ownerId) {
+            return interaction.editReply({ content: '❌ Apenas o dono da conta pode responder a esta solicitação.', components: [] });
+        }
+
+        delete pendingPilotApprovals[pilotUserId];
+
+        if (result === 'no') {
+            await interaction.editReply({ content: '❌ **Solicitação recusada.**', components: [] });
+            try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('❌ O dono recusou seu registro como piloto.'); } catch (e) {}
+            return;
+        }
+
+        const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
+        if (!guild) {
+            return interaction.editReply({ content: '❌ Erro ao encontrar o servidor.', components: [] });
+        }
+
+        const pilotMember = await guild.members.fetch(pilotUserId).catch(() => null);
+        const ownerMember = await guild.members.fetch(pending.ownerId).catch(() => null);
+
+        if (!pilotMember || !ownerMember) {
+            return interaction.editReply({ content: '❌ Um dos membros não está mais no servidor.', components: [] });
+        }
+
+        if (!db.users[pending.ownerId].pilotIds) db.users[pending.ownerId].pilotIds = [];
+        if (!db.users[pending.ownerId].pilotIds.includes(pilotUserId)) {
+            db.users[pending.ownerId].pilotIds.push(pilotUserId);
+        }
+        saveLocalStorage();
+
+        await pilotMember.setNickname(`${pending.ownerNick} - Pilot`).catch(() => {});
+        await applyImmediateRoleWithCache(pilotMember, pending.ownerNick, pending.ownerId);
+
+        logEvent(`${interaction.user.tag} approved pilot ${pilotUserId} for ${pending.ownerNick}`);
+
+        await interaction.editReply({ content: `✅ **Piloto aprovado!** <@${pilotUserId}> agora é seu piloto.`, components: [] });
+
+        try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('✅ **Registro aprovado!** O dono aprovou seu registro como piloto.'); } catch (e) {}
+        return;
+    }
+
+    // A1. NEW REGISTRATION MODAL SUBMITS
+
+    // ── Owner Registration Modal ──
+    if (interaction.isModalSubmit() && interaction.customId === 'register_owner_modal') {
+        await interaction.deferReply({ flags: 64 });
+
+        const nickname = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
+
+        const existingUser = Object.entries(db.users).find(([id, data]) =>
+            data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
+        );
+        if (existingUser) {
+            return interaction.editReply('❌ Este nome de personagem já está registrado por outro usuário.');
+        }
+
+        const userId = interaction.user.id;
+        pendingRegistrations[userId] = { nickname, timestamp: Date.now() };
+
+        if (!adminChannelId) {
+            return interaction.editReply('❌ O canal de aprovação não foi configurado. Use !setadminchannel primeiro.');
+        }
+
+        const adminChannel = interaction.guild.channels.cache.get(adminChannelId);
+        if (!adminChannel) {
+            return interaction.editReply('❌ Canal de aprovação não encontrado. Contacte um administrador.');
+        }
+
+        const adminMsg = await adminChannel.send({
+            content: `👑 **Novo Registro de Dono**\n\n👤 **Usuário:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}\n🕐 **Data:** ${new Date().toLocaleString('pt-BR')}`,
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Aprovar').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Recusar').setStyle(ButtonStyle.Danger)
+                )
+            ]
+        });
+
+        pendingRegistrations[userId].channelId = adminChannel.id;
+        pendingRegistrations[userId].messageId = adminMsg.id;
+
+        return interaction.editReply('✅ **Registro enviado para aprovação!** Um administrador irá revisar seu cadastro em breve.');
+    }
+
+    // ── Pilot Registration Modal ──
+    if (interaction.isModalSubmit() && interaction.customId === 'register_pilot_modal') {
+        await interaction.deferReply({ flags: 64 });
+
+        const ownerNick = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
+
+        const ownerEntry = Object.entries(db.users).find(([id, data]) =>
+            data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === ownerNick.toLowerCase()
+        );
+
+        if (!ownerEntry) {
+            return interaction.editReply('❌ Dono não encontrado. Verifique se o nickname está correto e se o dono já está registrado.');
+        }
+
+        const [ownerId, ownerData] = ownerEntry;
+        const pilotId = interaction.user.id;
+
+        if (ownerId === pilotId) {
+            return interaction.editReply('❌ Você não pode se registrar como piloto de si mesmo.');
+        }
+
+        if (!ownerData.pilotIds) ownerData.pilotIds = [];
+        if (ownerData.pilotIds.length >= 4) {
+            return interaction.editReply('❌ Este dono já atingiu o limite de 4 pilotos.');
+        }
+        if (ownerData.pilotIds.includes(pilotId)) {
+            return interaction.editReply('❌ Você já está registrado como piloto deste dono.');
+        }
+
+        pendingPilotApprovals[pilotId] = {
+            ownerId,
+            ownerNick: ownerData.nickname,
+            pilotId,
+            pilotTag: interaction.user.tag,
+            timestamp: Date.now()
+        };
+
+        try {
+            const ownerMember = await interaction.guild.members.fetch(ownerId);
+            const dmChannel = await ownerMember.createDM();
+
+            await dmChannel.send({
+                content: `✈️ **Aprovação de Piloto**\n\n👤 **${interaction.user.tag}** quer se registrar como seu piloto.\n📝 **Nickname do dono:** ${ownerData.nickname}\n\nDeseja aprovar este piloto?`,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-yes`).setLabel('✅ Aprovar').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-no`).setLabel('❌ Recusar').setStyle(ButtonStyle.Danger)
+                    )
+                ]
+            });
+
+            return interaction.editReply(`✅ **Solicitação enviada!** O dono **${ownerData.nickname}** recebeu uma DM para aprovar seu registro como piloto.`);
+        } catch (error) {
+            delete pendingPilotApprovals[pilotId];
+            return interaction.editReply('❌ Não foi possível enviar DM para o dono. Verifique se ele permite mensagens privadas no servidor.');
+        }
     }
 
     // B. PILOT REMOVAL HANDLER (user removing their own pilot)
@@ -536,62 +750,6 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
     if (!interaction.isCommand()) return;
     const { commandName, options, user, guild } = interaction;
-
-    // /REGISTER COMMAND: DIRECT MODAL POPUP
-    if (commandName === 'register') {
-        const modal = new ModalBuilder()
-            .setCustomId('register_modal')
-            .setTitle(getMsg('ranking.commands.register.modalTitle'));
-
-        const nicknameInput = new TextInputBuilder()
-            .setCustomId('character_nickname')
-            .setLabel(getMsg('ranking.commands.register.inputLabel'))
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder(getMsg('ranking.commands.register.inputPlaceholder'))
-            .setMinLength(2)
-            .setMaxLength(30)
-            .setRequired(true);
-
-        const firstActionRow = new ActionRowBuilder().addComponents(nicknameInput);
-        modal.addComponents(firstActionRow);
-
-        return await interaction.showModal(modal);
-    }
-
-    if (commandName === 'pilot') {
-        await interaction.deferReply({ flags: 64 });
-        const pilotMember = options.getMember('member');
-        
-        const userProfile = db.users[user.id];
-        const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
-
-        if (!isActuallyRegistered) {
-            return interaction.editReply(getMsg('ranking.responses.pilot.notRegistered'));
-        }
-
-        if (pilotMember.id === user.id) return interaction.editReply(getMsg('ranking.responses.pilot.selfPilot'));
-        
-        if (!db.users[user.id].pilotIds) db.users[user.id].pilotIds = [];
-
-        if (db.users[user.id].pilotIds.length >= 4) {
-            return interaction.editReply(getMsg('ranking.responses.pilot.limitReached'));
-        }
-
-        if (db.users[user.id].pilotIds.includes(pilotMember.id)) {
-            return interaction.editReply(getMsg('ranking.responses.pilot.alreadyLinked'));
-        }
-
-        db.users[user.id].pilotIds.push(pilotMember.id);
-        saveLocalStorage();
-
-        const ownerNick = db.users[user.id].nickname.trim().normalize('NFC');
-        await pilotMember.setNickname(`${ownerNick} - Pilot`).catch(() => {
-        // Silently ignore — Discord API errors are non-critical
-    });
-        await applyImmediateRoleWithCache(pilotMember, ownerNick, user.id);
-
-        return interaction.editReply(getMsg('ranking.responses.pilot.success', { pilotMember: pilotMember.toString(), count: db.users[user.id].pilotIds.length, nick: ownerNick }));
-    }
 
     if (commandName === 'removepilot') {
         const userProfile = db.users[user.id];
