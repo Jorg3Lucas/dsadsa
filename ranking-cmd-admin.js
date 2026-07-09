@@ -289,7 +289,10 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
                     )
                 ],
                 flags: 64
-            });if (commandName === 'manualforce') {
+            });
+        }
+
+        if (commandName === 'manualforce') {
         await interaction.deferReply({ flags: 64 });
 
         const targetMember = options.getMember('member');
@@ -1469,4 +1472,4 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
             return interaction.reply({ content: guide });
         }
     }
-}
+
