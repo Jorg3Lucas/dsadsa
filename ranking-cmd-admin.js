@@ -186,27 +186,23 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
                 const fuzzyManualNote = fuzzyManualNick
                     ? `\n🔍 **Fuzzy match:** "${nickname}" → "${fuzzyManualNick}"`
                     : '';
+                const rowButtons = [
+                        new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('⏳ Register as temp (3 days)').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('confirm-manualregister-permanent').setLabel('✅ Register as permanent (manual)').setStyle(ButtonStyle.Primary),
+                    ];
+                    if (fuzzyManualNick) {
+                        rowButtons.push(
+                            new ButtonBuilder().setCustomId('confirm-manualregister-fuzzy-ignore').setLabel("✍️ Register as typed (permanent)").setStyle(ButtonStyle.Primary)
+                        );
+                    }
+                    rowButtons.push(
+                        new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                    );
+
                 return interaction.reply({
                     content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}`,
                     components: [
-                        new ActionRowBuilder().addComponents(
-                        [
-                            new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('⏳ Register as temp (3 days)').setStyle(ButtonStyle.Success),
-                            new ButtonBuilder().setCustomId('confirm-manualregister-permanent').setLabel('✅ Register as permanent (manual)').setStyle(ButtonStyle.Primary),
-                            new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
-                        ]
-                    ).addComponents(
-                        [
-                            new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
-                            ...(fuzzyManualNick
-                                ? [new ButtonBuilder().setCustomId('confirm-manualregister-fuzzy-ignore').setLabel("✍️ Register as typed (permanent)").setStyle(ButtonStyle.Primary)]
-                                : []),
-                            new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
-                        ]
-                    ).addComponents(
-                            new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
-                            new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
-                        )
+                        new ActionRowBuilder().addComponents(rowButtons)
                     ],
                     flags: 64
                 });
