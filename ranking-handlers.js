@@ -1622,34 +1622,84 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             });
         }
 
-        // Not found in ranking — register as temporary (3 days)
-        const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+        // Not found in ranking — show confirmation with optional fuzzy conflict warning
+        // ── Fuzzy matching against registered users (db.users) to detect conflicts ──
+        let fuzzyConflictNote = '';
+        let fuzzyConflictNick = null;
+        const cleanedManualInput = cleanNickname(nickname);
+        if (cleanedManualInput.length >= 2) {
+            // Build set of pilot IDs to exclude (skip pilots, match only owners)
+            const manualPilotIds = new Set();
+            for (const [, data] of Object.entries(db.users)) {
+                if (data.pilotIds && data.pilotIds.length > 0) {
+                    for (const pid of data.pilotIds) {
+                        manualPilotIds.add(pid);
+                    }
+                }
+            }
 
-        db.users[targetMember.id] = {
-            ...db.users[targetMember.id],
-            nickname: nickname,
-            registeredAt: new Date().toISOString(),
-            tempUntil: threeDaysFromNow.toISOString(),
-            tempRegisteredAt: new Date().toISOString()
-        };
-        if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
-        saveLocalStorage();
+            let bestManualMatch = null;
+            let bestManualScore = 0;
 
-        // Assign nickname and member role directly
-        await targetMember.setNickname(nickname).catch(() => {});
-        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+            for (const [id, data] of Object.entries(db.users)) {
+                if (!data.nickname) continue;
+                // Skip pilots — only match actual owners
+                if (manualPilotIds.has(id)) continue;
+                // Skip self if already registered
+                if (id === targetMember.id) continue;
+                const cleanedNick = cleanNickname(data.nickname);
+                if (cleanedNick.length < 2) continue;
+
+                // Character overlap pre-filter
+                const inputChars = new Set(cleanedManualInput);
+                const nickChars = new Set(cleanedNick);
+                let commonChars = 0;
+                for (const c of inputChars) {
+                    if (nickChars.has(c)) commonChars++;
+                }
+                const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+                if (overlap < 0.3) continue;
+
+                // Levenshtein distance
+                const distance = levenshteinDistance(cleanedManualInput, cleanedNick);
+                const maxLen = Math.max(cleanedManualInput.length, cleanedNick.length);
+                const similarity = 1 - (distance / maxLen);
+
+                if (similarity > bestManualScore && similarity >= 0.55) {
+                    bestManualScore = similarity;
+                    bestManualMatch = { id, nickname: data.nickname };
+                }
+            }
+
+            if (bestManualMatch) {
+                fuzzyConflictNick = bestManualMatch.nickname;
+                fuzzyConflictNote = `\n\n⚠️ **Aviso:** O nome "${nickname}" é muito semelhante a "${bestManualMatch.nickname}" (já registrado por <@${bestManualMatch.id}>).`;
+                logEvent(`👑 Admin ${interaction.user.tag} — fuzzy conflict detected in /manualregister: "${nickname}" → "${bestManualMatch.nickname}" (user ${bestManualMatch.id})`);
+            }
         }
 
-        logEvent(`👑 Admin ${interaction.user.tag} manually registered ${targetMember.id} as ${nickname} (temporary — not in ranking)`);
+        confirmationCache[`${user.id}-manualregister`] = {
+            targetId: targetMember.id,
+            nickname: nickname,
+            clan: '❌ Not in ranking',
+            worldId: null,
+            needsTempApproval: true
+        };
+
+        const fuzzyConflictLine = fuzzyConflictNote
+            ? `⚠️ **Este nickname não foi encontrado no ranking.** Será registrado como temporário (3 dias).${fuzzyConflictNote}`
+            : `⚠️ **Este nickname não foi encontrado no ranking.** Será registrado como temporário (3 dias).`;
 
         return interaction.reply({
-            content: `⏳ **${nickname}** registered as temporary (3 days). They will be converted to permanent once found in an allied clan in the ranking.`,
+            content: fuzzyConflictLine + `\n\nDeseja registrar **${nickname}** para **${targetMember.displayName}** mesmo assim?`,
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
             flags: 64
-        });
-    }
-
-    if (commandName === 'manualpilot') {
+        });if (commandName === 'manualpilot') {
         const ownerMember = options.getMember('owner');
         const pilotMember = options.getMember('pilot');
 
