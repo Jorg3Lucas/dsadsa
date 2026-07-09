@@ -59,23 +59,6 @@ export const SECONDARY_SERVER_ID = '1432320162278670440';
 // Pre-registration validity (7 days)
 export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Remove pending registrations older than 24h */
-export function cleanExpiredPendingRegistrations() {
-    const now = Date.now();
-
-    for (const [userId, pending] of Object.entries(pendingRegistrations)) {
-        if (pending.timestamp && (now - pending.timestamp > PENDING_MAX_AGE_MS)) {
-            delete pendingRegistrations[userId];
-        }
-    }
-
-    for (const [pilotUserId, pending] of Object.entries(pendingPilotApprovals)) {
-        if (pending.timestamp && (now - pending.timestamp > PENDING_MAX_AGE_MS)) {
-            delete pendingPilotApprovals[pilotUserId];
-        }
-    }
-}
-
 // ==========================================
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================

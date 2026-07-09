@@ -14,7 +14,6 @@ import {
 } from 'discord.js';
 import { getMsg } from './lang.js';
 import {
-    confirmationCache,
     MEMBER_ROLE_ID,
     WORLD_IDS,
     DISCORD_SERVER_ID,
@@ -22,7 +21,6 @@ import {
     pendingPilotApprovals,
     adminChannelId,
     APPROVER_ROLE_IDS,
-    WELCOME_PANEL_MESSAGE,
     PENDING_MAX_AGE_MS
 } from './ranking-constants.js';
 import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, levenshteinDistance, cleanNickname } from './ranking-cache.js';
