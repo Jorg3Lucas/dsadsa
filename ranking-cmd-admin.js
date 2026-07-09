@@ -314,7 +314,11 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
 
         await targetMember.setNickname(nickname).catch(() => {});
         if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+            try {
+                await targetMember.roles.add(MEMBER_ROLE_ID);
+            } catch (err) {
+                logEvent(`❌ [manualforce] Failed to add MEMBER_ROLE_ID to ${targetMember.id}: ${err.message}`);
+            }
         }
 
         logEvent(`👑 Admin ${interaction.user.tag} force-registered ${targetMember.id} as ${nickname} (manual permanent)`);
