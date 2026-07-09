@@ -175,8 +175,8 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
                     nickname: cacheHit.nickname,
                     clan: cacheHit.clanName,
                     worldId: cacheHit.worldId,
-                    needsTempApproval: !inAlliedClan
-                                originalNickname: fuzzyManualNick ? nickname : null,
+                    needsTempApproval: !inAlliedClan,
+                    originalNickname: fuzzyManualNick ? nickname : null,
                 };
     
                 const statusLine = inAlliedClan
