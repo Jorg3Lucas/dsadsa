@@ -289,7 +289,37 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
                     )
                 ],
                 flags: 64
-            });if (commandName === 'manualpilot') {
+            });if (commandName === 'manualforce') {
+        await interaction.deferReply({ flags: 64 });
+
+        const targetMember = options.getMember('member');
+        if (!targetMember) {
+            return interaction.editReply('❌ Member not found in the server.');
+        }
+
+        const nickname = options.getString('nickname').trim().normalize('NFC');
+
+        // Register directly as permanent — no fuzzy/ranking checks
+        db.users[targetMember.id] = {
+            ...db.users[targetMember.id],
+            nickname: nickname,
+            registeredAt: new Date().toISOString(),
+            manualPermanent: true
+        };
+        if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
+        saveLocalStorage();
+
+        await targetMember.setNickname(nickname).catch(() => {});
+        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        }
+
+        logEvent(`👑 Admin ${interaction.user.tag} force-registered ${targetMember.id} as ${nickname} (manual permanent)`);
+
+        return interaction.editReply(`✅ **${nickname}** registered as permanent (manual force). No fuzzy or ranking checks were performed. The sync will keep this registration active.`);
+    }
+
+    if (commandName === 'manualpilot') {
             const ownerMember = options.getMember('owner');
             const pilotMember = options.getMember('pilot');
     

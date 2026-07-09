@@ -28,6 +28,15 @@ export async function registerMir4SlashCommands(guild) {
                 ]
             },
             {
+                name: 'manualforce',
+                description: '👑 [Admin] Force register a member as permanent — no fuzzy/ranking checks.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                options: [
+                    { type: 6, name: 'member', description: 'Discord member to register.', required: true },
+                    { type: 3, name: 'nickname', description: 'In-game character name (exact as typed).', required: true }
+                ]
+            },
+            {
                 name: 'manualpilot',
                 description: getMsg('ranking.commands.manualpilot.description'),
                 default_member_permissions: PermissionFlagsBits.Administrator.toString(),
