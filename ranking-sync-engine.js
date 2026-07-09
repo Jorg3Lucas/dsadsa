@@ -79,6 +79,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (!userData.nickname) continue;
                 // Skip temp users — they get handled by the temp cleanup step below
                 if (userData.tempUntil) continue;
+                // Skip manual permanent users — registered manually outside ranking
+                if (userData.manualPermanent) continue;
                 const nickname = userData.nickname.trim().normalize('NFC');
                 const inRanking = findNicknameInCache(nickname, cache);
                 if (!inRanking) {

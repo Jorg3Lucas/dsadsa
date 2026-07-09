@@ -936,6 +936,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
             if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
             if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
+            if (cached.manualPermanent) db.users[cached.targetId].manualPermanent = true;
             saveLocalStorage();
 
             await targetMember.setNickname(cached.nickname).catch(() => {});
@@ -944,7 +945,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             }
 
             const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
-            logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}${tempLabel}`);
+            logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}${cached.manualPermanent ? ' (manual permanent)' : cached.needsTempApproval ? ' (temporary — 3 days)' : ''}`);
 
             const responseMsg = cached.needsTempApproval
                 ? `⏳ **${cached.nickname}** registered as temporary (3 days) in **${cached.clan}**. Will be converted to permanent once found in an allied clan.`
@@ -1601,6 +1602,7 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 clan: cacheHit.clanName,
                 worldId: cacheHit.worldId,
                 needsTempApproval: !inAlliedClan
+                            originalNickname: fuzzyManualNick ? nickname : null,
             };
 
             const statusLine = inAlliedClan
@@ -1614,6 +1616,20 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
                 content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}`,
                 components: [
                     new ActionRowBuilder().addComponents(
+                    [
+                        new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('⏳ Register as temp (3 days)').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('confirm-manualregister-permanent').setLabel('✅ Register as permanent (manual)').setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                    ]
+                ).addComponents(
+                    [
+                        new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
+                        ...(fuzzyManualNick
+                            ? [new ButtonBuilder().setCustomId('confirm-manualregister-fuzzy-ignore').setLabel("✍️ Register as typed (permanent)").setStyle(ButtonStyle.Primary)]
+                            : []),
+                        new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                    ]
+                ).addComponents(
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                         new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                     )
