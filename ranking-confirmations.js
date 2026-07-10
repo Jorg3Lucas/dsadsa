@@ -2,11 +2,7 @@
 // ✅ CONFIRMATION BUTTON HANDLERS
 // For /manual* commands (manualregister, manualpilot, etc.)
 // ==========================================
-import {
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle
-} from 'discord.js';
+// No unused Discord.js imports needed — responses use plain interaction.update()
 import { getMsg } from './lang.js';
 import {
     confirmationCache,

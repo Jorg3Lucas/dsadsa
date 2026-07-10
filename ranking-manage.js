@@ -18,7 +18,7 @@ import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
 } from './ranking-constants.js';
-import { findNicknameInCache, getLocalRankingCache } from './ranking-cache.js';
+import { findNicknameInCache } from './ranking-cache.js';
 
 // ==========================================
 // 🖱️ HANDLER
