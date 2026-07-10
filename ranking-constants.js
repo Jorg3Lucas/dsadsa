@@ -59,6 +59,9 @@ export const SECONDARY_SERVER_ID = '1432320162278670440';
 // Pre-registration validity (7 days)
 export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Super admin — only this user can use high-risk commands
+export const SUPER_ADMIN_USER_ID = '864108100880171009';
+
 // ==========================================
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================

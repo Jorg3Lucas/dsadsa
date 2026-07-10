@@ -14,6 +14,7 @@ import {
 } from 'discord.js';
 import { getMsg } from './lang.js';
 import {
+    SUPER_ADMIN_USER_ID,
     confirmationCache,
     MEMBER_ROLE_ID,
     WORLD_IDS,
@@ -73,6 +74,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
         }
     
         if (commandName === 'forcesync') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
             await interaction.deferReply({ flags: 64 });
             logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
             await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
@@ -144,6 +148,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
         }
     
         if (commandName === 'manualregister') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
             const targetMember = options.getMember('member');
             const nickname = options.getString('nickname').trim().normalize('NFC');
     
@@ -289,6 +296,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
         }
 
         if (commandName === 'manualforce') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
         await interaction.deferReply({ flags: 64 });
 
         const targetMember = options.getMember('member');
@@ -323,6 +333,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
     }
 
     if (commandName === 'manualpilot') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
             const ownerMember = options.getMember('owner');
             const pilotMember = options.getMember('pilot');
     
@@ -364,6 +377,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
         }
     
         if (commandName === 'manualremovepilot') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
             const ownerMember = options.getMember('owner');
             const pilotMember = options.getMember('pilot');
     
@@ -395,6 +411,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
         }
     
         if (commandName === 'cleandb') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
             await interaction.deferReply({ flags: 64 });
             const seenNicknames = {};
             const duplicatesRemoved = [];
@@ -479,6 +498,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
         }
     
         if (commandName === 'manualremove') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
             const targetMember = options.getMember('member');
     
             if (!db.users[targetMember.id]) return interaction.reply({ content: getMsg('ranking.responses.manualremove.noRegistration'), flags: 64 });
@@ -810,6 +832,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
     
         // ── SCAN IMPORT ──
         if (commandName === 'scanimport') {
+            if (user.id !== SUPER_ADMIN_USER_ID) {
+                return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
+            }
             await interaction.deferReply({ flags: 64 });
     
             const prodGuild = interaction.guild;
