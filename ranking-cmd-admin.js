@@ -1495,6 +1495,8 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
                 `⏰ **6. Expiration**\n\n` +
                 `Pending approvals expire after **24h**. The message updates showing "expired". User must re-submit.\n\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `🤖 Bot developed by <@${SUPER_ADMIN_USER_ID}>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `❓ Need help? Contact an Administrator.`;
     
             return interaction.reply({ content: guide });

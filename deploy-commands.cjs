@@ -28,6 +28,7 @@ try {
 const TOKEN = process.env.TOKEN || process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.DISCORD_SERVER_ID || '1524296969521070120';
 const CLIENT_ID = process.env.CLIENT_ID;
+const SUPER_ADMIN_ID = '864108100880171009';
 
 if (!TOKEN) {
   console.error('❌ No token found. Create a .env file with:');
@@ -54,12 +55,12 @@ const commands = [
   { 
     name: 'forcesync', 
     description: '⚡ [Admin] Force an immediate synchronization with the official ranking portal.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+    default_member_permissions: '0'
   },
   {
     name: 'manualregister',
     description: '👑 [Admin] Register a player via cache lookup.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    default_member_permissions: '0',
     options: [
       { type: 6, name: 'member', description: 'Discord member.', required: true },
       { type: 3, name: 'nickname', description: 'In-game character name.', required: true }
@@ -68,7 +69,7 @@ const commands = [
   {
     name: 'manualforce',
     description: '👑 [Admin] Force register a member as permanent — no fuzzy/ranking checks.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    default_member_permissions: '0',
     options: [
       { type: 6, name: 'member', description: 'Discord member to register.', required: true },
       { type: 3, name: 'nickname', description: 'In-game character name (exact as typed).', required: true }
@@ -77,7 +78,7 @@ const commands = [
   {
     name: 'manualpilot',
     description: '👑 [Admin] Manually link a pilot to a character owner.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    default_member_permissions: '0',
     options: [
       { type: 6, name: 'owner', description: 'Select the primary character owner.', required: true },
       { type: 6, name: 'pilot', description: 'Select the Discord user acting as pilot.', required: true }
@@ -86,7 +87,7 @@ const commands = [
   {
     name: 'cleandb',
     description: '👑 [Admin] Remove all duplicate nickname entries from the database.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+    default_member_permissions: '0'
   },
   {
     name: 'manage',
@@ -95,13 +96,13 @@ const commands = [
   {
     name: 'manualremove',
     description: '👑 [Admin] Completely remove a player\'s registration and profile.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    default_member_permissions: '0',
     options: [{ type: 6, name: 'member', description: 'Discord member to clear.', required: true }]
   },
   {
     name: 'manualremovepilot',
     description: '👑 [Admin] Manually remove a pilot from a character owner.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    default_member_permissions: '0',
     options: [
       { type: 6, name: 'owner', description: 'Select the character owner.', required: true },
       { type: 6, name: 'pilot', description: 'Select the pilot to remove.', required: true }
@@ -128,7 +129,7 @@ const commands = [
   {
     name: 'scanimport',
     description: '📥 Scan another server and pre-register members by nickname',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    default_member_permissions: '0',
     options: [
       { type: 5, name: 'reset', description: '🧹 Clear all existing registrations from scan servers before re-importing' }
     ]
@@ -168,6 +169,35 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
     console.log('');
     console.log('📋 Commands deployed:');
     commands.forEach(c => console.log(`   /${c.name} — ${c.description}`));
+    console.log('');
+
+    // ── Set command permissions so only super-admin can see/use high-risk commands ──
+    const restrictedCommands = ['forcesync', 'manualregister', 'manualforce', 'manualpilot', 'manualremove', 'manualremovepilot', 'cleandb', 'scanimport'];
+
+    for (const cmd of result) {
+      if (restrictedCommands.includes(cmd.name)) {
+        try {
+          await rest.put(
+            Routes.applicationCommandPermissions(CLIENT_ID, GUILD_ID, cmd.id),
+            {
+              body: {
+                permissions: [
+                  {
+                    id: SUPER_ADMIN_ID,
+                    type: 2, // USER
+                    permission: true
+                  }
+                ]
+              }
+            }
+          );
+          console.log(`🔒 /${cmd.name} — hidden from everyone except <@${SUPER_ADMIN_ID}>`);
+        } catch (permErr) {
+          console.error(`⚠️ Failed to set permissions for /${cmd.name}: ${permErr.message}`);
+        }
+      }
+    }
+
     console.log('');
     console.log('🔄 Discord may take a few seconds to update the command list.');
   } catch (error) {
