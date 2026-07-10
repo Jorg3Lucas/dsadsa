@@ -280,7 +280,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             
             const effectiveOwnerId = isPilot ? ownerIdOfThisPilot : memberId;
             const ownerData = db.users[effectiveOwnerId];
-            const isRegistered = !!(ownerData && (ownerData.registeredAt || ownerData.manual === true));
+            const isRegistered = !!(ownerData && (ownerData.registeredAt || ownerData.manual === true)) || isPilot;
 
             let inGameNick = "";
             if (ownerData) {

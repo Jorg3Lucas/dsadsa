@@ -543,6 +543,9 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
                 if (member.user.bot) continue;
                 if (!member.roles.cache.has(MEMBER_ROLE_ID)) continue;
                 if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) continue;
+                // Skip pilots — they are considered registered via their owner
+                const isPilot = Object.values(db.users || {}).some(u => u.pilotIds && u.pilotIds.includes(memberId));
+                if (isPilot) continue;
                 unregistered.push(member);
             }
     
