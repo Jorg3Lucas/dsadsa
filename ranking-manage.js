@@ -18,7 +18,7 @@ import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
 } from './ranking-constants.js';
-import { findNicknameInCache } from './ranking-cache.js';
+import { findNicknameInCache, getLocalRankingCache, levenshteinDistance, cleanNickname } from './ranking-cache.js';
 
 // ==========================================
 // 🖱️ HANDLER
@@ -383,6 +383,86 @@ export async function handleManageInteractions(interaction, db, saveLocalStorage
             );
     
             return interaction.showModal(modal);
+        }
+    
+        // ── Allied Clans: Add clan modal submit with fuzzy check ──
+        if (interaction.isModalSubmit() && interaction.customId === 'manage_allied_add_modal') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ Permission denied.', flags: 64 }).catch(() => {});
+            }
+    
+            const clanName = interaction.fields.getTextInputValue('clan_name').trim().normalize('NFC');
+            const worldId = interaction.fields.getTextInputValue('world_id');
+            const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+    
+            if (!db.config) db.config = {};
+            if (!db.config.alliedClans) db.config.alliedClans = {};
+            if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+    
+            // Check if already added (case-insensitive)
+            if (db.config.alliedClans[worldId].some(c => c.toLowerCase() === clanName.toLowerCase())) {
+                return interaction.reply({ content: `⚠️ **${clanName}** is already an allied clan for **${worldName}**.`, flags: 64 });
+            }
+    
+            // ── Fuzzy check against ranking cache ──
+            const rankingCache = getLocalRankingCache();
+            let fuzzySuggestion = null;
+    
+            if (rankingCache && rankingCache[worldId]) {
+                const clanSet = new Set();
+                for (const [, cName] of Object.entries(rankingCache[worldId])) {
+                    clanSet.add(cName);
+                }
+                const clanNames = [...clanSet];
+    
+                const cleanedInput = cleanNickname(clanName);
+    
+                if (cleanedInput.length >= 2) {
+                    let bestMatch = null;
+                    let bestScore = 0;
+                    const threshold = 0.6;
+    
+                    for (const cName of clanNames) {
+                        const cleanedClan = cleanNickname(cName);
+                        if (cleanedClan.length < 2) continue;
+    
+                        const inputChars = new Set(cleanedInput);
+                        const clanChars = new Set(cleanedClan);
+                        let commonChars = 0;
+                        for (const c of inputChars) {
+                            if (clanChars.has(c)) commonChars++;
+                        }
+                        const overlap = (2 * commonChars) / (inputChars.size + clanChars.size);
+                        if (overlap < 0.3) continue;
+    
+                        const distance = levenshteinDistance(cleanedInput, cleanedClan);
+                        const maxLen = Math.max(cleanedInput.length, cleanedClan.length);
+                        const similarity = 1 - (distance / maxLen);
+    
+                        if (similarity > bestScore) {
+                            bestScore = similarity;
+                            bestMatch = cName;
+                        }
+                    }
+    
+                    if (bestMatch && bestScore >= threshold) {
+                        fuzzySuggestion = bestMatch;
+                    }
+                }
+            }
+    
+            // Add the clan
+            db.config.alliedClans[worldId].push(clanName);
+            saveLocalStorage();
+            logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${clanName}" to ${worldName}`);
+    
+            let response = `✅ **${clanName}** added as allied clan for **${worldName}**.`;
+    
+            if (fuzzySuggestion && fuzzySuggestion.toLowerCase() !== clanName.toLowerCase()) {
+                response += `\n\n🔍 **Fuzzy suggestion:** Did you mean **${fuzzySuggestion}** instead of **${clanName}**?`;
+            }
+    
+            return interaction.reply({ content: response, flags: 64 });
         }
     
         // ── Allied Clans: Remove clan from select menu ──
