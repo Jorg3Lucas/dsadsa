@@ -70,28 +70,18 @@ function findFuzzyClanSuggestion(clanName, worldId) {
 
 // ==========================================
 // 📋 Build allied clans view — shared by all allied clan handlers
-// Returns { content, components, hasFixableSuggestion }
+// Returns { content, components }
 // ==========================================
 
-function buildAlliedClansView(clans, worldId, worldName, fixSummary) {
+function buildAlliedClansView(clans, worldId, worldName) {
     let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
-    let hasFixableSuggestion = false;
 
     if (clans.length === 0) {
         content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
     } else {
-        if (fixSummary) {
-            content += `✅ **Auto-corrected ${fixSummary.length} clan name(s):**\n${fixSummary.join('\n')}\n\n`;
-        }
         content += '**Allied Clans:**\n';
         clans.forEach((clan, i) => {
-            const suggestion = findFuzzyClanSuggestion(clan, worldId);
-            const hasExact = suggestion && suggestion.toLowerCase() === cleanNickname(clan);
-            if (suggestion && !hasExact) hasFixableSuggestion = true;
-            const fuzzyNote = (suggestion && !hasExact)
-                ? ` 🔍 Did you mean **${suggestion}**?`
-                : '';
-            content += `\n${i + 1}. **${clan}**${fuzzyNote}`;
+            content += `\n${i + 1}. **${clan}**`;
         });
     }
 
@@ -114,14 +104,9 @@ function buildAlliedClansView(clans, worldId, worldName, fixSummary) {
         new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
     ];
-    if (hasFixableSuggestion) {
-        bottomRow.unshift(
-            new ButtonBuilder().setCustomId(`manage_allied_fix_all_${worldId}`).setLabel('🔄 Fix All').setStyle(ButtonStyle.Primary)
-        );
-    }
     components.push(new ActionRowBuilder().addComponents(bottomRow));
 
-    return { content, components, hasFixableSuggestion };
+    return { content, components };
 }
 
 // ==========================================
@@ -525,45 +510,6 @@ export async function handleManageInteractions(interaction, db, saveLocalStorage
             // Refresh the world view
             const clans = db.config?.alliedClans?.[worldId] || [];
             const view = buildAlliedClansView(clans, worldId, worldName);
-            return interaction.update({ content: view.content, components: view.components }).catch(() => {});
-        }
-    
-        // ── Allied Clans: Fix All button handler ──
-        if (interaction.isButton() && interaction.customId.startsWith('manage_allied_fix_all_')) {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
-            }
-    
-            const worldId = interaction.customId.replace('manage_allied_fix_all_', '');
-            const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
-    
-            if (!db.config?.alliedClans?.[worldId]) {
-                return interaction.update({ content: '❌ No allied clans configured for this server.', components: [] }).catch(() => {});
-            }
-    
-            const clans = db.config.alliedClans[worldId];
-            let fixedCount = 0;
-            const fixedList = [];
-    
-            for (let i = 0; i < clans.length; i++) {
-                const suggestion = findFuzzyClanSuggestion(clans[i], worldId);
-                const hasExact = suggestion && suggestion.toLowerCase() === cleanNickname(clans[i]);
-                if (suggestion && !hasExact) {
-                    fixedList.push(`**${clans[i]}** → **${suggestion}**`);
-                    clans[i] = suggestion;
-                    fixedCount++;
-                }
-            }
-    
-            saveLocalStorage();
-    
-            if (fixedCount > 0) {
-                logEvent(`🔄 Admin ${interaction.user.tag} auto-corrected ${fixedCount} allied clan name(s) in ${worldName}: ${fixedList.join(', ')}`);
-            }
-    
-            // Re-render the world view using helper
-            const fixSummary = fixedCount > 0 ? fixedList : null;
-            const view = buildAlliedClansView(clans, worldId, worldName, fixSummary);
             return interaction.update({ content: view.content, components: view.components }).catch(() => {});
         }
     
