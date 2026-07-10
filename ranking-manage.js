@@ -21,6 +21,54 @@ import {
 import { findNicknameInCache, getLocalRankingCache, levenshteinDistance, cleanNickname } from './ranking-cache.js';
 
 // ==========================================
+// 🔍 Fuzzy clan matching helper
+// Returns the closest matching clan name from the ranking cache, or null
+// ==========================================
+
+function findFuzzyClanSuggestion(clanName, worldId) {
+    const rankingCache = getLocalRankingCache();
+    if (!rankingCache || !rankingCache[worldId]) return null;
+
+    const clanSet = new Set();
+    for (const [, cName] of Object.entries(rankingCache[worldId])) {
+        clanSet.add(cName);
+    }
+    const clanNames = [...clanSet];
+
+    const cleanedInput = cleanNickname(clanName);
+    if (cleanedInput.length < 2) return null;
+
+    let bestMatch = null;
+    let bestScore = 0;
+    const threshold = 0.6;
+
+    for (const cName of clanNames) {
+        const cleanedClan = cleanNickname(cName);
+        if (cleanedClan.length < 2) continue;
+
+        const inputChars = new Set(cleanedInput);
+        const clanChars = new Set(cleanedClan);
+        let commonChars = 0;
+        for (const c of inputChars) {
+            if (clanChars.has(c)) commonChars++;
+        }
+        const overlap = (2 * commonChars) / (inputChars.size + clanChars.size);
+        if (overlap < 0.3) continue;
+
+        const distance = levenshteinDistance(cleanedInput, cleanedClan);
+        const maxLen = Math.max(cleanedInput.length, cleanedClan.length);
+        const similarity = 1 - (distance / maxLen);
+
+        if (similarity > bestScore) {
+            bestScore = similarity;
+            bestMatch = cName;
+        }
+    }
+
+    return (bestMatch && bestScore >= threshold) ? bestMatch : null;
+}
+
+// ==========================================
 // 🖱️ HANDLER
 // ==========================================
 
@@ -315,12 +363,19 @@ export async function handleManageInteractions(interaction, db, saveLocalStorage
             const clans = db.config.alliedClans[worldId];
     
             let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
+            let hasFixableSuggestion = false;
             if (clans.length === 0) {
                 content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
             } else {
                 content += '**Allied Clans:**\n';
                 clans.forEach((clan, i) => {
-                    content += `\n${i + 1}. **${clan}**`;
+                    const suggestion = findFuzzyClanSuggestion(clan, worldId);
+                    const hasExact = suggestion && suggestion.toLowerCase() === cleanNickname(clan);
+                    if (suggestion && !hasExact) hasFixableSuggestion = true;
+                    const fuzzyNote = (suggestion && !hasExact)
+                        ? ` 🔍 Did you mean **${suggestion}**?`
+                        : '';
+                    content += `\n${i + 1}. **${clan}**${fuzzyNote}`;
                 });
             }
     
@@ -340,10 +395,16 @@ export async function handleManageInteractions(interaction, db, saveLocalStorage
                 ));
             }
     
-            components.push(new ActionRowBuilder().addComponents(
+            const bottomRow = [
                 new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
                 new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
-            ));
+            ];
+            if (hasFixableSuggestion) {
+                bottomRow.unshift(
+                    new ButtonBuilder().setCustomId(`manage_allied_fix_all_${worldId}`).setLabel('🔄 Fix All').setStyle(ButtonStyle.Primary)
+                );
+            }
+            components.push(new ActionRowBuilder().addComponents(bottomRow));
     
             return interaction.update({ content, components }).catch(() => {});
         }
@@ -404,52 +465,8 @@ export async function handleManageInteractions(interaction, db, saveLocalStorage
                 return interaction.reply({ content: `⚠️ **${clanName}** is already an allied clan for **${worldName}**.`, flags: 64 });
             }
     
-            // ── Fuzzy check against ranking cache ──
-            const rankingCache = getLocalRankingCache();
-            let fuzzySuggestion = null;
-    
-            if (rankingCache && rankingCache[worldId]) {
-                const clanSet = new Set();
-                for (const [, cName] of Object.entries(rankingCache[worldId])) {
-                    clanSet.add(cName);
-                }
-                const clanNames = [...clanSet];
-    
-                const cleanedInput = cleanNickname(clanName);
-    
-                if (cleanedInput.length >= 2) {
-                    let bestMatch = null;
-                    let bestScore = 0;
-                    const threshold = 0.6;
-    
-                    for (const cName of clanNames) {
-                        const cleanedClan = cleanNickname(cName);
-                        if (cleanedClan.length < 2) continue;
-    
-                        const inputChars = new Set(cleanedInput);
-                        const clanChars = new Set(cleanedClan);
-                        let commonChars = 0;
-                        for (const c of inputChars) {
-                            if (clanChars.has(c)) commonChars++;
-                        }
-                        const overlap = (2 * commonChars) / (inputChars.size + clanChars.size);
-                        if (overlap < 0.3) continue;
-    
-                        const distance = levenshteinDistance(cleanedInput, cleanedClan);
-                        const maxLen = Math.max(cleanedInput.length, cleanedClan.length);
-                        const similarity = 1 - (distance / maxLen);
-    
-                        if (similarity > bestScore) {
-                            bestScore = similarity;
-                            bestMatch = cName;
-                        }
-                    }
-    
-                    if (bestMatch && bestScore >= threshold) {
-                        fuzzySuggestion = bestMatch;
-                    }
-                }
-            }
+            // ── Fuzzy check against ranking cache (using helper) ──
+            const fuzzySuggestion = findFuzzyClanSuggestion(clanName, worldId);
     
             // Add the clan
             db.config.alliedClans[worldId].push(clanName);
@@ -489,12 +506,19 @@ export async function handleManageInteractions(interaction, db, saveLocalStorage
             // Refresh the world view
             const clans = db.config?.alliedClans?.[worldId] || [];
             let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
+            let hasFixableSuggestion = false;
             if (clans.length === 0) {
                 content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
             } else {
                 content += '**Allied Clans:**\n';
                 clans.forEach((clan, i) => {
-                    content += `\n${i + 1}. **${clan}**`;
+                    const suggestion = findFuzzyClanSuggestion(clan, worldId);
+                    const hasExact = suggestion && suggestion.toLowerCase() === cleanNickname(clan);
+                    if (suggestion && !hasExact) hasFixableSuggestion = true;
+                    const fuzzyNote = (suggestion && !hasExact)
+                        ? ` 🔍 Did you mean **${suggestion}**?`
+                        : '';
+                    content += `\n${i + 1}. **${clan}**${fuzzyNote}`;
                 });
             }
     
@@ -512,10 +536,98 @@ export async function handleManageInteractions(interaction, db, saveLocalStorage
                         .addOptions(removeOptions)
                 ));
             }
-            components.push(new ActionRowBuilder().addComponents(
+            const bottomRow = [
                 new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
                 new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
-            ));
+            ];
+            if (hasFixableSuggestion) {
+                bottomRow.unshift(
+                    new ButtonBuilder().setCustomId(`manage_allied_fix_all_${worldId}`).setLabel('🔄 Fix All').setStyle(ButtonStyle.Primary)
+                );
+            }
+            components.push(new ActionRowBuilder().addComponents(bottomRow));
+    
+            return interaction.update({ content, components }).catch(() => {});
+        }
+    
+        // ── Allied Clans: Fix All button handler ──
+        if (interaction.isButton() && interaction.customId.startsWith('manage_allied_fix_all_')) {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+            }
+    
+            const worldId = interaction.customId.replace('manage_allied_fix_all_', '');
+            const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+    
+            if (!db.config?.alliedClans?.[worldId]) {
+                return interaction.update({ content: '❌ No allied clans configured for this server.', components: [] }).catch(() => {});
+            }
+    
+            const clans = db.config.alliedClans[worldId];
+            let fixedCount = 0;
+            const fixedList = [];
+    
+            for (let i = 0; i < clans.length; i++) {
+                const suggestion = findFuzzyClanSuggestion(clans[i], worldId);
+                const hasExact = suggestion && suggestion.toLowerCase() === cleanNickname(clans[i]);
+                if (suggestion && !hasExact) {
+                    fixedList.push(`**${clans[i]}** → **${suggestion}**`);
+                    clans[i] = suggestion;
+                    fixedCount++;
+                }
+            }
+    
+            saveLocalStorage();
+    
+            if (fixedCount > 0) {
+                logEvent(`🔄 Admin ${interaction.user.tag} auto-corrected ${fixedCount} allied clan name(s) in ${worldName}: ${fixedList.join(', ')}`);
+            }
+    
+            // Re-render the world view
+            let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
+            let hasFixableSuggestion = false;
+            if (clans.length === 0) {
+                content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
+            } else {
+                if (fixedCount > 0) {
+                    content += `✅ **Auto-corrected ${fixedCount} clan name(s):**\n${fixedList.join('\n')}\n\n`;
+                }
+                content += '**Allied Clans:**\n';
+                clans.forEach((clan, i) => {
+                    const suggestion = findFuzzyClanSuggestion(clan, worldId);
+                    const hasExact = suggestion && suggestion.toLowerCase() === cleanNickname(clan);
+                    if (suggestion && !hasExact) hasFixableSuggestion = true;
+                    const fuzzyNote = (suggestion && !hasExact)
+                        ? ` 🔍 Did you mean **${suggestion}**?`
+                        : '';
+                    content += `\n${i + 1}. **${clan}**${fuzzyNote}`;
+                });
+            }
+    
+            const removeOptions = clans.map((clan, i) => ({
+                label: `🗑️ ${clan}`,
+                value: `${worldId}_${i}`
+            }));
+    
+            const components = [];
+            if (removeOptions.length > 0) {
+                components.push(new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('manage_allied_remove')
+                        .setPlaceholder('Select a clan to remove...')
+                        .addOptions(removeOptions)
+                ));
+            }
+            const bottomRow = [
+                new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
+            ];
+            if (hasFixableSuggestion) {
+                bottomRow.unshift(
+                    new ButtonBuilder().setCustomId(`manage_allied_fix_all_${worldId}`).setLabel('🔄 Fix All').setStyle(ButtonStyle.Primary)
+                );
+            }
+            components.push(new ActionRowBuilder().addComponents(bottomRow));
     
             return interaction.update({ content, components }).catch(() => {});
         }
