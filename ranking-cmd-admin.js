@@ -24,7 +24,9 @@ import {
     adminChannelId,
     APPROVER_ROLE_IDS,
     WELCOME_PANEL_MESSAGE,
-    PRE_REGISTER_MAX_AGE_MS
+    PRE_REGISTER_MAX_AGE_MS,
+    ORIGIN_SERVER_ID,
+    SECONDARY_SERVER_ID
 } from './ranking-constants.js';
 import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, levenshteinDistance, cleanNickname } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';

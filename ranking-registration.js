@@ -577,36 +577,7 @@ export async function handleRegistrationInteractions(interaction, db, saveLocalS
     
             logEvent(`👑 ${interaction.user.tag} submitted owner registration for "${nickname}" — awaiting admin approval`);
             return interaction.editReply('✅ **Registration sent for approval!** An administrator will review it shortly.');
-        }
-    
-        // ── Allied Clans: Add Clan Modal Submit ──
-        if (interaction.isModalSubmit() && interaction.customId === 'manage_allied_add_modal') {
-            await interaction.deferReply({ flags: 64 });
-    
-            const clanName = interaction.fields.getTextInputValue('clan_name').trim();
-            const worldId = interaction.fields.getTextInputValue('world_id').trim();
-            const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
-    
-            if (!db.config) db.config = {};
-            if (!db.config.alliedClans) db.config.alliedClans = {};
-            if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
-    
-            const alreadyExists = db.config.alliedClans[worldId].some(
-                c => c.toLowerCase() === clanName.toLowerCase()
-            );
-    
-            if (alreadyExists) {
-                return interaction.editReply(`❌ **${clanName}** is already configured as an allied clan for **${worldName}**.`);
-            }
-    
-            db.config.alliedClans[worldId].push(clanName);
-            saveLocalStorage();
-    
-            logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${clanName}" to ${worldName}`);
-            return interaction.editReply(`✅ **${clanName}** added as an allied clan for **${worldName}**!`);
-        }
-    
-        // ── Pilot Registration Modal ──
+        }        // ── Pilot Registration Modal ──
         if (interaction.isModalSubmit() && interaction.customId === 'register_pilot_modal') {
             await interaction.deferReply({ flags: 64 });
     
