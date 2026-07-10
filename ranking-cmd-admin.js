@@ -387,7 +387,6 @@ export async function handleAdminCommands(interaction, db, saveLocalStorage, log
             }
     
             saveLocalStorage();
-            await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
             if (duplicatesRemoved.length === 0) return interaction.editReply(getMsg('ranking.responses.cleandb.noDuplicates'));
             return interaction.editReply(getMsg('ranking.responses.cleandb.success', { list: duplicatesRemoved.map(d => `• ${d}`).join('\n') }));
         }
