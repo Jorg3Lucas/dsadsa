@@ -11,6 +11,22 @@ import {
     handleMir4Interactions,
     runDailySynchronization
 } from './ranking_sync.js';
+import { handleOwnerRegistrationModal } from './ranking-registration.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './ranking-welcome.js';
+import { handleApproveOwner, handleRejectOwner, handleApprovePilot } from './ranking-approvals.js';
+import { handlePilotRegistrationModal, handlePilotRemoveSelect } from './ranking-pilot.js';
+import { handleConfirmAction } from './ranking-confirmations.js';
+import { handleRankingCommand } from './ranking-commands.js';
+import {
+    handleManageUserPage,
+    handleManageAction,
+    handleManagePilotRemove,
+    handleManageAllied,
+    handleManageAlliedWorld,
+    handleManageAlliedAdd,
+    handleManageAlliedRemove,
+    handleManageNav
+} from './ranking-management.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
 import { DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals } from './ranking-constants.js';
 
@@ -137,35 +153,98 @@ client.on('interactionCreate', async (interaction) => {
     try {
         // A. SLASH COMMANDS (/)
         if (interaction.isCommand()) {
+            const result = await handleRankingCommand(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            // Fallback: if command wasn't handled by new module, try giant file (e.g. scanimport)
+            if (result !== false) return;
             return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
         }
 
         // B. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
-            const rankingMenus = ['select_pilot_to_remove', 'manage_'];
-            const isRankingMenu = rankingMenus.some(id => interaction.customId.startsWith(id));
+            // Pilot removal (user removing their own pilot)
+            if (interaction.customId === 'select_pilot_to_remove') {
+                return await handlePilotRemoveSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
 
-            if (isRankingMenu) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            // Manage menu routing
+            if (interaction.customId.startsWith('manage_user_page_')) {
+                return await handleManageUserPage(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('manage_action_')) {
+                return await handleManageAction(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('manage_pilot_')) {
+                return await handleManagePilotRemove(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'manage_allied_world') {
+                return await handleManageAlliedWorld(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'manage_allied_remove') {
+                return await handleManageAlliedRemove(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
         }
 
         // C. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'register_owner_modal' ||
-                interaction.customId === 'register_pilot_modal' ||
-                interaction.customId === 'manage_allied_add_modal' ||
-                interaction.customId.startsWith('reject_owner_')) {
+            if (interaction.customId === 'register_owner_modal') {
+                return await handleOwnerRegistrationModal(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'register_pilot_modal') {
+                return await handlePilotRegistrationModal(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('reject_owner_')) {
+                return await handleRejectOwner(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'manage_allied_add_modal') {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
+            // Fallback for any other modal submits not caught above
+            return;
         }
 
         // D. BUTTON CLICKS
         if (interaction.isButton()) {
-            if (interaction.customId.startsWith('confirm-manual') ||
-                interaction.customId.startsWith('manage_') ||
-                interaction.customId.startsWith('welcome_') ||
-                interaction.customId.startsWith('approve_')) {
+            // Welcome buttons (register owner / pilot)
+            if (interaction.customId === 'welcome_register_owner') {
+                return handleWelcomeRegisterOwner(interaction);
+            }
+            if (interaction.customId === 'welcome_register_pilot') {
+                return handleWelcomeRegisterPilot(interaction);
+            }
+
+            // Admin approval buttons (approve/reject owner registration)
+            if (interaction.customId.startsWith('approve_owner_')) {
+                return await handleApproveOwner(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Pilot approval buttons (owner approves/rejects via DM)
+            if (interaction.customId.startsWith('approve_pilot_')) {
+                return await handleApprovePilot(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Confirmation buttons (confirm-manualremove, confirm-manualregister, etc.)
+            if (interaction.customId.startsWith('confirm-')) {
+                return await handleConfirmAction(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Manage navigation buttons (back, prev, next)
+            if (interaction.customId === 'manage_back' ||
+                interaction.customId === 'manage_allied_back' ||
+                interaction.customId.startsWith('manage_user_prev_') ||
+                interaction.customId.startsWith('manage_user_next_')) {
+                return await handleManageNav(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Manage: Allied clans buttons
+            if (interaction.customId === 'manage_allied') {
+                return await handleManageAllied(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('manage_allied_add_')) {
+                return await handleManageAlliedAdd(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Fallback: any remaining manage_ prefixed button
+            if (interaction.customId.startsWith('manage_')) {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
         }
