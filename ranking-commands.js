@@ -1,101 +1,724 @@
-import { PermissionFlagsBits } from 'discord.js';
+import {
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    PermissionFlagsBits
+} from 'discord.js';
 import { getMsg } from './lang.js';
+import {
+    MEMBER_ROLE_ID,
+    WORLD_IDS,
+    confirmationCache,
+    pendingRegistrations,
+    pendingPilotApprovals,
+    adminChannelId,
+    APPROVER_ROLE_IDS,
+    WELCOME_PANEL_MESSAGE
+} from './ranking-constants.js';
+import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, cleanNickname, levenshteinDistance } from './ranking-cache.js';
+import { runDailySynchronization } from './ranking-sync-engine.js';
 
 // ==========================================
-// 📜 SLASH COMMANDS REGISTRATION
+// 🎯 SLASH COMMAND HANDLERS
 // ==========================================
+// Extracted from ranking-handlers.js
+// Note: scanimport and scanimport_status remain in the giant file
 
-export async function registerMir4SlashCommands(guild) {
-    try {
-        await guild.commands.set([
-            // ── Ranking commands (registration via welcome buttons only) ──
-            {
-                name: 'removepilot',
-                description: getMsg('ranking.commands.removepilot.description')
-            },
-            { 
-                name: 'forcesync', 
-                description: getMsg('ranking.commands.forcesync.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'manualregister',
-                description: getMsg('ranking.commands.manualregister.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'member', description: getMsg('ranking.commands.manualregister.options.member'), required: true },
-                    { type: 3, name: 'nickname', description: getMsg('ranking.commands.manualregister.options.nickname'), required: true }
-                ]
-            },
-            {
-                name: 'manualpilot',
-                description: getMsg('ranking.commands.manualpilot.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'owner', description: getMsg('ranking.commands.manualpilot.options.owner'), required: true },
-                    { type: 6, name: 'pilot', description: getMsg('ranking.commands.manualpilot.options.pilot'), required: true }
-                ]
-            },
-            {
-                name: 'cleandb',
-                description: getMsg('ranking.commands.cleandb.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'manage',
-                description: '🛠️ Bot Management Panel'
-            },
-            {
-                name: 'manualremove',
-                description: getMsg('ranking.commands.manualremove.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [{ type: 6, name: 'member', description: getMsg('ranking.commands.manualremove.options.member'), required: true }]
-            },
-            {
-                name: 'manualremovepilot',
-                description: getMsg('ranking.commands.manualremovepilot.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'owner', description: getMsg('ranking.commands.manualremovepilot.options.owner'), required: true },
-                    { type: 6, name: 'pilot', description: getMsg('ranking.commands.manualremovepilot.options.pilot'), required: true }
-                ]
-            },
-            {
-                name: 'sendpanel',
-                description: getMsg('ranking.commands.sendpanel.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'listunregistered',
-                description: getMsg('ranking.commands.listunregistered.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 5, name: 'notify', description: 'Send a DM to each unregistered member asking them to register (5s delay each)' }
-                ]
-            },
-            {
-                name: 'pending',
-                description: getMsg('ranking.commands.pending.description'),
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'scanimport',
-                description: '📥 Scan another server and pre-register members by nickname',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 5, name: 'reset', description: '🧹 Clear all existing registrations from scan servers before re-importing' }
-                ]
-            },
-            {
-                name: 'scanimport_status',
-                description: '📊 Show pre-registration status and auto-convert eligible members',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'elderguide',
-                description: '📋 Guide: how to approve/reject owner registrations'
-            },
-        ]);
-        console.log(getMsg('ranking.logs.commandsRegistered'));
-    } catch (error) { console.error(getMsg('ranking.logs.commandsError'), error); }
+export async function handleRankingCommand(interaction, db, saveLocalStorage, logEvent) {
+    const { commandName, options, user, guild } = interaction;
+
+    // ── removepilot ──
+    if (commandName === 'removepilot') {
+        const userProfile = db.users[user.id];
+        const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
+
+        if (!isActuallyRegistered || !userProfile.pilotIds || userProfile.pilotIds.length === 0) {
+            return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), flags: 64 });
+        }
+
+        const menuOptions = [];
+        for (const pilotId of userProfile.pilotIds) {
+            const memberObj = await guild.members.fetch(pilotId).catch(() => null);
+            const pilotTag = memberObj ? memberObj.user.tag : `Disconnected User (${pilotId})`;
+            const pilotNick = memberObj ? (memberObj.nickname || memberObj.user.username) : 'Unknown';
+
+            menuOptions.push({
+                label: pilotTag,
+                description: `${pilotNick} - ${getMsg('ranking.responses.removepilot.optionDescription')}`,
+                value: pilotId
+            });
+        }
+
+        const pilotMenu = new StringSelectMenuBuilder()
+            .setCustomId('select_pilot_to_remove')
+            .setPlaceholder(getMsg('ranking.responses.removepilot.menuPlaceholder'))
+            .addOptions(menuOptions);
+
+        const row = new ActionRowBuilder().addComponents(pilotMenu);
+
+        return interaction.reply({
+            content: getMsg('ranking.responses.removepilot.menuContent'),
+            components: [row],
+            flags: 64
+        });
+    }
+
+    // ── forcesync ──
+    if (commandName === 'forcesync') {
+        await interaction.deferReply({ flags: 64 });
+        logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
+        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
+
+        // Auto-correct wrong nicknames using fuzzy matching
+        const rankingCache = getLocalRankingCache();
+        let fuzzyCorrected = 0;
+        const correctedList = [];
+
+        if (rankingCache) {
+            const pilotIdSet = new Set();
+            for (const [, data] of Object.entries(db.users || {})) {
+                if (data.pilotIds && data.pilotIds.length > 0) {
+                    for (const pid of data.pilotIds) {
+                        pilotIdSet.add(pid);
+                    }
+                }
+            }
+
+            for (const [memberId, userData] of Object.entries(db.users || {})) {
+                if (pilotIdSet.has(memberId)) continue;
+                if (!userData.nickname) continue;
+
+                const currentNick = userData.nickname;
+                const exactHit = findNicknameInCache(currentNick, rankingCache);
+                if (exactHit) continue;
+
+                const fuzzyHit = findClosestNicknameInCache(currentNick, rankingCache);
+                if (!fuzzyHit || fuzzyHit.nickname.toLowerCase() === currentNick.toLowerCase()) continue;
+
+                const oldNick = currentNick;
+                const newNick = fuzzyHit.nickname;
+                const serverName = WORLD_IDS[fuzzyHit.worldId] || fuzzyHit.worldId;
+
+                db.users[memberId].nickname = newNick;
+
+                const targetMember = await guild.members.fetch(memberId).catch(() => null);
+                if (targetMember) {
+                    await targetMember.setNickname(newNick).catch(() => {});
+                }
+
+                fuzzyCorrected++;
+                correctedList.push(`${oldNick} → ${newNick} (${serverName})`);
+                logEvent(`🔄 [ForceSync] Fuzzy corrected "${oldNick}" → "${newNick}" for user ${memberId}`);
+            }
+
+            if (fuzzyCorrected > 0) {
+                saveLocalStorage();
+            }
+        }
+
+        let responseMsg = getMsg('ranking.responses.forcesync.success') || '✅ **Force sync completed!**';
+        if (fuzzyCorrected > 0) {
+            const details = correctedList.slice(0, 10).join('\n');
+            responseMsg += `\n\n🔍 **Fuzzy auto-corrected ${fuzzyCorrected} nickname(s):**\n${details}`;
+            if (correctedList.length > 10) {
+                responseMsg += `\n... and ${correctedList.length - 10} more`;
+            }
+        }
+
+        return interaction.editReply(responseMsg);
+    }
+
+    // ── manualregister ──
+    if (commandName === 'manualregister') {
+        const targetMember = options.getMember('member');
+        const nickname = options.getString('nickname').trim().normalize('NFC');
+
+        let cacheHit = findNicknameInCache(nickname);
+
+        let fuzzyManualNick = null;
+        if (!cacheHit) {
+            const rankingCache = getLocalRankingCache();
+            if (rankingCache) {
+                const fuzzyMatch = findClosestNicknameInCache(nickname, rankingCache);
+                if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== nickname.toLowerCase()) {
+                    fuzzyManualNick = fuzzyMatch.nickname;
+                    cacheHit = fuzzyMatch;
+                    logEvent(`👑 Admin ${interaction.user.tag} — fuzzy corrected "${nickname}" → "${fuzzyMatch.nickname}" in /manualregister`);
+                }
+            }
+        }
+
+        if (cacheHit) {
+            const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
+
+            const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
+            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+
+            confirmationCache[`${user.id}-manualregister`] = {
+                targetId: targetMember.id,
+                nickname: cacheHit.nickname,
+                clan: cacheHit.clanName,
+                worldId: cacheHit.worldId,
+                needsTempApproval: !inAlliedClan
+            };
+
+            const statusLine = inAlliedClan
+                ? `🌍 Server: **${serverName}** — ✅ Allied clan`
+                : `🌍 Server: **${serverName}** (${cacheHit.clanName}) — ⏳ Will be temporary (3 days)`;
+
+            const fuzzyManualNote = fuzzyManualNick
+                ? `\n🔍 **Fuzzy match:** "${nickname}" → "${fuzzyManualNick}"`
+                : '';
+            return interaction.reply({
+                content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}`,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                    )
+                ],
+                flags: 64
+            });
+        }
+
+        // Not found in ranking — register as temporary (3 days)
+        const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+
+        db.users[targetMember.id] = {
+            ...db.users[targetMember.id],
+            nickname: nickname,
+            registeredAt: new Date().toISOString(),
+            tempUntil: threeDaysFromNow.toISOString(),
+            tempRegisteredAt: new Date().toISOString()
+        };
+        if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
+        saveLocalStorage();
+
+        await targetMember.setNickname(nickname).catch(() => {});
+        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        }
+
+        logEvent(`👑 Admin ${interaction.user.tag} manually registered ${targetMember.id} as ${nickname} (temporary — not in ranking)`);
+
+        return interaction.reply({
+            content: `⏳ **${nickname}** registered as temporary (3 days). They will be converted to permanent once found in an allied clan in the ranking.`,
+            flags: 64
+        });
+    }
+
+    // ── manualpilot ──
+    if (commandName === 'manualpilot') {
+        const ownerMember = options.getMember('owner');
+        const pilotMember = options.getMember('pilot');
+
+        if (!db.users[ownerMember.id]) {
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.ownerNotRegistered', { displayName: ownerMember.displayName }), flags: 64 });
+        }
+        if (ownerMember.id === pilotMember.id) {
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.selfPilot'), flags: 64 });
+        }
+
+        if (!db.users[ownerMember.id].pilotIds) db.users[ownerMember.id].pilotIds = [];
+
+        if (db.users[ownerMember.id].pilotIds.length >= 4) {
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.limitReached'), flags: 64 });
+        }
+
+        if (db.users[ownerMember.id].pilotIds.includes(pilotMember.id)) {
+            return interaction.reply({ content: getMsg('ranking.responses.manualpilot.alreadyLinked'), flags: 64 });
+        }
+
+        confirmationCache[`${user.id}-manualpilot`] = {
+            ownerId: ownerMember.id,
+            ownerName: ownerMember.displayName,
+            pilotId: pilotMember.id,
+            pilotName: pilotMember.displayName,
+            ownerNick: db.users[ownerMember.id].nickname.trim().normalize('NFC')
+        };
+
+        return interaction.reply({
+            content: getMsg('ranking.responses.manualpilot.confirm', { ownerDisplay: ownerMember.displayName, pilotDisplay: pilotMember.displayName }),
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-manualpilot-yes').setLabel('✅ Yes, link').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('confirm-manualpilot-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
+            flags: 64
+        });
+    }
+
+    // ── manualremovepilot ──
+    if (commandName === 'manualremovepilot') {
+        const ownerMember = options.getMember('owner');
+        const pilotMember = options.getMember('pilot');
+
+        if (!db.users[ownerMember.id]) {
+            return interaction.reply({ content: getMsg('ranking.responses.manualremovepilot.ownerNotRegistered', { displayName: ownerMember.displayName }), flags: 64 });
+        }
+
+        if (!db.users[ownerMember.id].pilotIds || !db.users[ownerMember.id].pilotIds.includes(pilotMember.id)) {
+            return interaction.reply({ content: getMsg('ranking.responses.manualremovepilot.notLinked', { pilotDisplay: pilotMember.displayName }), flags: 64 });
+        }
+
+        confirmationCache[`${user.id}-manualremovepilot`] = {
+            ownerId: ownerMember.id,
+            ownerName: ownerMember.displayName,
+            pilotId: pilotMember.id,
+            pilotName: pilotMember.displayName
+        };
+
+        return interaction.reply({
+            content: getMsg('ranking.responses.manualremovepilot.confirm', { ownerDisplay: ownerMember.displayName, pilotDisplay: pilotMember.displayName }),
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-manualremovepilot-yes').setLabel('✅ Yes, remove').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('confirm-manualremovepilot-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
+            flags: 64
+        });
+    }
+
+    // ── cleandb ──
+    if (commandName === 'cleandb') {
+        await interaction.deferReply({ flags: 64 });
+        const seenNicknames = {};
+        const duplicatesRemoved = [];
+
+        for (const [memberId, userData] of Object.entries(db.users)) {
+            const cleanNick = userData.nickname.trim().normalize('NFC').toLowerCase();
+            if (!seenNicknames[cleanNick]) seenNicknames[cleanNick] = [];
+            seenNicknames[cleanNick].push({ id: memberId, ...userData });
+        }
+
+        for (const [cleanNick, userList] of Object.entries(seenNicknames)) {
+            if (userList.length > 1) {
+                let realOwnerId = null;
+                for (const u of userList) {
+                    const member = await guild.members.fetch(u.id).catch(() => null);
+                    if (member) {
+                        const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
+                        if (!currentNick.endsWith(' - Pilot')) { realOwnerId = u.id; break; }
+                    }
+                }
+                if (!realOwnerId) {
+                    userList.sort((a, b) => new Date(a.registeredAt) - new Date(b.registeredAt));
+                    realOwnerId = userList[0].id;
+                }
+                for (const u of userList) {
+                    if (u.id !== realOwnerId) {
+                        duplicatesRemoved.push(`${u.nickname} (ID: ${u.id})`);
+                        delete db.users[u.id];
+                    }
+                }
+            }
+        }
+
+        saveLocalStorage();
+        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
+        if (duplicatesRemoved.length === 0) return interaction.editReply(getMsg('ranking.responses.cleandb.noDuplicates'));
+        return interaction.editReply(getMsg('ranking.responses.cleandb.success', { list: duplicatesRemoved.map(d => `• ${d}`).join('\n') }));
+    }
+
+    // ── manage (/manage slash command) ──
+    if (commandName === 'manage') {
+        const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
+        if (userEntries.length === 0) {
+            return interaction.reply({ content: getMsg('ranking.responses.manage.noUsers'), flags: 64 });
+        }
+
+        const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
+        const PAGE_SIZE = 25;
+        const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+        const page = 0;
+        const pageItems = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+        const selectOptions = pageItems.map(([id, data]) => ({
+            label: data.nickname.substring(0, 100),
+            description: `${data.tempUntil ? '⏳ Temp' : '✅ Perm'} | ${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
+            value: id
+        }));
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`manage_user_page_${page}`)
+            .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
+            .addOptions(selectOptions);
+
+        const components = [new ActionRowBuilder().addComponents(selectMenu)];
+
+        if (totalPages > 1) {
+            const navRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('manage_user_prev_0').setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(true),
+                new ButtonBuilder().setCustomId('manage_user_next_0').setLabel('Next ▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
+            );
+            components.push(navRow);
+        }
+
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary)
+        ));
+
+        return interaction.reply({
+            content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),
+            components,
+            flags: 64
+        });
+    }
+
+    // ── manualremove ──
+    if (commandName === 'manualremove') {
+        const targetMember = options.getMember('member');
+
+        if (!db.users[targetMember.id]) return interaction.reply({ content: getMsg('ranking.responses.manualremove.noRegistration'), flags: 64 });
+
+        confirmationCache[`${user.id}-manualremove`] = {
+            targetId: targetMember.id,
+            targetName: targetMember.displayName
+        };
+
+        return interaction.reply({
+            content: getMsg('ranking.responses.manualremove.confirm', { username: targetMember.displayName }),
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-manualremove-yes').setLabel('✅ Yes, remove').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('confirm-manualremove-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
+            flags: 64
+        });
+    }
+
+    // ── sendpanel ──
+    if (commandName === 'sendpanel') {
+        await interaction.deferReply({ flags: 64 });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('welcome_register_owner')
+                .setLabel('👑 Register as Owner')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('welcome_register_pilot')
+                .setLabel('✈️ Register as Pilot')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });
+
+        if (!db.config) db.config = {};
+        db.config.panelChannelId = interaction.channelId;
+        db.config.panelMessageId = panelMessage.id;
+        saveLocalStorage();
+
+        logEvent(`📋 Admin ${interaction.user.tag} sent registration panel in #${interaction.channel.name}`);
+        return interaction.editReply('✅ **Registration panel sent!**');
+    }
+
+    // ── listunregistered ──
+    if (commandName === 'listunregistered') {
+        await interaction.deferReply({ flags: 64 });
+
+        const doNotify = options.getBoolean('notify') || false;
+        const REGISTRATION_CHANNEL_ID = '1524296969521070120';
+
+        const allMembers = await guild.members.fetch().catch(() => null);
+        if (!allMembers || allMembers.size === 0) {
+            return interaction.editReply('❌ Could not fetch guild members.');
+        }
+
+        const unregistered = [];
+        for (const [memberId, member] of allMembers) {
+            if (member.user.bot) continue;
+            if (!member.roles.cache.has(MEMBER_ROLE_ID)) continue;
+            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) continue;
+            unregistered.push(member);
+        }
+
+        if (unregistered.length === 0) {
+            logEvent(`📋 Admin ${interaction.user.tag} checked unregistered members — none found`);
+            return interaction.editReply('✅ **All members with the role are registered!** No unregistered members found.');
+        }
+
+        const listLines = unregistered.map((m, i) => `${i + 1}. ${m.toString()} — ${m.user.tag}`);
+        let report = `📋 **Unregistered Members — ${unregistered.length} total**\n\n`;
+        report += listLines.join('\n');
+
+        if (report.length > 1900) {
+            report = `📋 **Unregistered Members — ${unregistered.length} total**\n\n`;
+            report += listLines.slice(0, 30).join('\n');
+            report += `\n\n... and ${unregistered.length - 30} more`;
+        }
+
+        if (doNotify) {
+            report += `\n\n✉️ **Sending DMs to ${unregistered.length} members...**`;
+            await interaction.editReply(report);
+
+            let sent = 0;
+            let failed = 0;
+            logEvent(`📋 Admin ${interaction.user.tag} started sending DMs to ${unregistered.length} unregistered members...`);
+            for (let i = 0; i < unregistered.length; i++) {
+                const member = unregistered[i];
+                try {
+                    await member.send(`👋 Hey **${member.displayName}**, you currently have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀`);
+                    sent++;
+                    logEvent(`✅ DM sent to ${member.user.tag} (${member.id}) — ${sent}/${unregistered.length}`);
+                } catch (e) {
+                    failed++;
+                    logEvent(`❌ DM failed for ${member.user.tag} (${member.id}) — ${e.message}`);
+                }
+                if (i < unregistered.length - 1) {
+                    await new Promise(r => setTimeout(r, 5000));
+                }
+            }
+
+            logEvent(`📋 Admin ${interaction.user.tag} finished notifying — ${sent} sent, ${failed} failed`);
+
+            if (adminChannelId) {
+                const adminCh = interaction.guild.channels.cache.get(adminChannelId);
+                if (adminCh) {
+                    const summary = `📋 **Bulk DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total unregistered:** ${unregistered.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('en-US')}`;
+                    await adminCh.send({ content: summary }).catch(() => {});
+                }
+            }
+
+            return interaction.editReply(`📋 **Unregistered Members — ${unregistered.length} total**\n\n✉️ DMs sent: **${sent}** ✅\n❌ Failed: **${failed}**`);
+        }
+
+        logEvent(`📋 Admin ${interaction.user.tag} listed ${unregistered.length} unregistered member(s)`);
+
+        if (adminChannelId) {
+            const adminCh = interaction.guild.channels.cache.get(adminChannelId);
+            if (adminCh) {
+                const summary = `📋 **Unregistered Members Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total unregistered:** ${unregistered.length}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`;
+                await adminCh.send({ content: summary }).catch(() => {});
+            }
+        }
+
+        return interaction.editReply(report);
+    }
+
+    // ── pending ──
+    if (commandName === 'pending') {
+        await interaction.deferReply({ flags: 64 });
+
+        const ownerEntries = Object.entries(pendingRegistrations);
+        const pilotEntries = Object.entries(pendingPilotApprovals);
+
+        if (ownerEntries.length === 0 && pilotEntries.length === 0) {
+            return interaction.editReply('✅ **No pending registration requests.**');
+        }
+
+        let report = `⏳ **Pending Registrations**\n\n`;
+        const rankingCache = getLocalRankingCache();
+        let panelsRestored = 0;
+
+        // ── Owner registrations ──
+        if (ownerEntries.length > 0) {
+            report += `👑 **Owner Registrations (${ownerEntries.length})**\n`;
+            for (const [userId, pending] of ownerEntries) {
+                const member = await guild.members.fetch(userId).catch(() => null);
+                const userTag = member ? member.toString() : `<@${userId}>`;
+                const hoursLeft = pending.timestamp
+                    ? ((Date.now() - pending.timestamp) / (1000 * 60 * 60)).toFixed(1)
+                    : '?';
+                const expiresIn = pending.timestamp
+                    ? `${Math.max(0, 24 - hoursLeft).toFixed(1)}h`
+                    : 'Unknown';
+                const hasMessage = pending.channelId && pending.messageId ? '✅' : '❌';
+                let line = `\n${userTag} — **${pending.nickname}**\n`;
+                line += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
+
+                const cacheHit = findNicknameInCache(pending.nickname);
+                if (!cacheHit && rankingCache) {
+                    const fuzzyMatch = findClosestNicknameInCache(pending.nickname, rankingCache);
+                    if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== pending.nickname.toLowerCase()) {
+                        line += `   🔍 **Fuzzy suggestion:** "${pending.nickname}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})\n`;
+                    }
+                }
+
+                report += line;
+
+                // Re-send admin panel
+                if (adminChannelId) {
+                    const adminChannel = interaction.guild.channels.cache.get(adminChannelId);
+                    if (adminChannel) {
+                        let rankingStatus = '❌ Not found in ranking';
+                        let alliedClanStatus = '❌ Not in allied clan';
+                        let fuzzyNote = '';
+
+                        const freshCacheHit = findNicknameInCache(pending.nickname) ||
+                            (rankingCache ? findClosestNicknameInCache(pending.nickname, rankingCache) : null);
+
+                        if (freshCacheHit) {
+                            const serverName = WORLD_IDS[freshCacheHit.worldId] || `World ${freshCacheHit.worldId}`;
+                            rankingStatus = `✅ Found — ${serverName} (${freshCacheHit.clanName})`;
+                            if (freshCacheHit.nickname.toLowerCase() !== pending.nickname.toLowerCase()) {
+                                fuzzyNote = `\n🔍 **Fuzzy match:** "${pending.nickname}" → "${freshCacheHit.nickname}"`;
+                            }
+                            const worldAlliedClans = db.config?.alliedClans?.[freshCacheHit.worldId];
+                            if (worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === freshCacheHit.clanName.toLowerCase())) {
+                                alliedClanStatus = '✅ Yes — Allied clan';
+                            }
+                        }
+
+                        const isMissingRankingOrAllied = !freshCacheHit || alliedClanStatus === '❌ Not in allied clan';
+
+                        const approveButtons = [
+                            new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
+                        ];
+
+                        if (isMissingRankingOrAllied) {
+                            approveButtons.push(
+                                new ButtonBuilder().setCustomId(`approve_owner_${userId}-temp`).setLabel('⏳ Approve Temporarily (3 days)').setStyle(ButtonStyle.Primary)
+                            );
+                        }
+
+                        approveButtons.push(
+                            new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+                        );
+
+                        try {
+                            const adminMsg = await adminChannel.send({
+                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${pending.nickname}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+                                components: [
+                                    new ActionRowBuilder().addComponents(approveButtons)
+                                ]
+                            });
+
+                            pending.channelId = adminChannel.id;
+                            pending.messageId = adminMsg.id;
+                            saveLocalStorage();
+                            panelsRestored++;
+                            logEvent(`📤 [Pending] Re-sent admin panel for ${userId} (${pending.nickname})`);
+                        } catch (e) {
+                            logEvent(`⚠️ [Pending] Failed to re-send admin panel for ${userId}: ${e.message}`);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Pilot approvals ──
+        if (pilotEntries.length > 0) {
+            if (ownerEntries.length > 0) report += '\n';
+            report += `✈️ **Pilot Approvals (${pilotEntries.length})**\n`;
+
+            const pilotIdSet = new Set();
+            for (const [, data] of Object.entries(db.users || {})) {
+                if (data.pilotIds && data.pilotIds.length > 0) {
+                    for (const pid of data.pilotIds) {
+                        pilotIdSet.add(pid);
+                    }
+                }
+            }
+
+            for (const [pilotId, pending] of pilotEntries) {
+                const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
+                const pilotTag = pilotMember ? pilotMember.toString() : `<@${pilotId}>`;
+                const hoursLeft = pending.timestamp
+                    ? ((Date.now() - pending.timestamp) / (1000 * 60 * 60)).toFixed(1)
+                    : '?';
+                const expiresIn = pending.timestamp
+                    ? `${Math.max(0, 24 - hoursLeft).toFixed(1)}h`
+                    : 'Unknown';
+
+                const ownerMatch = Object.entries(db.users || {}).find(([id, data]) =>
+                    data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === pending.ownerNick.toLowerCase()
+                );
+
+                let line = `\n${pilotTag} → Owner **${pending.ownerNick}**\n`;
+                line += `   ⏰ Expires in: ${expiresIn}\n`;
+
+                if (!ownerMatch) {
+                    const cleanedInput = cleanNickname(pending.ownerNick);
+                    if (cleanedInput.length >= 2) {
+                        let bestMatch = null;
+                        let bestScore = 0;
+
+                        for (const [id, data] of Object.entries(db.users || {})) {
+                            if (!data.nickname) continue;
+                            if (pilotIdSet.has(id)) continue;
+                            const cleanedNick = cleanNickname(data.nickname);
+                            if (cleanedNick.length < 2) continue;
+
+                            const inputChars = new Set(cleanedInput);
+                            const nickChars = new Set(cleanedNick);
+                            let commonChars = 0;
+                            for (const c of inputChars) {
+                                if (nickChars.has(c)) commonChars++;
+                            }
+                            const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+                            if (overlap < 0.3) continue;
+
+                            const distance = levenshteinDistance(cleanedInput, cleanedNick);
+                            const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+                            const similarity = 1 - (distance / maxLen);
+
+                            if (similarity > bestScore && similarity >= 0.55) {
+                                bestScore = similarity;
+                                bestMatch = data.nickname;
+                            }
+                        }
+
+                        if (bestMatch) {
+                            line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${bestMatch}"\n`;
+                        }
+                    }
+                }
+
+                report += line;
+            }
+        }
+
+        if (panelsRestored > 0) {
+            report += `\n📤 **Re-sent ${panelsRestored} admin panel(s) for review.**`;
+        }
+
+        if (report.length > 1900) {
+            report = report.substring(0, 1900) + '\n\n... (truncated)';
+        }
+
+        logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots, ${panelsRestored} panels restored)`);
+        return interaction.editReply(report);
+    }
+
+    // ── elderguide ──
+    if (commandName === 'elderguide') {
+        const isApprover = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+            interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+
+        if (!isApprover) {
+            return interaction.reply({ content: '❌ You do not have permission to view this guide.', flags: 64 });
+        }
+
+        const guide = `📋 **Elder Guide**\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `📩 **1. How approvals appear**\n\n` +
+            `When someone clicks **👑 Register as Owner**, a message appears in the admin channel with the user info, ranking status, and allied clan status.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `✅ **2. Approve (permanent)**\n\n` +
+            `Click **✅ Approve** when the nickname is in the ranking AND in an allied clan. → Permanent role + nickname set automatically.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `⏳ **3. Approve Temporarily (3 days)**\n\n` +
+            `Click **⏳ Approve Temporarily** when NOT in ranking or NOT in allied clan yet. → Temporary role (3 days). Auto-converts to permanent once found in an allied clan during daily sync.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `❌ **4. Reject with reason**\n\n` +
+            `Click **❌ Reject** → write the reason. The user gets a DM explaining why. Always write a clear reason so the user can fix it.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `✈️ **5. Pilot Registration**\n\n` +
+            `When someone clicks **✈️ Register as Pilot**, the bot DMs the owner to approve/reject directly. Elders do NOT approve pilots.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `⏰ **6. Expiration**\n\n` +
+            `Pending approvals expire after **24h**. The message updates showing "expired". User must re-submit.\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `❓ Need help? Contact an Administrator.`;
+
+        return interaction.reply({ content: guide });
+    }
+
+    // ── scanimport & scanimport_status still in giant file ──
+    return false;
 }
