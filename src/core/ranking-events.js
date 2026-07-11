@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
 import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, WORLD_IDS, PENDING_MAX_AGE_MS } from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
 // ==========================================
