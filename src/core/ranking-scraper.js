@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { saveRankingCache, getLocalRankingCache } from './ranking-cache.js';
 import { WORLD_IDS } from './ranking-constants.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 
 // ==========================================
 // 🌐 WEB SCRAPING (MIR4 Official Ranking)

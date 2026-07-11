@@ -2,7 +2,7 @@
 // 🛠️ SHARED UTILITIES
 // ==========================================
 import { MEMBER_ROLE_ID } from './ranking-constants.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 
 /**
  * Assign the general member role to a verified player
