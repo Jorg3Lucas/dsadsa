@@ -18,12 +18,12 @@ import {
 } from './ranking-constants.js';
 import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, cleanNickname, levenshteinDistance } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
+import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
 // ==========================================
 // Extracted from ranking-handlers.js
-// Note: scanimport and scanimport_status remain in the giant file
 
 export async function handleRankingCommand(interaction, db, saveLocalStorage, logEvent) {
     const { commandName, options, user, guild } = interaction;
@@ -719,6 +719,15 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         return interaction.reply({ content: guide });
     }
 
-    // ── scanimport & scanimport_status still in giant file ──
+    // ── scanimport ──
+    if (commandName === 'scanimport') {
+        return handleScanImport(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── scanimport_status ──
+    if (commandName === 'scanimport_status') {
+        return handleScanImportStatus(interaction, db, saveLocalStorage, logEvent);
+    }
+
     return false;
 }
