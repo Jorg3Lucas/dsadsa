@@ -3,11 +3,11 @@ import {
     ButtonBuilder,
     ButtonStyle
 } from 'discord.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     confirmationCache
-} from './ranking-constants.js';
+} from '../core/ranking-constants.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS

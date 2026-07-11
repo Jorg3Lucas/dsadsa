@@ -10,13 +10,13 @@ import {
     initMir4BotEvents,
     handleMir4Interactions,
     runDailySynchronization
-} from './ranking_sync.js';
-import { handleOwnerRegistrationModal } from './ranking-registration.js';
-import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './ranking-welcome.js';
-import { handleApproveOwner, handleRejectOwner, handleApprovePilot } from './ranking-approvals.js';
-import { handlePilotRegistrationModal, handlePilotRemoveSelect } from './ranking-pilot.js';
-import { handleConfirmAction } from './ranking-confirmations.js';
-import { handleRankingCommand } from './ranking-commands.js';
+} from './core/ranking_sync.js';
+import { handleOwnerRegistrationModal } from './handlers/ranking-registration.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './handlers/ranking-welcome.js';
+import { handleApproveOwner, handleRejectOwner, handleApprovePilot } from './handlers/ranking-approvals.js';
+import { handlePilotRegistrationModal, handlePilotRemoveSelect } from './handlers/ranking-pilot.js';
+import { handleConfirmAction } from './handlers/ranking-confirmations.js';
+import { handleRankingCommand } from './handlers/ranking-commands.js';
 import {
     handleManageUserPage,
     handleManageAction,
@@ -26,9 +26,9 @@ import {
     handleManageAlliedAdd,
     handleManageAlliedRemove,
     handleManageNav
-} from './ranking-management.js';
+} from './handlers/ranking-management.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
-import { DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals } from './core/ranking-constants.js';
 
 const client = new Client({
     intents: [

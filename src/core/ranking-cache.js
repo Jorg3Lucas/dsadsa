@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { runBackup } from './auto-backup.js';
+import { runBackup } from '../auto-backup.js';
 
 // ==========================================
 // 💾 RANKING CACHE (Local JSON)

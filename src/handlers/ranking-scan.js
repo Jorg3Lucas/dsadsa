@@ -12,8 +12,8 @@ import {
     PRE_REGISTER_MAX_AGE_MS,
     ORIGIN_SERVER_ID,
     SECONDARY_SERVER_ID
-} from './ranking-constants.js';
-import { findNicknameInCache, getLocalRankingCache } from './ranking-cache.js';
+} from '../core/ranking-constants.js';
+import { findNicknameInCache, getLocalRankingCache } from '../core/ranking-cache.js';
 
 // ==========================================
 // 🖱️ SCAN IMPORT HANDLER

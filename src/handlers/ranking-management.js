@@ -8,13 +8,13 @@ import {
     TextInputBuilder,
     TextInputStyle
 } from 'discord.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
     confirmationCache
-} from './ranking-constants.js';
-import { findNicknameInCache } from './ranking-cache.js';
+} from '../core/ranking-constants.js';
+import { findNicknameInCache } from '../core/ranking-cache.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS

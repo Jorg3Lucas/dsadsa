@@ -7,7 +7,7 @@ import {
     TextInputStyle,
     PermissionFlagsBits
 } from 'discord.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
@@ -15,7 +15,7 @@ import {
     pendingPilotApprovals,
     APPROVER_ROLE_IDS,
     PENDING_MAX_AGE_MS
-} from './ranking-constants.js';
+} from '../core/ranking-constants.js';
 
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS

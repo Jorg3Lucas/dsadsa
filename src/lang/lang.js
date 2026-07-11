@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const langPath = path.resolve('./lang.json');
+const langPath = path.join(import.meta.dirname, 'lang.json');
 let langDict = {};
 
 try {

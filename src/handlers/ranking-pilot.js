@@ -3,12 +3,12 @@ import {
     ButtonBuilder,
     ButtonStyle
 } from 'discord.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     pendingPilotApprovals
-} from './ranking-constants.js';
-import { cleanNickname, levenshteinDistance } from './ranking-cache.js';
+} from '../core/ranking-constants.js';
+import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 
 // ==========================================
 // ✈️ PILOT REGISTRATION & REMOVAL HANDLERS

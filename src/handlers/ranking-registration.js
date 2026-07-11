@@ -3,8 +3,8 @@ import {
     ButtonBuilder,
     ButtonStyle
 } from 'discord.js';
-import { WORLD_IDS, pendingRegistrations, adminChannelId } from './ranking-constants.js';
-import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache } from './ranking-cache.js';
+import { WORLD_IDS, pendingRegistrations, adminChannelId } from '../core/ranking-constants.js';
+import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache } from '../core/ranking-cache.js';
 
 // ==========================================
 // 👑 OWNER REGISTRATION MODAL HANDLER

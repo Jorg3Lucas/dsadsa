@@ -5,7 +5,7 @@ import {
     ButtonStyle,
     PermissionFlagsBits
 } from 'discord.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
@@ -15,9 +15,9 @@ import {
     adminChannelId,
     APPROVER_ROLE_IDS,
     WELCOME_PANEL_MESSAGE
-} from './ranking-constants.js';
-import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, cleanNickname, levenshteinDistance } from './ranking-cache.js';
-import { runDailySynchronization } from './ranking-sync-engine.js';
+} from '../core/ranking-constants.js';
+import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
+import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 
 // ==========================================

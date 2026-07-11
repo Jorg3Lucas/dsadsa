@@ -4,6 +4,6 @@
 // ==========================================
 
 export { runDailySynchronization } from "./ranking-sync-engine.js";
-export { registerMir4SlashCommands } from "./ranking-commands.js";
+export { registerMir4SlashCommands } from "../handlers/ranking-commands.js";
 export { initMir4BotEvents } from "./ranking-events.js";
 export { handleMir4Interactions } from "./ranking-handlers.js";

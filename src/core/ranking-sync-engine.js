@@ -1,7 +1,7 @@
 import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, WORLD_IDS } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache, findNicknameInCache } from './ranking-cache.js';
-import { getMsg } from './lang.js';
+import { getMsg } from '../lang/lang.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
