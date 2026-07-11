@@ -24,7 +24,6 @@ let backupInterval = null;
 function ensureBackupDir() {
   if (!fs.existsSync(BACKUP_DIR)) {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    console.log("📁 [Auto-Backup] Created backups directory.");
   }
 }
 
@@ -65,9 +64,6 @@ export function runBackup(targetFiles) {
     }
   }
 
-  if (count > 0) {
-    console.log(`✅ [Auto-Backup] Backed up ${count} file(s) to ${BACKUP_DIR}`);
-  }
   return count;
 }
 
@@ -89,9 +85,6 @@ function rotateBackups(baseName) {
       fs.unlinkSync(path.join(BACKUP_DIR, file.name));
     }
 
-    if (toRemove.length > 0) {
-      console.log(`🗑️ [Auto-Backup] Rotated ${toRemove.length} old backup(s) for ${baseName}`);
-    }
   } catch (err) {
     console.error(`❌ [Auto-Backup] Rotation error for ${baseName}:`, err.message);
   }
@@ -108,16 +101,8 @@ export function startAutoBackup(intervalHours = 6) {
   const intervalMs = intervalHours * 60 * 60 * 1000;
 
   // Run first backup after 1 minute (give bot time to initialize)
-  setTimeout(() => {
-    console.log(`⏰ [Auto-Backup] Running initial backup...`);
-    runBackup();
-  }, 60 * 1000);
+  setTimeout(() => runBackup(), 60 * 1000);
 
   // Schedule recurring backups
-  backupInterval = setInterval(() => {
-    console.log(`⏰ [Auto-Backup] Running scheduled backup (every ${intervalHours}h)...`);
-    runBackup();
-  }, intervalMs);
-
-  console.log(`📅 [Auto-Backup] Scheduled: every ${intervalHours} hour(s) — keeping last ${MAX_BACKUPS} backups`);
+  backupInterval = setInterval(() => runBackup(), intervalMs);
 }
