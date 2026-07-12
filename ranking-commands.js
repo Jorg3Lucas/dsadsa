@@ -3,7 +3,8 @@ import {
     StringSelectMenuBuilder,
     ButtonBuilder,
     ButtonStyle,
-    PermissionFlagsBits
+    PermissionFlagsBits,
+    SlashCommandBuilder
 } from 'discord.js';
 import { getMsg } from './lang.js';
 import {
@@ -18,6 +19,78 @@ import {
 } from './ranking-constants.js';
 import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, cleanNickname, levenshteinDistance } from './ranking-cache.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
+
+// ==========================================
+// 🎯 SLASH COMMAND REGISTRATION
+// ==========================================
+
+export async function registerMir4SlashCommands(guild) {
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('forcesync')
+            .setDescription(getMsg('ranking.commands.forcesync.description')),
+        new SlashCommandBuilder()
+            .setName('manualregister')
+            .setDescription(getMsg('ranking.commands.manualregister.description'))
+            .addUserOption(opt => opt.setName('member').setDescription(getMsg('ranking.commands.manualregister.options.member')).setRequired(true))
+            .addStringOption(opt => opt.setName('nickname').setDescription(getMsg('ranking.commands.manualregister.options.nickname')).setRequired(true)),
+        new SlashCommandBuilder()
+            .setName('manualpilot')
+            .setDescription(getMsg('ranking.commands.manualpilot.description'))
+            .addUserOption(opt => opt.setName('owner').setDescription(getMsg('ranking.commands.manualpilot.options.owner')).setRequired(true))
+            .addUserOption(opt => opt.setName('pilot').setDescription(getMsg('ranking.commands.manualpilot.options.pilot')).setRequired(true)),
+        new SlashCommandBuilder()
+            .setName('manualremove')
+            .setDescription(getMsg('ranking.commands.manualremove.description'))
+            .addUserOption(opt => opt.setName('member').setDescription(getMsg('ranking.commands.manualremove.options.member')).setRequired(true)),
+        new SlashCommandBuilder()
+            .setName('manualremovepilot')
+            .setDescription(getMsg('ranking.commands.manualremovepilot.description'))
+            .addUserOption(opt => opt.setName('owner').setDescription(getMsg('ranking.commands.manualremovepilot.options.owner')).setRequired(true))
+            .addUserOption(opt => opt.setName('pilot').setDescription(getMsg('ranking.commands.manualremovepilot.options.pilot')).setRequired(true)),
+        new SlashCommandBuilder()
+            .setName('manualforce')
+            .setDescription(getMsg('ranking.commands.manualforce.description'))
+            .addUserOption(opt => opt.setName('member').setDescription(getMsg('ranking.commands.manualforce.options.member')).setRequired(true))
+            .addStringOption(opt => opt.setName('nickname').setDescription(getMsg('ranking.commands.manualforce.options.nickname')).setRequired(true)),
+        new SlashCommandBuilder()
+            .setName('removepilot')
+            .setDescription(getMsg('ranking.commands.removepilot.description')),
+        new SlashCommandBuilder()
+            .setName('cleandb')
+            .setDescription(getMsg('ranking.commands.cleandb.description')),
+        new SlashCommandBuilder()
+            .setName('manage')
+            .setDescription('👑 [Admin] Open user management panel.'),
+        new SlashCommandBuilder()
+            .setName('sendpanel')
+            .setDescription(getMsg('ranking.commands.sendpanel.description')),
+        new SlashCommandBuilder()
+            .setName('listunregistered')
+            .setDescription(getMsg('ranking.commands.listunregistered.description'))
+            .addBooleanOption(opt => opt.setName('notify').setDescription('Send DMs to unregistered members').setRequired(false)),
+        new SlashCommandBuilder()
+            .setName('pending')
+            .setDescription(getMsg('ranking.commands.pending.description')),
+        new SlashCommandBuilder()
+            .setName('elderguide')
+            .setDescription('📋 [Admin] View the elder guide for registration approvals.'),
+        new SlashCommandBuilder()
+            .setName('scanimport')
+            .setDescription('📥 [Admin] Import registered members from origin servers.')
+            .addBooleanOption(opt => opt.setName('reset').setDescription('Reset all existing registrations from scan servers before re-importing').setRequired(false)),
+        new SlashCommandBuilder()
+            .setName('scanimport_status')
+            .setDescription('📥 [Admin] Check pre-registration status and auto-convert found users.')
+    ];
+
+    try {
+        await guild.commands.set(commands);
+        console.log(`✅ Registered ${commands.length} slash commands for guild ${guild.id}`);
+    } catch (error) {
+        console.error('❌ Failed to register slash commands:', error.message);
+    }
+}
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -385,6 +458,36 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('confirm-manualremove-yes').setLabel('✅ Yes, remove').setStyle(ButtonStyle.Danger),
                     new ButtonBuilder().setCustomId('confirm-manualremove-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
+            flags: 64
+        });
+    }
+
+    // ── manualforce: Force-register a member as permanent (ignores ranking/temp checks) ──
+    if (commandName === 'manualforce') {
+        const targetMember = options.getMember('member');
+        const nickname = options.getString('nickname').trim().normalize('NFC');
+
+        if (db.users[targetMember.id] && db.users[targetMember.id].registeredAt) {
+            return interaction.reply({
+                content: `❌ **${targetMember.displayName}** is already registered as **${db.users[targetMember.id].nickname}**. Use /manualremove first if you want to re-register them.`,
+                flags: 64
+            });
+        }
+
+        confirmationCache[`${user.id}-manualforce`] = {
+            targetId: targetMember.id,
+            targetName: targetMember.displayName,
+            nickname: nickname
+        };
+
+        return interaction.reply({
+            content: `⚠️ **Force-register** ${targetMember.toString()} as **${nickname}**?\n\nThis will assign the member role and set the nickname **permanently**, bypassing ranking and allied clan checks.`,
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-manualforce-yes').setLabel('✅ Yes, force register').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('confirm-manualforce-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                 )
             ],
             flags: 64

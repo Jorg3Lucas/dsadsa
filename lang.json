@@ -43,6 +43,13 @@
             "listunregistered": {
                 "description": "📋 [Admin] List members with role but no registration, optionally DM them."
             },
+            "manualforce": {
+                "description": "👑 [Admin] Force-register a member as permanent (bypasses ranking checks).",
+                "options": {
+                    "member": "Discord member to force-register.",
+                    "nickname": "In-game character name (permanent)."
+                }
+            },
             "pending": {
                 "description": "⏳ [Admin] List all pending registration requests with time remaining."
             }

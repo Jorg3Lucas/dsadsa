@@ -178,5 +178,43 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }).catch(() => {});
     }
 
+    // ── manualforce: Force-register a member as permanent (bypasses ranking/temp checks) ──
+    if (action === 'manualforce') {
+        const guild = interaction.guild;
+        const targetMember = await guild.members.fetch(cached.targetId).catch(() => null);
+
+        if (!targetMember) {
+            return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
+        }
+
+        // Register as permanent — no tempUntil, no ranking checks
+        db.users[cached.targetId] = {
+            ...(db.users[cached.targetId] || {}),
+            nickname: cached.nickname,
+            registeredAt: new Date().toISOString()
+        };
+
+        // Clean up any stale temp/clan fields to ensure a clean permanent registration
+        if (db.users[cached.targetId].tempUntil) delete db.users[cached.targetId].tempUntil;
+        if (db.users[cached.targetId].tempRegisteredAt) delete db.users[cached.targetId].tempRegisteredAt;
+        if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
+
+        if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
+        saveLocalStorage();
+
+        await targetMember.setNickname(cached.nickname).catch(() => {});
+        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+            logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
+        }
+
+        logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — bypassed ranking)`);
+
+        return interaction.update({
+            content: `✅ **${cached.nickname}** force-registered as **permanent**! Role and nickname set.`,
+            components: []
+        }).catch(() => {});
+    }
+
     return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {});
 }
