@@ -391,6 +391,29 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         });
     }
 
+    // ── manualforce ──
+    if (commandName === 'manualforce') {
+        const targetMember = options.getMember('member');
+        const nickname = options.getString('nickname').trim().normalize('NFC');
+
+        confirmationCache[`${user.id}-manualforce`] = {
+            targetId: targetMember.id,
+            targetName: targetMember.displayName,
+            nickname: nickname
+        };
+
+        return interaction.reply({
+            content: getMsg('ranking.responses.manualforce.confirm', { username: targetMember.displayName, nickname: nickname }),
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-manualforce-yes').setLabel('✅ Yes, force register').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('confirm-manualforce-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
+            flags: 64
+        });
+    }
+
     // ── sendpanel ──
     if (commandName === 'sendpanel') {
         await interaction.deferReply({ flags: 64 });

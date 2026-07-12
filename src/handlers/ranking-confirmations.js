@@ -178,5 +178,42 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }).catch(() => {});
     }
 
+    // ── manualforce: Force-register a user as permanent (no ranking check) ──
+    if (action === 'manualforce') {
+        const guild = interaction.guild;
+        const targetMember = await guild.members.fetch(cached.targetId).catch(() => null);
+
+        if (!targetMember) {
+            return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
+        }
+
+        // Register immediately as permanent — no tempUntil, no ranking check
+        db.users[cached.targetId] = {
+            ...db.users[cached.targetId],
+            nickname: cached.nickname,
+            registeredAt: new Date().toISOString()
+        };
+
+        // Clean up any stale temp fields if they exist
+        if (db.users[cached.targetId].tempUntil) delete db.users[cached.targetId].tempUntil;
+        if (db.users[cached.targetId].tempRegisteredAt) delete db.users[cached.targetId].tempRegisteredAt;
+        if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
+
+        if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
+        saveLocalStorage();
+
+        await targetMember.setNickname(cached.nickname).catch(() => {});
+        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        }
+
+        logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)`);
+
+        return interaction.update({
+            content: getMsg('ranking.responses.manualforce.success', { username: cached.targetName, nickname: cached.nickname }),
+            components: []
+        }).catch(() => {});
+    }
+
     return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {});
 }

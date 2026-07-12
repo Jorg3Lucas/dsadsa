@@ -52,6 +52,13 @@
                     "member": "The member whose nickname needs fixing.",
                     "nickname": "Optional: the correct nickname. If omitted, auto-detect from ranking."
                 }
+            },
+            "manualforce": {
+                "description": "👑 [Admin] Force register a member as permanent — no fuzzy/ranking checks.",
+                "options": {
+                    "member": "Discord member to register.",
+                    "nickname": "In-game character name (exact as typed)."
+                }
             }
         },
         "responses": {
@@ -111,6 +118,10 @@
                 "actionRemoveConfirm": "⚠️ Permanently remove **{username}**'s registration?",
                 "removePilotConfirm": "⚠️ Remove pilot from **{username}**?",
                 "back": "🔙 Back"
+            },
+            "manualforce": {
+                "confirm": "⚠️ Force-register **{username}** as **{nickname}**? This sets nickname + member role immediately — no ranking check.",
+                "success": "✅ **{nickname}** has been force-registered as permanent! Nickname + member role applied."
             }
         },
         "welcome": {
