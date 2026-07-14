@@ -189,11 +189,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
             confirmationCache[`${user.id}-manualregister`] = {
                 targetId: targetMember.id,
-                nickname: lookup.nickname,
+                nickname: nickname,
                 clan: lookup.clanName,
                 worldId: lookup.worldId,
                 needsTempApproval: !lookup.inAlliedClan,
-                selectedNickname: lookup.nickname
+                selectedNickname: nickname
             };
 
             return interaction.reply({
