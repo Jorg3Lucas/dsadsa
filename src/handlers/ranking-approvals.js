@@ -86,9 +86,11 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
 
     const isTempApproval = result === 'temp';
 
+    const finalNickname = pending.selectedNickname || pending.nickname;
+
     db.users[userId] = {
         ...db.users[userId],
-        nickname: pending.nickname,
+        nickname: finalNickname,
         registeredAt: new Date().toISOString()
     };
 
@@ -226,5 +228,102 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
     await interaction.editReply({ content: `✅ **Pilot approved!** <@${pilotUserId}> is now your pilot.`, components: [] });
 
     try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('✅ **Registration approved!** The owner accepted your pilot request.'); } catch (e) {}
+    return;
+}
+
+// ── Admin Approval: Pilot Registration ──
+// When an admin approves a pilot, the owner gets a DM with info and a button to remove if not theirs.
+export async function handleAdminApprovePilot(interaction, db, saveLocalStorage, logEvent) {
+    await interaction.deferUpdate();
+
+    const rest = interaction.customId.replace('admin_approve_pilot_', '');
+    const [pilotUserId, result] = rest.split('-');
+    const pending = pendingPilotApprovals[pilotUserId];
+
+    if (!pending) {
+        return interaction.editReply({ content: '⌛ This request has already been processed.', components: [] });
+    }
+
+    const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+    if (!canApprove) {
+        return interaction.followUp({ content: '❌ You do not have permission to approve pilot registrations.', flags: 64 });
+    }
+
+    delete pendingPilotApprovals[pilotUserId];
+    saveLocalStorage();
+
+    if (result === 'no') {
+        logEvent(`❌ Admin ${interaction.user.tag} REJECTED pilot ${pilotUserId} (${pending.pilotTag}) for owner ${pending.ownerNick}`);
+        await interaction.editReply({
+            content: `❌ **Pilot Rejected by Admin**\n\n✈️ **Pilot:** ${pending.pilotTag}\n👑 **Owner:** ${pending.ownerNick}\n❌ **Rejected by:** ${interaction.user.tag}`,
+            components: []
+        });
+        try {
+            const pilotUser = await interaction.client.users.fetch(pilotUserId);
+            await pilotUser.send('❌ Your pilot registration was rejected by an administrator.');
+        } catch (e) {}
+        return;
+    }
+
+    // Admin approved — register the pilot
+    const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
+    if (!guild) {
+        logEvent(`❌ Admin pilot approval failed: guild not found`);
+        return interaction.editReply({ content: '❌ Error finding the server.', components: [] });
+    }
+
+    const pilotMember = await guild.members.fetch(pilotUserId).catch(() => null);
+    const ownerMember = await guild.members.fetch(pending.ownerId).catch(() => null);
+
+    if (!pilotMember || !ownerMember) {
+        logEvent(`❌ Admin pilot approval failed: owner or pilot no longer in server`);
+        return interaction.editReply({ content: '❌ One of the members is no longer in the server.', components: [] });
+    }
+
+    if (!db.users[pending.ownerId].pilotIds) db.users[pending.ownerId].pilotIds = [];
+    if (!db.users[pending.ownerId].pilotIds.includes(pilotUserId)) {
+        db.users[pending.ownerId].pilotIds.push(pilotUserId);
+    }
+    saveLocalStorage();
+
+    await pilotMember.setNickname(`${pending.ownerNick} - Pilot`).catch(() => {});
+    if (!pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+        await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
+    }
+
+    logEvent(`✅ Admin ${interaction.user.tag} approved pilot ${pilotUserId} (${pending.pilotTag}) for owner ${pending.ownerNick}`);
+
+    await interaction.editReply({
+        content: `✅ **Pilot Approved by Admin**\n\n✈️ **Pilot:** ${pending.pilotTag}\n👑 **Owner:** ${pending.ownerNick}\n✅ **Approved by:** ${interaction.user.tag}`,
+        components: []
+    });
+
+    // Notify the pilot
+    try {
+        const pilotUser = await interaction.client.users.fetch(pilotUserId);
+        await pilotUser.send('✅ **Your pilot registration was approved by an administrator!**');
+    } catch (e) {}
+
+    // DM the owner with explanation and a button to remove if it's not their pilot
+    try {
+        const ownerUser = await interaction.client.users.fetch(pending.ownerId);
+        const removeButton = new ButtonBuilder()
+            .setCustomId(`owner_remove_pilot_${pilotUserId}`)
+            .setLabel('❌ Remove this pilot')
+            .setStyle(ButtonStyle.Danger);
+
+        await ownerUser.send({
+            content: `✈️ **Pilot Registered by Admin**\n\nAn administrator approved **${pending.pilotTag}** as your pilot.\n\nIf you do not recognize this pilot, click the button below to remove them immediately.\n\nYou can also use **/removepilot** anytime to manage your pilots.`,
+            components: [
+                new ActionRowBuilder().addComponents(removeButton)
+            ]
+        });
+        logEvent(`📬 DM sent to owner ${pending.ownerNick} (${pending.ownerId}) about admin-approved pilot ${pending.pilotTag}`);
+    } catch (e) {
+        logEvent(`⚠️ Could not DM owner ${pending.ownerNick} about admin-approved pilot: ${e.message}`);
+    }
+
     return;
 }

@@ -8,6 +8,7 @@ import { WORLD_IDS } from './ranking-constants.js';
 import {
     findNicknameInCache,
     findClosestNicknameInCache,
+    findTopNicknamesInCache,
     getLocalRankingCache
 } from './ranking-cache.js';
 
@@ -49,4 +50,29 @@ export function lookupNickname(nickname, db, cache) {
     }
 
     return { found: false };
+}
+
+// ── Top N fuzzy matches ──
+// Returns up to `limit` candidates, each with full info + score.
+export function lookupTopNicknames(nickname, db, cache, limit = 3) {
+    if (!cache) {
+        cache = getLocalRankingCache();
+    }
+    if (!cache) return [];
+
+    const topMatches = findTopNicknamesInCache(nickname, cache, limit);
+
+    return topMatches.map(match => {
+        const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
+        const worldAlliedClans = db.config?.alliedClans?.[match.worldId];
+        const inAlliedClan = !!(worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === match.clanName.toLowerCase()));
+        return {
+            worldId: match.worldId,
+            nickname: match.nickname,
+            clanName: match.clanName,
+            serverName,
+            inAlliedClan,
+            score: match.score
+        };
+    });
 }

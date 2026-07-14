@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import {
     ActionRowBuilder,
     StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder,
     ButtonBuilder,
     ButtonStyle,
     PermissionFlagsBits
@@ -20,7 +21,7 @@ import {
     ensureConfig
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
-import { lookupNickname } from '../core/ranking-service.js';
+import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 
@@ -28,6 +29,34 @@ import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 // 🎯 SLASH COMMAND HANDLERS
 // ==========================================
 // Extracted from ranking-handlers.js
+
+// Helper: build a nickname select menu for manualregister
+function buildManualNicknameSelect(userId, typedNick, topSuggestions, hasSuggestions) {
+    if (!hasSuggestions) return null;
+
+    const selectOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel(`📝 As typed: ${typedNick.substring(0, 80)}`)
+            .setValue(typedNick)
+            .setDescription('Use the nickname exactly as typed')
+            .setDefault(true),
+        ...topSuggestions
+            .filter(s => s.nickname.toLowerCase() !== typedNick.toLowerCase())
+            .slice(0, 2)
+            .map(s => new StringSelectMenuOptionBuilder()
+                .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
+                .setValue(s.nickname)
+                .setDescription(s.inAlliedClan ? `✅ Allied clan - ${s.clanName}` : `❌ Not allied - ${s.clanName}`)
+            )
+    ];
+
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`select_manual_nickname_${userId}`)
+            .setPlaceholder('Select which nickname to save (optional)')
+            .addOptions(selectOptions)
+    );
+}
 
 export async function handleRankingCommand(interaction, db, saveLocalStorage, logEvent) {
     const { commandName, options, user, guild } = interaction;
@@ -139,16 +168,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
         const lookup = lookupNickname(nickname, db);
+        const topSuggestions = lookupTopNicknames(nickname, db, null, 2);
+        const hasSuggestions = topSuggestions.some(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
 
         if (lookup.found) {
-            confirmationCache[`${user.id}-manualregister`] = {
-                targetId: targetMember.id,
-                nickname: lookup.nickname,
-                clan: lookup.clanName,
-                worldId: lookup.worldId,
-                needsTempApproval: !lookup.inAlliedClan
-            };
-
             const statusLine = lookup.inAlliedClan
                 ? `🌍 Server: **${lookup.serverName}** — ✅ Allied clan`
                 : `🌍 Server: **${lookup.serverName}** (${lookup.clanName}) — ⏳ Will be temporary (3 days)`;
@@ -161,9 +184,48 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 ? `\n🔍 **Fuzzy match:** "${nickname}" → "${lookup.fuzzySuggestion}"`
                 : '';
 
+            // Build nickname components
+            const nicknameRow = buildManualNicknameSelect(user.id, nickname, topSuggestions, hasSuggestions);
+
+            confirmationCache[`${user.id}-manualregister`] = {
+                targetId: targetMember.id,
+                nickname: lookup.nickname,
+                clan: lookup.clanName,
+                worldId: lookup.worldId,
+                needsTempApproval: !lookup.inAlliedClan,
+                selectedNickname: lookup.nickname
+            };
+
             return interaction.reply({
-                content: getMsg('ranking.responses.manualregister.confirm', { nickname: lookup.nickname, clan: lookup.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}`,
+                content: getMsg('ranking.responses.manualregister.confirm', { nickname: lookup.nickname, clan: lookup.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}${hasSuggestions ? '\n\n📌 Use the **dropdown below** to select a different nickname before confirming.' : ''}`,
                 components: [
+                    ...(nicknameRow ? [nicknameRow] : []),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                    )
+                ],
+                flags: 64
+            });
+        }
+
+        // Not found in ranking — check if there are suggestions anyway
+        if (hasSuggestions) {
+            const nicknameRow = buildManualNicknameSelect(user.id, nickname, topSuggestions, hasSuggestions);
+
+            confirmationCache[`${user.id}-manualregister`] = {
+                targetId: targetMember.id,
+                nickname: nickname,
+                clan: '',
+                worldId: '',
+                needsTempApproval: true,
+                selectedNickname: nickname
+            };
+
+            return interaction.reply({
+                content: `❌ **"${nickname}" not found in ranking.**\n\nHowever, there are similar nicknames available. Select one from the dropdown below and confirm to register as temporary (3 days).${hasSuggestions ? '\n\n📌 Use the **dropdown below** to select a different nickname before confirming.' : ''}`,
+                components: [
+                    ...(nicknameRow ? [nicknameRow] : []),
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                         new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
@@ -850,4 +912,33 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     }
 
     return false;
+}
+
+// ── Select Menu: Admin chooses nickname for manualregister ──
+export async function handleSelectManualNickname(interaction, db, saveLocalStorage, logEvent) {
+    await interaction.deferUpdate();
+
+    const userId = interaction.customId.replace('select_manual_nickname_', '');
+    const selectedNick = interaction.values[0];
+    const cacheKey = `${userId}-manualregister`;
+    const cached = confirmationCache[cacheKey];
+
+    if (!cached) {
+        await interaction.followUp({ content: '⌛ This confirmation has expired. Please run /manualregister again.', flags: 64 });
+        return;
+    }
+
+    cached.selectedNickname = selectedNick;
+
+    const originalMsg = interaction.message.content;
+    const updatedContent = originalMsg.includes('📌 Selected')
+        ? originalMsg.replace(/📌 Selected: .+/, `📌 Selected: **${selectedNick}**`)
+        : `${originalMsg}\n📌 Selected: **${selectedNick}**`;
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    logEvent(`📌 Admin selected nickname "${selectedNick}" for manualregister (was "${cached.nickname}")`);
 }

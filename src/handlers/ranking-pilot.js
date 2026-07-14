@@ -6,7 +6,9 @@ import {
 import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
-    pendingPilotApprovals
+    DISCORD_SERVER_ID,
+    pendingPilotApprovals,
+    adminChannelId
 } from '../core/ranking-constants.js';
 import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 
@@ -119,6 +121,23 @@ export async function handlePilotRegistrationModal(interaction, db, saveLocalSto
         });
 
         logEvent(`✈️ ${interaction.user.tag} requested to be pilot of ${ownerData.nickname} — DM sent to owner for approval`);
+
+        // ── Also send a copy to admin channel ──
+        if (adminChannelId) {
+            const adminChannel = interaction.guild.channels.cache.get(adminChannelId);
+            if (adminChannel) {
+                await adminChannel.send({
+                    content: `✈️ **Pilot Registration Request**\n\n👤 **Pilot:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${pilotId}\n👑 **Owner:** <@${ownerId}> (${ownerData.nickname})\n🕐 **Date:** ${new Date().toLocaleString('en-US')}\n\nThe owner was notified via DM. An admin can also approve or reject.`,
+                    components: [
+                        new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId(`admin_approve_pilot_${pilotId}-yes`).setLabel('✅ Admin Approve').setStyle(ButtonStyle.Success),
+                            new ButtonBuilder().setCustomId(`admin_approve_pilot_${pilotId}-no`).setLabel('❌ Admin Reject').setStyle(ButtonStyle.Danger)
+                        )
+                    ]
+                }).catch(e => logEvent(`⚠️ Failed to send pilot request to admin channel: ${e.message}`));
+            }
+        }
+
         const fuzzyReply = fuzzyCorrectedNick
             ? `\n🔍 **Corrected:** you typed "${ownerNick}" → using "${fuzzyCorrectedNick}"`
             : '';
@@ -161,4 +180,50 @@ export async function handlePilotRemoveSelect(interaction, db, saveLocalStorage,
         }).catch(() => {});
 
     return;
+}
+
+// ── Owner removes pilot via DM button (after admin approval) ──
+export async function handleOwnerRemovePilotDm(interaction, db, saveLocalStorage, logEvent) {
+    await interaction.deferUpdate();
+
+    const pilotUserId = interaction.customId.replace('owner_remove_pilot_', '');
+    const ownerId = interaction.user.id;
+    const ownerData = db.users[ownerId];
+
+    // The DM is always sent to the correct owner, so interaction.user.id IS the owner.
+    if (!ownerData || !ownerData.pilotIds || !ownerData.pilotIds.includes(pilotUserId)) {
+        await interaction.editReply({
+            content: '❌ This pilot is no longer linked to your account.',
+            components: []
+        }).catch(() => {});
+        return;
+    }
+
+    ownerData.pilotIds = ownerData.pilotIds.filter(id => id !== pilotUserId);
+    saveLocalStorage();
+
+    // Remove role and reset nickname for pilot, and get pilot tag for the log
+    let pilotTag = 'Unknown';
+    try {
+        const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
+        if (guild) {
+            const pilotMember = await guild.members.fetch(pilotUserId).catch(() => null);
+            if (pilotMember) {
+                pilotTag = pilotMember.user.tag;
+                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                }
+                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+            }
+        }
+    } catch (e) {
+        logEvent(`⚠️ Could not update pilot ${pilotUserId} after removal: ${e.message}`);
+    }
+
+    logEvent(`❌ Owner ${ownerId} removed pilot ${pilotUserId} (${pilotTag}) via DM button`);
+
+    await interaction.editReply({
+        content: `✅ **Pilot removed successfully.**\n\n✈️ **${pilotTag}** is no longer your pilot.\n\nYou can use **/removepilot** anytime to manage your pilots.`,
+        components: []
+    }).catch(() => {});
 }

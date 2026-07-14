@@ -15,7 +15,7 @@ import {
     confirmationCache,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { findNicknameInCache } from '../core/ranking-cache.js';
+import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache } from '../core/ranking-cache.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
@@ -388,10 +388,71 @@ export async function handleManageAlliedAddModal(interaction, db, saveLocalStora
         return interaction.editReply(`⚠️ **${clanName}** is already an allied clan in **${worldName}**.`);
     }
 
+    // ── Fuzzy suggestion check ──
+    const rankingCache = getLocalRankingCache();
+    const suggestions = rankingCache
+        ? findTopClanSuggestions(clanName, worldId, rankingCache, 2)
+        : [];
+
+    // Check if the typed name exactly matches any clan in the ranking cache for this world
+    const clanNamesInWorld = rankingCache ? Object.values(rankingCache[worldId] || {}) : [];
+    const exactRankingMatch = clanNamesInWorld.some(
+        c => c.toLowerCase() === clanName.toLowerCase()
+    );
+
+    // If there are fuzzy suggestions AND no exact match in the ranking, show the choice
+    const relevantSuggestions = suggestions.filter(
+        s => s.clanName.toLowerCase() !== clanName.toLowerCase()
+    );
+
+    if (!exactRankingMatch && relevantSuggestions.length > 0) {
+        // Store pending in confirmationCache with suggestion names
+        confirmationCache[`${interaction.user.id}-addclan`] = {
+            clanName,
+            worldId,
+            worldName,
+            suggestions: relevantSuggestions.map(s => s.clanName)
+        };
+
+        const suggestionRows = relevantSuggestions.map((s, i) =>
+            new ButtonBuilder()
+                .setCustomId(`confirm-addclan-suggest${i}`)
+                .setLabel(`🔍 ${s.clanName.substring(0, 80)}`)
+                .setStyle(ButtonStyle.Primary)
+        );
+
+        const typedRow = new ButtonBuilder()
+            .setCustomId(`confirm-addclan-typed`)
+            .setLabel('📝 Use as typed')
+            .setStyle(ButtonStyle.Secondary);
+
+        const cancelRow = new ButtonBuilder()
+            .setCustomId('confirm-addclan-cancel')
+            .setLabel('❌ Cancel')
+            .setStyle(ButtonStyle.Danger);
+
+        const suggestionList = relevantSuggestions.map((s, i) =>
+            `🔍 **${i + 1}.** ${s.clanName} (${(s.score * 100).toFixed(0)}% similar)`
+        ).join('\n');
+
+        return interaction.editReply({
+            content: `⚠️ **"${clanName}"** doesn't exactly match any clan in the ranking for **${worldName}**.\n\nDid you mean one of these?\n${suggestionList}\n\nChoose below or use the typed name:`,
+            components: [
+                new ActionRowBuilder().addComponents(...suggestionRows.slice(0, 2)),
+                new ActionRowBuilder().addComponents(typedRow, cancelRow)
+            ]
+        });
+    }
+
+    // No suggestions or exact match — add directly
     db.config.alliedClans[worldId].push(clanName);
     saveLocalStorage();
 
-    logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${clanName}" to ${worldName}`);
+    let logNote = '';
+    if (exactRankingMatch) {
+        logNote = ' (matched in ranking)';
+    }
+    logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${clanName}" to ${worldName}${logNote}`);
 
     // Refresh the world view
     const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName);
@@ -423,6 +484,75 @@ export async function handleManageAlliedRemove(interaction, db, saveLocalStorage
     const clans = db.config?.alliedClans?.[worldId] || [];
     const { content, components } = buildAlliedWorldView(worldId, clans, worldName);
     return interaction.update({ content, components }).catch(() => {});
+}
+
+// ── Allied Clans: Handle suggestion buttons (add clan modal flow) ──
+export async function handleAddClanSuggestion(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    await interaction.deferUpdate();
+
+    const customId = interaction.customId;
+    const cacheKey = `${interaction.user.id}-addclan`;
+    const cached = confirmationCache[cacheKey];
+
+    if (!cached) {
+        return interaction.editReply({ content: '⌛ This request has expired. Please try again.', components: [] }).catch(() => {});
+    }
+
+    delete confirmationCache[cacheKey];
+
+    if (customId === 'confirm-addclan-cancel') {
+        logEvent(`❌ Admin ${interaction.user.tag} cancelled adding allied clan "${cached.clanName}" to ${cached.worldName}`);
+        return interaction.editReply({ content: '❌ **Cancelled.**', components: [] }).catch(() => {});
+    }
+
+    let finalClanName;
+    let logSource;
+
+    if (customId === 'confirm-addclan-typed') {
+        finalClanName = cached.clanName;
+        logSource = 'as typed';
+    } else if (customId.startsWith('confirm-addclan-suggest')) {
+        // Extract the suggestion index from cached suggestions
+        const suggestIndex = parseInt(customId.replace('confirm-addclan-suggest', ''), 10);
+        if (cached.suggestions && cached.suggestions[suggestIndex]) {
+            finalClanName = cached.suggestions[suggestIndex];
+            logSource = `suggestion #${suggestIndex + 1}`;
+        } else {
+            finalClanName = cached.clanName;
+            logSource = 'as typed (suggestion unavailable)';
+        }
+    } else {
+        return interaction.editReply({ content: '❌ Unknown action.', components: [] }).catch(() => {});
+    }
+
+    const { worldId, worldName } = cached;
+
+    ensureConfig(db);
+    if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+
+    // Re-check duplicates after the selection
+    const alreadyExists = db.config.alliedClans[worldId].some(
+        c => c.toLowerCase() === finalClanName.toLowerCase()
+    );
+    if (alreadyExists) {
+        return interaction.editReply({
+            content: `⚠️ **${finalClanName}** is already an allied clan in **${worldName}**.`,
+            components: []
+        }).catch(() => {});
+    }
+
+    db.config.alliedClans[worldId].push(finalClanName);
+    saveLocalStorage();
+
+    logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${finalClanName}" to ${worldName} (${logSource})`);
+
+    // Refresh the world view
+    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName);
+    return interaction.editReply({ content, components }).catch(() => {});
 }
 
 // ── Manage: Navigation buttons (back, prev, next) ──

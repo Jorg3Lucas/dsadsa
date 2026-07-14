@@ -144,9 +144,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
         }
 
+        const finalNickname = cached.selectedNickname || cached.nickname;
+
         db.users[cached.targetId] = {
             ...db.users[cached.targetId],
-            nickname: cached.nickname,
+            nickname: finalNickname,
             registeredAt: new Date().toISOString()
         };
 

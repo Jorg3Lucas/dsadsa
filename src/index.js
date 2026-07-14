@@ -8,10 +8,10 @@ import { registerMir4SlashCommands } from './core/ranking-deploy.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
-import { handleOwnerRegistrationModal } from './handlers/ranking-registration.js';
+import { handleOwnerRegistrationModal, handleSelectRegistrationNickname } from './handlers/ranking-registration.js';
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './handlers/ranking-welcome.js';
-import { handleApproveOwner, handleRejectOwner, handleApprovePilot } from './handlers/ranking-approvals.js';
-import { handlePilotRegistrationModal, handlePilotRemoveSelect } from './handlers/ranking-pilot.js';
+import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
+import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm } from './handlers/ranking-pilot.js';
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand } from './handlers/ranking-commands.js';
 import {
@@ -23,7 +23,8 @@ import {
     handleManageAlliedAdd,
     handleManageAlliedAddModal,
     handleManageAlliedRemove,
-    handleManageNav
+    handleManageNav,
+    handleAddClanSuggestion
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
 import { DISCORD_SERVER_ID } from './core/ranking-constants.js';
@@ -104,6 +105,16 @@ client.on('interactionCreate', async (interaction) => {
                 return await handlePilotRemoveSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
+            // Registration nickname selection (admin choosing between typed vs suggestions)
+            if (interaction.customId.startsWith('select_reg_nickname_')) {
+                return await handleSelectRegistrationNickname(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Manualregister nickname selection
+            if (interaction.customId.startsWith('select_manual_nickname_')) {
+                return await handleSelectManualNickname(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
             // Manage menu routing
             if (interaction.customId.startsWith('manage_user_page_')) {
                 return await handleManageUserPage(interaction, rankingDb, saveRankingStorage, logRankingEvent);
@@ -160,6 +171,16 @@ client.on('interactionCreate', async (interaction) => {
                 return await handleApprovePilot(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
+            // Admin pilot approval buttons (admin approves/rejects from admin channel)
+            if (interaction.customId.startsWith('admin_approve_pilot_')) {
+                return await handleAdminApprovePilot(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Owner remove pilot button (from DM after admin approval)
+            if (interaction.customId.startsWith('owner_remove_pilot_')) {
+                return await handleOwnerRemovePilotDm(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
             // Confirmation buttons (confirm-manualremove, confirm-manualregister, etc.)
             if (interaction.customId.startsWith('confirm-')) {
                 return await handleConfirmAction(interaction, rankingDb, saveRankingStorage, logRankingEvent);
@@ -179,6 +200,11 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (interaction.customId.startsWith('manage_allied_add_')) {
                 return await handleManageAlliedAdd(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Allied clans: suggestion buttons (add clan modal fuzzy flow)
+            if (interaction.customId.startsWith('confirm-addclan-')) {
+                return await handleAddClanSuggestion(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
             // Fallback: any remaining manage_ prefixed button

@@ -1,10 +1,12 @@
 import {
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder
 } from 'discord.js';
 import { WORLD_IDS, pendingRegistrations, adminChannelId } from '../core/ranking-constants.js';
-import { lookupNickname } from '../core/ranking-service.js';
+import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 
 // ==========================================
 // 👑 OWNER REGISTRATION MODAL HANDLER
@@ -31,8 +33,12 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     // Look up nickname in ranking cache using centralized service
     const lookup = lookupNickname(nickname, db);
 
+    // Get top suggestions for the select menu
+    const topSuggestions = lookupTopNicknames(nickname, db, null, 2);
+    const hasSuggestions = topSuggestions.some(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
+
     // Always use the user's original nickname — no auto-correction
-    pendingRegistrations[userId] = { nickname, timestamp: Date.now() };
+    pendingRegistrations[userId] = { nickname, timestamp: Date.now(), selectedNickname: nickname };
 
     if (!adminChannelId) {
         logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but admin channel not configured`);
@@ -64,7 +70,32 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
         }
     }
 
-    const isMissingRankingOrAllied = !cacheHit || alliedClanStatus === '❌ Not in allied clan';
+    const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
+
+    // Build nickname select menu if there are suggestions
+    let nicknameSelect = null;
+    if (hasSuggestions) {
+        const selectOptions = [
+            new StringSelectMenuOptionBuilder()
+                .setLabel(`📝 As typed: ${nickname.substring(0, 80)}`)
+                .setValue(nickname)
+                .setDescription('Use the nickname exactly as typed')
+                .setDefault(true),
+            ...topSuggestions
+                .filter(s => s.nickname.toLowerCase() !== nickname.toLowerCase())
+                .slice(0, 2)
+                .map(s => new StringSelectMenuOptionBuilder()
+                    .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
+                    .setValue(s.nickname)
+                    .setDescription(s.inAlliedClan ? `✅ Allied clan - ${s.clanName}` : `❌ Not allied - ${s.clanName}`)
+                )
+        ];
+
+        nicknameSelect = new StringSelectMenuBuilder()
+            .setCustomId(`select_reg_nickname_${userId}`)
+            .setPlaceholder('Select which nickname to save (optional)')
+            .addOptions(selectOptions);
+    }
 
     const approveButtons = [
         new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
@@ -81,16 +112,47 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     );
 
     const adminMsg = await adminChannel.send({
-        content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}${fuzzyNote}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+        content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}${fuzzyNote}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}\n${hasSuggestions ? '\n📌 Use the **dropdown below** to select a different nickname before approving.' : ''}`,
         components: [
+            ...(hasSuggestions ? [new ActionRowBuilder().addComponents(nicknameSelect)] : []),
             new ActionRowBuilder().addComponents(approveButtons)
         ]
     });
 
     pendingRegistrations[userId].channelId = adminChannel.id;
     pendingRegistrations[userId].messageId = adminMsg.id;
+    pendingRegistrations[userId].selectedNickname = nickname;
     saveLocalStorage(); // Persist pending registration to survive bot restarts
 
     logEvent(`👑 ${interaction.user.tag} submitted owner registration for "${nickname}" — awaiting admin approval`);
     return interaction.editReply('✅ **Registration sent for approval!** An administrator will review it shortly.');
+}
+
+// ── Select Menu: Admin chooses nickname for registration ──
+export async function handleSelectRegistrationNickname(interaction, db, saveLocalStorage, logEvent) {
+    await interaction.deferUpdate();
+
+    const userId = interaction.customId.replace('select_reg_nickname_', '');
+    const selectedNick = interaction.values[0];
+    const pending = pendingRegistrations[userId];
+
+    if (!pending) {
+        await interaction.followUp({ content: '⌛ This registration has expired or was already processed.', flags: 64 });
+        return;
+    }
+
+    pending.selectedNickname = selectedNick;
+    saveLocalStorage();
+
+    const originalMsg = interaction.message.content;
+    const updatedContent = originalMsg.includes('📌 Selected')
+        ? originalMsg.replace(/📌 Selected: .+/, `📌 Selected: **${selectedNick}**`)
+        : `${originalMsg}\n📌 Selected: **${selectedNick}**`;
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    logEvent(`📌 Admin selected nickname "${selectedNick}" for registration ${userId} (was "${pending.nickname}")`);
 }

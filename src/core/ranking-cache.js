@@ -131,6 +131,123 @@ export function findClosestNicknameInCache(displayName, cache) {
     return bestMatch && bestScore >= threshold ? bestMatch : null;
 }
 
+// ── Top N fuzzy matches ──
+// Returns up to `limit` closest matches above threshold, sorted by score (best first).
+export function findTopNicknamesInCache(displayName, cache, limit = 3) {
+    if (!cache) return [];
+
+    const clean = cleanNickname;
+    const cleanedInput = clean(displayName);
+    if (cleanedInput.length < 2) return [];
+
+    const matches = [];
+    const threshold = 0.55;
+
+    for (const [worldId, players] of Object.entries(cache)) {
+        for (const [nickname, clanName] of Object.entries(players)) {
+            const cleanedNick = clean(nickname);
+            if (cleanedNick.length < 2) continue;
+
+            // Pre-filter: check if they share any common characters
+            const inputChars = new Set(cleanedInput);
+            const nickChars = new Set(cleanedNick);
+            let commonChars = 0;
+            for (const c of inputChars) {
+                if (nickChars.has(c)) commonChars++;
+            }
+            const overlapScore = (2 * commonChars) / (inputChars.size + nickChars.size);
+            if (overlapScore < 0.3) continue;
+
+            // Levenshtein distance for similarity
+            const distance = levenshteinDistance(cleanedInput, cleanedNick);
+            const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+            const similarity = 1 - (distance / maxLen);
+
+            if (similarity >= threshold) {
+                matches.push({ worldId, nickname, clanName, score: similarity });
+            }
+        }
+    }
+
+    // Also try matching with just the first/last parts
+    const parts = cleanedInput.split(/[\s_]+/).filter(p => p.length > 2);
+    for (const part of parts) {
+        for (const [worldId, players] of Object.entries(cache)) {
+            for (const [nickname, clanName] of Object.entries(players)) {
+                const cleanedNick = clean(nickname);
+                if (cleanedNick.length < 2) continue;
+                if (cleanedNick.includes(part) && cleanedNick.length > part.length) {
+                    const score = part.length / cleanedNick.length;
+                    if (score >= threshold) {
+                        // Avoid duplicates
+                        if (!matches.some(m => m.nickname === nickname && m.worldId === worldId)) {
+                            matches.push({ worldId, nickname, clanName, score });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by score descending and return top N
+    matches.sort((a, b) => b.score - a.score);
+    return matches.slice(0, limit);
+}
+
+// ── Get unique clan names from a specific world in the ranking cache ──
+export function getClanNamesInWorld(worldId, cache) {
+    if (!cache) return [];
+    const worldData = cache[worldId];
+    if (!worldData) return [];
+
+    const clanSet = new Set();
+    for (const clanName of Object.values(worldData)) {
+        clanSet.add(clanName);
+    }
+    return Array.from(clanSet);
+}
+
+// ── Find top N fuzzy clan name matches for a given world ──
+// Returns up to `limit` clan names from `worldId` that are closest matches to `typedClan`,
+// using the same Levenshtein distance scoring as nickname matching.
+export function findTopClanSuggestions(typedClan, worldId, cache, limit = 3) {
+    const clanNames = getClanNamesInWorld(worldId, cache);
+    if (clanNames.length === 0) return [];
+
+    const clean = cleanNickname;
+    const cleanedInput = clean(typedClan);
+    if (cleanedInput.length < 2) return [];
+
+    const threshold = 0.55;
+    const matches = [];
+
+    for (const clanName of clanNames) {
+        const cleanedClan = clean(clanName);
+        if (cleanedClan.length < 2) continue;
+
+        // Pre-filter: check if they share any common characters
+        const inputChars = new Set(cleanedInput);
+        const clanChars = new Set(cleanedClan);
+        let commonChars = 0;
+        for (const c of inputChars) {
+            if (clanChars.has(c)) commonChars++;
+        }
+        const overlapScore = (2 * commonChars) / (inputChars.size + clanChars.size);
+        if (overlapScore < 0.3) continue;
+
+        const distance = levenshteinDistance(cleanedInput, cleanedClan);
+        const maxLen = Math.max(cleanedInput.length, cleanedClan.length);
+        const similarity = 1 - (distance / maxLen);
+
+        if (similarity >= threshold) {
+            matches.push({ clanName, score: similarity });
+        }
+    }
+
+    matches.sort((a, b) => b.score - a.score);
+    return matches.slice(0, limit);
+}
+
 export function levenshteinDistance(a, b) {
     if (a.length === 0) return b.length;
     if (b.length === 0) return a.length;

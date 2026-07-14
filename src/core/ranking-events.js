@@ -152,7 +152,7 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
                 }
             }
 
-            const isMissingRankingOrAllied = !cacheHit || alliedClanStatus === '❌ Not in allied clan';
+            const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
 
             const approveButtons = [
                 new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
