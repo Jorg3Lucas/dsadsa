@@ -1,6 +1,7 @@
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, WORLD_IDS } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, MEMBER_ROLE_ID } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache, findNicknameInCache } from './ranking-cache.js';
+import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 
 // ==========================================
@@ -131,14 +132,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 const tempUntil = new Date(userData.tempUntil);
                 const now = new Date();
 
-                // Look up in ranking cache
-                const cacheHit = findNicknameInCache(userData.nickname, tempCache);
-
-                let inAlliedClan = false;
-                if (cacheHit) {
-                    const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-                    inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
-                }
+                // Look up in ranking cache using centralized service
+                const lookup = lookupNickname(userData.nickname, db, tempCache);
+                const inAlliedClan = lookup.found && lookup.inAlliedClan;
 
                 if (inAlliedClan) {
                     // Found in an allied clan — convert to permanent
@@ -146,8 +142,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     delete userData.tempRegisteredAt;
                     delete userData.tempNotified24h;
                     saveLocalStorage();
-                    const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
-                    logEvent(`✅ [Temp→Permanent] ${memberId} (${userData.nickname}) found in allied clan ${cacheHit.clanName} (${serverName}) — converted to permanent`);
+                    logEvent(`✅ [Temp→Permanent] ${memberId} (${userData.nickname}) found in allied clan ${lookup.clanName} (${lookup.serverName}) — converted to permanent`);
                 } else {
                     // Send 24h reminder DM if not yet notified and expiring soon
                     const hoursLeft = (tempUntil - now) / (1000 * 60 * 60);
@@ -223,13 +218,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const prodMember = members.get(memberId);
                     if (!prodMember) continue;
 
-                    // Check ranking + allied clan
-                    const cacheHit = findNicknameInCache(preReg.nickname, preRegCache);
-                    if (!cacheHit) continue;
-
-                    const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-                    const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
-                    if (!inAlliedClan) continue;
+                    // Check ranking + allied clan via centralized service
+                    const lookup = lookupNickname(preReg.nickname, db, preRegCache);
+                    if (!lookup.found || !lookup.inAlliedClan) continue;
 
                     // Auto-convert!
                     if (preReg.ownerNick && preReg.ownerId && db.users[preReg.ownerId]) {
@@ -253,7 +244,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             pilotIds: preReg.pilotIds || []
                         };
                         await prodMember.setNickname(preReg.nickname).catch(() => {});
-                        logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${cacheHit.clanName}`);
+                        logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${lookup.clanName}`);
                     }
 
                     if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {

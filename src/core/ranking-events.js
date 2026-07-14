@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, WORLD_IDS, PENDING_MAX_AGE_MS, ensureConfig } from './ranking-constants.js';
-import { findNicknameInCache } from './ranking-cache.js';
+import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig } from './ranking-constants.js';
+import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 
@@ -140,17 +140,14 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
             }
 
             const nickname = pending.nickname;
-            const cacheHit = findNicknameInCache(nickname);
+            const lookup = lookupNickname(nickname, db);
 
             let rankingStatus = '❌ Not found in ranking';
             let alliedClanStatus = '❌ Not in allied clan';
 
-            if (cacheHit) {
-                const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
-                rankingStatus = `✅ Found — ${serverName} (${cacheHit.clanName})`;
-
-                const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-                if (worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase())) {
+            if (lookup.found) {
+                rankingStatus = `✅ Found — ${lookup.serverName} (${lookup.clanName})`;
+                if (lookup.inAlliedClan) {
                     alliedClanStatus = '✅ Yes — Allied clan';
                 }
             }

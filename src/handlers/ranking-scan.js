@@ -7,13 +7,13 @@
 import {
     SUPER_ADMIN_USER_ID,
     MEMBER_ROLE_ID,
-    WORLD_IDS,
     DISCORD_SERVER_ID,
     PRE_REGISTER_MAX_AGE_MS,
     ORIGIN_SERVER_ID,
     SECONDARY_SERVER_ID
 } from '../core/ranking-constants.js';
-import { findNicknameInCache, getLocalRankingCache } from '../core/ranking-cache.js';
+import { getLocalRankingCache } from '../core/ranking-cache.js';
+import { lookupNickname } from '../core/ranking-service.js';
 
 // ==========================================
 // 🖱️ SCAN IMPORT HANDLER
@@ -566,23 +566,18 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
             continue;
         }
 
-        // ── Check ranking cache ──
-        const cacheHit = findNicknameInCache(preReg.nickname, rankingCache);
+        // ── Check ranking + allied clan via centralized service ──
+        const lookup = lookupNickname(preReg.nickname, db, rankingCache);
 
-        if (!cacheHit) {
+        if (!lookup.found) {
             totalNotFound++;
             if (results.length < 30) results.push(`❌ **${preReg.nickname}** — not found in ranking`);
             continue;
         }
 
-        // ── Check if in allied clan ──
-        const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-        const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
-        const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
-
-        if (!inAlliedClan) {
+        if (!lookup.inAlliedClan) {
             totalInAlliedClan++;
-            if (results.length < 30) results.push(`⚠️ **${preReg.nickname}** — found in ${serverName} (${cacheHit.clanName}) but NOT allied clan`);
+            if (results.length < 30) results.push(`⚠️ **${preReg.nickname}** — found in ${lookup.serverName} (${lookup.clanName}) but NOT allied clan`);
             continue;
         }
 
@@ -606,8 +601,8 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
             }
             delete db.preRegistrations[memberId];
             totalConverted++;
-            if (results.length < 30) results.push(`✈️ **${preReg.nickname}** → CONVERTED as pilot of **${preReg.ownerNick}** (${serverName} — ${cacheHit.clanName})`);
-            logEvent(`📊 [ScanImportStatus] Auto-converted pilot "${preReg.nickname}" (${memberId}) — linked to owner "${preReg.ownerNick}" (${serverName} — ${cacheHit.clanName})`);
+            if (results.length < 30) results.push(`✈️ **${preReg.nickname}** → CONVERTED as pilot of **${preReg.ownerNick}** (${lookup.serverName} — ${lookup.clanName})`);
+            logEvent(`📊 [ScanImportStatus] Auto-converted pilot "${preReg.nickname}" (${memberId}) — linked to owner "${preReg.ownerNick}" (${lookup.serverName} — ${lookup.clanName})`);
         } else {
             // Owner auto-conversion
             db.users[memberId] = {
@@ -622,8 +617,8 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
             }
             delete db.preRegistrations[memberId];
             totalConverted++;
-            if (results.length < 30) results.push(`✅ **${preReg.nickname}** → CONVERTED to permanent (${serverName} — ${cacheHit.clanName})`);
-            logEvent(`📊 [ScanImportStatus] Auto-converted owner "${preReg.nickname}" (${memberId}) — found in allied clan ${cacheHit.clanName} (${serverName})`);
+            if (results.length < 30) results.push(`✅ **${preReg.nickname}** → CONVERTED to permanent (${lookup.serverName} — ${lookup.clanName})`);
+            logEvent(`📊 [ScanImportStatus] Auto-converted owner "${preReg.nickname}" (${memberId}) — found in allied clan ${lookup.clanName} (${lookup.serverName})`);
         }
     }
 

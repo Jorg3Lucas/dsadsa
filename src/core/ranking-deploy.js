@@ -1,15 +1,6 @@
 import { PermissionFlagsBits } from 'discord.js';
 
 // ==========================================
-// 🔄 RE-EXPORTS (barrel file)
-// All logic has been moved to separate modules.
-// ==========================================
-
-export { runDailySynchronization } from "./ranking-sync-engine.js";
-export { initMir4BotEvents } from "./ranking-events.js";
-export { handleMir4Interactions } from "./ranking-handlers.js";
-
-// ==========================================
 // 🚀 SLASH COMMAND REGISTRATION
 // ==========================================
 
@@ -111,6 +102,7 @@ export async function registerMir4SlashCommands(guild) {
                 ]
             },
             { name: 'elderguide', description: '📋 Guide: how to approve/reject owner registrations' },
+            { name: 'stats', description: '📊 Show bot statistics (registrations, sync status, allied clans)' },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {

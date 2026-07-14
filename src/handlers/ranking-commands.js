@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
     ActionRowBuilder,
     StringSelectMenuBuilder,
@@ -18,7 +19,8 @@ import {
     REGISTRATION_CHANNEL_ID,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
+import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
+import { lookupNickname } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 
@@ -136,44 +138,31 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const targetMember = options.getMember('member');
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
-        let cacheHit = findNicknameInCache(nickname);
+        const lookup = lookupNickname(nickname, db);
 
-        let fuzzyManualNick = null;
-        if (!cacheHit) {
-            const rankingCache = getLocalRankingCache();
-            if (rankingCache) {
-                const fuzzyMatch = findClosestNicknameInCache(nickname, rankingCache);
-                if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== nickname.toLowerCase()) {
-                    fuzzyManualNick = fuzzyMatch.nickname;
-                    cacheHit = fuzzyMatch;
-                    logEvent(`👑 Admin ${interaction.user.tag} — fuzzy corrected "${nickname}" → "${fuzzyMatch.nickname}" in /manualregister`);
-                }
-            }
-        }
-
-        if (cacheHit) {
-            const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
-
-            const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
-
+        if (lookup.found) {
             confirmationCache[`${user.id}-manualregister`] = {
                 targetId: targetMember.id,
-                nickname: cacheHit.nickname,
-                clan: cacheHit.clanName,
-                worldId: cacheHit.worldId,
-                needsTempApproval: !inAlliedClan
+                nickname: lookup.nickname,
+                clan: lookup.clanName,
+                worldId: lookup.worldId,
+                needsTempApproval: !lookup.inAlliedClan
             };
 
-            const statusLine = inAlliedClan
-                ? `🌍 Server: **${serverName}** — ✅ Allied clan`
-                : `🌍 Server: **${serverName}** (${cacheHit.clanName}) — ⏳ Will be temporary (3 days)`;
+            const statusLine = lookup.inAlliedClan
+                ? `🌍 Server: **${lookup.serverName}** — ✅ Allied clan`
+                : `🌍 Server: **${lookup.serverName}** (${lookup.clanName}) — ⏳ Will be temporary (3 days)`;
 
-            const fuzzyManualNote = fuzzyManualNick
-                ? `\n🔍 **Fuzzy match:** "${nickname}" → "${fuzzyManualNick}"`
+            if (!lookup.exactMatch && lookup.fuzzySuggestion) {
+                logEvent(`👑 Admin ${interaction.user.tag} — fuzzy corrected "${nickname}" → "${lookup.fuzzySuggestion}" in /manualregister`);
+            }
+
+            const fuzzyManualNote = !lookup.exactMatch && lookup.fuzzySuggestion
+                ? `\n🔍 **Fuzzy match:** "${nickname}" → "${lookup.fuzzySuggestion}"`
                 : '';
+
             return interaction.reply({
-                content: getMsg('ranking.responses.manualregister.confirm', { nickname: cacheHit.nickname, clan: cacheHit.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}`,
+                content: getMsg('ranking.responses.manualregister.confirm', { nickname: lookup.nickname, clan: lookup.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}`,
                 components: [
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
@@ -555,12 +544,9 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 let line = `\n${userTag} — **${pending.nickname}**\n`;
                 line += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
 
-                const cacheHit = findNicknameInCache(pending.nickname);
-                if (!cacheHit && rankingCache) {
-                    const fuzzyMatch = findClosestNicknameInCache(pending.nickname, rankingCache);
-                    if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== pending.nickname.toLowerCase()) {
-                        line += `   🔍 **Fuzzy suggestion:** "${pending.nickname}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})\n`;
-                    }
+                const lookup = lookupNickname(pending.nickname, db, rankingCache);
+                if (lookup.fuzzySuggestion) {
+                    line += `   🔍 **Fuzzy suggestion:** "${pending.nickname}" → "${lookup.fuzzySuggestion}" (${lookup.serverName})\n`;
                 }
 
                 report += line;
@@ -573,22 +559,17 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                         let alliedClanStatus = '❌ Not in allied clan';
                         let fuzzyNote = '';
 
-                        const freshCacheHit = findNicknameInCache(pending.nickname) ||
-                            (rankingCache ? findClosestNicknameInCache(pending.nickname, rankingCache) : null);
-
-                        if (freshCacheHit) {
-                            const serverName = WORLD_IDS[freshCacheHit.worldId] || `World ${freshCacheHit.worldId}`;
-                            rankingStatus = `✅ Found — ${serverName} (${freshCacheHit.clanName})`;
-                            if (freshCacheHit.nickname.toLowerCase() !== pending.nickname.toLowerCase()) {
-                                fuzzyNote = `\n🔍 **Fuzzy match:** "${pending.nickname}" → "${freshCacheHit.nickname}"`;
+                        if (lookup.found) {
+                            rankingStatus = `✅ Found — ${lookup.serverName} (${lookup.clanName})`;
+                            if (!lookup.exactMatch && lookup.fuzzySuggestion) {
+                                fuzzyNote = `\n🔍 **Fuzzy match:** "${pending.nickname}" → "${lookup.fuzzySuggestion}"`;
                             }
-                            const worldAlliedClans = db.config?.alliedClans?.[freshCacheHit.worldId];
-                            if (worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === freshCacheHit.clanName.toLowerCase())) {
+                            if (lookup.inAlliedClan) {
                                 alliedClanStatus = '✅ Yes — Allied clan';
                             }
                         }
 
-                        const isMissingRankingOrAllied = !freshCacheHit || alliedClanStatus === '❌ Not in allied clan';
+                        const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
 
                         const approveButtons = [
                             new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
@@ -751,6 +732,121 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     // ── scanimport_status ──
     if (commandName === 'scanimport_status') {
         return handleScanImportStatus(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── stats ──
+    if (commandName === 'stats') {
+        await interaction.deferReply({ flags: 64 });
+
+        // Count owners (registered users who are not pilots of someone else)
+        const pilotIdSet = new Set();
+        for (const [, data] of Object.entries(db.users || {})) {
+            if (data.pilotIds && data.pilotIds.length > 0) {
+                for (const pid of data.pilotIds) {
+                    pilotIdSet.add(pid);
+                }
+            }
+        }
+
+        const totalUsers = Object.keys(db.users || {}).length;
+        const totalPilots = pilotIdSet.size;
+        const totalOwners = totalUsers - totalPilots;
+        const totalTemp = Object.values(db.users || {}).filter(u => u.tempUntil).length;
+
+        // Count temps expiring within 24h
+        const now = Date.now();
+        const expiringSoon = Object.values(db.users || {}).filter(u => {
+            if (!u.tempUntil) return false;
+            const hoursLeft = (new Date(u.tempUntil).getTime() - now) / (1000 * 60 * 60);
+            return hoursLeft > 0 && hoursLeft <= 24;
+        }).length;
+
+        // Pending
+        const pendingOwners = Object.keys(pendingRegistrations).length;
+        const pendingPilots = Object.keys(pendingPilotApprovals).length;
+
+        // Ranking cache stats
+        const cachePath = './ranking_cache.json';
+        let lastSync = '❌ Nunca sincronizado';
+        let worldsInCache = 0;
+        let playersInCache = 0;
+
+        try {
+            if (fs.existsSync(cachePath)) {
+                const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+                if (raw.updatedAt) {
+                    const syncDate = new Date(raw.updatedAt);
+                    const hoursAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60 * 60));
+                    const minsAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60));
+                    if (hoursAgo < 1) {
+                        lastSync = `🟢 ${minsAgo} min atrás`;
+                    } else if (hoursAgo < 24) {
+                        lastSync = `🟡 ${hoursAgo}h atrás`;
+                    } else {
+                        lastSync = `🔴 ${Math.floor(hoursAgo / 24)}d atrás`;
+                    }
+                }
+                if (raw.ranking) {
+                    worldsInCache = Object.keys(raw.ranking).length;
+                    playersInCache = Object.values(raw.ranking).reduce((sum, w) => sum + (w ? Object.keys(w).length : 0), 0);
+                }
+            }
+        } catch (e) {
+            lastSync = '❌ Erro ao ler cache';
+        }
+
+        // Allied clans
+        const alliedClans = db.config?.alliedClans || {};
+        const totalAlliedClans = Object.values(alliedClans).reduce((sum, clans) => sum + (clans ? clans.length : 0), 0);
+        const alliedWorlds = Object.keys(alliedClans).length;
+
+        // Pre-registrations
+        const preRegs = db.preRegistrations ? Object.keys(db.preRegistrations).length : 0;
+
+        const report = `📊 **Bot Statistics**
+
+` +
+            `━━━━━━━━━━━━━━━━━━━━━━
+` +
+            `👥 **Registrations**
+` +
+            `   👑 Owners: **${totalOwners}**
+` +
+            `   ✈️ Pilots: **${totalPilots}**
+` +
+            `   📦 Total: **${totalUsers}**
+` +
+            `   ⏳ Temporary: **${totalTemp}** (${expiringSoon} expiring < 24h)
+` +
+            `   ⏳ Pre-registrations: **${preRegs}**
+
+` +
+            `⏰ **Pending Approvals**
+` +
+            `   👑 Owners: **${pendingOwners}**
+` +
+            `   ✈️ Pilots: **${pendingPilots}**
+
+` +
+            `🌍 **Ranking Cache**
+` +
+            `   🗺️ Worlds: **${worldsInCache}**
+` +
+            `   👤 Players: **${playersInCache.toLocaleString()}**
+` +
+            `   🕐 Last sync: ${lastSync}
+
+` +
+            `🤝 **Allied Clans**
+` +
+            `   🗺️ Worlds: **${alliedWorlds}**
+` +
+            `   🏰 Clans: **${totalAlliedClans}**
+` +
+            `━━━━━━━━━━━━━━━━━━━━━━`;
+
+        logEvent(`📊 ${interaction.user.tag} requested bot stats`);
+        return interaction.editReply(report);
     }
 
     return false;

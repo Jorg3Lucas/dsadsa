@@ -4,7 +4,7 @@ import {
 } from 'discord.js';
 import 'dotenv/config';
 
-import { registerMir4SlashCommands } from './core/ranking_sync.js';
+import { registerMir4SlashCommands } from './core/ranking-deploy.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';

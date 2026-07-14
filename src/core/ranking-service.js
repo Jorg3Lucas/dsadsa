@@ -13,7 +13,7 @@ import {
 
 function checkAlliedClan(cacheHit, db) {
     const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-    return worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+    return !!(worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase()));
 }
 
 function buildResult(cacheHit, db, extraFields = {}) {
