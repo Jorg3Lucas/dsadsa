@@ -2,15 +2,12 @@ import {
     Client,
     GatewayIntentBits
 } from 'discord.js';
-import fs from 'node:fs';
 import 'dotenv/config';
 
-import {
-    registerMir4SlashCommands,
-    initMir4BotEvents,
-    handleMir4Interactions,
-    runDailySynchronization
-} from './core/ranking_sync.js';
+import { registerMir4SlashCommands } from './core/ranking_sync.js';
+import { initMir4BotEvents } from './core/ranking-events.js';
+import { handleMir4Interactions } from './core/ranking-handlers.js';
+import { runDailySynchronization } from './core/ranking-sync-engine.js';
 import { handleOwnerRegistrationModal } from './handlers/ranking-registration.js';
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot } from './handlers/ranking-approvals.js';
@@ -28,8 +25,10 @@ import {
     handleManageAlliedRemove,
     handleManageNav
 } from './handlers/ranking-management.js';
-import { startAutoBackup, runBackup } from './auto-backup.js';
-import { DISCORD_SERVER_ID, pendingRegistrations, pendingPilotApprovals } from './core/ranking-constants.js';
+import { startAutoBackup } from './auto-backup.js';
+import { DISCORD_SERVER_ID } from './core/ranking-constants.js';
+import { logRankingEvent } from './core/ranking-logger.js';
+import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
 const client = new Client({
     intents: [
@@ -43,71 +42,9 @@ const client = new Client({
     }
 });
 
-const dbRankingPath = './database_ranking.json';
-const rankingLogsPath = './ranking_logs.txt';
-
 let rankingDb = {
     users: {}
 };
-
-function logRankingEvent(message) {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] ${message}\n`;
-    console.log(`[Ranking] ${message}`);
-    fs.appendFileSync(rankingLogsPath, logMessage, 'utf8');
-}
-
-function saveRankingStorage() {
-    try {
-        // Backup is non-fatal — save first, then try to backup
-        try { runBackup(['./database_ranking.json']); } catch (e) {
-            console.error('⚠️ [Save] Backup failed (non-fatal):', e.message);
-        }
-
-        const dbToSave = { ...rankingDb };
-        // Persist pending registrations (deep copy to avoid reference issues)
-        dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
-        dbToSave._pendingPilotApprovals = JSON.parse(JSON.stringify(pendingPilotApprovals));
-        fs.writeFileSync(dbRankingPath, JSON.stringify(dbToSave, null, 2), 'utf8');
-        
-        const pendCount = Object.keys(dbToSave._pendingRegistrations).length;
-        const pilotCount = Object.keys(dbToSave._pendingPilotApprovals).length;
-        if (pendCount > 0 || pilotCount > 0) {
-            console.log(`💾 [Save] Saved ${pendCount} pending + ${pilotCount} pilot approvals`);
-        }
-    } catch (error) {
-        console.error('❌ Error saving ranking database:', error);
-        if (error.stack) console.error('📋 [Stack]:', error.stack);
-    }
-}
-
-function loadLocalStorageRanking() {
-    try {
-        if (fs.existsSync(dbRankingPath)) {
-            const data = fs.readFileSync(dbRankingPath, 'utf8');
-            rankingDb = JSON.parse(data);
-            if (!rankingDb.users) rankingDb.users = {};
-
-            // Restore pending registrations from disk (survive bot restarts)
-            if (rankingDb._pendingRegistrations) {
-                Object.assign(pendingRegistrations, rankingDb._pendingRegistrations);
-                delete rankingDb._pendingRegistrations;
-            }
-            if (rankingDb._pendingPilotApprovals) {
-                Object.assign(pendingPilotApprovals, rankingDb._pendingPilotApprovals);
-                delete rankingDb._pendingPilotApprovals;
-            }
-
-            console.log('✅ Ranking database loaded successfully.');
-            console.log(`📋 Restored ${Object.keys(pendingRegistrations).length} pending registration(s), ${Object.keys(pendingPilotApprovals).length} pending pilot approval(s)`);
-        } else {
-            saveRankingStorage();
-            console.log('📝 New database_ranking.json file created.');
-        }
-    } catch (error) {
-        console.error('❌ Error loading ranking database:', error);
-    }
-}
 
 // ==========================================
 // 🚀 READY EVENT
@@ -115,7 +52,7 @@ function loadLocalStorageRanking() {
 client.once('clientReady', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
-    loadLocalStorageRanking();
+    rankingDb = loadLocalStorageRanking();
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
 
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
@@ -125,11 +62,11 @@ client.once('clientReady', async () => {
         console.error('❌ Error: Invalid Server ID configuration.');
     }
 
-    initMir4BotEvents(client, rankingDb, saveRankingStorage, logRankingEvent);
+    initMir4BotEvents(client, rankingDb, (db) => saveRankingStorage(db || rankingDb), logRankingEvent);
 
     setTimeout(async () => {
         console.log('🧪 [Startup] Checking if ranking needs sync...');
-        await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, false);
+        await runDailySynchronization(client, rankingDb, (db) => saveRankingStorage(db || rankingDb), logRankingEvent, false);
     }, 10000);
 
     // Start auto-backup scheduler
@@ -139,7 +76,7 @@ client.once('clientReady', async () => {
 // Graceful shutdown handlers (top-level, not inside ready callback)
 function handleShutdown(signal) {
     console.log(`\n🛑 [${signal}] Shutting down gracefully...`);
-    saveRankingStorage();
+    saveRankingStorage(rankingDb);
     logRankingEvent(`[Ranking Bot] Shutting down (${signal})`);
     process.exit(0);
 }

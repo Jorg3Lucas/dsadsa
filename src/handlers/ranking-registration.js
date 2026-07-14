@@ -4,7 +4,7 @@ import {
     ButtonStyle
 } from 'discord.js';
 import { WORLD_IDS, pendingRegistrations, adminChannelId } from '../core/ranking-constants.js';
-import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache } from '../core/ranking-cache.js';
+import { lookupNickname } from '../core/ranking-service.js';
 
 // ==========================================
 // 👑 OWNER REGISTRATION MODAL HANDLER
@@ -28,23 +28,8 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
 
     const userId = interaction.user.id;
 
-    // Look up nickname in ranking cache and check allied clan status
-    let cacheHit = findNicknameInCache(nickname);
-    let fuzzySuggestion = null;
-
-    // ── Fuzzy matching: if exact nickname not found, find closest for informational note ──
-    if (!cacheHit) {
-        const rankingCache = getLocalRankingCache();
-        if (rankingCache) {
-            const fuzzyMatch = findClosestNicknameInCache(nickname, rankingCache);
-            if (fuzzyMatch && fuzzyMatch.nickname.toLowerCase() !== nickname.toLowerCase()) {
-                fuzzySuggestion = fuzzyMatch;
-                // Use fuzzy match just for ranking/allied status display
-                cacheHit = fuzzyMatch;
-                logEvent(`👑 ${interaction.user.tag} — fuzzy suggestion: "${nickname}" → "${fuzzyMatch.nickname}" (${WORLD_IDS[fuzzyMatch.worldId] || fuzzyMatch.worldId})`);
-            }
-        }
-    }
+    // Look up nickname in ranking cache using centralized service
+    const lookup = lookupNickname(nickname, db);
 
     // Always use the user's original nickname — no auto-correction
     pendingRegistrations[userId] = { nickname, timestamp: Date.now() };
@@ -66,17 +51,15 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     let alliedClanStatus = '❌ Not in allied clan';
     let fuzzyNote = '';
 
-    if (cacheHit) {
-        const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
-        rankingStatus = `✅ Found — ${serverName} (${cacheHit.clanName})`;
+    if (lookup.found) {
+        rankingStatus = `✅ Found — ${lookup.serverName} (${lookup.clanName})`;
 
-        if (fuzzySuggestion) {
-            fuzzyNote = `\n🔍 **Fuzzy suggestion:** "${nickname}" → "${fuzzySuggestion.nickname}"`;
+        if (!lookup.exactMatch && lookup.fuzzySuggestion) {
+            fuzzyNote = `\n🔍 **Fuzzy suggestion:** "${nickname}" → "${lookup.fuzzySuggestion}"`;
+            logEvent(`👑 ${interaction.user.tag} — fuzzy suggestion: "${nickname}" → "${lookup.fuzzySuggestion}" (${lookup.serverName})`);
         }
 
-        // Check if the clan is an allied clan
-        const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-        if (worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase())) {
+        if (lookup.inAlliedClan) {
             alliedClanStatus = '✅ Yes — Allied clan';
         }
     }

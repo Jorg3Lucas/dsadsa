@@ -20,7 +20,6 @@ import { findNicknameInCache } from '../core/ranking-cache.js';
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
 // ==========================================
-// Extracted from ranking-handlers.js
 
 // ── Manage: User selected from page → show actions ──
 export async function handleManageUserPage(interaction, db, saveLocalStorage, logEvent) {
@@ -268,20 +267,15 @@ export async function handleManageAllied(interaction, db, saveLocalStorage, logE
     }).catch(() => {});
 }
 
-// ── Allied Clans: World selected → show clans ──
-export async function handleManageAlliedWorld(interaction, db, saveLocalStorage, logEvent) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
-    }
+// ==========================================
+// 🏗️ WORLD VIEW BUILDER (shared by 3 handlers)
+// ==========================================
 
-    const worldId = interaction.values[0];
-    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
-
-    ensureConfig(db);
-    if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
-
-    const clans = db.config.alliedClans[worldId];
-
+/**
+ * Build the content string and component rows for a world's allied clans view.
+ * Returns { content, components } ready to pass to interaction.update/editReply.
+ */
+function buildAlliedWorldView(worldId, clans, worldName) {
     let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
     if (clans.length === 0) {
         content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
@@ -298,7 +292,6 @@ export async function handleManageAlliedWorld(interaction, db, saveLocalStorage,
     }));
 
     const components = [];
-
     if (removeOptions.length > 0) {
         components.push(new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
@@ -307,12 +300,27 @@ export async function handleManageAlliedWorld(interaction, db, saveLocalStorage,
                 .addOptions(removeOptions)
         ));
     }
-
     components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
     ));
 
+    return { content, components };
+}
+
+// ── Allied Clans: World selected → show clans ──
+export async function handleManageAlliedWorld(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    const worldId = interaction.values[0];
+    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+
+    ensureConfig(db);
+    if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+
+    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName);
     return interaction.update({ content, components }).catch(() => {});
 }
 
@@ -385,33 +393,8 @@ export async function handleManageAlliedAddModal(interaction, db, saveLocalStora
 
     logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${clanName}" to ${worldName}`);
 
-    // Refresh the world view to show the updated list
-    const clans = db.config.alliedClans[worldId];
-    let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
-    content += '**Allied Clans:**\n';
-    clans.forEach((clan, i) => {
-        content += `\n${i + 1}. **${clan}**`;
-    });
-
-    const removeOptions = clans.map((clan, i) => ({
-        label: `🗑️ ${clan}`,
-        value: `${worldId}_${i}`
-    }));
-
-    const components = [];
-    if (removeOptions.length > 0) {
-        components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId('manage_allied_remove')
-                .setPlaceholder('Select a clan to remove...')
-                .addOptions(removeOptions)
-        ));
-    }
-    components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
-    ));
-
+    // Refresh the world view
+    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName);
     return interaction.editReply({ content, components });
 }
 
@@ -438,35 +421,7 @@ export async function handleManageAlliedRemove(interaction, db, saveLocalStorage
 
     // Refresh the world view
     const clans = db.config?.alliedClans?.[worldId] || [];
-    let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
-    if (clans.length === 0) {
-        content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
-    } else {
-        content += '**Allied Clans:**\n';
-        clans.forEach((clan, i) => {
-            content += `\n${i + 1}. **${clan}**`;
-        });
-    }
-
-    const removeOptions = clans.map((clan, i) => ({
-        label: `🗑️ ${clan}`,
-        value: `${worldId}_${i}`
-    }));
-
-    const components = [];
-    if (removeOptions.length > 0) {
-        components.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId('manage_allied_remove')
-                .setPlaceholder('Select a clan to remove...')
-                .addOptions(removeOptions)
-        ));
-    }
-    components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
-    ));
-
+    const { content, components } = buildAlliedWorldView(worldId, clans, worldName);
     return interaction.update({ content, components }).catch(() => {});
 }
 
