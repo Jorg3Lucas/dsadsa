@@ -14,6 +14,7 @@ export default [
     },
     rules: {
       // === ERRORS ===
+      "no-useless-assignment": "off", // experimental — false positives on counter pattern (let x = 0; x++;)
       "no-unused-vars": ["warn", {
         argsIgnorePattern: "^_",
         varsIgnorePattern: "^_",
