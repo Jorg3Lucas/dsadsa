@@ -5,8 +5,8 @@
 // Keeps last 7 backups per file
 // ==========================================
 
-import fs from "fs";
-import path from "path";
+import fs from 'node:fs';
+import path from 'node:path';
 
 const BACKUP_DIR = path.resolve("./backups");
 const MAX_BACKUPS = 7; // keep last 7 backups per file

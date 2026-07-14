@@ -14,7 +14,9 @@ import {
     pendingPilotApprovals,
     adminChannelId,
     APPROVER_ROLE_IDS,
-    WELCOME_PANEL_MESSAGE
+    WELCOME_PANEL_MESSAGE,
+    REGISTRATION_CHANNEL_ID,
+    ensureConfig
 } from '../core/ranking-constants.js';
 import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
@@ -431,7 +433,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });
 
-        if (!db.config) db.config = {};
+        ensureConfig(db);
         db.config.panelChannelId = interaction.channelId;
         db.config.panelMessageId = panelMessage.id;
         saveLocalStorage();
@@ -445,7 +447,6 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         await interaction.deferReply({ flags: 64 });
 
         const doNotify = options.getBoolean('notify') || false;
-        const REGISTRATION_CHANNEL_ID = '1524296969521070120';
 
         const allMembers = await guild.members.fetch().catch(() => null);
         if (!allMembers || allMembers.size === 0) {

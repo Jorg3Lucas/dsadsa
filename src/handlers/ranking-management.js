@@ -12,7 +12,8 @@ import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
-    confirmationCache
+    confirmationCache,
+    ensureConfig
 } from '../core/ranking-constants.js';
 import { findNicknameInCache } from '../core/ranking-cache.js';
 
@@ -276,8 +277,7 @@ export async function handleManageAlliedWorld(interaction, db, saveLocalStorage,
     const worldId = interaction.values[0];
     const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
 
-    if (!db.config) db.config = {};
-    if (!db.config.alliedClans) db.config.alliedClans = {};
+    ensureConfig(db);
     if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
 
     const clans = db.config.alliedClans[worldId];
@@ -369,8 +369,7 @@ export async function handleManageAlliedAddModal(interaction, db, saveLocalStora
         return interaction.editReply('❌ Clan name cannot be empty.');
     }
 
-    if (!db.config) db.config = {};
-    if (!db.config.alliedClans) db.config.alliedClans = {};
+    ensureConfig(db);
     if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
 
     // Check for duplicates (case-insensitive)

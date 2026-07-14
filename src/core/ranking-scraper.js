@@ -22,7 +22,8 @@ export async function fetchMir4RankingData(forceRefresh = false) {
     const worldIds = Object.keys(WORLD_IDS);
     const baseUrl = 'https://forum.mir4global.com/rank?ranktype=1&worldgroupid=3&classtype=&searchname=';
 
-    for (const worldId of worldIds) {
+    for (let i = 0; i < worldIds.length; i++) {
+        const worldId = worldIds[i];
         const serverName = WORLD_IDS[worldId];
         console.log(`🌍 Fetching ranking for ${serverName} (worldid=${worldId})...`);
         const rankingMap = {};
@@ -67,7 +68,7 @@ export async function fetchMir4RankingData(forceRefresh = false) {
         result[worldId] = rankingMap;
 
         // Delay between worlds to avoid rate limiting
-        if (worldIds.indexOf(worldId) < worldIds.length - 1) {
+        if (i < worldIds.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 10000));
         }
     }

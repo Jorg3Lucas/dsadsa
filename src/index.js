@@ -2,7 +2,7 @@ import {
     Client,
     GatewayIntentBits
 } from 'discord.js';
-import fs from 'fs';
+import fs from 'node:fs';
 import 'dotenv/config';
 
 import {

@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, WORLD_IDS, PENDING_MAX_AGE_MS } from './ranking-constants.js';
+import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, WORLD_IDS, PENDING_MAX_AGE_MS, ensureConfig } from './ranking-constants.js';
 import { findNicknameInCache } from './ranking-cache.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
@@ -20,7 +20,7 @@ async function handleTextCommands(message, db, saveLocalStorage) {
             return message.reply('❌ You must be an Administrator to use this command.');
         }
 
-        if (!db.config) db.config = {};
+        ensureConfig(db);
         db.config.adminChannelId = message.channel.id;
         saveLocalStorage();
         setAdminChannelId(message.channel.id);
@@ -32,7 +32,7 @@ async function handleTextCommands(message, db, saveLocalStorage) {
             return message.reply('❌ You must be an Administrator to use this command.');
         }
 
-        if (!db.config) db.config = {};
+        ensureConfig(db);
         db.config.welcomeChannelId = message.channel.id;
         saveLocalStorage();
         return message.reply(`✅ Welcome channel set to ${message.channel.toString()}.`);
@@ -43,7 +43,7 @@ async function handleTextCommands(message, db, saveLocalStorage) {
             return message.reply('❌ You must be an Administrator to use this command.');
         }
 
-        if (!db.config) db.config = {};
+        ensureConfig(db);
         db.config.rankingValidationEnabled = true;
         saveLocalStorage();
         return message.reply('✅ **Ranking validation ENABLED!** Members not found in any EU ranking will lose their role on next sync.');
@@ -54,7 +54,7 @@ async function handleTextCommands(message, db, saveLocalStorage) {
             return message.reply('❌ You must be an Administrator to use this command.');
         }
 
-        if (!db.config) db.config = {};
+        ensureConfig(db);
         db.config.rankingValidationEnabled = false;
         saveLocalStorage();
         return message.reply('🔓 **Ranking validation DISABLED!** Members won\'t lose roles automatically.');

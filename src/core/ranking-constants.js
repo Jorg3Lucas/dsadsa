@@ -68,4 +68,23 @@ export const SUPER_ADMIN_USER_ID = '864108100880171009';
 
 export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@864108100880171009>';
 
+// ==========================================
+// 📢 REGISTRATION CHANNEL (for /listunregistered DMs)
+// ==========================================
+
+export const REGISTRATION_CHANNEL_ID = '1524296969521070120';
+
+// ==========================================
+// 🛠️ CONFIG INITIALIZATION HELPER
+// ==========================================
+
+/**
+ * Ensures db.config and db.config.alliedClans exist.
+ * Call this before accessing db.config properties.
+ */
+export function ensureConfig(db) {
+    if (!db.config) db.config = {};
+    if (!db.config.alliedClans) db.config.alliedClans = {};
+}
+
 
