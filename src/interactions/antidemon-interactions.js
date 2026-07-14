@@ -28,9 +28,12 @@ export function canHandleAntidemonInteraction(interaction) {
         cid.startsWith("antipwdask-no-");
 }
 
-/** Check if a modal submit matches the antidemon password modal. */
+/** Check if a modal submit matches the antidemon password modal or claim+password modal. */
 export function canHandleAntidemonModal(interaction) {
-    return interaction.isModalSubmit() && interaction.customId.startsWith("antipwdmodal-");
+    return interaction.isModalSubmit() && (
+        interaction.customId.startsWith("antipwdmodal-") ||
+        interaction.customId.startsWith("antipwdaskmodal-")
+    );
 }
 
 /** Route an antidemon interaction to the appropriate handler. */
