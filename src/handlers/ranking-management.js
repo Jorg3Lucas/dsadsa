@@ -353,6 +353,69 @@ export async function handleManageAlliedAdd(interaction, db, saveLocalStorage, l
     return interaction.showModal(modal);
 }
 
+// ── Allied Clans: Add clan modal submission ──
+export async function handleManageAlliedAddModal(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: '❌ Permission denied.', flags: 64 }).catch(() => {});
+    }
+
+    await interaction.deferReply({ flags: 64 });
+
+    const clanName = interaction.fields.getTextInputValue('clan_name').trim();
+    const worldId = interaction.fields.getTextInputValue('world_id').trim();
+    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+
+    if (!clanName) {
+        return interaction.editReply('❌ Clan name cannot be empty.');
+    }
+
+    if (!db.config) db.config = {};
+    if (!db.config.alliedClans) db.config.alliedClans = {};
+    if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+
+    // Check for duplicates (case-insensitive)
+    const alreadyExists = db.config.alliedClans[worldId].some(
+        c => c.toLowerCase() === clanName.toLowerCase()
+    );
+    if (alreadyExists) {
+        return interaction.editReply(`⚠️ **${clanName}** is already an allied clan in **${worldName}**.`);
+    }
+
+    db.config.alliedClans[worldId].push(clanName);
+    saveLocalStorage();
+
+    logEvent(`➕ Admin ${interaction.user.tag} added allied clan "${clanName}" to ${worldName}`);
+
+    // Refresh the world view to show the updated list
+    const clans = db.config.alliedClans[worldId];
+    let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
+    content += '**Allied Clans:**\n';
+    clans.forEach((clan, i) => {
+        content += `\n${i + 1}. **${clan}**`;
+    });
+
+    const removeOptions = clans.map((clan, i) => ({
+        label: `🗑️ ${clan}`,
+        value: `${worldId}_${i}`
+    }));
+
+    const components = [];
+    if (removeOptions.length > 0) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('manage_allied_remove')
+                .setPlaceholder('Select a clan to remove...')
+                .addOptions(removeOptions)
+        ));
+    }
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
+    ));
+
+    return interaction.editReply({ content, components });
+}
+
 // ── Allied Clans: Remove clan from select menu ──
 export async function handleManageAlliedRemove(interaction, db, saveLocalStorage, logEvent) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {

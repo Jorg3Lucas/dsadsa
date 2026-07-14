@@ -24,6 +24,7 @@ import {
     handleManageAllied,
     handleManageAlliedWorld,
     handleManageAlliedAdd,
+    handleManageAlliedAddModal,
     handleManageAlliedRemove,
     handleManageNav
 } from './handlers/ranking-management.js';
@@ -111,7 +112,7 @@ function loadLocalStorageRanking() {
 // ==========================================
 // 🚀 READY EVENT
 // ==========================================
-client.once('ready', async () => {
+client.once('clientReady', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
     loadLocalStorageRanking();
@@ -196,7 +197,7 @@ client.on('interactionCreate', async (interaction) => {
                 return await handleRejectOwner(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId === 'manage_allied_add_modal') {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+                return await handleManageAlliedAddModal(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
             // Fallback for any other modal submits not caught above
             return;
