@@ -103,7 +103,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     if (!db.users[userId].pilotIds) db.users[userId].pilotIds = [];
     saveLocalStorage();
 
-    await targetMember.setNickname(pending.nickname).catch(() => {});
+    await targetMember.setNickname(finalNickname).catch(() => {});
     if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
         await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
     }
@@ -113,10 +113,10 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         ? '⏳ **Temporary registration approved!** You have 3 days to join an allied clan and appear in the ranking. After that, your role will be removed if you\'re not in an allied clan.'
         : '✅ **Registration approved!** You received the member role.';
 
-    logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${pending.nickname}`);
+    logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${finalNickname}`);
 
     await interaction.editReply({
-        content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${pending.nickname}\n✅ **Approved by:** ${interaction.user.tag}`,
+        content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${finalNickname}\n✅ **Approved by:** ${interaction.user.tag}`,
         components: []
     });
 

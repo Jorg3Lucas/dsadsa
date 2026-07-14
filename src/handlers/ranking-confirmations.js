@@ -162,17 +162,17 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
         saveLocalStorage();
 
-        await targetMember.setNickname(cached.nickname).catch(() => {});
+        await targetMember.setNickname(finalNickname).catch(() => {});
         if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }
 
         const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
-        logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${cached.nickname} in ${cached.clan}${tempLabel}`);
+        logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${finalNickname} in ${cached.clan}${tempLabel}`);
 
         const responseMsg = cached.needsTempApproval
-            ? `⏳ **${cached.nickname}** registered as temporary (3 days) in **${cached.clan}**. Will be converted to permanent once found in an allied clan.`
-            : getMsg('ranking.responses.manualregister.cacheFound', { nickname: cached.nickname, clan: cached.clan });
+            ? `⏳ **${finalNickname}** registered as temporary (3 days) in **${cached.clan}**. Will be converted to permanent once found in an allied clan.`
+            : getMsg('ranking.responses.manualregister.cacheFound', { nickname: finalNickname, clan: cached.clan });
 
         return interaction.update({
             content: responseMsg,
