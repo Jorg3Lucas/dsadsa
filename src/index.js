@@ -22,6 +22,7 @@ import {
 } from './core/ranking_sync.js';
 import { loadSalaryState } from './handlers/salary-state.js';
 import { initSalaryCron } from './handlers/salary-lifecycle.js';
+import { exportVotesToSheets } from './handlers/salary-sheets.js';
 import { handleManagementInteraction, handleMgmtSlash } from './handlers/management-menu.js';
 import { noop, getBotToken} from './core/config.js';
 
@@ -168,6 +169,18 @@ client.once('ready', async () => {
     // Initialize Salary Poll system
     loadSalaryState();
     initSalaryCron();
+
+    // Re-export votes to Google Sheets on boot
+    // Ensures stones are re-applied to the spreadsheet after restart
+    setTimeout(async () => {
+        try {
+            console.log("📊 [Boot] Re-exporting votes to Google Sheets...");
+            const result = await exportVotesToSheets();
+            if (result) console.log("✅ [Boot] Votes re-exported successfully.");
+        } catch (err) {
+            console.error("❌ [Boot] Error re-exporting votes to sheets:", err.message);
+        }
+    }, 3000);
 
 
 });
