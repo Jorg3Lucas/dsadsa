@@ -59,9 +59,41 @@
                     "member": "Discord member to register.",
                     "nickname": "In-game character name (exact as typed)."
                 }
+            },
+            "notify": {
+                "description": "📧 [Admin] Send notifications to server members"
             }
         },
         "responses": {
+            "notify": {
+                "prompt": "📧 **Select the type of notification to send:**",
+                "placeholder": "Choose an option...",
+                "optionUnreg": {
+                    "label": "📧 Unregistered",
+                    "description": "Notify unregistered members via DM to register"
+                },
+                "optionDomination": {
+                    "label": "⚔️ Domination",
+                    "description": "Call all members to Domination"
+                },
+                "optionStandby": {
+                    "label": "⏳ Standby",
+                    "description": "Call all members to the Standby channel"
+                },
+                "confirmBtn": "✅ Yes, notify",
+                "cancelBtn": "❌ Cancel",
+                "unregConfirm": "⚠️ **Are you sure you want to DM ALL unregistered members?**\n\nThis may take a few minutes depending on the number of members.",
+                "dominationConfirm": "⚠️ **Are you sure you want to DM ALL registered members calling for Domination?**\n\nThis may take a few minutes depending on the number of members.",
+                "standbyConfirm": "⚠️ **Are you sure you want to DM ALL registered members calling for Standby?**\n\nThis may take a few minutes depending on the number of members.",
+                "sendingDms": "📧 **Sending DMs to {count} members...**\nPlease wait, this may take a few minutes.",
+                "cancelled": "❌ **Notification cancelled.**",
+                "unregDm": "👋 Hey **{displayName}**, you have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#{channelId}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀",
+                "unregResult": "📧 **Notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
+                "dominationDm": "⚔️ **ATTENTION — DOMINATION!**\n\n{displayName}, all members must join the Domination channel to fight NOW!\n\n🔗 <#{channelId}>\n\nJoin and help the clan win! 💪",
+                "standbyDm": "⏳ **ATTENTION — STANDBY!**\n\n{displayName}, all members must join the Standby channel and await commands!\n\n🔗 <#{channelId}>\n\nGet ready for instructions! 🎯",
+                "dominationResult": "⚔️ **Domination notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
+                "standbyResult": "⏳ **Standby notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**"
+            },
             "removepilot": {
                 "noPilots": "❌ You don't have any active pilots on your account.",
                 "menuContent": "👇 **Pilot Management:** Select which pilot to remove from your account:",

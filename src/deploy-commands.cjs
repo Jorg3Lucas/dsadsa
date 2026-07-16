@@ -151,6 +151,11 @@ const commands = [
     name: 'elderguide',
     description: '📋 Guide: how to approve/reject owner registrations'
   },
+  {
+    name: 'notify',
+    description: '📧 [Admin] Send notifications to server members',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

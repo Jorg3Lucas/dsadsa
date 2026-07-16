@@ -75,6 +75,13 @@ export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠�
 export const REGISTRATION_CHANNEL_ID = '1524296969521070120';
 
 // ==========================================
+// 📢 NOTIFICATION CHANNELS (for /notify command)
+// ==========================================
+
+export const DOMINATION_CHANNEL_ID = '1481572061850767490';
+export const STANDBY_CHANNEL_ID = '1481572514399518780';
+
+// ==========================================
 // 🛠️ CONFIG INITIALIZATION HELPER
 // ==========================================
 

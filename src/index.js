@@ -15,6 +15,11 @@ import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemov
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand } from './handlers/ranking-commands.js';
 import {
+    handleNotifyCommand,
+    handleNotifySelect,
+    handleNotifyButton
+} from './handlers/ranking-notify.js';
+import {
     handleManageUserPage,
     handleManageAction,
     handleManagePilotRemove,
@@ -92,6 +97,11 @@ client.on('interactionCreate', async (interaction) => {
     try {
         // A. SLASH COMMANDS (/)
         if (interaction.isCommand()) {
+            // Notify command
+            if (interaction.commandName === 'notify') {
+                return await handleNotifyCommand(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
             const result = await handleRankingCommand(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             // Fallback: if command wasn't handled by new module, try giant file (e.g. scanimport)
             if (result !== false) return;
@@ -100,6 +110,11 @@ client.on('interactionCreate', async (interaction) => {
 
         // B. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
+            // Notify select menu
+            if (interaction.customId === 'notify_select_action') {
+                return await handleNotifySelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
             // Pilot removal (user removing their own pilot)
             if (interaction.customId === 'select_pilot_to_remove') {
                 return await handlePilotRemoveSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
@@ -153,6 +168,11 @@ client.on('interactionCreate', async (interaction) => {
 
         // D. BUTTON CLICKS
         if (interaction.isButton()) {
+            // Notify buttons
+            if (interaction.customId.startsWith('notify_')) {
+                return await handleNotifyButton(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
             // Welcome buttons (register owner / pilot)
             if (interaction.customId === 'welcome_register_owner') {
                 return handleWelcomeRegisterOwner(interaction);

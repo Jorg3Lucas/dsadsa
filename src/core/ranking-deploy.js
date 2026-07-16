@@ -103,6 +103,11 @@ export async function registerMir4SlashCommands(guild) {
             },
             { name: 'elderguide', description: '📋 Guide: how to approve/reject owner registrations' },
             { name: 'stats', description: '📊 Show bot statistics (registrations, sync status, allied clans)' },
+            {
+                name: 'notify',
+                description: '📧 [Admin] Send notifications to server members',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {
