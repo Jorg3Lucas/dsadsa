@@ -58,9 +58,9 @@ export async function handleNotifyCommand(interaction, db, saveLocalStorage, log
         .setPlaceholder(getMsg('ranking.responses.notify.placeholder'))
         .addOptions(
             new StringSelectMenuOptionBuilder()
-                .setLabel(getMsg('ranking.responses.notify.optionUnreg.label'))
-                .setDescription(getMsg('ranking.responses.notify.optionUnreg.description'))
-                .setValue('notify_unregistered')
+                .setLabel(getMsg('ranking.responses.notify.optionNoRole.label'))
+                .setDescription(getMsg('ranking.responses.notify.optionNoRole.description'))
+                .setValue('notify_no_role')
                 .setEmoji('📧'),
             new StringSelectMenuOptionBuilder()
                 .setLabel(getMsg('ranking.responses.notify.optionDomination.label'))
@@ -87,14 +87,12 @@ export async function handleNotifyCommand(interaction, db, saveLocalStorage, log
  * Handles the select menu choice — shows a confirmation step before sending.
  */
 export async function handleNotifySelect(interaction, db, saveLocalStorage, logEvent) {
-    const selected = interaction.values[0];
-
-    if (selected === 'notify_unregistered') {
-        pendingNotifications[interaction.user.id] = { type: 'unregistered' };
+    const selected = interaction.values[0];        if (selected === 'notify_no_role') {
+        pendingNotifications[interaction.user.id] = { type: 'no_role' };
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('notify_confirm_unreg')
+                .setCustomId('notify_confirm_no_role')
                 .setLabel(getMsg('ranking.responses.notify.confirmBtn'))
                 .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
@@ -104,7 +102,7 @@ export async function handleNotifySelect(interaction, db, saveLocalStorage, logE
         );
 
         return interaction.update({
-            content: getMsg('ranking.responses.notify.unregConfirm'),
+            content: getMsg('ranking.responses.notify.noRoleConfirm'),
             components: [row]
         });
     }
@@ -165,8 +163,8 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
         });
     }
 
-    // ── Confirm: Notify unregistered members via DM ──
-    if (customId === 'notify_confirm_unreg') {
+    // ── Confirm: Notify no-role members via DM ──
+    if (customId === 'notify_confirm_no_role') {
         await interaction.deferUpdate();
         delete pendingNotifications[interaction.user.id];
 
@@ -175,28 +173,28 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
             return interaction.editReply({ content: '❌ Could not fetch guild members.' });
         }
 
-        const unregistered = [];
+        const noRole = [];
         for (const [memberId, member] of allMembers) {
             if (member.user.bot) continue;
-            if (!member.roles.cache.has(MEMBER_ROLE_ID)) continue;
-            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) continue;
-            unregistered.push(member);
+            // Notify members with NO roles at all on the server
+            if (member.roles.cache.size > 0) continue;
+            noRole.push(member);
         }
 
-        if (unregistered.length === 0) {
-            logEvent(`📧 Admin ${interaction.user.tag} tried to notify unregistered — none found`);
-            return interaction.editReply({ content: '✅ **All members with the role are already registered!**' });
+        if (noRole.length === 0) {
+            logEvent(`📧 Admin ${interaction.user.tag} tried to notify no-role members — none found`);
+            return interaction.editReply({ content: '✅ **All members already have at least one role!**' });
         }
 
         await interaction.editReply({
-            content: getMsg('ranking.responses.notify.sendingDms', { count: unregistered.length })
+            content: getMsg('ranking.responses.notify.sendingDms', { count: noRole.length })
         });
 
-        logEvent(`📧 Admin ${interaction.user.tag} started notifying ${unregistered.length} unregistered members...`);
+        logEvent(`📧 Admin ${interaction.user.tag} started notifying ${noRole.length} members with no roles...`);
 
         const { sent, failed } = await sendDmsToMembers(
-            unregistered,
-            (member) => getMsg('ranking.responses.notify.unregDm', {
+            noRole,
+            (member) => getMsg('ranking.responses.notify.noRoleDm', {
                 displayName: member.displayName,
                 channelId: REGISTRATION_CHANNEL_ID
             }),
@@ -209,13 +207,13 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
             const adminCh = interaction.guild.channels.cache.get(adminChannelId);
             if (adminCh) {
                 await adminCh.send({
-                    content: `📧 **Bulk DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total unregistered:** ${unregistered.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('pt-BR')}`
+                    content: `📧 **Bulk DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total no-role members:** ${noRole.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('pt-BR')}`
                 }).catch(() => {});
             }
         }
 
         return interaction.editReply({
-            content: getMsg('ranking.responses.notify.unregResult', { sent, failed }),
+            content: getMsg('ranking.responses.notify.noRoleResult', { sent, failed }),
             components: []
         });
     }
@@ -225,34 +223,34 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
         await interaction.deferUpdate();
         delete pendingNotifications[interaction.user.id];
 
-        // Collect all registered members still in the guild
+        // Collect all guild members with the member role
         const allMembers = await interaction.guild.members.fetch().catch(() => null);
         if (!allMembers || allMembers.size === 0) {
             return interaction.editReply({ content: '❌ Could not fetch guild members.' });
         }
 
-        const registeredMembers = [];
+        const memberRoleMembers = [];
         for (const [memberId, member] of allMembers) {
             if (member.user.bot) continue;
-            // Only DM registered members (owners/pilots)
-            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
-                registeredMembers.push(member);
+            // Only DM members who have the MEMBER_ROLE_ID role
+            if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+                memberRoleMembers.push(member);
             }
         }
 
-        if (registeredMembers.length === 0) {
-            logEvent(`⚔️ Admin ${interaction.user.tag} tried to notify Domination — no registered members found`);
-            return interaction.editReply({ content: '❌ **No registered members found to notify.**' });
+        if (memberRoleMembers.length === 0) {
+            logEvent(`⚔️ Admin ${interaction.user.tag} tried to notify Domination — no members with member role found`);
+            return interaction.editReply({ content: '❌ **No members with the member role found to notify.**' });
         }
 
         await interaction.editReply({
-            content: getMsg('ranking.responses.notify.sendingDms', { count: registeredMembers.length })
+            content: getMsg('ranking.responses.notify.sendingDms', { count: memberRoleMembers.length })
         });
 
-        logEvent(`⚔️ Admin ${interaction.user.tag} started Domination DM to ${registeredMembers.length} members...`);
+        logEvent(`⚔️ Admin ${interaction.user.tag} started Domination DM to ${memberRoleMembers.length} members with member role...`);
 
         const { sent, failed } = await sendDmsToMembers(
-            registeredMembers,
+            memberRoleMembers,
             (member) => getMsg('ranking.responses.notify.dominationDm', {
                 displayName: member.displayName,
                 channelId: DOMINATION_CHANNEL_ID
@@ -266,7 +264,7 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
             const adminCh = interaction.guild.channels.cache.get(adminChannelId);
             if (adminCh) {
                 await adminCh.send({
-                    content: `⚔️ **Domination DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total registered:** ${registeredMembers.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('pt-BR')}`
+                    content: `⚔️ **Domination DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total with member role:** ${memberRoleMembers.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('pt-BR')}`
                 }).catch(() => {});
             }
         }
@@ -282,34 +280,34 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
         await interaction.deferUpdate();
         delete pendingNotifications[interaction.user.id];
 
-        // Collect all registered members still in the guild
+        // Collect all guild members with the member role
         const allMembers = await interaction.guild.members.fetch().catch(() => null);
         if (!allMembers || allMembers.size === 0) {
             return interaction.editReply({ content: '❌ Could not fetch guild members.' });
         }
 
-        const registeredMembers = [];
+        const memberRoleMembers = [];
         for (const [memberId, member] of allMembers) {
             if (member.user.bot) continue;
-            // Only DM registered members (owners/pilots)
-            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
-                registeredMembers.push(member);
+            // Only DM members who have the MEMBER_ROLE_ID role
+            if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+                memberRoleMembers.push(member);
             }
         }
 
-        if (registeredMembers.length === 0) {
-            logEvent(`⏳ Admin ${interaction.user.tag} tried to notify Standby — no registered members found`);
-            return interaction.editReply({ content: '❌ **No registered members found to notify.**' });
+        if (memberRoleMembers.length === 0) {
+            logEvent(`⏳ Admin ${interaction.user.tag} tried to notify Standby — no members with member role found`);
+            return interaction.editReply({ content: '❌ **No members with the member role found to notify.**' });
         }
 
         await interaction.editReply({
-            content: getMsg('ranking.responses.notify.sendingDms', { count: registeredMembers.length })
+            content: getMsg('ranking.responses.notify.sendingDms', { count: memberRoleMembers.length })
         });
 
-        logEvent(`⏳ Admin ${interaction.user.tag} started Standby DM to ${registeredMembers.length} members...`);
+        logEvent(`⏳ Admin ${interaction.user.tag} started Standby DM to ${memberRoleMembers.length} members with member role...`);
 
         const { sent, failed } = await sendDmsToMembers(
-            registeredMembers,
+            memberRoleMembers,
             (member) => getMsg('ranking.responses.notify.standbyDm', {
                 displayName: member.displayName,
                 channelId: STANDBY_CHANNEL_ID
@@ -323,7 +321,7 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
             const adminCh = interaction.guild.channels.cache.get(adminChannelId);
             if (adminCh) {
                 await adminCh.send({
-                    content: `⏳ **Standby DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total registered:** ${registeredMembers.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('pt-BR')}`
+                    content: `⏳ **Standby DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total with member role:** ${memberRoleMembers.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('pt-BR')}`
                 }).catch(() => {});
             }
         }
