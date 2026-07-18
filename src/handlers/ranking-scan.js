@@ -14,6 +14,7 @@ import {
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname } from '../core/ranking-service.js';
+import { buildPrefixedNickname } from '../core/ranking-utils.js';
 
 // ==========================================
 // 🖱️ SCAN IMPORT HANDLER
@@ -183,7 +184,7 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
 
         const prodPilot = await prodGuild.members.fetch(pilotMemberId).catch(() => null);
         if (prodPilot) {
-            await prodPilot.setNickname(`${ownerNick} - Pilot`).catch(() => {});
+            await prodPilot.setNickname(buildPrefixedNickname(ownerNick, db, 'Pilot')).catch(() => {});
             if (!prodPilot.roles.cache.has(MEMBER_ROLE_ID)) {
                 await prodPilot.roles.add(MEMBER_ROLE_ID).catch(() => {});
             }
@@ -212,7 +213,7 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                     // Update Discord nickname to reflect proper link
                     const member = prodGuild.members.cache.get(pid);
                     if (member) {
-                        member.setNickname(`${ownerNick} - Pilot`).catch(() => {});
+                        member.setNickname(buildPrefixedNickname(ownerNick, db, 'Pilot')).catch(() => {});
                     }
                     linkedCount++;
                 }
@@ -243,7 +244,7 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
         // Check if in production server
         const prodPilot = await prodGuild.members.fetch(pilotMemberId).catch(() => null);
         if (prodPilot) {
-            await prodPilot.setNickname(`${ownerNick} - Pilot`).catch(() => {});
+            await prodPilot.setNickname(buildPrefixedNickname(ownerNick, db, 'Pilot')).catch(() => {});
             if (!prodPilot.roles.cache.has(MEMBER_ROLE_ID)) {
                 await prodPilot.roles.add(MEMBER_ROLE_ID).catch(() => {});
             }
@@ -329,8 +330,8 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                     const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
                     if (prodMember) {
                         const expectedNick = isPilot && gameNick
-                            ? `${gameNick} - Pilot`
-                            : gameNick || db.users[memberId].nickname;
+                            ? buildPrefixedNickname(gameNick, db, 'Pilot')
+                            : buildPrefixedNickname(gameNick || db.users[memberId].nickname, db);
 
                         if (gameNick && db.users[memberId].nickname !== gameNick) {
                             const oldNick = db.users[memberId].nickname;
@@ -414,7 +415,7 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                 };
                 saveLocalStorage();
 
-                await prodMember.setNickname(gameNick).catch(() => {});
+                await prodMember.setNickname(buildPrefixedNickname(gameNick, db)).catch(() => {});
                 if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
                     await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
                 }
@@ -479,7 +480,7 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                     saveLocalStorage();
                     const prodPilot = await prodGuild.members.fetch(pilot.memberId).catch(() => null);
                     if (prodPilot) {
-                        await prodPilot.setNickname(`${pilot.ownerNick} - Pilot`).catch(() => {});
+                        await prodPilot.setNickname(buildPrefixedNickname(pilot.ownerNick, db, 'Pilot')).catch(() => {});
                     }
                     logEvent(`📥 [ScanImport] ${pilot.member.user.tag} — linked to owner "${pilot.ownerNick}" (resolve)`);
                     if (results.length < 20) results.push(`🔗 ${pilot.member.user.tag} — linked to owner "${pilot.ownerNick}" (resolve)`);
@@ -595,7 +596,7 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
                 pilotIds: []
             };
 
-            await prodMember.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+            await prodMember.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
             if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
                 await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
             }
@@ -611,7 +612,7 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
                 pilotIds: preReg.pilotIds || []
             };
 
-            await prodMember.setNickname(preReg.nickname).catch(() => {});
+            await prodMember.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
             if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
                 await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
             }

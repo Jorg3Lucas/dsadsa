@@ -16,6 +16,7 @@ import {
     APPROVER_ROLE_IDS,
     PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
+import { buildPrefixedNickname } from '../core/ranking-utils.js';
 
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS
@@ -103,7 +104,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     if (!db.users[userId].pilotIds) db.users[userId].pilotIds = [];
     saveLocalStorage();
 
-    await targetMember.setNickname(finalNickname).catch(() => {});
+    await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
     if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
         await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
     }
@@ -216,7 +217,7 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
     }
     saveLocalStorage();
 
-    await pilotMember.setNickname(`${pending.ownerNick} - Pilot`).catch(() => {});
+    await pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {});
     // Apply member role
     if (!pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
         await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
@@ -287,7 +288,7 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
     }
     saveLocalStorage();
 
-    await pilotMember.setNickname(`${pending.ownerNick} - Pilot`).catch(() => {});
+    await pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {});
     if (!pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
         await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));

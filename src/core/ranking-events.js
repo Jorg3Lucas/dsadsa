@@ -4,6 +4,7 @@ import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, W
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
+import { buildPrefixedNickname } from './ranking-utils.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
@@ -316,7 +317,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             delete db.preRegistrations[member.id];
                             saveLocalStorage();
 
-                            await member.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                            await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
                             if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
                                 await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                             }
@@ -337,7 +338,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             }
                             saveLocalStorage();
 
-                            await member.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                            await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
                             if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
                                 await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                             }
@@ -354,7 +355,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         delete db.preRegistrations[member.id];
                         saveLocalStorage();
 
-                        await member.setNickname(preReg.nickname).catch(() => {});
+                        await member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
                         if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
                             await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                         }

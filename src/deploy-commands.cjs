@@ -156,6 +156,11 @@ const commands = [
     description: '📧 [Admin] Send notifications to server members',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
+  {
+    name: 'refreshnames',
+    description: '🔄 [Admin] Reapply server prefix to all registered members nicknames immediately.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

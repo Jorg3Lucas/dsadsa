@@ -3,6 +3,7 @@ import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper
 import { getLocalRankingCache, findNicknameInCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
+import { buildPrefixedNickname } from '../core/ranking-utils.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -234,7 +235,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             registeredAt: new Date().toISOString(),
                             pilotIds: []
                         };
-                        await prodMember.setNickname(`${preReg.ownerNick} - Pilot`).catch(() => {});
+                        await prodMember.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
                         logEvent(`✅ [PreReg Sync] Auto-converted pilot "${preReg.nickname}" (${memberId}) → pilot of "${preReg.ownerNick}"`);
                     } else {
                         // Owner
@@ -243,7 +244,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             registeredAt: new Date().toISOString(),
                             pilotIds: preReg.pilotIds || []
                         };
-                        await prodMember.setNickname(preReg.nickname).catch(() => {});
+                        await prodMember.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
                         logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${lookup.clanName}`);
                     }
 
@@ -295,9 +296,11 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             if (isRegistered || isPilot) {
                 let desiredNickname = "";
                 if (isPilot) {
-                    desiredNickname = `${db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC')} - Pilot`;
+                    const ownerNick = db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC');
+                    desiredNickname = buildPrefixedNickname(ownerNick, db, 'Pilot');
                 } else {
-                    desiredNickname = db.users[memberId].nickname.trim().normalize('NFC');
+                    const nick = db.users[memberId].nickname.trim().normalize('NFC');
+                    desiredNickname = buildPrefixedNickname(nick, db);
                 }
 
                 if ((member.nickname || '').normalize('NFC') !== desiredNickname) {

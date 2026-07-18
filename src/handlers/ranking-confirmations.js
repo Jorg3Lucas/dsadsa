@@ -8,6 +8,7 @@ import {
     MEMBER_ROLE_ID,
     confirmationCache
 } from '../core/ranking-constants.js';
+import { buildPrefixedNickname } from '../core/ranking-utils.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS
@@ -119,7 +120,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         if (pilotMember) {
-            await pilotMember.setNickname(`${cached.ownerNick} - Pilot`).catch(() => {});
+            await pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {});
         }
 
         // Apply member role
@@ -162,7 +163,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
         saveLocalStorage();
 
-        await targetMember.setNickname(finalNickname).catch(() => {});
+        await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
         if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }
@@ -204,7 +205,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
         saveLocalStorage();
 
-        await targetMember.setNickname(cached.nickname).catch(() => {});
+        await targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {});
         if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }

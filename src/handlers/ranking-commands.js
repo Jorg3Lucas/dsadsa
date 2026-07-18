@@ -23,6 +23,7 @@ import {
 import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
+import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 
 // ==========================================
@@ -137,7 +138,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                 const targetMember = await guild.members.fetch(memberId).catch(() => null);
                 if (targetMember) {
-                    await targetMember.setNickname(newNick).catch(() => {});
+                    await targetMember.setNickname(buildPrefixedNickname(newNick, db)).catch(() => {});
                 }
 
                 fuzzyCorrected++;
@@ -248,7 +249,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
         saveLocalStorage();
 
-        await targetMember.setNickname(nickname).catch(() => {});
+        await targetMember.setNickname(buildPrefixedNickname(nickname, db)).catch(() => {});
         if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }
@@ -908,6 +909,78 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             `━━━━━━━━━━━━━━━━━━━━━━`;
 
         logEvent(`📊 ${interaction.user.tag} requested bot stats`);
+        return interaction.editReply(report);
+    }
+
+    // ── refreshnames ──
+    if (commandName === 'refreshnames') {
+        await interaction.deferReply({ flags: 64 });
+
+        const allMembers = await guild.members.fetch().catch(() => null);
+        if (!allMembers || allMembers.size === 0) {
+            return interaction.editReply('❌ Could not fetch guild members.');
+        }
+
+        let updated = 0;
+        let skipped = 0;
+        let failed = 0;
+        const details = [];
+
+        for (const [memberId, member] of allMembers) {
+            if (member.user.bot) continue;
+
+            // Check if this member is a pilot
+            const ownerIdOfThisPilot = Object.keys(db.users || {}).find(id =>
+                db.users[id].pilotIds && db.users[id].pilotIds.includes(memberId)
+            );
+            const isPilot = !!ownerIdOfThisPilot;
+
+            if (isPilot) {
+                const ownerNick = db.users[ownerIdOfThisPilot].nickname;
+                if (!ownerNick) { skipped++; continue; }
+
+                const prefixed = buildPrefixedNickname(ownerNick, db, 'Pilot');
+                if ((member.nickname || '') !== prefixed) {
+                    try {
+                        await member.setNickname(prefixed);
+                        updated++;
+                        if (details.length < 20) details.push(`✈️ ${member.user.tag} → ${prefixed}`);
+                    } catch {
+                        failed++;
+                    }
+                } else {
+                    skipped++;
+                }
+            } else if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
+                // Owner
+                const nickname = db.users[memberId].nickname;
+                if (!nickname) { skipped++; continue; }
+
+                const prefixed = buildPrefixedNickname(nickname, db);
+                if ((member.nickname || '') !== prefixed) {
+                    try {
+                        await member.setNickname(prefixed);
+                        updated++;
+                        if (details.length < 20) details.push(`👑 ${member.user.tag} → ${prefixed}`);
+                    } catch {
+                        failed++;
+                    }
+                } else {
+                    skipped++;
+                }
+            }
+        }
+
+        let report = `🔄 **Nickname Refresh Complete**\n\n`;
+        report += `✅ Updated: **${updated}**\n`;
+        report += `⏭️ Already correct: **${skipped}**\n`;
+        report += `❌ Failed: **${failed}**\n`;
+
+        if (details.length > 0) {
+            report += `\n📋 **Details:**\n${details.join('\n')}`;
+        }
+
+        logEvent(`🔄 Admin ${interaction.user.tag} ran /refreshnames — ${updated} updated, ${skipped} skipped, ${failed} failed`);
         return interaction.editReply(report);
     }
 
