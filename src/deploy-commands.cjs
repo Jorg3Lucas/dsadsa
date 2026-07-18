@@ -118,15 +118,6 @@ const commands = [
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
   {
-    name: 'fixnick',
-    description: '🔍 [Admin] Auto-correct a member\'s nickname via fuzzy ranking match.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 6, name: 'member', description: 'The member whose nickname needs fixing.', required: true },
-      { type: 3, name: 'nickname', description: 'Optional: the correct nickname. If omitted, auto-detect from ranking.', required: false }
-    ]
-  },
-  {
     name: 'elderguide',
     description: '📋 Guide: how to approve/reject owner registrations'
   },
