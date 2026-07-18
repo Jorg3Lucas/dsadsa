@@ -27,17 +27,6 @@ async function handleTextCommands(message, db, saveLocalStorage) {
         return message.reply(`✅ Admin approval channel set to ${message.channel.toString()}.`);
     }
 
-    if (command === 'setwelcome') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You must be an Administrator to use this command.');
-        }
-
-        ensureConfig(db);
-        db.config.welcomeChannelId = message.channel.id;
-        saveLocalStorage();
-        return message.reply(`✅ Welcome channel set to ${message.channel.toString()}.`);
-    }
-
     if (command === 'enablevalidation') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ You must be an Administrator to use this command.');
@@ -380,28 +369,8 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                 }
             }
 
-            // ── Send welcome message ──
-            if (!db.config || !db.config.welcomeChannelId) return;
-
-            const welcomeChannel = member.guild.channels.cache.get(db.config.welcomeChannelId);
-            if (!welcomeChannel) return;
-
-            const welcomeMsg = getMsg('ranking.welcome.message', { member: member.toString() });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('welcome_register_owner')
-                    .setLabel('👑 Register as Owner')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId('welcome_register_pilot')
-                    .setLabel('✈️ Register as Pilot')
-                    .setStyle(ButtonStyle.Secondary)
-            );
-
-            await welcomeChannel.send({ content: welcomeMsg, components: [row] });
         } catch (error) {
-            console.error(getMsg('ranking.logs.welcomeError', { error: error.message }));
+            console.error(`❌ guildMemberAdd error: ${error.message}`);
         }
     });
 

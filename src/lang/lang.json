@@ -156,9 +156,6 @@
                 "success": "✅ **{nickname}** has been force-registered as permanent! Nickname + member role applied."
             }
         },
-        "welcome": {
-            "message": "👋 Hello {member}, welcome to our server!\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\n📌 **How to get your roles:**\n1️⃣ Click **👑 Register as Owner** below and type your in-game name.\n2️⃣ Have pilots? The owner will receive a DM to approve them.\n3️⃣ Need to remove a pilot? Use `/removepilot`.\n\nEnjoy your stay! 🚀"
-        },
         "logs": {
             "syncStart": "⏳ [Sync] Starting role and nickname update routine...",
             "syncAbort": "❌ [Sync] Aborting sync: Member list unavailable.",
@@ -173,7 +170,6 @@
             "roleRemoved": "❌ [Automation] Role [{clan}] removed from {username}",
             "memberLeave": "🏃‍♂️ [Leave-Handler] Registered member {tag} left the server. Cleaning up registration and pilots.",
             "pilotCleaned": "🗑️ [Leave-Handler] Pilot {tag} removed due to owner leaving.",
-            "welcomeError": "❌ Failed to send welcome message: {error}",
             "leaveError": "❌ Error executing member leave cleanup: {error}",
             "commandsRegistered": "✅ All slash commands registered successfully.",
             "commandsError": "❌ Slash command registration failed: {error}"
