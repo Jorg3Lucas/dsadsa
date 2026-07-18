@@ -22,27 +22,47 @@ import {
 const pendingNotifications = {};
 
 /**
- * Send DMs to a list of members with a 5-second delay between each.
+ * Send DMs to a list of members in parallel batches.
+ * Sends up to BATCH_SIZE members concurrently, with a brief delay between batches
+ * to avoid hitting Discord's global rate limit.
  * Returns { sent, failed } counts.
  */
 async function sendDmsToMembers(members, getMessageFn, logEvent) {
     let sent = 0;
     let failed = 0;
     const total = members.length;
+    const BATCH_SIZE = 30;
 
-    for (let i = 0; i < total; i++) {
-        const member = members[i];
-        try {
-            const msg = getMessageFn(member);
-            await member.send(msg);
-            sent++;
-            logEvent(`✅ DM sent to ${member.user.tag} (${member.id}) — ${sent}/${total}`);
-        } catch (e) {
-            failed++;
-            logEvent(`❌ DM failed for ${member.user.tag} (${member.id}) — ${e.message}`);
+    for (let i = 0; i < total; i += BATCH_SIZE) {
+        const batch = members.slice(i, i + BATCH_SIZE);
+
+        // Send all members in this batch concurrently
+        const batchResults = await Promise.all(
+            batch.map(async (member) => {
+                try {
+                    const msg = getMessageFn(member);
+                    await member.send(msg);
+                    return { member, success: true };
+                } catch (error) {
+                    return { member, success: false, error };
+                }
+            })
+        );
+
+        // Report results for this batch
+        for (const { member, success, error } of batchResults) {
+            if (success) {
+                sent++;
+                logEvent(`✅ DM sent to ${member.user.tag} (${member.id}) — ${sent}/${total}`);
+            } else {
+                failed++;
+                logEvent(`❌ DM failed for ${member.user.tag} (${member.id}) — ${error.message}`);
+            }
         }
-        if (i < total - 1) {
-            await new Promise(r => setTimeout(r, 5000));
+
+        // Brief delay between batches to avoid rate limiting
+        if (i + BATCH_SIZE < total) {
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
 
