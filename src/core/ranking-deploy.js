@@ -108,6 +108,11 @@ export async function registerMir4SlashCommands(guild) {
                 description: '📧 [Admin] Send notifications to server members',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'refreshnames',
+                description: '🔄 [Admin] Reapply server prefix to all registered members nicknames immediately.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {
