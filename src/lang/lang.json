@@ -113,7 +113,8 @@
         "summonAbsenceDM": "❌ **Queue Lost**\n\nYou didn't activate your tickets for **{roomKey}** in time.",
         "dmBossNotMarkedWarning": "⚠️ **Boss Reminder**\n\n**{boss}** in **{title}** has been available for over 5 minutes.\nDon't forget to register the kill.",
         "slotAlreadyClaimed": "🔒 {room} is already claimed by {ownerName}.",
-        "eventOpensIn": "⏳ This event opens in {minutes} minutes. You can claim 5 minutes before the start!",
+        "eventOpensIn": "⏳ This event opens in {minutes} minutes.",
+        "eventEarlyClaimDenied": "🔒 You are not authorized to claim early. Wait until **{time}** when the event opens.",
         "eventClaimedFixed": "🏆 {title} claimed! You have 1 full hour.",
         "dmImmediateSpawn": "🚨 **INSTANT SPAWN**\n\n**{boss}** has just spawned on **{title}**!",
         "dmImmediateSpawnFixed": "🚨 **INSTANT SPAWN**\n\n**{boss}** has just spawned on **{title}**! Move now!"

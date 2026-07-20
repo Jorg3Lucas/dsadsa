@@ -5,7 +5,7 @@
 // ==========================================
 
 import { getMsg } from "../core/lang.js";
-import { db, saveLocalStorage } from "../core/state.js";
+import { db, saveLocalStorage, isEarlyClaimUser } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
@@ -67,11 +67,19 @@ export async function handleEGFixClaim(interaction, uid, uName) {
         eventStart = calculateNextOpening(evData.schedules, minuteOffset);
         claimedHour = eventStart.getHours();
         const fiveMinBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
+        // ── Early claim check: only authorized users can claim within the 5-min pre-window ──
         if (now < fiveMinBefore) {
             const diffMs = eventStart.getTime() - now.getTime();
             const diffMins = Math.ceil(diffMs / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
+                flags: 64
+            }).catch(noop);
+        }
+        // Within 5 min pre-window — only allow if user is authorized for early claim
+        if (!isEarlyClaimUser(uid)) {
+            return await interaction.reply({
+                content: getMsg("rooms.eventEarlyClaimDenied", { time: getFormattedTime12h(eventStart) }),
                 flags: 64
             }).catch(noop);
         }

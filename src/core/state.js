@@ -9,6 +9,7 @@ import { runBackup } from "../auto-backup.js";
 const punishmentsPath = s.resolve("./punishments.json");
 export const dailyLogsPath = s.resolve("./daily-logs.json");
 const dmOptOutPath = s.resolve("./dm-optout.json");
+const earlyClaimUsersPath = s.resolve("./early-claim-users.json");
 export const defaultFloors = ["7", "8", "9", "10"];
 
 export let punishments = {};
@@ -18,8 +19,16 @@ export const antiDemonSelectionCache = {};
 export const summonSelectionCache = {};
 export const bossSpawnAlertCache = {};
 
+// ── Early Claim Users (set of user IDs allowed to claim Fury/Frenzy 5 minutes early) ──
+export let earlyClaimUsers = new Set();
+
 // ── DM Opt-Out (Set of user IDs that opted out of DMs) ──
 export let dmOptOut = new Set();
+
+/** Check if a user is allowed to claim fixed events (Fury/Frenzy) early (5 min pre-window). @param {string} uid @returns {boolean} */
+export function isEarlyClaimUser(uid) {
+    return earlyClaimUsers.has(uid);
+}
 
 export let client, db, rankingDb, saveLocalStorage, logEvent, lastMessages;
 
@@ -63,6 +72,39 @@ export function savePunishmentsToDisk() {
     }
 }
 
+// ── Early Claim Users Persistence ─────────────────────────
+
+function loadEarlyClaimUsersFromDisk() {
+    try {
+        if (o.existsSync(earlyClaimUsersPath)) {
+            const data = JSON.parse(o.readFileSync(earlyClaimUsersPath, "utf8"));
+            if (Array.isArray(data)) {
+                earlyClaimUsers = new Set(data);
+            }
+        }
+    } catch (err) {
+        console.error("❌ Error loading early-claim-users.json:", err.message);
+    }
+}
+
+export function saveEarlyClaimUsersToDisk() {
+    try {
+        o.writeFileSync(earlyClaimUsersPath, JSON.stringify([...earlyClaimUsers], null, 2));
+    } catch (err) {
+        console.error("❌ Error saving early-claim-users.json:", err.message);
+    }
+}
+
+export function addEarlyClaimUser(uid) {
+    earlyClaimUsers.add(uid);
+    saveEarlyClaimUsersToDisk();
+}
+
+export function removeEarlyClaimUser(uid) {
+    earlyClaimUsers.delete(uid);
+    saveEarlyClaimUsersToDisk();
+}
+
 // ── DM Opt-Out Persistence ────────────────────────────────
 
 function loadDmOptOutFromDisk() {
@@ -91,4 +133,5 @@ export function saveDmOptOutToDisk() {
 // ==========================================
 
 loadDailyLogsFromDisk();
+loadEarlyClaimUsersFromDisk();
 loadDmOptOutFromDisk();

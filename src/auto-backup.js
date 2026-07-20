@@ -18,7 +18,8 @@ const BACKUP_FILES = [
   "./salary-poll-db.json",
   "./daily-logs.json",
   "./punishments.json",
-  "./ranking_cache.json"
+  "./ranking_cache.json",
+  "./early-claim-users.json"
 ];
 
 let backupInterval = null;
