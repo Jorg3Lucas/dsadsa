@@ -16,7 +16,7 @@ import {
     PermissionFlagsBits
 } from 'discord.js';
 import { getMsg } from '../core/lang.js';
-import { CLAN_ROLES, confirmationCache, DISCORD_SERVER_ID } from '../core/ranking-constants.js';
+import { CLAN_ROLES, confirmationCache, DISCORD_SERVER_ID, ELDER_ROLE_ID, APPROVAL_CHANNEL_ID } from '../core/ranking-constants.js';
 import { getLocalRankingCache, findClosestNicknameInCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 import { applyImmediateRoleWithCache, applyClanRoleOnly } from '../core/ranking-role.js';
 import { noop } from '../core/config.js';
@@ -26,6 +26,9 @@ import { logger } from '../core/logger.js';
 
 // ── Pending pilot registration requests (ownerId -> { pilotId, pilotTag, timestamp }) ──
 export const pilotRequests = {};
+
+// ── Pending owner registration requests (userId -> { nickname, userTag, ... }) ──
+export const pendingOwnerRegistrations = {};
 
 // ── Configuration ──
 const REG_PANEL_CUSTOM_ID = 'reg_panel';
@@ -454,6 +457,27 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
 
         logEvent(`✈️ Pilot request sent: ${interaction.user.tag} wants to pilot for ${ownerData.nickname} (${ownerId})`);
 
+        // ── Send copy to approval channel ──
+        try {
+            const approvalChannel = await client.channels.fetch(APPROVAL_CHANNEL_ID).catch(() => null);
+            if (approvalChannel) {
+                await approvalChannel.send({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setTitle('✈️ Pilot Request')
+                            .setColor('#5865F2')
+                            .setDescription(`**${interaction.user.tag}** wants to be a pilot for **${ownerData.nickname}**`)
+                            .addFields(
+                                { name: '👤 Pilot', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+                                { name: '🎮 Owner', value: `**${ownerData.nickname}**`, inline: true },
+                                { name: '📬 Status', value: '⏳ Awaiting owner approval via DM', inline: false }
+                            )
+                            .setTimestamp()
+                    ]
+                }).catch(noop);
+            }
+        } catch { /* ignore */ }
+
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()
@@ -686,6 +710,7 @@ export function cleanupExpiredPilotRequests() {
 
 // Run cleanup every minute
 setInterval(cleanupExpiredPilotRequests, 60000);
+setInterval(cleanupExpiredOwnerRegistrations, 60000);
 
 /** Handle re-register confirmation. */
 export async function handleReRegisterConfirm(interaction, rankingDb, saveLocalStorage, logEvent) {
@@ -778,51 +803,240 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
         }
     }
 
-    // ── Save user ──
-    rankingDb.users[interaction.user.id] = {
-        ...rankingDb.users[interaction.user.id],
+    // ── Create pending registration request ──
+    const requestKey = `${interaction.user.id}_${Date.now()}`;
+    pendingOwnerRegistrations[requestKey] = {
+        userId: interaction.user.id,
+        userTag: interaction.user.tag,
         nickname: finalNickname,
+        originalNickname: nickname,
+        wasAutoCorrected,
+        fuzzyConflict,
+        timestamp: Date.now()
+    };
+
+    // ── Send to approval channel ──
+    const channel = await client.channels.fetch(APPROVAL_CHANNEL_ID).catch(() => null);
+    if (!channel) {
+        delete pendingOwnerRegistrations[requestKey];
+        return interaction.editReply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Error')
+                    .setColor('#ED4245')
+                    .setDescription('Could not send approval request. Please try again later.')
+            ]
+        });
+    }
+
+    const approveEmbed = new EmbedBuilder()
+        .setTitle('📝 Registration Request')
+        .setColor('#5865F2')
+        .setDescription(`${interaction.user} wants to register!`)
+        .addFields(
+            { name: '👤 User', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
+            { name: '🎮 Character', value: `**${finalNickname}**`, inline: true },
+            { name: '✏️ Original Input', value: nickname !== finalNickname ? `~~${nickname}~~` : 'Same', inline: true }
+        )
+        .setFooter({ text: 'Only Elders and Admins can approve/reject' })
+        .setTimestamp();
+
+    const approveRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`reg_elder_approve_owner_${requestKey}`)
+            .setEmoji('✅')
+            .setLabel('Approve')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId(`reg_elder_reject_owner_${requestKey}`)
+            .setEmoji('❌')
+            .setLabel('Reject')
+            .setStyle(ButtonStyle.Danger)
+    );
+
+    await channel.send({ embeds: [approveEmbed], components: [approveRow] });
+
+    logEvent(`📝 Registration request sent for approval: ${interaction.user.tag} → ${finalNickname}`);
+
+    return interaction.editReply({
+        embeds: [
+            new EmbedBuilder()
+                .setTitle('✅ Request Sent for Approval')
+                .setColor('#57F287')
+                .setDescription(
+                    `Your registration request for **${finalNickname}** has been sent to the **Elders** for approval.\n\n` +
+                    'You will be notified once it is approved or rejected.'
+                )
+                .setTimestamp()
+        ]
+    });
+}
+
+// ==========================================
+// ✅ ELDER APPROVE OWNER REGISTRATION
+// ==========================================
+
+/** Handle owner registration approval by an Elder/Admin from the approval channel. */
+export async function handleRegElderApproveOwner(interaction, rankingDb, saveLocalStorage, logEvent) {
+    // Check permissions
+    const isElder = interaction.member?.roles.cache.has(ELDER_ROLE_ID);
+    const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator);
+    if (!isElder && !isAdmin) {
+        return interaction.reply({
+            content: '❌ Only **Elders** and **Admins** can approve registration requests.',
+            flags: 64
+        });
+    }
+
+    const requestKey = interaction.customId.replace('reg_elder_approve_owner_', '');
+    const request = pendingOwnerRegistrations[requestKey];
+
+    if (!request) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('⌛ Request Expired')
+                    .setColor('#FEE75C')
+                    .setDescription('This registration request has expired or was already processed.')
+            ],
+            components: []
+        });
+    }
+
+    delete pendingOwnerRegistrations[requestKey];
+
+    // ── Save user ──
+    rankingDb.users[request.userId] = {
+        ...rankingDb.users[request.userId],
+        nickname: request.nickname,
         registeredAt: new Date().toISOString()
     };
-    if (!rankingDb.users[interaction.user.id].pilotIds) {
-        rankingDb.users[interaction.user.id].pilotIds = [];
+    if (!rankingDb.users[request.userId].pilotIds) {
+        rankingDb.users[request.userId].pilotIds = [];
     }
     saveLocalStorage();
 
     // ── Set nickname + role ──
-    interaction.guild.members.fetch(interaction.user.id).then(async (member) => {
+    const guild = interaction.guild;
+    if (guild) {
+        const member = await guild.members.fetch(request.userId).catch(() => null);
         if (member) {
-            await member.setNickname(finalNickname).catch(noop);
-            await applyImmediateRoleWithCache(interaction, member, finalNickname, interaction.user.id).catch(noop);
+            await member.setNickname(request.nickname).catch(noop);
+            await applyImmediateRoleWithCache(interaction, member, request.nickname, request.userId).catch(noop);
         }
-    }).catch(noop);
-
-    // ── Build response embed ──
-    const successEmbed = new EmbedBuilder()
-        .setTitle('✅ Registration Successful!')
-        .setColor('#57F287')
-        .setDescription(`Successfully linked to **${finalNickname}**.`)
-        .setTimestamp();
-
-    if (wasAutoCorrected) {
-        successEmbed.addFields({
-            name: '✏️ Auto-Corrected',
-            value: `From: ~~${nickname}~~ → **${finalNickname}**`,
-            inline: false
-        });
-    }
-    if (fuzzyConflict) {
-        successEmbed.addFields({
-            name: '⚠️ Similar Name Detected',
-            value: `**${nickname}** is very similar to **${fuzzyConflict.existingNick}** (another user).\nIf this was a mistake, contact an admin.`,
-            inline: false
-        });
     }
 
-    await interaction.editReply({ embeds: [successEmbed] });
+    logEvent(`✅ Registration approved by ${interaction.user.tag}: ${request.userTag} → ${request.nickname}`);
 
-    // ── Refresh the panel ──
-    await refreshRegPanel(rankingDb);
+    // ── Notify the user ──
+    try {
+        const user = await client.users.fetch(request.userId).catch(() => null);
+        if (user) {
+            await user.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('✅ Registration Approved!')
+                        .setColor('#57F287')
+                        .setDescription(`Your registration for **${request.nickname}** has been approved! 🎉`)
+                        .setTimestamp()
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Update the approval message ──
+    return interaction.update({
+        embeds: [
+            new EmbedBuilder()
+                .setTitle('✅ Registration Approved')
+                .setColor('#57F287')
+                .setDescription(`Approved by ${interaction.user}.`)
+                .addFields(
+                    { name: '👤 User', value: `${request.userTag} (${request.userId})`, inline: false },
+                    { name: '🎮 Character', value: `**${request.nickname}**`, inline: true }
+                )
+                .setTimestamp()
+        ],
+        components: []
+    });
+}
+
+// ==========================================
+// ❌ ELDER REJECT OWNER REGISTRATION
+// ==========================================
+
+/** Handle owner registration rejection by an Elder/Admin from the approval channel. */
+export async function handleRegElderRejectOwner(interaction, rankingDb, saveLocalStorage, logEvent) {
+    // Check permissions
+    const isElder = interaction.member?.roles.cache.has(ELDER_ROLE_ID);
+    const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator);
+    if (!isElder && !isAdmin) {
+        return interaction.reply({
+            content: '❌ Only **Elders** and **Admins** can reject registration requests.',
+            flags: 64
+        });
+    }
+
+    const requestKey = interaction.customId.replace('reg_elder_reject_owner_', '');
+    const request = pendingOwnerRegistrations[requestKey];
+
+    if (!request) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('⌛ Request Expired')
+                    .setColor('#FEE75C')
+                    .setDescription('This registration request has expired or was already processed.')
+            ],
+            components: []
+        });
+    }
+
+    delete pendingOwnerRegistrations[requestKey];
+
+    logEvent(`❌ Registration rejected by ${interaction.user.tag}: ${request.userTag} → ${request.nickname}`);
+
+    // ── Notify the user ──
+    try {
+        const user = await client.users.fetch(request.userId).catch(() => null);
+        if (user) {
+            await user.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('❌ Registration Rejected')
+                        .setColor('#ED4245')
+                        .setDescription(`Your registration for **${request.nickname}** has been rejected by the Elders.`)
+                        .setTimestamp()
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Update the approval message ──
+    return interaction.update({
+        embeds: [
+            new EmbedBuilder()
+                .setTitle('❌ Registration Rejected')
+                .setColor('#ED4245')
+                .setDescription(`Rejected by ${interaction.user}.`)
+                .addFields(
+                    { name: '👤 User', value: `${request.userTag} (${request.userId})`, inline: false },
+                    { name: '🎮 Character', value: `**${request.nickname}**`, inline: true }
+                )
+                .setTimestamp()
+        ],
+        components: []
+    });
+}
+
+/** Clean up expired pending owner registrations (30 min expiry). */
+export function cleanupExpiredOwnerRegistrations() {
+    const now = Date.now();
+    for (const [key, request] of Object.entries(pendingOwnerRegistrations)) {
+        if (now - request.timestamp > 1800000) { // 30 minutes
+            delete pendingOwnerRegistrations[key];
+        }
+    }
 }
 
 // ==========================================

@@ -22,7 +22,9 @@ import {
     handleRegSyncConfirm,
     handleRegPilotModal,
     handleRegPilotApprove,
-    handleRegPilotReject
+    handleRegPilotReject,
+    handleRegElderApproveOwner,
+    handleRegElderRejectOwner
 } from '../handlers/registration-panel.js';
 
 
@@ -55,6 +57,15 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         if (interaction.customId === 'reg_cancel_pilot_remove') {
             return interaction.update({ content: '❌ Pilot removal cancelled.', components: [] }).catch(noop);
         }
+
+        // ── Elder approval buttons ──
+        if (interaction.customId.startsWith('reg_elder_approve_owner_')) {
+            return handleRegElderApproveOwner(interaction, db, saveLocalStorage, logEvent);
+        }
+        if (interaction.customId.startsWith('reg_elder_reject_owner_')) {
+            return handleRegElderRejectOwner(interaction, db, saveLocalStorage, logEvent);
+        }
+
         // Standard panel buttons
         return handleRegPanelButtons(interaction, db, saveLocalStorage, logEvent);
     }
