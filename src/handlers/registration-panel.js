@@ -24,7 +24,7 @@ import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { client } from '../core/state.js';
 import { logger } from '../core/logger.js';
 
-// ── Pending pilot registration requests (ownerId -> { pilotId, pilotName, timestamp }) ──
+// ── Pending pilot registration requests (ownerId -> { pilotId, pilotTag, timestamp }) ──
 export const pilotRequests = {};
 
 // ── Configuration ──
@@ -280,7 +280,7 @@ async function handleRegisterPilotButton(interaction, rankingDb) {
                     .setColor('#ED4245')
                     .setDescription(
                         'You are already registered as a character owner (**' + userData.nickname + '**).\n\n' +
-                        'If you want to be a pilot for someone else, ask the owner to use `/pilot @user` command to add you.'
+                        'If you want to be a pilot for someone else, ask the owner to use the **🗑️ Remove Pilot** button to free up a slot first.'
                     )
             ],
             flags: 64
@@ -291,18 +291,9 @@ async function handleRegisterPilotButton(interaction, rankingDb) {
         .setCustomId('reg_pilot_modal')
         .setTitle('✈️ Register as Pilot');
 
-    const ownNicknameInput = new TextInputBuilder()
-        .setCustomId('reg_pilot_nickname')
-        .setLabel('Your Character Name (in-game)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('e.g., MyCharacter')
-        .setMinLength(2)
-        .setMaxLength(30)
-        .setRequired(true);
-
-    const ownerNicknameInput = new TextInputBuilder()
-        .setCustomId('reg_pilot_owner')
-        .setLabel('Owner Character Name (who you pilot for)')
+    const ownerNameInput = new TextInputBuilder()
+        .setCustomId('reg_pilot_owner_name')
+        .setLabel("Owner's Character Name (account you'll pilot for)")
         .setStyle(TextInputStyle.Short)
         .setPlaceholder('e.g., xVraeL')
         .setMinLength(2)
@@ -310,8 +301,7 @@ async function handleRegisterPilotButton(interaction, rankingDb) {
         .setRequired(true);
 
     modal.addComponents(
-        new ActionRowBuilder().addComponents(ownNicknameInput),
-        new ActionRowBuilder().addComponents(ownerNicknameInput)
+        new ActionRowBuilder().addComponents(ownerNameInput)
     );
 
     return interaction.showModal(modal);
@@ -319,8 +309,7 @@ async function handleRegisterPilotButton(interaction, rankingDb) {
 
 /** Handle the pilot registration modal submission. */
 export async function handleRegPilotModal(interaction, rankingDb, saveLocalStorage, logEvent) {
-    const pilotName = interaction.fields.getTextInputValue('reg_pilot_nickname').trim().normalize('NFC');
-    const ownerName = interaction.fields.getTextInputValue('reg_pilot_owner').trim().normalize('NFC');
+    const ownerName = interaction.fields.getTextInputValue('reg_pilot_owner_name').trim().normalize('NFC');
 
     // ── Find the owner in the database ──
     let ownerId = null;
@@ -412,7 +401,6 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
         ownerId,
         ownerNick: ownerData.nickname,
         pilotId: interaction.user.id,
-        pilotName,
         pilotTag: interaction.user.tag,
         timestamp: Date.now()
     };
@@ -445,8 +433,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                 `**${interaction.user.tag}** wants to be your pilot!`
             )
             .addFields(
-                { name: '👤 Pilot Discord', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
-                { name: '🎮 Pilot Character', value: `**${pilotName}**`, inline: true },
+                { name: '👤 Pilot', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
                 { name: '🎮 Your Character', value: `**${ownerData.nickname}**`, inline: true }
             )
             .setFooter({ text: 'This request expires in 5 minutes' })
@@ -465,7 +452,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
 
         await ownerUser.send({ embeds: [dmEmbed], components: [dmRow] });
 
-        logEvent(`✈️ Pilot request sent: ${interaction.user.tag} → ${ownerData.nickname} (${ownerId})`);
+        logEvent(`✈️ Pilot request sent: ${interaction.user.tag} wants to pilot for ${ownerData.nickname} (${ownerId})`);
 
         return interaction.reply({
             embeds: [
@@ -595,7 +582,7 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
         }
     }
 
-    logEvent(`✈️ Pilot approved: ${request.pilotTag} (${request.pilotName}) → ${request.ownerNick}`);
+    logEvent(`✈️ Pilot approved: ${request.pilotTag} → ${request.ownerNick}`);
 
     // ── Notify the pilot ──
     try {
@@ -1059,7 +1046,7 @@ async function handleHelpButton(interaction) {
             },
             {
                 name: '✈️ Register as Pilot',
-                value: 'Want to pilot for someone? Click the **✈️ Register as Pilot** button! Enter your character name and the owner\'s name. The owner receives a DM to approve or reject.',
+                value: 'Want to pilot for someone? Click the **✈️ Register as Pilot** button! Enter the owner\'s character name and they\'ll receive a DM to approve or reject your request.',
                 inline: false
             },
             {
