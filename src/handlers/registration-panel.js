@@ -293,7 +293,7 @@ async function handleRegisterPilotButton(interaction, rankingDb) {
 
     const ownerNameInput = new TextInputBuilder()
         .setCustomId('reg_pilot_owner_name')
-        .setLabel("Owner's Character Name (account you'll pilot for)")
+        .setLabel("Owner's Character Name (who you pilot for)")
         .setStyle(TextInputStyle.Short)
         .setPlaceholder('e.g., xVraeL')
         .setMinLength(2)
