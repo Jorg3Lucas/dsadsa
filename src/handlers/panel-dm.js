@@ -5,6 +5,7 @@
 
 import { client, lastMessages, db, dmOptOut, saveLocalStorage, logEvent } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
+import { logger } from "../core/logger.js";
 
 // ── DM Rate-Limit Queue ───────────────────────────────
 const dmQueue = [];
@@ -21,16 +22,16 @@ async function processDMQueue() {
             await (await client.users.fetch(uid)).send({ content });
         } catch (err) {
             if (err.code === 50007) {
-                console.log(`⚠️ [DM] Cannot send DM to ${uid}: DMs closed or bot blocked.`);
+                logger.warn('DM', `Cannot send DM to ${uid}: DMs closed or bot blocked.`);
             } else if (err.code === 10013) {
-                console.log(`⚠️ [DM] Cannot send DM to ${uid}: User not found.`);
+                logger.warn('DM', `Cannot send DM to ${uid}: User not found.`);
             } else if (err.code === 429) {
-                console.log(`⏳ [DM] Rate-limited sending to ${uid}, re-queuing.`);
+                logger.warn('DM', `Rate-limited sending to ${uid}, re-queuing.`);
                 dmQueue.unshift({ uid, content });
                 await new Promise(r => setTimeout(r, 5000));
                 continue;
             } else {
-                console.log(`⚠️ [DM] Failed to send DM to ${uid}: ${err.message}`);
+                logger.error('DM', `Failed to send DM to ${uid}`, err);
             }
         }
         if (dmQueue.length > 0) {

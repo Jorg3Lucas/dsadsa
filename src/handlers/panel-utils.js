@@ -2,6 +2,7 @@ import { db, client, saveLocalStorage, logEvent, lastMessages } from "../core/st
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { noop } from "../core/config.js";
 import { STATUS_AVAILABLE } from "../core/constants.js";
+import { logger } from "../core/logger.js";
 
 // Re-export from sub-modules
 export { refreshVisualPanel, notifyUserDM } from "./panel-dm.js";
@@ -248,8 +249,8 @@ export async function processAutoRecoveryOnBoot() {
                 };
             }
         } catch (s) {
+            logger.error('Panel', `Failed to restore panel ${key}`, s);
             logEvent(`Failed to restore panel ${key}: ${s.message}`);
-            console.error(`[Panel Restore Error] ${key}:`, s);
         }}
     }
     saveLocalStorage();

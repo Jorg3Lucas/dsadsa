@@ -4,6 +4,7 @@
 
 import axios from "axios";
 import { getBotToken } from "./config.js";
+import { logger } from "./logger.js";
 
 /**
  * Send a file with an embed to a Discord channel via REST API multipart.
@@ -55,10 +56,10 @@ export async function sendFileWithEmbed(channelId, fileName, buffer, embed, logL
             }
         );
 
-        console.log(`✅ ${logLabel} sent: ${fileName}`);
+        logger.info('Discord', `${logLabel} sent: ${fileName}`);
         return true;
     } catch (err) {
-        console.error(`❌ Failed to send ${logLabel.toLowerCase()}:`, err.message);
+        logger.error('Discord', `Failed to send ${logLabel.toLowerCase()}`, err);
         return false;
     }
 }

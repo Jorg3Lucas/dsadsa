@@ -6,6 +6,7 @@ import fs from "fs";
 import { runBackup } from "../auto-backup.js";
 import { sendFileWithEmbed } from "./discord-utils.js";
 import { noop } from "./config.js";
+import { logger } from "./logger.js";
 
 
 // ==========================================
@@ -19,7 +20,7 @@ export function saveDailyLogs() {
 
         fs.writeFileSync(dailyLogsPath, JSON.stringify(dailyLogs, null, 2));
     } catch (err) {
-        console.error("❌ Error saving daily logs:", err.message);
+        logger.error('DailyLogs', 'Error saving daily logs', err);
     }
 }
 
@@ -233,7 +234,7 @@ export async function dispatchDailyLogs(isForced = false) {
     const totalEvents = Object.values(totals).reduce((a, b) => a + b, 0);
 
     const buffer = Buffer.from(fileContent, "utf8");
-    console.log(`📎 Preparing claim report: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB, ${queueData.length} events)`);
+    logger.debug('DailyLogs', `Preparing claim report: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB, ${queueData.length} events)`);
 
     // Send via shared multipart helper
     const summaryEmbed = new EmbedBuilder()
