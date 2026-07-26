@@ -327,7 +327,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
     }
 
     if (!ownerId || !ownerData) {
-        return interaction.reply({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Owner Not Found')
@@ -337,15 +337,14 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                         'Make sure you typed the name exactly as they registered it. ' +
                         'Ask the owner to check their character name (it must match exactly what they registered).'
                     )
-            ],
-            flags: 64
+            ]
         });
     }
 
     // ── Check if owner has room for more pilots ──
     if (!ownerData.pilotIds) ownerData.pilotIds = [];
     if (ownerData.pilotIds.length >= 4) {
-        return interaction.reply({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Owner Pilot Limit Reached')
@@ -354,14 +353,13 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                         `**${ownerData.nickname}** already has the maximum of **4 pilots**.\n\n` +
                         'Ask them to remove a pilot first before adding you.'
                     )
-            ],
-            flags: 64
+            ]
         });
     }
 
     // ── Check if already linked ──
     if (ownerData.pilotIds.includes(interaction.user.id)) {
-        return interaction.reply({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Already a Pilot')
@@ -369,8 +367,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                     .setDescription(
                         `You are already linked as a pilot for **${ownerData.nickname}**.`
                     )
-            ],
-            flags: 64
+            ]
         });
     }
 
@@ -381,7 +378,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
     if (existingKey) {
         const age = Date.now() - pilotRequests[existingKey].timestamp;
         if (age < 300000) { // 5 minutes
-            return interaction.reply({
+            return interaction.editReply({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle('⏳ Pending Request')
@@ -390,8 +387,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                             'You already have a pending pilot request for **' + ownerData.nickname + '**.\n\n' +
                             'Please wait for the owner to respond, or try again later if the request expires.'
                         )
-                ],
-                flags: 64
+                ]
             });
         }
         // Expired, remove it
@@ -414,7 +410,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
 
     if (!ownerUser) {
         delete pilotRequests[requestKey];
-        return interaction.reply({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Cannot Send Request')
@@ -423,8 +419,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                         'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
                         'The owner may have left the server or has DMs disabled.'
                     )
-            ],
-            flags: 64
+            ]
         });
     }
 
@@ -478,7 +473,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
             }
         } catch { /* ignore */ }
 
-        return interaction.reply({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('✅ Request Sent!')
@@ -487,23 +482,21 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                         `Your pilot request has been sent to **${ownerData.nickname}**!\n\n` +
                         'They will receive a DM with your request. Once they approve, you will be linked as their pilot.'
                     )
-            ],
-            flags: 64
+            ]
         });
     } catch (err) {
         delete pilotRequests[requestKey];
         logger.error('Registration', 'Failed to send pilot request DM', err);
-        return interaction.reply({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Cannot Send Request')
                     .setColor('#ED4245')
                     .setDescription(
                         'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
-                        'The owner may have DMs disabled. Ask them to enable DMs or use `/pilot @user` to add you directly.'
+                        'The owner may have DMs disabled. Ask them to enable DMs in server settings.'
                     )
-            ],
-            flags: 64
+            ]
         });
     }
 }
