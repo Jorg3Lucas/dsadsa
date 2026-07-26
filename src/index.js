@@ -240,7 +240,7 @@ client.on('interactionCreate', async (interaction) => {
 
         // D. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'register_modal' || interaction.customId === 'reg_modal') {
+            if (interaction.customId === 'register_modal' || interaction.customId === 'reg_modal' || interaction.customId === 'reg_pilot_modal') {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             } else if (interaction.customId === 'mgmt-salary-spreadsheet-modal' || interaction.customId === 'mgmt-reservations-add-modal') {
                 return await handleManagementInteraction(interaction);

@@ -16,7 +16,7 @@ import {
     PermissionFlagsBits
 } from 'discord.js';
 import { getMsg } from '../core/lang.js';
-import { CLAN_ROLES, confirmationCache } from '../core/ranking-constants.js';
+import { CLAN_ROLES, confirmationCache, DISCORD_SERVER_ID } from '../core/ranking-constants.js';
 import { getLocalRankingCache, findClosestNicknameInCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 import { applyImmediateRoleWithCache, applyClanRoleOnly } from '../core/ranking-role.js';
 import { noop } from '../core/config.js';
@@ -24,10 +24,14 @@ import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { client } from '../core/state.js';
 import { logger } from '../core/logger.js';
 
+// ── Pending pilot registration requests (ownerId -> { pilotId, pilotName, timestamp }) ──
+export const pilotRequests = {};
+
 // ── Configuration ──
 const REG_PANEL_CUSTOM_ID = 'reg_panel';
 const BUTTON_IDS = {
     register: 'reg_register',
+    registerPilot: 'reg_registerpilot',
     pilot: 'reg_pilot',
     removePilot: 'reg_removepilot',
     myInfo: 'reg_myinfo',
@@ -63,7 +67,8 @@ export function buildRegPanelEmbed(rankingDb) {
                     '**1.** Click **📝 Register** and type your exact in-game nickname.',
                     '**2.** The bot auto-detects your clan from the ranking and assigns the role.',
                     '**3.** Add up to **4 pilots** who can claim on your behalf.',
-                    '**4.** Your nickname and role stay synced automatically every day at **22:00 BRT**.'
+                    '**4.** Want to be a pilot for someone? Use **✈️ Register as Pilot** button!',
+                    '**5.** Your nickname and role stay synced automatically every day at **22:00 BRT**.'
                 ].join('\n'),
                 inline: false
             },
@@ -145,20 +150,26 @@ function buildRegPanelButtons(disableAll = false) {
             .setStyle(ButtonStyle.Success)
             .setDisabled(disableAll),
         new ButtonBuilder()
+            .setCustomId(BUTTON_IDS.registerPilot)
+            .setEmoji('✈️')
+            .setLabel('Register as Pilot')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(disableAll),
+        new ButtonBuilder()
             .setCustomId(BUTTON_IDS.pilot)
             .setEmoji('👤')
             .setLabel('Add Pilot')
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(disableAll),
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disableAll)
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(BUTTON_IDS.removePilot)
             .setEmoji('🗑️')
             .setLabel('Remove Pilot')
             .setStyle(ButtonStyle.Danger)
-            .setDisabled(disableAll)
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
+            .setDisabled(disableAll),
         new ButtonBuilder()
             .setCustomId(BUTTON_IDS.myInfo)
             .setEmoji('ℹ️')
@@ -193,6 +204,8 @@ export async function handleRegPanelButtons(interaction, rankingDb, saveLocalSto
     switch (customId) {
         case BUTTON_IDS.register:
             return handleRegisterButton(interaction, rankingDb, saveLocalStorage, logEvent);
+        case BUTTON_IDS.registerPilot:
+            return handleRegisterPilotButton(interaction, rankingDb);
         case BUTTON_IDS.pilot:
             return handlePilotButton(interaction, rankingDb, saveLocalStorage);
         case BUTTON_IDS.removePilot:
@@ -267,6 +280,444 @@ async function showRegisterModal(interaction, rankingDb, saveLocalStorage, logEv
     modal.addComponents(new ActionRowBuilder().addComponents(nicknameInput));
     return interaction.showModal(modal);
 }
+
+// ==========================================
+// ✈️ REGISTER AS PILOT BUTTON
+// ==========================================
+
+/** Opens a modal for a user to register themselves as a pilot for an owner. */
+async function handleRegisterPilotButton(interaction, rankingDb) {
+    // Check if the user is already registered (they can't be a pilot AND an owner)
+    const userData = rankingDb.users[interaction.user.id];
+    const isRegistered = userData && (userData.registeredAt || userData.manual === true);
+
+    if (isRegistered) {
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ You Are Already Registered')
+                    .setColor('#ED4245')
+                    .setDescription(
+                        'You are already registered as a character owner (**' + userData.nickname + '**).\n\n' +
+                        'If you want to be a pilot for someone else, ask them to use the **👤 Add Pilot** button or `/pilot @user` command to add you.'
+                    )
+            ],
+            flags: 64
+        });
+    }
+
+    const modal = new ModalBuilder()
+        .setCustomId('reg_pilot_modal')
+        .setTitle('✈️ Register as Pilot');
+
+    const ownNicknameInput = new TextInputBuilder()
+        .setCustomId('reg_pilot_nickname')
+        .setLabel('Your Character Name (in-game)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g., MyCharacter')
+        .setMinLength(2)
+        .setMaxLength(30)
+        .setRequired(true);
+
+    const ownerNicknameInput = new TextInputBuilder()
+        .setCustomId('reg_pilot_owner')
+        .setLabel('Owner Character Name (who you pilot for)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g., xVraeL')
+        .setMinLength(2)
+        .setMaxLength(30)
+        .setRequired(true);
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(ownNicknameInput),
+        new ActionRowBuilder().addComponents(ownerNicknameInput)
+    );
+
+    return interaction.showModal(modal);
+}
+
+/** Handle the pilot registration modal submission. */
+export async function handleRegPilotModal(interaction, rankingDb, saveLocalStorage, logEvent) {
+    const pilotName = interaction.fields.getTextInputValue('reg_pilot_nickname').trim().normalize('NFC');
+    const ownerName = interaction.fields.getTextInputValue('reg_pilot_owner').trim().normalize('NFC');
+
+    // ── Find the owner in the database ──
+    let ownerId = null;
+    let ownerData = null;
+
+    for (const [uid, data] of Object.entries(rankingDb.users || {})) {
+        if (data.nickname?.trim().normalize('NFC').toLowerCase() === ownerName.toLowerCase()) {
+            ownerId = uid;
+            ownerData = data;
+            break;
+        }
+    }
+
+    if (!ownerId || !ownerData) {
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Owner Not Found')
+                    .setColor('#ED4245')
+                    .setDescription(
+                        `No registered user found with the character name **${ownerName}**.\n\n` +
+                        'Make sure you typed the name exactly as they registered it. ' +
+                        'Ask the owner to check their character name via the **ℹ️ My Info** button.'
+                    )
+            ],
+            flags: 64
+        });
+    }
+
+    // ── Check if owner has room for more pilots ──
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (ownerData.pilotIds.length >= 4) {
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Owner Pilot Limit Reached')
+                    .setColor('#ED4245')
+                    .setDescription(
+                        `**${ownerData.nickname}** already has the maximum of **4 pilots**.\n\n` +
+                        'Ask them to remove a pilot first before adding you.'
+                    )
+            ],
+            flags: 64
+        });
+    }
+
+    // ── Check if already linked ──
+    if (ownerData.pilotIds.includes(interaction.user.id)) {
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Already a Pilot')
+                    .setColor('#ED4245')
+                    .setDescription(
+                        `You are already linked as a pilot for **${ownerData.nickname}**.`
+                    )
+            ],
+            flags: 64
+        });
+    }
+
+    // ── Check for pending request ──
+    const existingKey = Object.keys(pilotRequests).find(k =>
+        k.startsWith(`${ownerId}_`) && pilotRequests[k].pilotId === interaction.user.id
+    );
+    if (existingKey) {
+        const age = Date.now() - pilotRequests[existingKey].timestamp;
+        if (age < 300000) { // 5 minutes
+            return interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('⏳ Pending Request')
+                        .setColor('#FEE75C')
+                        .setDescription(
+                            'You already have a pending pilot request for **' + ownerData.nickname + '**.\n\n' +
+                            'Please wait for the owner to respond, or try again later if the request expires.'
+                        )
+                ],
+                flags: 64
+            });
+        }
+        // Expired, remove it
+        delete pilotRequests[existingKey];
+    }
+
+    // ── Store the pending request ──
+    const requestKey = `${ownerId}_${interaction.user.id}_${Date.now()}`;
+    pilotRequests[requestKey] = {
+        ownerId,
+        ownerNick: ownerData.nickname,
+        pilotId: interaction.user.id,
+        pilotName,
+        pilotTag: interaction.user.tag,
+        timestamp: Date.now()
+    };
+
+    // ── Send DM to the owner for approval ──
+    const ownerMember = await interaction.guild?.members.fetch(ownerId).catch(() => null);
+    const ownerUser = ownerMember?.user || await client.users.fetch(ownerId).catch(() => null);
+
+    if (!ownerUser) {
+        delete pilotRequests[requestKey];
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Cannot Send Request')
+                    .setColor('#ED4245')
+                    .setDescription(
+                        'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
+                        'The owner may have left the server or has DMs disabled.'
+                    )
+            ],
+            flags: 64
+        });
+    }
+
+    try {
+        const dmEmbed = new EmbedBuilder()
+            .setTitle('✈️ Pilot Request')
+            .setColor('#5865F2')
+            .setDescription(
+                `**${interaction.user.tag}** wants to be your pilot!`
+            )
+            .addFields(
+                { name: '👤 Pilot Discord', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
+                { name: '🎮 Pilot Character', value: `**${pilotName}**`, inline: true },
+                { name: '🎮 Your Character', value: `**${ownerData.nickname}**`, inline: true }
+            )
+            .setFooter({ text: 'This request expires in 5 minutes' })
+            .setTimestamp();
+
+        const dmRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`reg_pilot_approve_${requestKey}`)
+                .setLabel('✅ Approve')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId(`reg_pilot_reject_${requestKey}`)
+                .setLabel('❌ Reject')
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        await ownerUser.send({ embeds: [dmEmbed], components: [dmRow] });
+
+        logEvent(`✈️ Pilot request sent: ${interaction.user.tag} → ${ownerData.nickname} (${ownerId})`);
+
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('✅ Request Sent!')
+                    .setColor('#57F287')
+                    .setDescription(
+                        `Your pilot request has been sent to **${ownerData.nickname}**!\n\n` +
+                        'They will receive a DM with your request. Once they approve, you will be linked as their pilot.'
+                    )
+            ],
+            flags: 64
+        });
+    } catch (err) {
+        delete pilotRequests[requestKey];
+        logger.error('Registration', 'Failed to send pilot request DM', err);
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Cannot Send Request')
+                    .setColor('#ED4245')
+                    .setDescription(
+                        'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
+                        'The owner may have DMs disabled. Ask them to enable DMs or use `/pilot @user` to add you directly.'
+                    )
+            ],
+            flags: 64
+        });
+    }
+}
+
+/** Handle pilot request approval from DM. */
+export async function handleRegPilotApprove(interaction, rankingDb, saveLocalStorage, logEvent) {
+    const requestKey = interaction.customId.replace('reg_pilot_approve_', '');
+    const request = pilotRequests[requestKey];
+
+    if (!request) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('⌛ Request Expired')
+                    .setColor('#FEE75C')
+                    .setDescription('This pilot request has expired or was already processed.')
+            ],
+            components: []
+        });
+    }
+
+    // Verify the person responding is the actual owner
+    if (interaction.user.id !== request.ownerId) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Not Your Request')
+                    .setColor('#ED4245')
+                    .setDescription('Only the account owner can approve this request.')
+            ],
+            components: []
+        });
+    }
+
+    delete pilotRequests[requestKey];
+
+    // ── Add pilot to owner's list ──
+    const ownerData = rankingDb.users[request.ownerId];
+    if (!ownerData) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Error')
+                    .setColor('#ED4245')
+                    .setDescription('Your account data could not be found. Please re-register.')
+            ],
+            components: []
+        });
+    }
+
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (ownerData.pilotIds.length >= 4) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Pilot Limit Reached')
+                    .setColor('#ED4245')
+                    .setDescription('You already have the maximum of **4 pilots**. Remove one first.')
+            ],
+            components: []
+        });
+    }
+
+    if (ownerData.pilotIds.includes(request.pilotId)) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('ℹ️ Already Linked')
+                    .setColor('#5865F2')
+                    .setDescription('This user is already linked as your pilot.')
+            ],
+            components: []
+        });
+    }
+
+    ownerData.pilotIds.push(request.pilotId);
+    saveLocalStorage();
+
+    // ── Update the pilot's nickname and roles ──
+    if (interaction.guild) {
+        const pilotMember = await interaction.guild.members.fetch(request.pilotId).catch(() => null);
+        if (pilotMember) {
+            await pilotMember.setNickname(`${request.ownerNick} - Pilot`).catch(noop);
+            await applyImmediateRoleWithCache(interaction, pilotMember, request.ownerNick, request.ownerId).catch(noop);
+        }
+    } else {
+        // We're in DMs, use configured DISCORD_SERVER_ID for reliable guild lookup
+        const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
+        if (guild) {
+            const pilotMember = await guild.members.fetch(request.pilotId).catch(() => null);
+            if (pilotMember) {
+                await pilotMember.setNickname(`${request.ownerNick} - Pilot`).catch(noop);
+                // We need a guild interaction for applyImmediateRoleWithCache, use a fallback
+                for (const roleId of Object.values(CLAN_ROLES)) {
+                    if (!pilotMember.roles.cache.has(roleId)) {
+                        await pilotMember.roles.add(roleId).catch(noop);
+                    }
+                }
+            }
+        }
+    }
+
+    logEvent(`✈️ Pilot approved: ${request.pilotTag} (${request.pilotName}) → ${request.ownerNick}`);
+
+    // ── Notify the pilot ──
+    try {
+        const pilotUser = await client.users.fetch(request.pilotId).catch(() => null);
+        if (pilotUser) {
+            await pilotUser.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('✅ Pilot Request Approved!')
+                        .setColor('#57F287')
+                        .setDescription(`**${request.ownerNick}** has approved you as their pilot! 🎉`)
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Update the DM embed ──
+    return interaction.update({
+        embeds: [
+            new EmbedBuilder()
+                .setTitle('✅ Pilot Approved!')
+                .setColor('#57F287')
+                .setDescription(`You approved **${request.pilotTag}** as your pilot for **${request.ownerNick}**.`)
+                .setTimestamp()
+        ],
+        components: []
+    });
+}
+
+/** Handle pilot request rejection from DM. */
+export async function handleRegPilotReject(interaction, rankingDb, saveLocalStorage, logEvent) {
+    const requestKey = interaction.customId.replace('reg_pilot_reject_', '');
+    const request = pilotRequests[requestKey];
+
+    if (!request) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('⌛ Request Expired')
+                    .setColor('#FEE75C')
+                    .setDescription('This pilot request has expired or was already processed.')
+            ],
+            components: []
+        });
+    }
+
+    // Verify the person responding is the actual owner
+    if (interaction.user.id !== request.ownerId) {
+        return interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('❌ Not Your Request')
+                    .setColor('#ED4245')
+                    .setDescription('Only the account owner can reject this request.')
+            ],
+            components: []
+        });
+    }
+
+    delete pilotRequests[requestKey];
+
+    logEvent(`✈️ Pilot request rejected: ${request.pilotTag} → ${request.ownerNick}`);
+
+    // ── Notify the pilot ──
+    try {
+        const pilotUser = await client.users.fetch(request.pilotId).catch(() => null);
+        if (pilotUser) {
+            await pilotUser.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('❌ Pilot Request Rejected')
+                        .setColor('#ED4245')
+                        .setDescription(`**${request.ownerNick}** has declined your pilot request.`)
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Update the DM embed ──
+    return interaction.update({
+        embeds: [
+            new EmbedBuilder()
+                .setTitle('❌ Request Rejected')
+                .setColor('#ED4245')
+                .setDescription(`You rejected **${request.pilotTag}** as your pilot.`)
+                .setTimestamp()
+        ],
+        components: []
+    });
+}
+
+/** Clean up expired pilot requests (call periodically). */
+export function cleanupExpiredPilotRequests() {
+    const now = Date.now();
+    for (const [key, request] of Object.entries(pilotRequests)) {
+        if (now - request.timestamp > 300000) { // 5 minutes
+            delete pilotRequests[key];
+        }
+    }
+}
+
+// Run cleanup every minute
+setInterval(cleanupExpiredPilotRequests, 60000);
 
 /** Handle re-register confirmation. */
 export async function handleReRegisterConfirm(interaction, rankingDb, saveLocalStorage, logEvent) {
@@ -753,8 +1204,13 @@ async function handleHelpButton(interaction) {
                 inline: false
             },
             {
-                name: '👤 Add Pilot',
-                value: 'Add up to **4 pilots** — other Discord members who can claim panels on your behalf. Use `/pilot @user`.',
+                name: '✈️ Register as Pilot',
+                value: 'Want to pilot for someone? Click the **✈️ Register as Pilot** button! Enter your character name and the owner\'s name. The owner receives a DM to approve or reject.',
+                inline: false
+            },
+            {
+                name: '👤 Add Pilot (Owner)',
+                value: 'Add up to **4 pilots** — other Discord members who can claim on your behalf. Use `/pilot @user`.',
                 inline: false
             },
             {

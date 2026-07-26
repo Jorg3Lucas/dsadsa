@@ -23,7 +23,10 @@ import {
     handleRegModalSubmit,
     handleRegRemovePilotSelect,
     handleReRegisterConfirm,
-    handleRegSyncConfirm
+    handleRegSyncConfirm,
+    handleRegPilotModal,
+    handleRegPilotApprove,
+    handleRegPilotReject
 } from '../handlers/registration-panel.js';
 
 
@@ -70,6 +73,22 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     if (interaction.isModalSubmit() && interaction.customId === 'reg_modal') {
         await interaction.deferReply({ flags: 64 });
         return handleRegModalSubmit(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── Pilot Registration Modal ──
+    if (interaction.isModalSubmit() && interaction.customId === 'reg_pilot_modal') {
+        await interaction.deferReply({ flags: 64 });
+        return handleRegPilotModal(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── Pilot Request Approval (from DM) ──
+    if (interaction.isButton() && interaction.customId.startsWith('reg_pilot_approve_')) {
+        return handleRegPilotApprove(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── Pilot Request Rejection (from DM) ──
+    if (interaction.isButton() && interaction.customId.startsWith('reg_pilot_reject_')) {
+        return handleRegPilotReject(interaction, db, saveLocalStorage, logEvent);
     }
 
     // ── Confirm buttons → ranking-confirm.js ──
