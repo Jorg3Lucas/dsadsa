@@ -20,24 +20,6 @@ import { PermissionFlagsBits } from 'discord.js';
 export const SLASH_COMMANDS = [
   // ── Ranking commands ──
   {
-    name: 'register',
-    description: 'Register your MIR4 character nickname'
-  },
-  {
-    name: 'pilot',
-    description: 'Link another Discord member as your pilot',
-    options: [{
-      type: 6,
-      name: 'member',
-      description: 'Select the Discord member to link as pilot',
-      required: true
-    }]
-  },
-  {
-    name: 'removepilot',
-    description: 'Remove one of your linked pilots'
-  },
-  {
     name: 'forcesync',
     description: 'Force a full synchronization of all rankings, nicknames, and roles',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()

@@ -5,11 +5,7 @@ import { CLAN_ROLES } from './ranking-constants.js';
 import { noop } from "./config.js";
 import { handleConfirmButtons } from './ranking-confirm.js';
 import { handleManageNavigation, handleManageUserPage, handleManageAction, handleManagePilot } from './ranking-manage.js';
-import { handleRegisterModal } from './ranking-handlers-modal.js';
 import {
-    handleRegisterCommand,
-    handlePilotCommand,
-    handleRemovePilotCommand,
     handleForceSyncCommand,
     handleManageCommand,
     handleManualRegisterCommand,
@@ -116,12 +112,6 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return handleManagePilot(interaction, db, saveLocalStorage, logEvent);
     }
 
-    // ── REGISTER MODAL → ranking-handlers-modal.js ──
-    if (interaction.isModalSubmit() && interaction.customId === 'register_modal') {
-        await interaction.deferReply({ flags: 64 });
-        return handleRegisterModal(interaction, db, saveLocalStorage, logEvent);
-    }
-
     // ── MANUAL CLAN SELECTION DROPDOWN (ADMIN) ──
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_clan_manual_')) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -154,45 +144,11 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
         return interaction.editReply(getMsg('ranking.responses.selectClanMenu.error'));
     }
 
-    // ── PILOT REMOVAL HANDLER (user removing their own pilot) ──
-    if (interaction.isStringSelectMenu() && interaction.customId === 'select_pilot_to_remove') {
-        await interaction.deferUpdate();
-        
-        const pilotToRemoveId = interaction.values[0];
-        const userProfile = db.users[interaction.user.id];
-
-        if (!userProfile || !userProfile.pilotIds || !userProfile.pilotIds.includes(pilotToRemoveId)) {
-            return interaction.followUp({ content: getMsg('ranking.responses.removepilot.error'), flags: 64 });
-        }
-
-        userProfile.pilotIds = userProfile.pilotIds.filter(id => id !== pilotToRemoveId);
-        saveLocalStorage();
-
-        await interaction.webhook.editMessage(interaction.message.id, {
-            content: getMsg('ranking.responses.removepilot.success'),
-            components: []
-        }).catch(noop);
-
-        interaction.guild.members.fetch(pilotToRemoveId)
-            .then(async (pilotMember) => {
-                if (pilotMember) {
-                    for (const roleId of Object.values(CLAN_ROLES)) {
-                        if (pilotMember.roles.cache.has(roleId)) {await pilotMember.roles.remove(roleId).catch(noop);}
-                    }
-                    await pilotMember.setNickname(pilotMember.user.username).catch(noop);
-                }
-            }).catch(noop);
-        return;
-    }
-
     // ── Not a button/select/modal? Must be a slash command ──
     if (!interaction.isCommand()) return;
     const { commandName } = interaction;
 
     // ── Route slash commands → ranking-handlers-commands.js ──
-    if (commandName === 'register') return handleRegisterCommand(interaction);
-    if (commandName === 'pilot') return handlePilotCommand(interaction, db, saveLocalStorage);
-    if (commandName === 'removepilot') return handleRemovePilotCommand(interaction, db);
     if (commandName === 'forcesync') return handleForceSyncCommand(interaction, db, saveLocalStorage, logEvent);
     if (commandName === 'manage') return handleManageCommand(interaction, db);
     if (commandName === 'manualregister') return handleManualRegisterCommand(interaction, db, saveLocalStorage, logEvent);

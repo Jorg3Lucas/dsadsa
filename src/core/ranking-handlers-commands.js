@@ -1,17 +1,12 @@
 // ==========================================
-// 🖱️ RANKING — Slash Command Handlers
-// /register, /pilot, /removepilot, /forcesync,
-// /manualregister, /manualpilot, /manualremovepilot,
-// /cleandb, /manage, /manualremove
-// Extracted from ranking-handlers.js
+// 🖱️ RANKING — Admin Slash Command Handlers
+// /forcesync, /manage, /manualregister, /manualpilot,
+// /manualremovepilot, /manualremove, /cleandb
 // ==========================================
 
 import {
     ActionRowBuilder,
     StringSelectMenuBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
     ButtonBuilder,
     ButtonStyle
 } from 'discord.js';
@@ -22,101 +17,6 @@ import { runDailySynchronization } from './ranking-sync-engine.js';
 import { noop } from "./config.js";
 import { applyImmediateRoleWithCache } from './ranking-role.js';
 import { handleManageSlashCommand } from './ranking-manage.js';
-
-/** Handle the /register slash command — shows the registration modal. @param {import('discord.js').CommandInteraction} interaction @returns {Promise} */
-export async function handleRegisterCommand(interaction) {
-    const modal = new ModalBuilder()
-        .setCustomId('register_modal')
-        .setTitle(getMsg('ranking.commands.register.modalTitle'));
-
-    const nicknameInput = new TextInputBuilder()
-        .setCustomId('character_nickname')
-        .setLabel(getMsg('ranking.commands.register.inputLabel'))
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(getMsg('ranking.commands.register.inputPlaceholder'))
-        .setMinLength(2)
-        .setMaxLength(30)
-        .setRequired(true);
-
-    const firstActionRow = new ActionRowBuilder().addComponents(nicknameInput);
-    modal.addComponents(firstActionRow);
-
-    return await interaction.showModal(modal);
-}
-
-/** Handle the /pilot slash command. @param {import('discord.js').CommandInteraction} interaction @param {object} db @param {Function} saveLocalStorage @param {Function} logEvent @returns {Promise} */
-export async function handlePilotCommand(interaction, db, saveLocalStorage) {
-    await interaction.deferReply({ flags: 64 });
-    const pilotMember = interaction.options.getMember('member');
-
-    const userProfile = db.users[interaction.user.id];
-    const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
-
-    if (!isActuallyRegistered) {
-        return interaction.editReply(getMsg('ranking.responses.pilot.notRegistered'));
-    }
-
-    if (pilotMember.id === interaction.user.id) return interaction.editReply(getMsg('ranking.responses.pilot.selfPilot'));
-
-    if (!db.users[interaction.user.id].pilotIds) db.users[interaction.user.id].pilotIds = [];
-
-    if (db.users[interaction.user.id].pilotIds.length >= 4) {
-        return interaction.editReply(getMsg('ranking.responses.pilot.limitReached'));
-    }
-
-    if (db.users[interaction.user.id].pilotIds.includes(pilotMember.id)) {
-        return interaction.editReply(getMsg('ranking.responses.pilot.alreadyLinked'));
-    }
-
-    db.users[interaction.user.id].pilotIds.push(pilotMember.id);
-    saveLocalStorage();
-
-    const ownerNick = db.users[interaction.user.id].nickname.trim().normalize('NFC');
-    await pilotMember.setNickname(`${ownerNick} - Pilot`).catch(noop);
-    await applyImmediateRoleWithCache(interaction, pilotMember, ownerNick, interaction.user.id);
-
-    return interaction.editReply(getMsg('ranking.responses.pilot.success', {
-        pilotMember: pilotMember.toString(),
-        count: db.users[interaction.user.id].pilotIds.length,
-        nick: ownerNick
-    }));
-}
-
-/** Handle the /removepilot slash command. @param {import('discord.js').CommandInteraction} interaction @param {object} db @returns {Promise} */
-export async function handleRemovePilotCommand(interaction, db) {
-    const userProfile = db.users[interaction.user.id];
-    const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
-
-    if (!isActuallyRegistered || !userProfile.pilotIds || userProfile.pilotIds.length === 0) {
-        return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), flags: 64 });
-    }
-
-    const menuOptions = [];
-    for (const pilotId of userProfile.pilotIds) {
-        const memberObj = await interaction.guild.members.fetch(pilotId).catch(() => null);
-        const pilotTag = memberObj ? memberObj.user.tag : `Disconnected User (${pilotId})`;
-        const pilotNick = memberObj ? (memberObj.nickname || memberObj.user.username) : 'Unknown';
-
-        menuOptions.push({
-            label: pilotTag,
-            description: `${pilotNick} - ${getMsg('ranking.responses.removepilot.optionDescription')}`,
-            value: pilotId
-        });
-    }
-
-    const pilotMenu = new StringSelectMenuBuilder()
-        .setCustomId('select_pilot_to_remove')
-        .setPlaceholder(getMsg('ranking.responses.removepilot.menuPlaceholder'))
-        .addOptions(menuOptions);
-
-    const row = new ActionRowBuilder().addComponents(pilotMenu);
-
-    return interaction.reply({
-        content: getMsg('ranking.responses.removepilot.menuContent'),
-        components: [row],
-        flags: 64
-    });
-}
 
 /** Handle the /forcesync slash command. @param {import('discord.js').CommandInteraction} interaction @param {object} db @param {Function} saveLocalStorage @param {Function} logEvent @returns {Promise} */
 export async function handleForceSyncCommand(interaction, db, saveLocalStorage, logEvent) {
