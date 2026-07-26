@@ -18,6 +18,13 @@ import {
     handleManualRemoveCommand,
     handleCleanDbCommand
 } from './ranking-handlers-commands.js';
+import {
+    handleRegPanelButtons,
+    handleRegModalSubmit,
+    handleRegRemovePilotSelect,
+    handleReRegisterConfirm,
+    handleRegSyncConfirm
+} from '../handlers/registration-panel.js';
 
 
 // ==========================================
@@ -30,6 +37,40 @@ import {
 /** Main router for all MIR4 ranking interactions: slash commands, modals, select menus, confirm buttons. @param {import('discord.js').Interaction} interaction @param {object} db @param {Function} saveLocalStorage @param {Function} logEvent */
 export async function handleMir4Interactions(interaction, db, saveLocalStorage, logEvent) {
     if (!db.users) db.users = {};
+
+    // ── Registration Panel Buttons (reg_ prefix) ──
+    if (interaction.isButton() && interaction.customId.startsWith('reg_')) {
+        // Reregister / sync confirmations
+        if (interaction.customId === 'reg_confirm_reregister') {
+            return handleReRegisterConfirm(interaction, db, saveLocalStorage, logEvent);
+        }
+        if (interaction.customId === 'reg_cancel_reregister') {
+            return interaction.update({ content: '❌ Re-registration cancelled.', components: [] }).catch(noop);
+        }
+        if (interaction.customId === 'reg_confirm_sync') {
+            return handleRegSyncConfirm(interaction, db, saveLocalStorage, logEvent);
+        }
+        if (interaction.customId === 'reg_cancel_sync') {
+            return interaction.update({ content: '❌ Sync cancelled.', components: [] }).catch(noop);
+        }
+        if (interaction.customId === 'reg_cancel_pilot_remove') {
+            return interaction.update({ content: '❌ Pilot removal cancelled.', components: [] }).catch(noop);
+        }
+        // Standard panel buttons
+        return handleRegPanelButtons(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── Registration Panel Select Menus ──
+    if (interaction.isStringSelectMenu() && interaction.customId === 'reg_select_pilot_remove') {
+        await interaction.deferUpdate();
+        return handleRegRemovePilotSelect(interaction, db, saveLocalStorage);
+    }
+
+    // ── Registration Modal ──
+    if (interaction.isModalSubmit() && interaction.customId === 'reg_modal') {
+        await interaction.deferReply({ flags: 64 });
+        return handleRegModalSubmit(interaction, db, saveLocalStorage, logEvent);
+    }
 
     // ── Confirm buttons → ranking-confirm.js ──
     if (interaction.isButton() && interaction.customId.startsWith('confirm-')) {

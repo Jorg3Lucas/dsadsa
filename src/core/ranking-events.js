@@ -5,6 +5,7 @@ import { getMsg } from './lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { noop } from "./config.js";
 import { addEarlyClaimUser, removeEarlyClaimUser, earlyClaimUsers } from './state.js';
+import { deployRegistrationPanel, setRegistrationChannel } from '../handlers/registration-panel.js';
 
 
 // ==========================================
@@ -16,6 +17,20 @@ async function handleTextCommands(message, db, saveLocalStorage) {
 
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
+
+    if (command === 'setregistration') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply(getMsg('ranking.responses.setwelcome.noPermission'));
+        }
+
+        if (!db.config) db.config = {};
+        db.config.registrationChannelId = message.channel.id;
+        saveLocalStorage();
+
+        await setRegistrationChannel(message.channel, db);
+
+        return message.reply(`✅ **Registration panel deployed!** Check <#${message.channel.id}> for the beautiful new interface.`);
+    }
 
     if (command === 'setwelcome') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -138,4 +153,19 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
     cron.schedule('0 17 * * *', async () => {
         await runDailySynchronization(client, db, saveLocalStorage, logEvent, true);
     }, { scheduled: true, timezone: "America/Sao_Paulo" });
+
+    // ── Deploy registration panel on boot if configured ──
+    setTimeout(async () => {
+        try {
+            if (db.config && db.config.registrationChannelId) {
+                const channel = client.channels.cache.get(db.config.registrationChannelId);
+                if (channel) {
+                    await deployRegistrationPanel(channel, db);
+                    logEvent('📝 Registration panel deployed on boot.');
+                }
+            }
+        } catch (err) {
+            console.error('❌ Failed to deploy registration panel on boot:', err.message);
+        }
+    }, 8000);
 }

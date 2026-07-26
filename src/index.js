@@ -239,7 +239,7 @@ client.on('interactionCreate', async (interaction) => {
 
         // D. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'register_modal') {
+            if (interaction.customId === 'register_modal' || interaction.customId === 'reg_modal') {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             } else if (interaction.customId === 'mgmt-salary-spreadsheet-modal' || interaction.customId === 'mgmt-reservations-add-modal') {
                 return await handleManagementInteraction(interaction);
@@ -253,7 +253,7 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId.startsWith('mgmt-')) {
                 return await handleManagementInteraction(interaction);
             }
-            if (interaction.customId.startsWith('confirm-manual') || interaction.customId.startsWith('manage_')) {
+            if (interaction.customId.startsWith('confirm-manual') || interaction.customId.startsWith('manage_') || interaction.customId.startsWith('reg_')) {
                 return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
             return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
