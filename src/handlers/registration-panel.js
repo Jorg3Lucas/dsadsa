@@ -22,6 +22,7 @@ import { applyImmediateRoleWithCache, applyClanRoleOnly } from '../core/ranking-
 import { noop } from '../core/config.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { client } from '../core/state.js';
+import { logger } from '../core/logger.js';
 
 // ── Configuration ──
 const REG_PANEL_CUSTOM_ID = 'reg_panel';
@@ -113,10 +114,10 @@ export async function deployRegistrationPanel(channel, rankingDb) {
             regPanelChannelId = channel.id;
         }
 
-        console.log(`✅ Registration panel deployed in #${channel.name}`);
+        logger.info('Registration', `Panel deployed in #${channel.name}`);
         return regPanelMessage;
     } catch (err) {
-        console.error('❌ Failed to deploy registration panel:', err.message);
+        logger.error('Registration', 'Failed to deploy registration panel', err);
         return null;
     }
 }

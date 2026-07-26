@@ -6,6 +6,7 @@ import { runDailySynchronization } from './ranking-sync-engine.js';
 import { noop } from "./config.js";
 import { addEarlyClaimUser, removeEarlyClaimUser, earlyClaimUsers } from './state.js';
 import { deployRegistrationPanel, setRegistrationChannel } from '../handlers/registration-panel.js';
+import { logger } from './logger.js';
 
 
 // ==========================================
@@ -97,10 +98,7 @@ async function handleTextCommands(message, db, saveLocalStorage) {
 
 export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
     client.on('error', (err) => {
-        console.error('⚠️ [Discord Client Error Handled Safely]:', err.message);
-        if (err.stack) {
-            console.error('📋 [Stack Trace]:', err.stack);
-        }
+        logger.error('Discord', 'Client error', err);
     });
 
     client.on('messageCreate', async (message) => {
@@ -118,7 +116,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
 
             await welcomeChannel.send(welcomeMsg);
         } catch (error) {
-            console.error(getMsg('ranking.logs.welcomeError', { error: error.message }));
+            logger.error('Ranking', 'Error sending welcome message', error);
         }
     });
 
@@ -146,7 +144,10 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                 }
             }
         } catch (error) {
-            console.error(getMsg('ranking.logs.leaveError', { error: error.message }));
+            logger.error('Ranking', 'Error handling member leave', error, {
+                userId: member.id,
+                userTag: member.user?.tag
+            });
         }
     });
 
@@ -165,7 +166,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                 }
             }
         } catch (err) {
-            console.error('❌ Failed to deploy registration panel on boot:', err.message);
+                logger.error('Ranking', 'Failed to deploy registration panel on boot', err);
         }
     }, 8000);
 }

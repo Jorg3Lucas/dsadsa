@@ -1,6 +1,7 @@
 import o from "fs";
 import s from "path";
 import { runBackup } from "../auto-backup.js";
+import { logger } from "./logger.js";
 
 // ==========================================
 // 🏗️ MODULE-LEVEL STATE
@@ -47,7 +48,7 @@ function loadDailyLogsFromDisk() {
             dailyLogs = JSON.parse(o.readFileSync(dailyLogsPath, "utf8"));
         }
     } catch (l) {
-        console.error("❌ Error loading daily-logs.json file:", l.message);
+        logger.error('State', 'Error loading daily-logs.json', l);
     }
 }
 
@@ -83,7 +84,7 @@ function loadEarlyClaimUsersFromDisk() {
             }
         }
     } catch (err) {
-        console.error("❌ Error loading early-claim-users.json:", err.message);
+        logger.error('State', 'Error loading early-claim-users.json', err);
     }
 }
 
@@ -91,7 +92,7 @@ export function saveEarlyClaimUsersToDisk() {
     try {
         o.writeFileSync(earlyClaimUsersPath, JSON.stringify([...earlyClaimUsers], null, 2));
     } catch (err) {
-        console.error("❌ Error saving early-claim-users.json:", err.message);
+        logger.error('State', 'Error saving early-claim-users.json', err);
     }
 }
 
@@ -116,7 +117,7 @@ function loadDmOptOutFromDisk() {
             }
         }
     } catch (err) {
-        console.error("❌ Error loading dm-optout.json:", err.message);
+        logger.error('State', 'Error loading dm-optout.json', err);
     }
 }
 
@@ -124,7 +125,7 @@ export function saveDmOptOutToDisk() {
     try {
         o.writeFileSync(dmOptOutPath, JSON.stringify([...dmOptOut], null, 2));
     } catch (err) {
-        console.error("❌ Error saving dm-optout.json:", err.message);
+        logger.error('State', 'Error saving dm-optout.json', err);
     }
 }
 

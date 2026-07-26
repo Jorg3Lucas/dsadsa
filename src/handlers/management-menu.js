@@ -13,6 +13,7 @@ import {
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
 import { noop } from "../core/config.js";
+import { logger } from "../core/logger.js";
 
 // Sub-module imports
 import {
@@ -107,8 +108,10 @@ export async function handleMgmtSlash(interaction) {
             flags: 64
         });
     } catch (err) {
-        console.error("❌ [handleMgmtSlash] CRASH:", err);
-        if (err.stack) console.error("📋 [Stack]:", err.stack);
+        logger.error('Management', 'Error in /manage slash command', err, {
+            userId: interaction.user?.id,
+            guildId: interaction.guild?.id
+        });
         try {
             const errContent = getMsg("management.errorBody", { error: (err.message || String(err)).slice(0, 1500) });
             if (!interaction.replied && !interaction.deferred) {

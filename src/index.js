@@ -25,6 +25,7 @@ import { initSalaryCron } from './handlers/salary-lifecycle.js';
 import { exportVotesToSheets } from './handlers/salary-sheets.js';
 import { handleManagementInteraction, handleMgmtSlash } from './handlers/management-menu.js';
 import { noop, getBotToken} from './core/config.js';
+import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
 const client = new Client({
     intents: [
@@ -66,10 +67,10 @@ try {
                 claimLastMessages[panelId] = parsedClaim.panels[panelId];
             }
         }
-        console.log('✅ Claim database loaded successfully.');
+        logger.info('Boot', 'Claim database loaded successfully.');
     }
 } catch (e) {
-    console.error('❌ Error pre-loading claim database:', e);
+    logger.error('Boot', 'Error pre-loading claim database', e);
 }
 
 function saveClaimStorage() {
@@ -91,7 +92,7 @@ function saveClaimStorage() {
             panels: persistentMessages
         }, null, 2), 'utf8');
     } catch (e) {
-        console.error('❌ Error saving claim database:', e);
+        logger.error('Database', 'Error saving claim database', e);
     }
 }
 
@@ -102,7 +103,7 @@ function saveRankingStorage() {
 
         fs.writeFileSync(dbRankingPath, JSON.stringify(rankingDb, null, 2), 'utf8');
     } catch (error) {
-        console.error('❌ Error saving ranking database:', error);
+        logger.error('Database', 'Error saving ranking database', error);
     }
 }
 
@@ -112,13 +113,13 @@ function loadLocalStorageRanking() {
             const data = fs.readFileSync(dbRankingPath, 'utf8');
             rankingDb = JSON.parse(data);
             if (!rankingDb.users) rankingDb.users = {};
-            console.log('✅ Ranking database loaded successfully.');
+            logger.info('Boot', 'Ranking database loaded successfully.');
         } else {
             saveRankingStorage();
-            console.log('📝 New database_ranking.json file created.');
+            logger.info('Boot', 'New database_ranking.json file created.');
         }
     } catch (error) {
-        console.error('❌ Error loading ranking database:', error);
+        logger.error('Database', 'Error loading ranking database', error);
     }
 }
 
@@ -126,7 +127,7 @@ function loadLocalStorageRanking() {
 // 🚀 READY EVENT
 // ==========================================
 client.once('ready', async () => {
-    console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
+    logger.info('Boot', `Bot connected successfully as ${client.user.tag}`);
 
     loadLocalStorageRanking();
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
@@ -135,13 +136,13 @@ client.once('ready', async () => {
     if (guild) {
         await registerMir4SlashCommands(guild);
     } else {
-        console.error('❌ Error: Invalid Server ID configuration.');
+        logger.error('Boot', 'Invalid Server ID configuration.');
     }
 
     initMir4BotEvents(client, rankingDb, saveRankingStorage, logRankingEvent);
 
     setTimeout(async () => {
-        console.log('🧪 [Test] Starting forced validation scan...');
+        logger.info('Sync', 'Starting forced validation scan...');
         await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, true);
     }, 10000);
 
@@ -156,7 +157,7 @@ client.once('ready', async () => {
             const { setupAllChannels } = await import('./handlers/auto-channel-setup.js');
             await setupAllChannels(client, DISCORD_SERVER_ID);
         } catch (err) {
-            console.error('❌ [Auto Setup] Error:', err.message);
+                logger.error('AutoSetup', 'Failed to auto-setup channels', err);
         }
     }, 5000);
 
@@ -174,11 +175,11 @@ client.once('ready', async () => {
     // Ensures stones are re-applied to the spreadsheet after restart
     setTimeout(async () => {
         try {
-            console.log("📊 [Boot] Re-exporting votes to Google Sheets...");
+            logger.info('Boot', 'Re-exporting votes to Google Sheets...');
             const result = await exportVotesToSheets();
-            if (result) console.log("✅ [Boot] Votes re-exported successfully.");
+            if (result) logger.info('Boot', 'Votes re-exported successfully.');
         } catch (err) {
-            console.error("❌ [Boot] Error re-exporting votes to sheets:", err.message);
+            logger.error('Boot', 'Error re-exporting votes to sheets', err);
         }
     }, 3000);
 
@@ -260,8 +261,12 @@ client.on('interactionCreate', async (interaction) => {
         }
 
     } catch (error) {
-        console.error('❌ Error caught in unified interaction router:', error);
-        if (error.stack) console.error('📋 [Stack]:', error.stack);
+        logger.error('Router', 'Error caught in unified interaction router', error, {
+            command: interaction.commandName,
+            customId: interaction.customId,
+            type: interaction.type,
+            user: interaction.user?.id
+        });
         // Prevent interaction timeout — reply if not already replied
         try {
             if (!interaction.replied && !interaction.deferred) {
@@ -272,5 +277,8 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 });
+
+// Install global error handlers BEFORE login
+installGlobalErrorHandlers();
 
 client.login(getBotToken());
