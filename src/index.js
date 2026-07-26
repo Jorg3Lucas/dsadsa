@@ -126,7 +126,7 @@ function loadLocalStorageRanking() {
 // ==========================================
 // 🚀 READY EVENT
 // ==========================================
-client.once('ready', async () => {
+client.once('clientReady', async () => {
     logger.info('Boot', `Bot connected successfully as ${client.user.tag}`);
 
     loadLocalStorageRanking();
