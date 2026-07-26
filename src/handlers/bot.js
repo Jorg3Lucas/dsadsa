@@ -8,7 +8,7 @@ import { startTickInterval } from "./panel-tick.js";
 // 🚀 INITIALIZATION
 // ==========================================
 
-export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, rankingDatabase) {
+export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, rankingDatabase, skipRecovery = false) {
     initState({ client: botClient, db: database, rankingDb: rankingDatabase || null, saveLocalStorage: saveStorageFn, logEvent: logEventFn, lastMessages: messagesTracker });
 
     // Build all known panel keys and initialize if missing
@@ -55,7 +55,12 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
         refreshVisualPanel(key);
     }
 
-    processAutoRecoveryOnBoot().then(() => {
+    if (skipRecovery) {
+        logEvent("Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).");
+        return;
+    }
+
+    return processAutoRecoveryOnBoot().then(() => {
         startTickInterval();
         logEvent("Sub-system initialized and panels auto-refreshed inside global Client.");
     });

@@ -149,17 +149,20 @@ client.once('clientReady', async () => {
     // Start auto-backup scheduler
     startAutoBackup(6);
 
-    initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb);
+    // Inicializa dados dos painéis sem recovery (não envia para canais antigos)
+    initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb, true);
 
-    // Auto-setup channels after panels are initialized
-    setTimeout(async () => {
-        try {
-            const { setupAllChannels } = await import('./handlers/auto-channel-setup.js');
-            await setupAllChannels(client, DISCORD_SERVER_ID);
-        } catch (err) {
-                logger.error('AutoSetup', 'Failed to auto-setup channels', err);
-        }
-    }, 5000);
+    // Recria canais e envia painéis frescos para os canais novos
+    try {
+        const { setupAllChannels } = await import('./handlers/auto-channel-setup.js');
+        await setupAllChannels(client, DISCORD_SERVER_ID);
+    } catch (err) {
+        logger.error('AutoSetup', 'Failed to auto-setup channels', err);
+    }
+
+    // Inicia o tick AFTER os canais/painéis existirem
+    const { startTickInterval } = await import('./handlers/panel-tick.js');
+    startTickInterval();
 
     // Initialize Temp Voice system
     initTempVoiceSystem(client);
