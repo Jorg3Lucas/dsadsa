@@ -32,9 +32,7 @@ const REG_PANEL_CUSTOM_ID = 'reg_panel';
 const BUTTON_IDS = {
     register: 'reg_register',
     registerPilot: 'reg_registerpilot',
-    pilot: 'reg_pilot',
     removePilot: 'reg_removepilot',
-    myInfo: 'reg_myinfo',
     sync: 'reg_sync',
     help: 'reg_help'
 };
@@ -66,9 +64,8 @@ export function buildRegPanelEmbed(rankingDb) {
                 value: [
                     '**1.** Click **📝 Register** and type your exact in-game nickname.',
                     '**2.** The bot auto-detects your clan from the ranking and assigns the role.',
-                    '**3.** Add up to **4 pilots** who can claim on your behalf.',
-                    '**4.** Want to be a pilot for someone? Use **✈️ Register as Pilot** button!',
-                    '**5.** Your nickname and role stay synced automatically every day at **22:00 BRT**.'
+                    '**3.** Want to be a pilot for someone? Use **✈️ Register as Pilot** button!',
+                    '**4.** Your nickname and role stay synced automatically every day at **22:00 BRT**.'
                 ].join('\n'),
                 inline: false
             },
@@ -154,12 +151,6 @@ function buildRegPanelButtons(disableAll = false) {
             .setEmoji('✈️')
             .setLabel('Register as Pilot')
             .setStyle(ButtonStyle.Primary)
-            .setDisabled(disableAll),
-        new ButtonBuilder()
-            .setCustomId(BUTTON_IDS.pilot)
-            .setEmoji('👤')
-            .setLabel('Add Pilot')
-            .setStyle(ButtonStyle.Secondary)
             .setDisabled(disableAll)
     );
 
@@ -169,12 +160,6 @@ function buildRegPanelButtons(disableAll = false) {
             .setEmoji('🗑️')
             .setLabel('Remove Pilot')
             .setStyle(ButtonStyle.Danger)
-            .setDisabled(disableAll),
-        new ButtonBuilder()
-            .setCustomId(BUTTON_IDS.myInfo)
-            .setEmoji('ℹ️')
-            .setLabel('My Info')
-            .setStyle(ButtonStyle.Secondary)
             .setDisabled(disableAll),
         new ButtonBuilder()
             .setCustomId(BUTTON_IDS.sync)
@@ -206,12 +191,8 @@ export async function handleRegPanelButtons(interaction, rankingDb, saveLocalSto
             return handleRegisterButton(interaction, rankingDb, saveLocalStorage, logEvent);
         case BUTTON_IDS.registerPilot:
             return handleRegisterPilotButton(interaction, rankingDb);
-        case BUTTON_IDS.pilot:
-            return handlePilotButton(interaction, rankingDb, saveLocalStorage);
         case BUTTON_IDS.removePilot:
             return handleRemovePilotButton(interaction, rankingDb);
-        case BUTTON_IDS.myInfo:
-            return handleMyInfoButton(interaction, rankingDb);
         case BUTTON_IDS.sync:
             return handleSyncButton(interaction, rankingDb, saveLocalStorage, logEvent);
         case BUTTON_IDS.help:
@@ -299,7 +280,7 @@ async function handleRegisterPilotButton(interaction, rankingDb) {
                     .setColor('#ED4245')
                     .setDescription(
                         'You are already registered as a character owner (**' + userData.nickname + '**).\n\n' +
-                        'If you want to be a pilot for someone else, ask them to use the **👤 Add Pilot** button or `/pilot @user` command to add you.'
+                        'If you want to be a pilot for someone else, ask the owner to use `/pilot @user` command to add you.'
                     )
             ],
             flags: 64
@@ -362,7 +343,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                     .setDescription(
                         `No registered user found with the character name **${ownerName}**.\n\n` +
                         'Make sure you typed the name exactly as they registered it. ' +
-                        'Ask the owner to check their character name via the **ℹ️ My Info** button.'
+                        'Ask the owner to check their character name (it must match exactly what they registered).'
                     )
             ],
             flags: 64
@@ -740,14 +721,13 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
             data.nickname?.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
     );
     if (duplicate) {
-        return interaction.reply({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Registration Failed')
                     .setColor('#ED4245')
                     .setDescription(`**${nickname}** is already registered by another user.`)
-            ],
-            flags: 64
+            ]
         });
     }
 
@@ -797,7 +777,7 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
         );
         if (correctedConflict) {
             logEvent(`⚠️ User ${interaction.user.tag} — auto-correct blocked: "${nickname}" → "${finalNickname}" conflicts`);
-            return interaction.reply({
+            return interaction.editReply({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle('❌ Registration Failed')
@@ -806,8 +786,7 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
                             `**${nickname}** would be auto-corrected to **${finalNickname}**, ` +
                             'but that name is already registered.\n\nPlease contact an admin or use a different name.'
                         )
-                ],
-                flags: 64
+                ]
             });
         }
     }
@@ -853,59 +832,10 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
         });
     }
 
-    await interaction.reply({ embeds: [successEmbed], flags: 64 });
+    await interaction.editReply({ embeds: [successEmbed] });
 
     // ── Refresh the panel ──
     await refreshRegPanel(rankingDb);
-}
-
-// ==========================================
-// 👤 PILOT BUTTON
-// ==========================================
-
-/** Opens a modal to add a pilot by Discord member ID. */
-async function handlePilotButton(interaction, rankingDb, saveLocalStorage) {
-    const userData = rankingDb.users[interaction.user.id];
-    const isRegistered = userData && (userData.registeredAt || userData.manual === true);
-
-    if (!isRegistered) {
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Not Registered')
-                    .setColor('#ED4245')
-                    .setDescription('You need to register first before adding a pilot.\n\nUse the **📝 Register** button above!')
-            ],
-            flags: 64
-        });
-    }
-
-    if (!userData.pilotIds) userData.pilotIds = [];
-    if (userData.pilotIds.length >= 4) {
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Pilot Limit Reached')
-                    .setColor('#ED4245')
-                    .setDescription('You already have **4 pilots** linked to your account.\nRemove one first before adding another.')
-            ],
-            flags: 64
-        });
-    }
-
-    const embed = new EmbedBuilder()
-        .setTitle('👤 Add a Pilot')
-        .setColor('#5865F2')
-        .setDescription(
-            `A pilot is another Discord member who can claim panels on your behalf.\n\n` +
-            `**Your pilots:** ${userData.pilotIds.length}/4\n\n` +
-            `To add a pilot, use the slash command:\n` +
-            `➡️ **\`/pilot @user\`**\n\n` +
-            `*Replace @user with the Discord member you want to add.*`
-        )
-        .setFooter({ text: 'Pilot limit: 4 per account' });
-
-    return interaction.reply({ embeds: [embed], flags: 64 });
 }
 
 // ==========================================
@@ -1012,82 +942,6 @@ export async function handleRegRemovePilotSelect(interaction, rankingDb, saveLoc
     });
 
     await refreshRegPanel(rankingDb);
-}
-
-// ==========================================
-// ℹ️ MY INFO BUTTON
-// ==========================================
-
-/** Shows the user's registration info in a beautiful embed. */
-async function handleMyInfoButton(interaction, rankingDb) {
-    const userData = rankingDb.users[interaction.user.id];
-    const isRegistered = userData && (userData.registeredAt || userData.manual === true);
-
-    if (!isRegistered) {
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle('ℹ️ My Info')
-                    .setColor('#5865F2')
-                    .setDescription("You are **not registered** yet.\n\nUse the **📝 Register** button above to get started!")
-            ],
-            flags: 64
-        });
-    }
-
-    // Find clan from role
-    const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-    let currentClan = 'Unknown';
-    if (member) {
-        for (const [clanName, roleId] of Object.entries(CLAN_ROLES)) {
-            if (member.roles.cache.has(roleId)) {
-                currentClan = clanName;
-                break;
-            }
-        }
-    }
-
-    // Pilot info
-    let pilotInfo = 'None';
-    if (userData.pilotIds && userData.pilotIds.length > 0) {
-        const pilotNames = [];
-        for (const pId of userData.pilotIds) {
-            const pMember = await interaction.guild.members.fetch(pId).catch(() => null);
-            pilotNames.push(pMember ? pMember.user.tag : `Unknown (${pId})`);
-        }
-        pilotInfo = `• ${pilotNames.join('\n• ')}`;
-    }
-
-    const registeredDate = userData.registeredAt
-        ? new Date(userData.registeredAt).toLocaleDateString('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        })
-        : 'N/A';
-
-    const embed = new EmbedBuilder()
-        .setTitle('ℹ️ My Registration Info')
-        .setColor('#5865F2')
-        .setThumbnail(interaction.user.displayAvatarURL())
-        .addFields(
-            { name: '👤 User', value: `${interaction.user.tag}`, inline: true },
-            { name: '🎮 Character', value: `**${userData.nickname}**`, inline: true },
-            { name: '🏷️ Current Clan', value: currentClan, inline: true },
-            { name: '📅 Registered', value: registeredDate, inline: true },
-            { name: '✈️ Pilots', value: `**${userData.pilotIds ? userData.pilotIds.length : 0}/4**`, inline: true },
-            { name: '🔄 Last Sync', value: 'Daily at 22:00 BRT', inline: true }
-        )
-        .setFooter({ text: 'Use /pilot to add pilots to your account' })
-        .setTimestamp();
-
-    if (userData.pilotIds && userData.pilotIds.length > 0) {
-        embed.addFields({ name: '👥 Linked Pilots', value: pilotInfo, inline: false });
-    }
-
-    return interaction.reply({ embeds: [embed], flags: 64 });
 }
 
 // ==========================================
@@ -1209,18 +1063,8 @@ async function handleHelpButton(interaction) {
                 inline: false
             },
             {
-                name: '👤 Add Pilot (Owner)',
-                value: 'Add up to **4 pilots** — other Discord members who can claim on your behalf. Use `/pilot @user`.',
-                inline: false
-            },
-            {
                 name: '🗑️ Remove Pilot',
                 value: 'Remove a pilot from your account. Their clan role will be revoked.',
-                inline: false
-            },
-            {
-                name: 'ℹ️ My Info',
-                value: 'View your current registration details: character name, clan, pilots, and registration date.',
                 inline: false
             },
             {
