@@ -15,11 +15,14 @@ import {
     StringSelectMenuBuilder,
     PermissionFlagsBits
 } from 'discord.js';
+import fs from 'fs';
+import path from 'path';
 import { getMsg } from '../core/lang.js';
 import { CLAN_ROLES, confirmationCache, DISCORD_SERVER_ID, ELDER_ROLE_ID, APPROVAL_CHANNEL_ID } from '../core/ranking-constants.js';
 import { getLocalRankingCache, findClosestNicknameInCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 import { applyImmediateRoleWithCache, applyClanRoleOnly } from '../core/ranking-role.js';
 import { noop } from '../core/config.js';
+import { runBackup } from '../auto-backup.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { client } from '../core/state.js';
 import { logger } from '../core/logger.js';
@@ -29,6 +32,51 @@ export const pilotRequests = {};
 
 // ── Pending owner registration requests (userId -> { nickname, userTag, ... }) ──
 export const pendingOwnerRegistrations = {};
+
+// ── Persistence ──
+const REGISTRATION_REQUESTS_PATH = path.resolve('./registration-requests.json');
+const REQUEST_EXPIRY_MS = 48 * 60 * 60 * 1000; // 48 hours
+
+/** Save pilot and owner registration requests to disk. */
+function saveRegistrationRequests() {
+    try {
+        const data = { pilotRequests, pendingOwnerRegistrations };
+        runBackup(['./registration-requests.json']);
+        fs.writeFileSync(REGISTRATION_REQUESTS_PATH, JSON.stringify(data, null, 2), 'utf8');
+    } catch (err) {
+        logger.error('Registration', 'Error saving registration requests', err);
+    }
+}
+
+/** Load pilot and owner registration requests from disk. Cleans up already-expired entries. */
+export function loadRegistrationRequests() {
+    try {
+        if (!fs.existsSync(REGISTRATION_REQUESTS_PATH)) return;
+        const raw = fs.readFileSync(REGISTRATION_REQUESTS_PATH, 'utf8');
+        const data = JSON.parse(raw);
+        const now = Date.now();
+
+        // Clean expired and restore valid
+        if (data.pilotRequests) {
+            for (const [key, req] of Object.entries(data.pilotRequests)) {
+                if (now - req.timestamp <= REQUEST_EXPIRY_MS) {
+                    pilotRequests[key] = req;
+                }
+            }
+        }
+        if (data.pendingOwnerRegistrations) {
+            for (const [key, req] of Object.entries(data.pendingOwnerRegistrations)) {
+                if (now - req.timestamp <= REQUEST_EXPIRY_MS) {
+                    pendingOwnerRegistrations[key] = req;
+                }
+            }
+        }
+
+        logger.info('Registration', `Loaded ${Object.keys(pilotRequests).length} pilot request(s) and ${Object.keys(pendingOwnerRegistrations).length} owner registration request(s) from disk.`);
+    } catch (err) {
+        logger.error('Registration', 'Error loading registration requests', err);
+    }
+}
 
 // ── Configuration ──
 const REG_PANEL_CUSTOM_ID = 'reg_panel';
@@ -376,22 +424,17 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
         k.startsWith(`${ownerId}_`) && pilotRequests[k].pilotId === interaction.user.id
     );
     if (existingKey) {
-        const age = Date.now() - pilotRequests[existingKey].timestamp;
-        if (age < 300000) { // 5 minutes
-            return interaction.editReply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setTitle('⏳ Pending Request')
-                        .setColor('#FEE75C')
-                        .setDescription(
-                            'You already have a pending pilot request for **' + ownerData.nickname + '**.\n\n' +
-                            'Please wait for the owner to respond, or try again later if the request expires.'
-                        )
-                ]
-            });
-        }
-        // Expired, remove it
-        delete pilotRequests[existingKey];
+        return interaction.editReply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('⏳ Pending Request')
+                    .setColor('#FEE75C')
+                    .setDescription(
+                        'You already have a pending pilot request for **' + ownerData.nickname + '**.\n\n' +
+                        'This request expires in **48 hours**. Please wait for the owner to respond, or contact an Elder if needed.'
+                    )
+            ]
+        });
     }
 
     // ── Store the pending request ──
@@ -403,6 +446,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
         pilotTag: interaction.user.tag,
         timestamp: Date.now()
     };
+    saveRegistrationRequests();
 
     // ── Send DM to the owner for approval ──
     const ownerMember = await interaction.guild?.members.fetch(ownerId).catch(() => null);
@@ -410,6 +454,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
 
     if (!ownerUser) {
         delete pilotRequests[requestKey];
+        saveRegistrationRequests();
         return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
@@ -434,7 +479,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
                 { name: '👤 Pilot', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
                 { name: '🎮 Your Character', value: `**${ownerData.nickname}**`, inline: true }
             )
-            .setFooter({ text: 'This request expires in 5 minutes' })
+            .setFooter({ text: 'This request expires in 48 hours' })
             .setTimestamp();
 
         const dmRow = new ActionRowBuilder().addComponents(
@@ -498,6 +543,7 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
         });
     } catch (err) {
         delete pilotRequests[requestKey];
+        saveRegistrationRequests();
         logger.error('Registration', 'Failed to send pilot request DM', err);
         return interaction.editReply({
             embeds: [
@@ -544,6 +590,7 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     }
 
     delete pilotRequests[requestKey];
+    saveRegistrationRequests();
 
     // ── Add pilot to owner's list ──
     const ownerData = rankingDb.users[request.ownerId];
@@ -670,8 +717,8 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
             components: []
         });
     }
-
     delete pilotRequests[requestKey];
+    saveRegistrationRequests();
 
     logEvent(`✈️ Pilot request rejected: ${request.pilotTag} → ${request.ownerNick}`);
 
@@ -706,16 +753,19 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
 /** Clean up expired pilot requests (call periodically). */
 export function cleanupExpiredPilotRequests() {
     const now = Date.now();
+    let changed = false;
     for (const [key, request] of Object.entries(pilotRequests)) {
-        if (now - request.timestamp > 300000) { // 5 minutes
+        if (now - request.timestamp > REQUEST_EXPIRY_MS) {
             delete pilotRequests[key];
+            changed = true;
         }
     }
+    if (changed) saveRegistrationRequests();
 }
 
-// Run cleanup every minute
-setInterval(cleanupExpiredPilotRequests, 60000);
-setInterval(cleanupExpiredOwnerRegistrations, 60000);
+// Run cleanup every 5 minutes
+setInterval(cleanupExpiredPilotRequests, 300000);
+setInterval(cleanupExpiredOwnerRegistrations, 300000);
 
 /** Handle re-register confirmation. */
 export async function handleReRegisterConfirm(interaction, rankingDb, saveLocalStorage, logEvent) {
@@ -819,11 +869,13 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
         fuzzyConflict,
         timestamp: Date.now()
     };
+    saveRegistrationRequests();
 
     // ── Send to approval channel ──
     const channel = await client.channels.fetch(APPROVAL_CHANNEL_ID).catch(() => null);
     if (!channel) {
         delete pendingOwnerRegistrations[requestKey];
+        saveRegistrationRequests();
         return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
@@ -843,7 +895,7 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
             { name: '🎮 Character', value: `**${finalNickname}**`, inline: true },
             { name: '✏️ Original Input', value: nickname !== finalNickname ? `~~${nickname}~~` : 'Same', inline: true }
         )
-        .setFooter({ text: 'Only Elders and Admins can approve/reject' })
+        .setFooter({ text: 'This request expires in 48 hours • Only Elders and Admins can approve/reject' })
         .setTimestamp();
 
     const approveRow = new ActionRowBuilder().addComponents(
@@ -870,7 +922,7 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
                 .setColor('#57F287')
                 .setDescription(
                     `Your registration request for **${finalNickname}** has been sent to the **Elders** for approval.\n\n` +
-                    'You will be notified once it is approved or rejected.'
+                    'This request expires in **48 hours**. You will be notified when it is approved or rejected.'
                 )
                 .setTimestamp()
         ]
@@ -909,6 +961,7 @@ export async function handleRegElderApproveOwner(interaction, rankingDb, saveLoc
     }
 
     delete pendingOwnerRegistrations[requestKey];
+    saveRegistrationRequests();
 
     // ── Save user ──
     rankingDb.users[request.userId] = {
@@ -998,6 +1051,7 @@ export async function handleRegElderRejectOwner(interaction, rankingDb, saveLoca
     }
 
     delete pendingOwnerRegistrations[requestKey];
+    saveRegistrationRequests();
 
     logEvent(`❌ Registration rejected by ${interaction.user.tag}: ${request.userTag} → ${request.nickname}`);
 
@@ -1034,14 +1088,17 @@ export async function handleRegElderRejectOwner(interaction, rankingDb, saveLoca
     });
 }
 
-/** Clean up expired pending owner registrations (30 min expiry). */
+/** Clean up expired pending owner registrations (48h expiry). */
 export function cleanupExpiredOwnerRegistrations() {
     const now = Date.now();
+    let changed = false;
     for (const [key, request] of Object.entries(pendingOwnerRegistrations)) {
-        if (now - request.timestamp > 1800000) { // 30 minutes
+        if (now - request.timestamp > REQUEST_EXPIRY_MS) {
             delete pendingOwnerRegistrations[key];
+            changed = true;
         }
     }
+    if (changed) saveRegistrationRequests();
 }
 
 // ==========================================
@@ -1074,6 +1131,7 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
     }
 
     delete pilotRequests[requestKey];
+    saveRegistrationRequests();
 
     // ── Add pilot to owner's list ──
     const ownerData = rankingDb.users[request.ownerId];
@@ -1215,6 +1273,7 @@ export async function handleRegElderRejectPilot(interaction, rankingDb, saveLoca
 
     const ownerNick = request.ownerNick;
     delete pilotRequests[requestKey];
+    saveRegistrationRequests();
 
     logEvent(`✈️ Pilot request rejected by ${interaction.user.tag}: ${request.pilotTag} → ${ownerNick}`);
 

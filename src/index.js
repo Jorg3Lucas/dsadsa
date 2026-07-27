@@ -20,6 +20,7 @@ import {
     runDailySynchronization,
     DISCORD_SERVER_ID
 } from './core/ranking_sync.js';
+import { loadRegistrationRequests } from './handlers/registration-panel.js';
 import { loadSalaryState } from './handlers/salary-state.js';
 import { initSalaryCron } from './handlers/salary-lifecycle.js';
 import { exportVotesToSheets } from './handlers/salary-sheets.js';
@@ -130,6 +131,7 @@ client.once('clientReady', async () => {
     logger.info('Boot', `Bot connected successfully as ${client.user.tag}`);
 
     loadLocalStorageRanking();
+    loadRegistrationRequests();
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
 
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
