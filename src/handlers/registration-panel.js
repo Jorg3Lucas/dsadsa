@@ -285,8 +285,8 @@ async function handleRegisterButton(interaction, rankingDb, saveLocalStorage, lo
                 .setStyle(ButtonStyle.Secondary)
         );
 
-        // Cache the confirmation (timestamp-based expiry check)
-        confirmationCache[`${interaction.user.id}-reregister`] = {};
+        // Cache the confirmation with timestamp (expires after 5 minutes)
+        confirmationCache[`${interaction.user.id}-reregister`] = { timestamp: Date.now() };
 
         return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
     }
@@ -717,6 +717,7 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
             components: []
         });
     }
+
     delete pilotRequests[requestKey];
     saveRegistrationRequests();
 
@@ -767,10 +768,14 @@ export function cleanupExpiredPilotRequests() {
 setInterval(cleanupExpiredPilotRequests, 300000);
 setInterval(cleanupExpiredOwnerRegistrations, 300000);
 
+const CONFIRM_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
 /** Handle re-register confirmation. */
 export async function handleReRegisterConfirm(interaction, rankingDb, saveLocalStorage, logEvent) {
     const cacheKey = `${interaction.user.id}-reregister`;
-    if (!confirmationCache[cacheKey]) {
+    const cache = confirmationCache[cacheKey];
+    if (!cache || (Date.now() - cache.timestamp > CONFIRM_EXPIRY_MS)) {
+        delete confirmationCache[cacheKey];
         return interaction.update({ content: '⌛ This confirmation has expired.', components: [], flags: 64 });
     }
     delete confirmationCache[cacheKey];
@@ -1481,7 +1486,8 @@ export async function handleRegRemovePilotSelect(interaction, rankingDb, saveLoc
     saveLocalStorage();
 
     // Clean up pilot's roles and nickname
-    interaction.guild.members.fetch(pilotToRemoveId).then(async (pilotMember) => {
+    try {
+        const pilotMember = await interaction.guild.members.fetch(pilotToRemoveId).catch(() => null);
         if (pilotMember) {
             for (const roleId of Object.values(CLAN_ROLES)) {
                 if (pilotMember.roles.cache.has(roleId)) {
@@ -1490,7 +1496,7 @@ export async function handleRegRemovePilotSelect(interaction, rankingDb, saveLoc
             }
             await pilotMember.setNickname(pilotMember.user.username).catch(noop);
         }
-    }).catch(noop);
+    } catch { /* ignore */ }
 
     await interaction.update({
         embeds: [
@@ -1544,7 +1550,7 @@ async function handleSyncButton(interaction, rankingDb, saveLocalStorage, logEve
             .setStyle(ButtonStyle.Secondary)
     );
 
-    confirmationCache[`${interaction.user.id}-sync`] = { db: rankingDb, saveLocalStorage, logEvent };
+    confirmationCache[`${interaction.user.id}-sync`] = { db: rankingDb, saveLocalStorage, logEvent, timestamp: Date.now() };
 
     return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
 }
@@ -1552,7 +1558,9 @@ async function handleSyncButton(interaction, rankingDb, saveLocalStorage, logEve
 /** Execute the force sync. */
 export async function handleRegSyncConfirm(interaction, rankingDb, saveLocalStorage, logEvent) {
     const cacheKey = `${interaction.user.id}-sync`;
-    if (!confirmationCache[cacheKey]) {
+    const cache = confirmationCache[cacheKey];
+    if (!cache || (Date.now() - cache.timestamp > CONFIRM_EXPIRY_MS)) {
+        delete confirmationCache[cacheKey];
         return interaction.update({
             embeds: [
                 new EmbedBuilder()
