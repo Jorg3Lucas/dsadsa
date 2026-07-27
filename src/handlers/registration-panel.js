@@ -452,24 +452,36 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
 
         logEvent(`✈️ Pilot request sent: ${interaction.user.tag} wants to pilot for ${ownerData.nickname} (${ownerId})`);
 
-        // ── Send copy to approval channel ──
+        // ── Send copy to approval channel (Elders/Admins can approve/reject too) ──
         try {
             const approvalChannel = await client.channels.fetch(APPROVAL_CHANNEL_ID).catch(() => null);
             if (approvalChannel) {
-                await approvalChannel.send({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setTitle('✈️ Pilot Request')
-                            .setColor('#5865F2')
-                            .setDescription(`**${interaction.user.tag}** wants to be a pilot for **${ownerData.nickname}**`)
-                            .addFields(
-                                { name: '👤 Pilot', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
-                                { name: '🎮 Owner', value: `**${ownerData.nickname}**`, inline: true },
-                                { name: '📬 Status', value: '⏳ Awaiting owner approval via DM', inline: false }
-                            )
-                            .setTimestamp()
-                    ]
-                }).catch(noop);
+                const elderEmbed = new EmbedBuilder()
+                    .setTitle('✈️ Pilot Request')
+                    .setColor('#5865F2')
+                    .setDescription(`**${interaction.user.tag}** wants to be a pilot for **${ownerData.nickname}**`)
+                    .addFields(
+                        { name: '👤 Pilot', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+                        { name: '🎮 Owner', value: `**${ownerData.nickname}** (${ownerId})`, inline: true },
+                        { name: '📬 Status', value: '⏳ Awaiting Elder/Admin approval', inline: false }
+                    )
+                    .setFooter({ text: 'Only Elders and Admins can approve/reject' })
+                    .setTimestamp();
+
+                const elderRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`reg_elder_approve_pilot_${requestKey}`)
+                        .setEmoji('✅')
+                        .setLabel('Approve')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`reg_elder_reject_pilot_${requestKey}`)
+                        .setEmoji('❌')
+                        .setLabel('Reject')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                await approvalChannel.send({ embeds: [elderEmbed], components: [elderRow] }).catch(noop);
             }
         } catch { /* ignore */ }
 
@@ -1030,6 +1042,303 @@ export function cleanupExpiredOwnerRegistrations() {
             delete pendingOwnerRegistrations[key];
         }
     }
+}
+
+// ==========================================
+// ✅ ELDER APPROVE PILOT
+// ==========================================
+
+/** Handle pilot approval by an Elder/Admin from the approval channel. */
+export async function handleRegElderApprovePilot(interaction, rankingDb, saveLocalStorage, logEvent) {
+    const isElder = interaction.member?.roles.cache.has(ELDER_ROLE_ID);
+    const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator);
+    if (!isElder && !isAdmin) {
+        return interaction.reply({
+            content: '❌ Only **Elders** and **Admins** can approve pilot requests.',
+            flags: 64
+        });
+    }
+
+    const requestKey = interaction.customId.replace('reg_elder_approve_pilot_', '');
+    const request = pilotRequests[requestKey];
+
+    if (!request) {
+        return interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('⌛ Request Expired')
+                .setColor('#FEE75C')
+                .setDescription('This pilot request has expired or was already processed.')
+            ],
+            components: []
+        });
+    }
+
+    delete pilotRequests[requestKey];
+
+    // ── Add pilot to owner's list ──
+    const ownerData = rankingDb.users[request.ownerId];
+    if (!ownerData) {
+        return interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('❌ Error')
+                .setColor('#ED4245')
+                .setDescription('The owner account could not be found.')
+            ],
+            components: []
+        });
+    }
+
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (ownerData.pilotIds.length >= 4) {
+        return interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('❌ Pilot Limit Reached')
+                .setColor('#ED4245')
+                .setDescription('This owner already has the maximum of **4 pilots**.')
+            ],
+            components: []
+        });
+    }
+
+    if (ownerData.pilotIds.includes(request.pilotId)) {
+        return interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('ℹ️ Already Linked')
+                .setColor('#5865F2')
+                .setDescription('This user is already linked as a pilot.')
+            ],
+            components: []
+        });
+    }
+
+    ownerData.pilotIds.push(request.pilotId);
+    saveLocalStorage();
+
+    // ── Update the pilot's nickname and roles ──
+    const guild = interaction.guild;
+    if (guild) {
+        const pilotMember = await guild.members.fetch(request.pilotId).catch(() => null);
+        if (pilotMember) {
+            await pilotMember.setNickname(`${request.ownerNick} - Pilot`).catch(noop);
+            await applyImmediateRoleWithCache(interaction, pilotMember, request.ownerNick, request.ownerId).catch(noop);
+        }
+    }
+
+    logEvent(`✈️ Pilot approved by ${interaction.user.tag}: ${request.pilotTag} → ${request.ownerNick}`);
+
+    // ── Notify the owner with revoke option ──
+    try {
+        const ownerUser = await client.users.fetch(request.ownerId).catch(() => null);
+        if (ownerUser) {
+            const revokeRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`reg_pilot_revoke_${request.ownerId}_${request.pilotId}`)
+                    .setEmoji('🗑️')
+                    .setLabel('Revoke Pilot')
+                    .setStyle(ButtonStyle.Danger)
+            );
+            await ownerUser.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Pilot Approved by Elders')
+                    .setColor('#57F287')
+                    .setDescription(`**${request.pilotTag}** has been approved as your pilot by ${interaction.user.tag}.`)
+                    .addFields(
+                        { name: '👤 Pilot', value: request.pilotTag, inline: true },
+                        { name: '🎮 Character', value: request.ownerNick, inline: true },
+                        { name: 'ℹ️', value: 'If you want to revoke this pilot, click the button below.', inline: false }
+                    )
+                    .setTimestamp()
+                ],
+                components: [revokeRow]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Notify the pilot ──
+    try {
+        const pilotUser = await client.users.fetch(request.pilotId).catch(() => null);
+        if (pilotUser) {
+            await pilotUser.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Pilot Request Approved!')
+                    .setColor('#57F287')
+                    .setDescription(`**${request.ownerNick}** has approved you as their pilot! 🎉`)
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Update the channel message ──
+    return interaction.update({
+        embeds: [new EmbedBuilder()
+            .setTitle('✅ Pilot Approved')
+            .setColor('#57F287')
+            .setDescription(`Approved by ${interaction.user}.`)
+            .addFields(
+                { name: '👤 Pilot', value: request.pilotTag, inline: true },
+                { name: '🎮 Owner', value: request.ownerNick, inline: true }
+            )
+            .setTimestamp()
+        ],
+        components: []
+    });
+}
+
+// ==========================================
+// ❌ ELDER REJECT PILOT
+// ==========================================
+
+/** Handle pilot rejection by an Elder/Admin from the approval channel. */
+export async function handleRegElderRejectPilot(interaction, rankingDb, saveLocalStorage, logEvent) {
+    const isElder = interaction.member?.roles.cache.has(ELDER_ROLE_ID);
+    const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator);
+    if (!isElder && !isAdmin) {
+        return interaction.reply({
+            content: '❌ Only **Elders** and **Admins** can reject pilot requests.',
+            flags: 64
+        });
+    }
+
+    const requestKey = interaction.customId.replace('reg_elder_reject_pilot_', '');
+    const request = pilotRequests[requestKey];
+
+    if (!request) {
+        return interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('⌛ Request Expired')
+                .setColor('#FEE75C')
+                .setDescription('This pilot request has expired or was already processed.')
+            ],
+            components: []
+        });
+    }
+
+    const ownerNick = request.ownerNick;
+    delete pilotRequests[requestKey];
+
+    logEvent(`✈️ Pilot request rejected by ${interaction.user.tag}: ${request.pilotTag} → ${ownerNick}`);
+
+    // ── Notify the pilot ──
+    try {
+        const pilotUser = await client.users.fetch(request.pilotId).catch(() => null);
+        if (pilotUser) {
+            await pilotUser.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('❌ Pilot Request Rejected')
+                    .setColor('#ED4245')
+                    .setDescription(`Your pilot request for **${ownerNick}** has been rejected by the Elders.`)
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Notify the owner ──
+    try {
+        const ownerUser = await client.users.fetch(request.ownerId).catch(() => null);
+        if (ownerUser) {
+            await ownerUser.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('❌ Pilot Request Rejected')
+                    .setColor('#ED4245')
+                    .setDescription(`The pilot request from **${request.pilotTag}** has been rejected by the Elders.`)
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Update the channel message ──
+    return interaction.update({
+        embeds: [new EmbedBuilder()
+            .setTitle('❌ Pilot Request Rejected')
+            .setColor('#ED4245')
+            .setDescription(`Rejected by ${interaction.user}.`)
+            .addFields(
+                { name: '👤 Pilot', value: request.pilotTag, inline: true },
+                { name: '🎮 Owner', value: ownerNick, inline: true }
+            )
+            .setTimestamp()
+        ],
+        components: []
+    });
+}
+
+// ==========================================
+// 🗑️ REVOKE PILOT (from owner DM)
+// ==========================================
+
+/** Handle pilot revocation by the owner from DM (clicking Revoke button). */
+export async function handleRegPilotRevoke(interaction, rankingDb, saveLocalStorage, logEvent) {
+    const parts = interaction.customId.replace('reg_pilot_revoke_', '').split('_');
+    const ownerId = parts[0];
+    const pilotId = parts[1];
+
+    // Verify the person clicking is the actual owner
+    if (interaction.user.id !== ownerId) {
+        return interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('❌ Not Your Account')
+                .setColor('#ED4245')
+                .setDescription('Only the account owner can revoke a pilot.')
+            ],
+            components: []
+        });
+    }
+
+    const ownerData = rankingDb.users[ownerId];
+    if (!ownerData || !ownerData.pilotIds || !ownerData.pilotIds.includes(pilotId)) {
+        return interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('❌ Not Found')
+                .setColor('#ED4245')
+                .setDescription('This pilot is no longer linked to your account.')
+            ],
+            components: []
+        });
+    }
+
+    ownerData.pilotIds = ownerData.pilotIds.filter(id => id !== pilotId);
+    saveLocalStorage();
+
+    // Clean up pilot's roles and nickname (may be in DM, use guild lookup)
+    const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
+    if (guild) {
+        const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
+        if (pilotMember) {
+            for (const roleId of Object.values(CLAN_ROLES)) {
+                if (pilotMember.roles.cache.has(roleId)) {
+                    await pilotMember.roles.remove(roleId).catch(noop);
+                }
+            }
+            await pilotMember.setNickname(pilotMember.user.username).catch(noop);
+        }
+    }
+
+    logEvent(`✈️ Pilot revoked by owner: ${interaction.user.tag} revoked pilot ${pilotId}`);
+
+    // ── Notify the pilot ──
+    try {
+        const pilotUser = await client.users.fetch(pilotId).catch(() => null);
+        if (pilotUser) {
+            await pilotUser.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('❌ Pilot Revoked')
+                    .setColor('#ED4245')
+                    .setDescription(`Your pilot role has been revoked by **${ownerData.nickname}**.`)
+                ]
+            }).catch(noop);
+        }
+    } catch { /* ignore */ }
+
+    // ── Update the DM embed ──
+    return interaction.update({
+        embeds: [new EmbedBuilder()
+            .setTitle('🗑️ Pilot Revoked')
+            .setColor('#ED4245')
+            .setDescription(`You have revoked that pilot from your account.`)
+            .setTimestamp()
+        ],
+        components: []
+    });
 }
 
 // ==========================================

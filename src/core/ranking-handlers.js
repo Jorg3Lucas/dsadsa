@@ -24,7 +24,10 @@ import {
     handleRegPilotApprove,
     handleRegPilotReject,
     handleRegElderApproveOwner,
-    handleRegElderRejectOwner
+    handleRegElderRejectOwner,
+    handleRegElderApprovePilot,
+    handleRegElderRejectPilot,
+    handleRegPilotRevoke
 } from '../handlers/registration-panel.js';
 
 
@@ -41,6 +44,19 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
 
     // ── Registration Panel Buttons (reg_ prefix) ──
     if (interaction.isButton() && interaction.customId.startsWith('reg_')) {
+        // ── Pilot approve/reject from DM (must be first before other reg_ checks) ──
+        if (interaction.customId.startsWith('reg_pilot_approve_')) {
+            return handleRegPilotApprove(interaction, db, saveLocalStorage, logEvent);
+        }
+        if (interaction.customId.startsWith('reg_pilot_reject_')) {
+            return handleRegPilotReject(interaction, db, saveLocalStorage, logEvent);
+        }
+
+        // ── Pilot revoke from DM ──
+        if (interaction.customId.startsWith('reg_pilot_revoke_')) {
+            return handleRegPilotRevoke(interaction, db, saveLocalStorage, logEvent);
+        }
+
         // Reregister / sync confirmations
         if (interaction.customId === 'reg_confirm_reregister') {
             return handleReRegisterConfirm(interaction, db, saveLocalStorage, logEvent);
@@ -58,12 +74,18 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
             return interaction.update({ content: '❌ Pilot removal cancelled.', components: [] }).catch(noop);
         }
 
-        // ── Elder approval buttons ──
+        // ── Elder/Admin approval buttons ──
         if (interaction.customId.startsWith('reg_elder_approve_owner_')) {
             return handleRegElderApproveOwner(interaction, db, saveLocalStorage, logEvent);
         }
         if (interaction.customId.startsWith('reg_elder_reject_owner_')) {
             return handleRegElderRejectOwner(interaction, db, saveLocalStorage, logEvent);
+        }
+        if (interaction.customId.startsWith('reg_elder_approve_pilot_')) {
+            return handleRegElderApprovePilot(interaction, db, saveLocalStorage, logEvent);
+        }
+        if (interaction.customId.startsWith('reg_elder_reject_pilot_')) {
+            return handleRegElderRejectPilot(interaction, db, saveLocalStorage, logEvent);
         }
 
         // Standard panel buttons
@@ -86,16 +108,6 @@ export async function handleMir4Interactions(interaction, db, saveLocalStorage, 
     if (interaction.isModalSubmit() && interaction.customId === 'reg_pilot_modal') {
         await interaction.deferReply({ flags: 64 });
         return handleRegPilotModal(interaction, db, saveLocalStorage, logEvent);
-    }
-
-    // ── Pilot Request Approval (from DM) ──
-    if (interaction.isButton() && interaction.customId.startsWith('reg_pilot_approve_')) {
-        return handleRegPilotApprove(interaction, db, saveLocalStorage, logEvent);
-    }
-
-    // ── Pilot Request Rejection (from DM) ──
-    if (interaction.isButton() && interaction.customId.startsWith('reg_pilot_reject_')) {
-        return handleRegPilotReject(interaction, db, saveLocalStorage, logEvent);
     }
 
     // ── Confirm buttons → ranking-confirm.js ──
