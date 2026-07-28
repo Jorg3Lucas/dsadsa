@@ -9,7 +9,7 @@ import { canHandleTicketInteraction, handleTicketInteraction } from "./ticket-sy
 import { canHandleAntidemonInteraction, handleAntidemonInteraction, canHandleAntidemonModal, handleAntidemonModal } from "../interactions/antidemon-interactions.js";
 import { canHandleSummonInteraction, handleSummonInteraction } from "../interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "../interactions/floor-interactions.js";
-import { dmOptOut, saveDmOptOutToDisk } from "../core/state.js";
+import { dmOptOut, saveDmOptOutToDisk, rankingDb } from "../core/state.js";
 import { canHandleSalaryInteraction, handleSalaryInteraction } from "../interactions/salary-interactions.js";
 
 
@@ -21,15 +21,32 @@ export async function handleClaimInteractions(interaction) {
     const uid = interaction.user.id;
     const uName = interaction.member ? interaction.member.displayName : interaction.user.username;
 
-    // 0. DM Opt-Out button (🔕 on all panels)
+    // 0. DM Opt-Out button (🔕 on all panels) — no registration required
     if (interaction.isButton() && interaction.customId === 'dmoptout') {
         return await handleDmOptOut(interaction, uid);
     }
 
-    // 1. Admin interactions (reset menu, kick menu, reset logs, reserve flow)
+    // 1. Admin interactions (reset menu, kick menu, reset logs, reserve flow) — no registration required
     if (canHandleAdminInteraction(interaction)) {
         return await handleAdminInteraction(interaction, uid);
     }
+
+    // ── Registration check: only registered users can use the claim system ──
+    const userData = rankingDb?.users?.[uid];
+    const isRegistered = !!(userData && (userData.nickname || userData.registeredAt || userData.manual === true));
+    if (!isRegistered) {
+        // Reject unregistered users — they must register first
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ **Access denied.** You must be registered with the bot to use claim features.\n\nPlease register in the registration channel first.',
+                    flags: 64
+                });
+            }
+        } catch { /* interaction may have expired */ }
+        return;
+    }
+    // ────────────────────────────────────────────────────────────────────
 
     // 2. Antidemon interactions (slide, ticket, queue)
     if (canHandleAntidemonInteraction(interaction)) {
