@@ -12,9 +12,63 @@ import { runBackup } from "../auto-backup.js";
 import { noop } from "../core/config.js";
 
 const ticketsPath = path.resolve("./tickets.json");
-export const TICKET_CATEGORY_ID = "1519145795838808093";
+export let TICKET_CATEGORY_ID = "1519145795838808093";
+export let STAFF_ROLE_ID = "1503934006431973488";
 
-export const STAFF_ROLE_ID = "1503934006431973488";
+// Per-world ticket configuration (set by setup command)
+export let worldTicketConfig = {}; // { worldName: { categoryId, staffRoleId, elderIds[] } }
+
+/**
+ * Update ticket configuration from db.config.worldSetup.
+ * Called after setup or on boot.
+ */
+export function syncTicketConfig(db) {
+    const ws = db.config?.worldSetup;
+    if (!ws) return;
+    const newConfig = {};
+    for (const [world, wc] of Object.entries(ws)) {
+        newConfig[world] = {
+            categoryId: wc.categoryId,
+            staffRoleId: wc.roleElderId,
+            elderIds: wc.elders || []
+        };
+    }
+    worldTicketConfig = newConfig;
+}
+
+/**
+ * Get the ticket category for a Discord member based on their world role.
+ * Falls back to the default TICKET_CATEGORY_ID.
+ */
+export function getTicketCategoryForMember(member, db) {
+    const ws = db.config?.worldSetup;
+    if (!ws) return TICKET_CATEGORY_ID;
+    for (const [world, config] of Object.entries(ws)) {
+        if (member.roles.cache.has(config.roleMemberId) || member.roles.cache.has(config.roleElderId)) {
+            return config.categoryId || TICKET_CATEGORY_ID;
+        }
+    }
+    return TICKET_CATEGORY_ID;
+}
+
+/**
+ * Get elder/staff role IDs for a member's world.
+ * Falls back to the default STAFF_ROLE_ID.
+ */
+export function getStaffRolesForMember(member, db) {
+    const ws = db.config?.worldSetup;
+    const roles = [];
+    if (STAFF_ROLE_ID) roles.push(STAFF_ROLE_ID);
+    if (!ws) return roles;
+    for (const [world, config] of Object.entries(ws)) {
+        if (member.roles.cache.has(config.roleMemberId) || member.roles.cache.has(config.roleElderId)) {
+            if (config.roleElderId && !roles.includes(config.roleElderId)) {
+                roles.push(config.roleElderId);
+            }
+        }
+    }
+    return roles;
+}
 export const TICKET_CATEGORIES = [
     { label: "❓ Support", value: "support", description: "General help and questions" },
     { label: "⚠️ Report", value: "report", description: "Report a player or issue" },

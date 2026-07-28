@@ -25,6 +25,10 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
+import {
+    handleSetupStart,
+    handleSetElder
+} from './setup-handler.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -928,6 +932,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         logEvent(`🔄 Admin ${interaction.user.tag} ran /refreshnames — ${updated} updated, ${skipped} skipped, ${failed} failed`);
         return interaction.editReply(report);
+    }
+
+    // ── setup ──
+    if (commandName === 'setup') {
+        return await handleSetupStart(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── setelder ──
+    if (commandName === 'setelder') {
+        return await handleSetElder(interaction, db, saveLocalStorage, logEvent);
     }
 
     // ── scanrebuild ──

@@ -83,6 +83,20 @@ export async function registerMir4SlashCommands(guild) {
                 description: '🔄 [Admin] Rebuild database from current Discord members with the member role.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'setup',
+                description: '🏗️ [Admin] Create all server channels, roles, and configure the bot.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
+            {
+                name: 'setelder',
+                description: '👑 [Admin] Assign an elder role for a specific world to a member.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                options: [
+                    { type: 3, name: 'world', description: 'World code (e.g. EU011, EU012)', required: true },
+                    { type: 6, name: 'member', description: 'The Discord member to assign as elder.', required: true }
+                ]
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {

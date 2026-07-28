@@ -18,6 +18,12 @@ import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemov
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
 import {
+    handleSetupSelectWorlds,
+    handleSetupNav,
+    handleSetupConfirm,
+    handleSetupCancel
+} from './handlers/setup-handler.js';
+import {
     handleNotifyCommand,
     handleNotifySelect,
     handleNotifyButton
@@ -47,6 +53,7 @@ import { loadSalaryState } from './handlers/salary-state.js';
 import { initSalaryCron } from './handlers/salary-lifecycle.js';
 import { exportVotesToSheets } from './handlers/salary-sheets.js';
 import { handleManagementInteraction, handleMgmtSlash } from './handlers/management-menu.js';
+import { syncTicketConfig } from './handlers/ticket-core.js';
 import { noop, getBotToken } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
@@ -138,6 +145,7 @@ client.once('clientReady', async () => {
 
     // Load databases
     rankingDb = loadLocalStorageRanking();
+    syncTicketConfig(rankingDb);
     loadClaimStorage();
     loadRegistrationRequests();
     logEvent(`Connected successfully as ${client.user.tag}`);
@@ -251,6 +259,11 @@ client.on('interactionCreate', async (interaction) => {
 
         // C. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
+            // Setup wizard — world selection
+            if (interaction.customId === 'setup_select_worlds') {
+                return await handleSetupSelectWorlds(interaction, rankingDb, saveRankingDb, logEvent);
+            }
+
             // Management menus
             if (interaction.customId.startsWith('mgmt-')) {
                 return await handleManagementInteraction(interaction);
@@ -324,6 +337,20 @@ client.on('interactionCreate', async (interaction) => {
 
         // E. BUTTON CLICKS
         if (interaction.isButton()) {
+            // Setup wizard buttons
+            if (interaction.customId === 'setup_confirm') {
+                return await handleSetupConfirm(interaction, rankingDb, saveRankingDb, logEvent);
+            }
+            if (interaction.customId === 'setup_cancel') {
+                return await handleSetupCancel(interaction, rankingDb, saveRankingDb, logEvent);
+            }
+            if (interaction.customId === 'setup_next_page') {
+                return await handleSetupNav(interaction, rankingDb, saveRankingDb, logEvent, 'next');
+            }
+            if (interaction.customId === 'setup_prev_page') {
+                return await handleSetupNav(interaction, rankingDb, saveRankingDb, logEvent, 'prev');
+            }
+
             // Management buttons
             if (interaction.customId.startsWith('mgmt-')) {
                 return await handleManagementInteraction(interaction);

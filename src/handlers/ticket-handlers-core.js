@@ -6,7 +6,8 @@
 
 import { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from "discord.js";
 import { noop } from "../core/config.js";
-import { STAFF_ROLE_ID, TICKET_CATEGORIES, TICKET_CATEGORY_ID, openTickets, saveTicketState } from "./ticket-core.js";
+import { rankingDb } from "../core/state.js";
+import { STAFF_ROLE_ID, TICKET_CATEGORIES, TICKET_CATEGORY_ID, openTickets, saveTicketState, getTicketCategoryForMember, getStaffRolesForMember } from "./ticket-core.js";
 import { saveTicketLog } from "./ticket-handlers-logs.js";
 
 /** Step 1: Show category selection dropdown to the user. */
@@ -37,16 +38,29 @@ export async function handleTicketCategory(interaction) {
     try {
         const safeName = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
         const channelName = `ticket-${selectedCategory}-${safeName}`;
+
+        // Use per-world ticket category and elders if available
+        const member = interaction.member;
+        const worldCatId = getTicketCategoryForMember(member, rankingDb);
+        const staffRoles = getStaffRolesForMember(member, rankingDb);
+
         const overwrites = [
             { id: guild.id, deny: ["ViewChannel"] },
             { id: uid, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory", "AttachFiles"] },
         ];
-        if (STAFF_ROLE_ID) {
+
+        // Add all staff/elder roles
+        for (const roleId of staffRoles) {
+            overwrites.push({ id: roleId, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory", "ManageChannels"] });
+        }
+        // Always include default STAFF_ROLE_ID as fallback
+        if (STAFF_ROLE_ID && !staffRoles.includes(STAFF_ROLE_ID)) {
             overwrites.push({ id: STAFF_ROLE_ID, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory", "ManageChannels"] });
         }
+
         const ticketChannel = await guild.channels.create({
             name: channelName, type: ChannelType.GuildText,
-            parent: TICKET_CATEGORY_ID || undefined,
+            parent: worldCatId || TICKET_CATEGORY_ID || undefined,
             permissionOverwrites: overwrites,
             topic: `Ticket for ${interaction.user.tag} (${uid}) — ${categoryLabel}`,
         });
@@ -58,6 +72,7 @@ export async function handleTicketCategory(interaction) {
             new ButtonBuilder().setCustomId("ticket_remove").setLabel("🚫 Remove Member").setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId("ticket_close").setLabel("🔒 Close Ticket").setStyle(ButtonStyle.Secondary)
         );
+        const staffMentions = staffRoles.map(r => `<@&${r}>`).join(' ');
         const welcomeEmbed = {
             color: 0x57F287, title: `🎫 ${categoryLabel}`,
             description: `Welcome ${interaction.user}! A staff member will be with you shortly.\n\nPlease describe your issue in detail.`,
@@ -68,7 +83,7 @@ export async function handleTicketCategory(interaction) {
             ],
             timestamp: new Date().toISOString(),
         };
-        await ticketChannel.send({ content: STAFF_ROLE_ID ? `<@&${STAFF_ROLE_ID}>` : "", embeds: [welcomeEmbed], components: [actionRow] });
+        await ticketChannel.send({ content: staffMentions || (STAFF_ROLE_ID ? `<@&${STAFF_ROLE_ID}>` : ""), embeds: [welcomeEmbed], components: [actionRow] });
         return await interaction.editReply({ content: `📩 Ticket created! ${ticketChannel}`, components: [] }).catch(noop);
     } catch (err) {
         console.error("❌ [Tickets] Error creating ticket:", err.message);
