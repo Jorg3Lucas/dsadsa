@@ -41,10 +41,10 @@ export function findNicknameInCache(nickname, cache) {
     }
     if (!cache) return null;
 
-    const normalized = nickname.trim().normalize('NFC').toLowerCase();
+    const cleaned = cleanNickname(nickname);
 
     for (const [worldId, players] of Object.entries(cache)) {
-        const matchKey = Object.keys(players).find(k => k.normalize('NFC').toLowerCase() === normalized);
+        const matchKey = Object.keys(players).find(k => cleanNickname(k) === cleaned);
         if (matchKey) {
             return {
                 worldId,
@@ -62,8 +62,8 @@ export function findNicknameInCache(nickname, cache) {
 
 // Clean helper: strips formatting characters for comparison
 function cleanNickname(s) {
-    return s.trim().normalize('NFC').toLowerCase()
-        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,.]/g, '')
+    return s.trim().normalize('NFKC').toLowerCase()
+        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,•·●○.,]/g, '')
         .replace(/\s+/g, '');
 }
 

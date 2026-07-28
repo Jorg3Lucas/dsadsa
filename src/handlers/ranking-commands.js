@@ -104,61 +104,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
         await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
 
-        // Auto-correct wrong nicknames using fuzzy matching
-        const rankingCache = getLocalRankingCache();
-        let fuzzyCorrected = 0;
-        const correctedList = [];
-
-        if (rankingCache) {
-            const pilotIdSet = new Set();
-            for (const [, data] of Object.entries(db.users || {})) {
-                if (data.pilotIds && data.pilotIds.length > 0) {
-                    for (const pid of data.pilotIds) {
-                        pilotIdSet.add(pid);
-                    }
-                }
-            }
-
-            for (const [memberId, userData] of Object.entries(db.users || {})) {
-                if (pilotIdSet.has(memberId)) continue;
-                if (!userData.nickname) continue;
-
-                const currentNick = userData.nickname;
-                const exactHit = findNicknameInCache(currentNick, rankingCache);
-                if (exactHit) continue;
-
-                const fuzzyHit = findClosestNicknameInCache(currentNick, rankingCache);
-                if (!fuzzyHit || fuzzyHit.nickname.toLowerCase() === currentNick.toLowerCase()) continue;
-
-                const oldNick = currentNick;
-                const newNick = fuzzyHit.nickname;
-                const serverName = WORLD_IDS[fuzzyHit.worldId] || fuzzyHit.worldId;
-
-                db.users[memberId].nickname = newNick;
-
-                const targetMember = await guild.members.fetch(memberId).catch(() => null);
-                if (targetMember) {
-                    await targetMember.setNickname(buildPrefixedNickname(newNick, db)).catch(() => {});
-                }
-
-                fuzzyCorrected++;
-                correctedList.push(`${oldNick} → ${newNick} (${serverName})`);
-                logEvent(`🔄 [ForceSync] Fuzzy corrected "${oldNick}" → "${newNick}" for user ${memberId}`);
-            }
-
-            if (fuzzyCorrected > 0) {
-                saveLocalStorage();
-            }
-        }
-
         let responseMsg = getMsg('ranking.responses.forcesync.success') || '✅ **Force sync completed!**';
-        if (fuzzyCorrected > 0) {
-            const details = correctedList.slice(0, 10).join('\n');
-            responseMsg += `\n\n🔍 **Fuzzy auto-corrected ${fuzzyCorrected} nickname(s):**\n${details}`;
-            if (correctedList.length > 10) {
-                responseMsg += `\n... and ${correctedList.length - 10} more`;
-            }
-        }
 
         return interaction.editReply(responseMsg);
     }
@@ -982,6 +928,172 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         logEvent(`🔄 Admin ${interaction.user.tag} ran /refreshnames — ${updated} updated, ${skipped} skipped, ${failed} failed`);
         return interaction.editReply(report);
+    }
+
+    // ── scanrebuild ──
+    if (commandName === 'scanrebuild') {
+        await interaction.deferReply({ flags: 64 });
+
+        const allMembers = await guild.members.fetch().catch(() => null);
+        if (!allMembers || allMembers.size === 0) {
+            return interaction.editReply('❌ Could not fetch guild members.');
+        }
+
+        // Reset only the users that were in DB (backup was lost)
+        const previousCount = Object.keys(db.users || {}).length;
+        db.users = {};
+
+        let registered = 0;
+        let pilots = 0;
+        let fuzzyLinked = 0;
+        const errors = [];
+        const fuzzyInfos = [];
+        const now = new Date().toISOString();
+
+        // Build a map: nickname → memberId for owner lookups
+        const nicknameToId = {};
+
+        // First pass: collect all members with member role
+        const eligible = [];
+        for (const [memberId, member] of allMembers) {
+            if (member.user.bot) continue;
+            if (!member.roles.cache.has(MEMBER_ROLE_ID)) continue;
+            eligible.push(member);
+        }
+
+        // Detect pilots and extract owner nicknames
+        const pilotLinks = []; // { pilotId, ownerNick }
+
+        for (const member of eligible) {
+            const currentNick = (member.nickname || member.user.username).trim();
+
+            // Detect pilot: nickname ends with " - Pilot"
+            if (currentNick.endsWith(' - Pilot')) {
+                // Remove suffix and prefix to get owner base name
+                let ownerNick = currentNick.replace(/ - Pilot$/, '').trim();
+                // Remove known server prefix if present (e.g. "ASIA1 - Name" → "Name")
+                // Only strip uppercase server codes (ASIA1, EU2, SA1, etc.)
+                const prefixMatch = ownerNick.match(/^[A-Z0-9]+ - (.+)$/);
+                if (prefixMatch) {
+                    ownerNick = prefixMatch[1].trim();
+                }
+                pilotLinks.push({ pilotId: member.id, ownerNick, displayName: currentNick });
+            } else {
+                // Owner: strip server prefix if present
+                let baseName = currentNick;
+                const prefixMatch = baseName.match(/^[A-Z0-9]+ - (.+)$/);
+                if (prefixMatch) {
+                    baseName = prefixMatch[1].trim();
+                }
+
+                // Register as owner
+                db.users[member.id] = {
+                    nickname: baseName,
+                    registeredAt: now,
+                    pilotIds: []
+                };
+                nicknameToId[baseName.toLowerCase()] = member.id;
+                registered++;
+            }
+        }
+
+        // Second pass: link pilots to owners
+        for (const { pilotId, ownerNick, displayName } of pilotLinks) {
+            // Try exact cleanNickname match first
+            let ownerId = Object.entries(db.users).find(([id, data]) =>
+                data.nickname && cleanNickname(data.nickname) === cleanNickname(ownerNick)
+            )?.[0];
+
+            // If exact match fails, try fuzzy matching fallback
+            if (!ownerId) {
+                const cleanedInput = cleanNickname(ownerNick);
+                if (cleanedInput.length >= 2) {
+                    let bestScore = 0;
+                    let bestId = null;
+                    let bestNick = null;
+
+                    for (const [id, data] of Object.entries(db.users)) {
+                        if (!data.nickname) continue;
+                        const cleanedNick = cleanNickname(data.nickname);
+                        if (cleanedNick.length < 2) continue;
+
+                        const inputChars = new Set(cleanedInput);
+                        const nickChars = new Set(cleanedNick);
+                        let commonChars = 0;
+                        for (const c of inputChars) {
+                            if (nickChars.has(c)) commonChars++;
+                        }
+                        const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+                        if (overlap < 0.3) continue;
+
+                        const distance = levenshteinDistance(cleanedInput, cleanedNick);
+                        const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+                        const similarity = 1 - (distance / maxLen);
+
+                        if (similarity > bestScore && similarity >= 0.55) {
+                            bestScore = similarity;
+                            bestId = id;
+                            bestNick = data.nickname;
+                        }
+                    }
+
+                    if (bestId) {
+                        ownerId = bestId;
+                        fuzzyLinked++;
+                        fuzzyInfos.push(`🔍 Pilot ${pilotId} — fuzzy matched owner "${ownerNick}" → "${bestNick}"`);
+                    }
+                }
+            }
+
+            if (ownerId) {
+                if (!db.users[ownerId].pilotIds.includes(pilotId)) {
+                    db.users[ownerId].pilotIds.push(pilotId);
+                }
+                // Register pilot as user (so they show in manage panel)
+                db.users[pilotId] = {
+                    ...db.users[pilotId],
+                    nickname: displayName,
+                    registeredAt: now,
+                    pilotIds: []
+                };
+                pilots++;
+            } else {
+                // Owner not found — register pilot as temporary owner with note
+                db.users[pilotId] = {
+                    nickname: ownerNick,
+                    registeredAt: now,
+                    pilotIds: [],
+                    tempUntil: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+                    tempRegisteredAt: now
+                };
+                errors.push(`⚠️ Pilot ${pilotId} — owner "${ownerNick}" not found, registered as temporary`);
+            }
+        }
+
+        saveLocalStorage();
+
+        let responseMsg = `🔄 **Database Rebuilt!**\n\n`;
+        responseMsg += `📋 Previous entries: **${previousCount}**\n`;
+        responseMsg += `👑 Owners registered: **${registered}**\n`;
+        responseMsg += `✈️ Pilots linked: **${pilots}**\n`;
+        responseMsg += `📦 Total: **${Object.keys(db.users).length}**\n`;
+
+        if (fuzzyInfos.length > 0) {
+            responseMsg += `\n🔍 **Fuzzy-matched pilots (${fuzzyLinked}):**\n${fuzzyInfos.slice(0, 5).join('\n')}`;
+            if (fuzzyInfos.length > 5) {
+                responseMsg += `\n... and ${fuzzyInfos.length - 5} more`;
+            }
+        }
+
+        if (errors.length > 0) {
+            responseMsg += `\n⚠️ **Warnings (${errors.length}):**\n${errors.slice(0, 5).join('\n')}`;
+            if (errors.length > 5) {
+                responseMsg += `\n... and ${errors.length - 5} more`;
+            }
+        }
+
+        logEvent(`🔄 Admin ${interaction.user.tag} ran /scanrebuild — ${registered} owners, ${pilots} pilots recovered`);
+        return interaction.editReply(responseMsg);
     }
 
     return false;

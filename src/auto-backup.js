@@ -2,14 +2,14 @@
 // 💾 AUTO-BACKUP SYSTEM
 // Automatic backups of all JSON database files
 // Runs every 6 hours + optionally before writes
-// Keeps last 7 backups per file
+// Retains backups for 48 hours
 // ==========================================
 
 import fs from 'node:fs';
 import path from 'node:path';
 
 const BACKUP_DIR = path.resolve("./backups");
-const MAX_BACKUPS = 7; // keep last 7 backups per file
+const BACKUP_RETENTION_MS = 48 * 60 * 60 * 1000; // keep backups for 48 hours
 
 // All JSON files that should be backed up
 const BACKUP_FILES = [
@@ -67,22 +67,20 @@ export function runBackup(targetFiles) {
   return count;
 }
 
-// ─── Rotate old backups (keep only last N) ───
+// ─── Rotate old backups (remove older than 48h) ───
 
 function rotateBackups(baseName) {
   try {
+    const cutoff = Date.now() - BACKUP_RETENTION_MS;
     const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith(baseName + "_") && f.endsWith(".json"))
-      .map(f => ({
-        name: f,
-        time: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs
-      }))
-      .sort((a, b) => b.time - a.time); // newest first
+      .filter(f => f.startsWith(baseName + "_") && f.endsWith(".json"));
 
-    // Remove excess backups
-    const toRemove = files.slice(MAX_BACKUPS);
-    for (const file of toRemove) {
-      fs.unlinkSync(path.join(BACKUP_DIR, file.name));
+    for (const file of files) {
+      const filePath = path.join(BACKUP_DIR, file);
+      const stat = fs.statSync(filePath);
+      if (stat.mtimeMs < cutoff) {
+        fs.unlinkSync(filePath);
+      }
     }
 
   } catch (err) {

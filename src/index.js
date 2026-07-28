@@ -13,7 +13,7 @@ import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './handle
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm } from './handlers/ranking-pilot.js';
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
-import { handleRankingCommand } from './handlers/ranking-commands.js';
+import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
 import {
     handleNotifyCommand,
     handleNotifySelect,

@@ -112,7 +112,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     );
 
     const adminMsg = await adminChannel.send({
-        content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}${fuzzyNote}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}\n${hasSuggestions ? '\n📌 Use the **dropdown below** to select a different nickname before approving.' : ''}`,
+        content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}${fuzzyNote}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}\n${hasSuggestions ? '\n📌 Use the **dropdown below** to select a different nickname before approving.' : ''}`,
         components: [
             ...(hasSuggestions ? [new ActionRowBuilder().addComponents(nicknameSelect)] : []),
             new ActionRowBuilder().addComponents(approveButtons)

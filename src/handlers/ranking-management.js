@@ -15,7 +15,7 @@ import {
     confirmationCache,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache } from '../core/ranking-cache.js';
+import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
@@ -167,7 +167,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
         if (cacheHit) {
             const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
             const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase());
+            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => cleanNickname(c) === cleanNickname(cacheHit.clanName));
             statusLines += `\n🔍 **Ranking:** ✅ Found — ${serverName}\n`;
             statusLines += `🏰 **Clan:** ${cacheHit.clanName}\n`;
             statusLines += `${inAlliedClan ? '✅ **Allied Clan:** Yes' : '❌ **Allied Clan:** No'}\n`;

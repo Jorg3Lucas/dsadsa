@@ -78,6 +78,11 @@ export async function registerMir4SlashCommands(guild) {
                 description: '📧 [Admin] Send notifications to server members',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'scanrebuild',
+                description: '🔄 [Admin] Rebuild database from current Discord members with the member role.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {

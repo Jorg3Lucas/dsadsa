@@ -9,12 +9,13 @@ import {
     findNicknameInCache,
     findClosestNicknameInCache,
     findTopNicknamesInCache,
-    getLocalRankingCache
+    getLocalRankingCache,
+    cleanNickname
 } from './ranking-cache.js';
 
 function checkAlliedClan(cacheHit, db) {
     const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-    return !!(worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === cacheHit.clanName.toLowerCase()));
+    return !!(worldAlliedClans && worldAlliedClans.some(c => cleanNickname(c) === cleanNickname(cacheHit.clanName)));
 }
 
 function buildResult(cacheHit, db, extraFields = {}) {
@@ -65,7 +66,7 @@ export function lookupTopNicknames(nickname, db, cache, limit = 3) {
     return topMatches.map(match => {
         const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
         const worldAlliedClans = db.config?.alliedClans?.[match.worldId];
-        const inAlliedClan = !!(worldAlliedClans && worldAlliedClans.some(c => c.toLowerCase() === match.clanName.toLowerCase()));
+        const inAlliedClan = !!(worldAlliedClans && worldAlliedClans.some(c => cleanNickname(c) === cleanNickname(match.clanName)));
         return {
             worldId: match.worldId,
             nickname: match.nickname,
