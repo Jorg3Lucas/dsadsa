@@ -12,7 +12,7 @@ import {
     ButtonStyle,
     EmbedBuilder
 } from 'discord.js';
-import { WORLD_IDS, WELCOME_PANEL_MESSAGE, ensureConfig } from '../core/ranking-constants.js';
+import { WORLD_IDS, WELCOME_PANEL_MESSAGE, ensureConfig, setAdminChannelId } from '../core/ranking-constants.js';
 import { setupTicketPanel } from './ticket-system.js';
 import { syncTicketConfig } from './ticket-core.js';
 
@@ -294,7 +294,18 @@ async function setupWorld(guild, world, db) {
         reason: `[Setup] ${world} welcome`
     });
 
-    // Send registration panel in welcome
+    // Send welcome greeting + registration panel
+    await welcomeChannel.send({
+        embeds: [{
+            color: 0x57f287,
+            title: `🌍 Welcome to ${world}!`,
+            description: 'Register your MIR4 account below to get access to the server channels.\n\n' +
+                'Click **👑 Register as Owner** if this is your main character.\n' +
+                'Click **✈️ Register as Pilot** if you play for someone else.',
+            footer: { text: world },
+            timestamp: new Date().toISOString()
+        }]
+    });
     const regRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('welcome_register_owner').setLabel('👑 Register as Owner').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('welcome_register_pilot').setLabel('✈️ Register as Pilot').setStyle(ButtonStyle.Secondary)
@@ -308,6 +319,12 @@ async function setupWorld(guild, world, db) {
         parent: category.id,
         reason: `[Setup] ${world} approvals`
     });
+
+    // Wire up adminChannelId so approval requests arrive here
+    if (!db.config.adminChannelId) {
+        db.config.adminChannelId = approvalsChannel.id;
+        setAdminChannelId(approvalsChannel.id);
+    }
 
     // ── Create tickets channel ──
     const ticketChannel = await guild.channels.create({
