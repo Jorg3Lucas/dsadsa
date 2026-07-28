@@ -26,6 +26,11 @@ for (const [id, name] of Object.entries(WORLD_IDS)) {
 function worldRoleName(world) { return `${world} Member`; }
 function worldElderRoleName(world) { return `${world} Elder`; }
 function worldCategoryName(world) { return `🌍 ${world}`; }
+function worldClaimsCatName(world) { return `📁 ${world} Claims`; }
+function worldLogsCatName(world) { return `📁 ${world} Logs`; }
+function worldChatName(world) { return `💬・chat-${world.toLowerCase()}`; }
+
+
 
 // ══════════════════════════════════════════
 // 1. INTERACTIVE SETUP FLOW
@@ -107,11 +112,10 @@ async function sendSetupPage(interaction, db, saveLocalStorage, logEvent, edit =
         .setDescription(
             'Select which MIR4 worlds to configure. For each world, the bot will:\n\n' +
             '• Create **roles**: `{World} Member`, `{World} Elder`\n' +
-            '• Create **category** with channels: welcome, approvals, tickets\n' +
-            '• Send **registration panel** in the welcome channel\n' +
-            '• Send **approval panel** in the approvals channel\n' +
-            '• Send **ticket panel** in the tickets channel\n\n' +
-            'Also creates server-wide: **reminders** and **events** channels.\n\n' +
+            '• **🌍 {World}** — welcome, approvals, tickets, announcements, rules, world-boss, salary, chat\n' +
+            '• **📁 {World} Claims** — read-only claim info (SP, MS, events)\n' +
+            '• **📁 {World} Logs** — activity channels: world-boss, heist, valley-war, altar, MS/SP, PVP\n' +
+            '• **🌐 Alliance General** — market, tower-rules, announcements, allied-list, main-chat, reminders, events\n\n' +
             `📌 Worlds selected: **${selectedCount}**`
         )
         .setFooter({ text: `Page ${state.page + 1}/${state.pages.length}` })
@@ -200,9 +204,15 @@ export async function handleSetupConfirm(interaction, db, saveLocalStorage, logE
                 roleMemberId: result.roleMemberId,
                 roleElderId: result.roleElderId,
                 categoryId: result.categoryId,
+                claimsCategoryId: result.claimsCategoryId,
+                logsCategoryId: result.logsCategoryId,
                 welcomeChannelId: result.welcomeChannelId,
                 approvalsChannelId: result.approvalsChannelId,
                 ticketChannelId: result.ticketChannelId,
+                chatChannelId: result.chatChannelId,
+                elderPostIds: result.elderPostIds,
+                claimChannelIds: result.claimChannelIds,
+                logChannelIds: result.logChannelIds,
                 elders: [],
                 setupAt: new Date().toISOString()
             };
@@ -262,39 +272,28 @@ async function setupWorld(guild, world, db) {
         reason: `[Setup] ${world} elder role`
     });
 
-    // ── Create category ──
-    const category = await guild.channels.create({
+    // ═════════════════════════════════════
+    // CATEGORY 1: MAIN WORLD CHANNELS
+    // ═════════════════════════════════════
+    const mainCat = await guild.channels.create({
         name: worldCategoryName(world),
-        type: 4, // GuildCategory
-        reason: `[Setup] ${world} channels`
+        type: 4,
+        reason: `[Setup] ${world} main`
     });
+    // Category default: deny everyone, member can view+send, elder can view+send+manage
+    await mainCat.permissionOverwrites.create(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
+    await mainCat.permissionOverwrites.create(memberRole.id, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true
+    }).catch(() => {});
+    await mainCat.permissionOverwrites.create(elderRole.id, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true, ManageMessages: true
+    }).catch(() => {});
 
-    // ── Set permissions on category ──
-    // Deny @everyone view, allow member role view
-    await category.permissionOverwrites.create(guild.roles.everyone, {
-        ViewChannel: false
-    });
-    await category.permissionOverwrites.create(memberRole, {
-        ViewChannel: true,
-        SendMessages: true,
-        ReadMessageHistory: true
-    });
-    await category.permissionOverwrites.create(elderRole, {
-        ViewChannel: true,
-        SendMessages: true,
-        ReadMessageHistory: true,
-        ManageMessages: true
-    });
-
-    // ── Create welcome channel ──
+    // ── Welcome channel (everyone can view after getting member role) ──
     const welcomeChannel = await guild.channels.create({
-        name: '👋・welcome',
-        type: 0, // GuildText
-        parent: category.id,
+        name: '👋・welcome', type: 0, parent: mainCat.id,
         reason: `[Setup] ${world} welcome`
     });
-
-    // Send welcome greeting + registration panel
     await welcomeChannel.send({
         embeds: [{
             color: 0x57f287,
@@ -312,38 +311,123 @@ async function setupWorld(guild, world, db) {
     );
     await welcomeChannel.send({ content: WELCOME_PANEL_MESSAGE, components: [regRow] });
 
-    // ── Create approvals channel ──
+    // ── Approvals channel (elder view only) ──
     const approvalsChannel = await guild.channels.create({
-        name: '📋・approvals',
-        type: 0,
-        parent: category.id,
+        name: '📋・approvals', type: 0, parent: mainCat.id,
         reason: `[Setup] ${world} approvals`
     });
-
-    // Wire up adminChannelId so approval requests arrive here
+    await approvalsChannel.permissionOverwrites.create(memberRole.id, { ViewChannel: false }).catch(() => {});
     if (!db.config.adminChannelId) {
         db.config.adminChannelId = approvalsChannel.id;
         setAdminChannelId(approvalsChannel.id);
     }
 
-    // ── Create tickets channel ──
+    // ── Tickets channel ──
     const ticketChannel = await guild.channels.create({
-        name: '🎫・tickets',
-        type: 0,
-        parent: category.id,
+        name: '🎫・tickets', type: 0, parent: mainCat.id,
         reason: `[Setup] ${world} tickets`
     });
-
-    // Send ticket panel
     await setupTicketPanel(ticketChannel);
+
+    // ── Elder-only post channels (members read only) ──
+    const elderPostChannels = [
+        { name: '📢・announcements', emoji: '📢' },
+        { name: '👹・world-boss-list', emoji: '👹' },
+        { name: '📜・rules', emoji: '📜' },
+        { name: '💰・salary-list', emoji: '💰' }
+    ];
+    const elderPostIds = {};
+    for (const ch of elderPostChannels) {
+        const channel = await guild.channels.create({
+            name: ch.name, type: 0, parent: mainCat.id,
+            reason: `[Setup] ${world} ${ch.name}`
+        });
+        // Remove send permission from members
+        await channel.permissionOverwrites.create(memberRole.id, {
+            ViewChannel: true, ReadMessageHistory: true, SendMessages: false
+        }).catch(() => {});
+        elderPostIds[ch.name] = channel.id;
+    }
+
+    // ── Per-world chat (all members can talk) ──
+    const chatChannel = await guild.channels.create({
+        name: worldChatName(world), type: 0, parent: mainCat.id,
+        reason: `[Setup] ${world} chat`
+    });
+
+    // ═════════════════════════════════════
+    // CATEGORY 2: CLAIMS (read-only for all)
+    // ═════════════════════════════════════
+    const claimsCat = await guild.channels.create({
+        name: worldClaimsCatName(world),
+        type: 4,
+        reason: `[Setup] ${world} claims`
+    });
+    // Deny everyone, allow member+elder to VIEW only (no send)
+    await claimsCat.permissionOverwrites.create(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
+    await claimsCat.permissionOverwrites.create(memberRole.id, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: false
+    }).catch(() => {});
+    await claimsCat.permissionOverwrites.create(elderRole.id, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: false
+    }).catch(() => {});
+
+    const claimChannels = ['⚔️・claim-sp', '⚔️・claim-ms', '🎪・events'];
+    const claimChannelIds = {};
+    for (const name of claimChannels) {
+        const ch = await guild.channels.create({
+            name, type: 0, parent: claimsCat.id,
+            reason: `[Setup] ${world} ${name}`
+        });
+        // Explicitly deny send for both member and elder
+        await ch.permissionOverwrites.create(memberRole.id, {
+            ViewChannel: true, ReadMessageHistory: true, SendMessages: false
+        }).catch(() => {});
+        await ch.permissionOverwrites.create(elderRole.id, {
+            ViewChannel: true, ReadMessageHistory: true, SendMessages: false
+        }).catch(() => {});
+        claimChannelIds[name] = ch.id;
+    }
+
+    // ═════════════════════════════════════
+    // CATEGORY 3: ACTIVITY LOGS (all can post)
+    // ═════════════════════════════════════
+    const logsCat = await guild.channels.create({
+        name: worldLogsCatName(world),
+        type: 4,
+        reason: `[Setup] ${world} logs`
+    });
+    await logsCat.permissionOverwrites.create(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
+    await logsCat.permissionOverwrites.create(memberRole.id, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true
+    }).catch(() => {});
+    await logsCat.permissionOverwrites.create(elderRole.id, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true, ManageMessages: true
+    }).catch(() => {});
+
+    const logChannels = ['🐉・world-boss', '💎・heist', '⚔️・valley-war', '🛡️・altar-defense', '🏰・ms-and-sp', '🤺・pvp'];
+    const logChannelIds = {};
+    for (const name of logChannels) {
+        const ch = await guild.channels.create({
+            name, type: 0, parent: logsCat.id,
+            reason: `[Setup] ${world} ${name}`
+        });
+        logChannelIds[name] = ch.id;
+    }
 
     return {
         roleMemberId: memberRole.id,
         roleElderId: elderRole.id,
-        categoryId: category.id,
+        categoryId: mainCat.id,
+        claimsCategoryId: claimsCat.id,
+        logsCategoryId: logsCat.id,
         welcomeChannelId: welcomeChannel.id,
         approvalsChannelId: approvalsChannel.id,
-        ticketChannelId: ticketChannel.id
+        ticketChannelId: ticketChannel.id,
+        chatChannelId: chatChannel.id,
+        elderPostIds,
+        claimChannelIds,
+        logChannelIds
     };
 }
 
@@ -354,22 +438,80 @@ async function setupWorld(guild, world, db) {
 async function setupGeneralChannels(guild, db) {
     if (db.config._generalChannelsDone) return;
 
-    // Create reminders channel
-    const remindersChannel = await guild.channels.create({
-        name: '📢・reminders',
-        type: 0,
-        reason: '[Setup] General reminders'
+    // ── Alliance General category ──
+    const generalCat = await guild.channels.create({
+        name: '🌐 Alliance General',
+        type: 4,
+        reason: '[Setup] Alliance General'
+    });
+    // Restrict to @everyone deny by default
+    await generalCat.permissionOverwrites.create(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
+    // Grant view+send to each world's member role so members can see & interact in alliance channels
+    // Elder-only channels (tower-rules, announcements, allied-list) will override SendMessages to false
+    for (const [, wc] of Object.entries(db.config.worldSetup || {})) {
+        const role = guild.roles.cache.get(wc.roleMemberId);
+        if (role) {
+            await generalCat.permissionOverwrites.create(role, {
+                ViewChannel: true, ReadMessageHistory: true, SendMessages: true
+            }).catch(() => {});
+        }
+    }
+
+    // Market & Main chat — all members can write
+    const marketChannel = await guild.channels.create({
+        name: '🛒・market', type: 0, parent: generalCat.id,
+        reason: '[Setup] Alliance market'
+    });
+    const mainChatChannel = await guild.channels.create({
+        name: '💬・main-chat', type: 0, parent: generalCat.id,
+        reason: '[Setup] Alliance main chat'
     });
 
-    // Create events channel
+    // Tower rules & Announcements & Allied list — all can view, only elders+admins write
+    // We need to create these with proper permissions
+    async function createElderPostChannel(name, emoji) {
+        const ch = await guild.channels.create({
+            name: `${emoji}・${name}`, type: 0, parent: generalCat.id,
+            reason: `[Setup] Alliance ${name}`
+        });
+        // Members can't send; elders keep send permission
+        for (const [, wc] of Object.entries(db.config.worldSetup || {})) {
+            if (wc.roleMemberId) {
+                await ch.permissionOverwrites.create(wc.roleMemberId, {
+                    ViewChannel: true, ReadMessageHistory: true, SendMessages: false
+                }).catch(() => {});
+            }
+            if (wc.roleElderId) {
+                await ch.permissionOverwrites.create(wc.roleElderId, {
+                    ViewChannel: true, ReadMessageHistory: true, SendMessages: true
+                }).catch(() => {});
+            }
+        }
+        return ch;
+    }
+
+    const towerRulesChannel = await createElderPostChannel('tower-rules', '🏛️');
+    const announcementsChannel = await createElderPostChannel('announcements', '📢');
+    const alliedListChannel = await createElderPostChannel('allied-list', '📋');
+
+    // Create reminders + events channels under general category
+    const remindersChannel = await guild.channels.create({
+        name: '📢・reminders', type: 0, parent: generalCat.id,
+        reason: '[Setup] General reminders'
+    });
     const eventsChannel = await guild.channels.create({
-        name: '📅・events',
-        type: 0,
+        name: '📅・events', type: 0, parent: generalCat.id,
         reason: '[Setup] General events'
     });
 
     db.config._generalChannelsDone = true;
     db.config.generalChannels = {
+        categoryId: generalCat.id,
+        marketChannelId: marketChannel.id,
+        mainChatChannelId: mainChatChannel.id,
+        towerRulesChannelId: towerRulesChannel.id,
+        announcementsChannelId: announcementsChannel.id,
+        alliedListChannelId: alliedListChannel.id,
         remindersChannelId: remindersChannel.id,
         eventsChannelId: eventsChannel.id
     };
