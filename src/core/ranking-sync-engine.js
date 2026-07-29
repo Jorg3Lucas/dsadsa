@@ -68,52 +68,57 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             }
         }
 
-        // 2.5. RANKING VALIDATION — remove registration if nickname not in any world's ranking
+        // 2.5. RANKING VALIDATION — remove ROLE (not registration) if nickname not in any world's ranking
         const rankingValidationEnabled = db.config?.rankingValidationEnabled === true;
         const rankingCache = rankingValidationEnabled ? getLocalRankingCache() : null;
         if (rankingCache) {
-            const toRemove = new Set();
-
-            // Pre-load cache once — reuse to avoid reading the JSON file from disk for every user
+            let removedRoleCount = 0;
             const cache = rankingCache;
 
             for (const [memberId, userData] of Object.entries(db.users)) {
                 if (!userData.nickname) continue;
-                // Skip temp users — they get handled by the temp cleanup step below
                 if (userData.tempUntil) continue;
-                // Skip manual permanent users — registered manually outside ranking
                 if (userData.manualPermanent) continue;
+
                 const nickname = userData.nickname.trim().normalize('NFC');
                 const inRanking = findNicknameInCache(nickname, cache);
+
                 if (!inRanking) {
-                    toRemove.add(memberId);
+                    const member = members.get(memberId);
+                    if (member) {
+                        const displayName = userData.nickname || member.user.username;
+                        logEvent(`⚠️ [Ranking Validation] ${member.user.tag} (${displayName}) not found in any EU ranking — removing role (keeping registration)`);
+
+                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        }
+
+                        // Reset nickname but keep the registration
+                        const currentNick = member.nickname || member.user.username;
+                        if (!currentNick.endsWith(' - Pilot')) {
+                            await member.setNickname(member.user.username).catch(() => {});
+                        }
+                        removedRoleCount++;
+                    }
+
+                    // Also handle pilots linked to this owner
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
                         for (const pId of userData.pilotIds) {
-                            toRemove.add(pId);
+                            const pilotMember = members.get(pId);
+                            if (pilotMember) {
+                                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                                }
+                                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                            }
                         }
                     }
                 }
             }
 
-            if (toRemove.size > 0) {
-                for (const memberId of toRemove) {
-                    const member = members.get(memberId);
-                    const userData = db.users[memberId];
-                    if (!userData) continue;
-
-                    if (member) {
-                        const displayName = userData.nickname || member.user.username;
-                        logEvent(`⚠️ [Ranking Validation] ${member.user.tag} (${displayName}) not found in any EU ranking — removing role`);
-
-                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                        }
-                        await member.setNickname(member.user.username).catch(() => {});
-                    }
-                    delete db.users[memberId];
-                }
+            if (removedRoleCount > 0) {
                 saveLocalStorage();
-                logEvent(`🧹 [Ranking Validation] Removed ${toRemove.size} member(s) not found in any EU ranking`);
+                logEvent(`🧹 [Ranking Validation] Removed roles from ${removedRoleCount} member(s) not found in any EU ranking (registrations kept)`);
             }
         }
 
@@ -263,7 +268,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             }
         }
 
-        // 3. NICKNAME SYNCHRONIZATION + MEMBER ROLE
+        // 3. NICKNAME SYNCHRONIZATION + MEMBER ROLE (allied clan aware)
+        const syncCache = getLocalRankingCache();
+
         for (const [memberId, member] of members) {
             if (member.user.bot) continue;
 
@@ -274,26 +281,46 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             const ownerData = db.users[effectiveOwnerId];
             const isRegistered = !!(ownerData && (ownerData.registeredAt || ownerData.manual === true)) || isPilot;
 
-            let inGameNick = "";
-            if (ownerData) {
-                inGameNick = ownerData.nickname.trim().normalize('NFC');
-            } else {
-                inGameNick = (member.nickname || member.user.username).trim().normalize('NFC');
-                if (inGameNick.endsWith(' - Pilot')) inGameNick = inGameNick.replace(' - Pilot', '').trim();
+            // ── If registered, check allied clan status ──
+            let inAlliedClan = false;
+            let foundInRanking = false;
+
+            if (isRegistered && ownerData && ownerData.nickname && syncCache) {
+                const lookup = lookupNickname(ownerData.nickname, db, syncCache);
+                if (lookup.found) {
+                    foundInRanking = true;
+                    inAlliedClan = lookup.inAlliedClan;
+                }
             }
 
-            // Assign member role to registered users, remove from non-registered
             const hasMemberRole = member.roles.cache.has(MEMBER_ROLE_ID);
-            if (isRegistered && !hasMemberRole) {
-                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
+
+            // ── ROLE MANAGEMENT ──
+            if (isRegistered) {
+                if (inAlliedClan) {
+                    // ✅ In allied clan — ensure role is present
+                    if (!hasMemberRole) {
+                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
+                    }
+                } else {
+                    // ❌ Not in allied clan — remove role (keep registration)
+                    if (hasMemberRole) {
+                        await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan (registration kept)`);
+                    }
+                }
             } else if (!isRegistered && hasMemberRole && rankingValidationEnabled) {
+                // Non-registered user — remove role if validation enabled
                 await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                 logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
             }
 
-            // Only change nickname for registered members and pilots — never touch existing members' nicknames
-            if (isRegistered || isPilot) {
+            // ── NICKNAME MANAGEMENT ──
+            // Only set nickname if in allied clan (has role). Otherwise reset to Discord username.
+            // Never change a user's registered nickname in the database — keep what they registered with.
+            if (isRegistered && inAlliedClan) {
+                // Has role — ensure correct nickname
                 let desiredNickname = "";
                 if (isPilot) {
                     const ownerNick = db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC');
@@ -305,6 +332,11 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
                 if ((member.nickname || '').normalize('NFC') !== desiredNickname) {
                     await member.setNickname(desiredNickname).catch(() => {});
+                }
+            } else if (isRegistered && !inAlliedClan) {
+                // No role — reset nickname to Discord username (but keep DB registration)
+                if (member.nickname && member.nickname !== member.user.username) {
+                    await member.setNickname(member.user.username).catch(() => {});
                 }
             }
         }

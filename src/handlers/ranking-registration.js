@@ -19,16 +19,22 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     await interaction.deferReply({ flags: 64 });
 
     const nickname = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
+    const userId = interaction.user.id;
 
-    const existingUser = Object.entries(db.users).find(([id, data]) =>
-        data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
-    );
-    if (existingUser) {
-        logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${existingUser[0]}`);
-        return interaction.editReply('❌ This character name is already registered by another user.');
+    // ── Check if user already has a registration (can't register a second account) ──
+    if (db.users[userId] && (db.users[userId].registeredAt || db.users[userId].manual === true)) {
+        const existingNick = db.users[userId].nickname;
+        logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but already registered as "${existingNick}" — rejected`);
+        return interaction.editReply(`❌ **You are already registered!**\nYour account is already registered as **${existingNick}**.\n\nIf you need to update your nickname, contact an administrator.\nYou cannot register a second account.`);
     }
 
-    const userId = interaction.user.id;
+    const existingNickname = Object.entries(db.users).find(([id, data]) =>
+        data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
+    );
+    if (existingNickname) {
+        logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${existingNickname[0]}`);
+        return interaction.editReply('❌ This character name is already registered by another user.');
+    }
 
     // Look up nickname in ranking cache using centralized service
     const lookup = lookupNickname(nickname, db);

@@ -85,6 +85,19 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         return interaction.editReply({ content: '❌ User is no longer in the server.', components: [] });
     }
 
+    // ── Safety check: prevent overwriting existing registration with different nickname ──
+    if (db.users[userId] && (db.users[userId].registeredAt || db.users[userId].manual === true)) {
+        const existingNick = db.users[userId].nickname;
+        const finalNickname = pending.selectedNickname || pending.nickname;
+        if (existingNick && existingNick.trim().normalize('NFC').toLowerCase() !== finalNickname.trim().normalize('NFC').toLowerCase()) {
+            logEvent(`❌ [SAFETY] Admin ${interaction.user.tag} tried to approve registration for ${userId} with different nickname "${finalNickname}" — user already registered as "${existingNick}" — BLOCKED`);
+            return interaction.editReply({
+                content: `❌ **Safety Blocked:** User <@${userId}> is already registered as **${existingNick}**.\nCannot overwrite with a different nickname "${finalNickname}".\n\nUse /manualremove first if you need to clear the existing registration.`,
+                components: []
+            });
+        }
+    }
+
     const isTempApproval = result === 'temp';
 
     const finalNickname = pending.selectedNickname || pending.nickname;

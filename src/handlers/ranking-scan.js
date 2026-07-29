@@ -313,42 +313,34 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
             // Mark as processed — server 1 (origin) nickname takes priority over server 2
             processedMemberIds.add(memberId);
 
-            // User already registered — check if wrongly registered as owner (should be pilot)
+            // User already registered — do NOT change their DB nickname, never swap pilot/owner
             if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
-                const isWronglyRegisteredOwner = isPilot && gameNick && 
+                // Check if looks like a wrong registration (pilot format but registered as owner)
+                const looksLikeWrongOwner = isPilot && gameNick && 
                     !db.users[memberId].pendingOwnerNick &&
                     !Object.values(db.users || {}).some(u => u.pilotIds && u.pilotIds.includes(memberId));
 
-                if (isWronglyRegisteredOwner) {
-                    // Fix: remove the wrong owner registration — will be properly handled below
-                    delete db.users[memberId];
-                    saveLocalStorage();
-                    logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) FIXED: wrong owner registration removed — now processing as pilot`);
-                    // Fall through to isPilot / owner logic below
-                } else {
-                    // Normal already-registered: update Discord nickname + DB if needed
-                    const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
-                    if (prodMember) {
-                        const expectedNick = isPilot && gameNick
-                            ? buildPrefixedNickname(gameNick, db, 'Pilot')
-                            : buildPrefixedNickname(gameNick || db.users[memberId].nickname, db);
-
-                        if (gameNick && db.users[memberId].nickname !== gameNick) {
-                            const oldNick = db.users[memberId].nickname;
-                            db.users[memberId].nickname = gameNick;
-                            saveLocalStorage();
-                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) DB nickname updated: "${oldNick}" → "${gameNick}"`);
-                        }
-
-                        if (prodMember.nickname !== expectedNick) {
-                            await prodMember.setNickname(expectedNick).catch(() => {});
-                            if (results.length < 20) results.push(`🔄 ${member.user.tag} → updated to "${expectedNick}"`);
-                            logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) Discord nickname updated to "${expectedNick}"`);
-                        }
-                    }
-                    totalSkipped++;
-                    continue;
+                if (looksLikeWrongOwner) {
+                    // Log warning but do NOT auto-fix — admin must handle manually
+                    logEvent(`⚠️ [ScanImport] ${member.user.tag} (${memberId}) appears to be a pilot registered as owner "${db.users[memberId].nickname}" — NOT auto-fixing, admin intervention required`);
                 }
+
+                // Normal already-registered: only update Discord display nickname, NEVER change DB
+                const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
+                if (prodMember) {
+                    const storedNick = db.users[memberId].nickname.trim().normalize('NFC');
+                    const expectedNick = isPilot
+                        ? buildPrefixedNickname(storedNick, db, 'Pilot')
+                        : buildPrefixedNickname(storedNick, db);
+
+                    if (prodMember.nickname !== expectedNick) {
+                        await prodMember.setNickname(expectedNick).catch(() => {});
+                        if (results.length < 20) results.push(`🔄 ${member.user.tag} → updated Discord nick to "${expectedNick}"`);
+                        logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) Discord nickname updated to "${expectedNick}" (DB nick kept: "${storedNick}")`);
+                    }
+                }
+                totalSkipped++;
+                continue;
             }
 
             if (isPilot) {
