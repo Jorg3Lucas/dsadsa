@@ -5,7 +5,7 @@
 // ==========================================
 
 import { getMsg } from "../core/lang.js";
-import { db, saveLocalStorage } from "../core/state.js";
+import { db, saveLocalStorage, setCurrentWorld, worldDbs } from "../core/state.js";
 import { refreshVisualPanel } from "../handlers/panel-utils.js";
 import {
     ActionRowBuilder as t,
@@ -83,7 +83,7 @@ async function handleReserveSelectHours(interaction) {
     }).catch(noop);
 }
 
-// ── Confirm: Apply Reservations ──
+// ── Confirm: Apply Reservations across ALL worlds ──
 async function handleReserveConfirm(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({ content: getMsg("system.permissionDeniedAdminDropped"), components: [], flags: 64 }).catch(noop);
@@ -94,37 +94,46 @@ async function handleReserveConfirm(interaction) {
 
     const { eventName, floors, hours, targetUserId, targetUserName } = cache;
     let appliedCount = 0;
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        const current = db[key];
-        if ("event_group" !== current.type) continue;
-        const floorMatch = floors.some(f => key.includes(`${f}squareevents`));
-        if (!floorMatch) continue;
-        const evData = current[eventName];
-        if (!evData || evData.type !== "fixed") continue;
 
-        if (hours.includes("_all")) {
-            evData.reservedFor = targetUserId;
-            evData.reservedByName = targetUserName;
-            evData.reservations = null;
-        } else {
-            evData.reservedFor = null;
-            evData.reservedByName = null;
-            evData.reservations = evData.reservations || {};
-            for (const h of hours) { evData.reservations[h] = { userId: targetUserId, userName: targetUserName }; }
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
+
+        for (const key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            const current = db[key];
+            if ("event_group" !== current.type) continue;
+            const floorMatch = floors.some(f => key.includes(`${f}squareevents`));
+            if (!floorMatch) continue;
+            const evData = current[eventName];
+            if (!evData || evData.type !== "fixed") continue;
+
+            if (hours.includes("_all")) {
+                evData.reservedFor = targetUserId;
+                evData.reservedByName = targetUserName;
+                evData.reservations = null;
+            } else {
+                evData.reservedFor = null;
+                evData.reservedByName = null;
+                evData.reservations = evData.reservations || {};
+                for (const h of hours) { evData.reservations[h] = { userId: targetUserId, userName: targetUserName }; }
+            }
+            appliedCount++;
         }
-        appliedCount++;
+
+        saveLocalStorage();
+        for (const key in db) { if (!db[key] || key.startsWith("_")) continue; await refreshVisualPanel(key); }
     }
 
+    setCurrentWorld(null);
     delete reserveFlowCache[uid];
+
     if (appliedCount === 0) { return await interaction.update({ content: getMsg("reserve.noEvent", { event: eventName.charAt(0).toUpperCase() + eventName.slice(1) }), components: [], flags: 64 }).catch(noop); }
-    for (const key in db) { if (!db[key] || key.startsWith("_")) continue; await refreshVisualPanel(key); }
 
     const eventLabel = eventName.charAt(0).toUpperCase() + eventName.slice(1);
     const floorsLabel = floors.includes("11") && floors.includes("12") ? "MS11 + MS12" : floors.map(f => `MS${f}`).join(", ");
     const hoursLabel = hours.includes("_all") ? "All hours" : hours.sort((a, b) => parseInt(a) - parseInt(b)).map(h => `${h}:00`).join(", ");
 
-    saveLocalStorage();
     return await interaction.update({ content: getMsg("reserve.interactive.applied", { event: eventLabel, floors: floorsLabel, hours: hoursLabel, userName: targetUserName }), components: [] }).catch(noop);
 }
 

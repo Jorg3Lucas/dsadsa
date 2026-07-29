@@ -27,7 +27,8 @@ import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 import {
     handleSetupStart,
-    handleSetElder
+    handleSetElder,
+    handleNuke
 } from './setup-handler.js';
 
 // ==========================================
@@ -942,6 +943,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     // ── setelder ──
     if (commandName === 'setelder') {
         return await handleSetElder(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── nuke ──
+    if (commandName === 'nuke') {
+        return await handleNuke(interaction, db, saveLocalStorage, logEvent);
     }
 
     // ── scanrebuild ──

@@ -1,0 +1,715 @@
+[2026-07-29T02:07:29.861Z] [WARN] [Process] Warning: Warning — Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+Message: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+    at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+    at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:264:42)
+    at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:202:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:342:24)
+Stack:
+  Error: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+  at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+  at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:264:42)
+  at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:202:34)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:342:24)
+  at process.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/logger.js:266:23)
+  at process.emit (node:events:521:24)
+[2026-07-29T02:13:18.895Z] [WARN] [Process] Warning: Warning — Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+Message: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+    at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+    at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:264:42)
+    at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:202:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:342:24)
+Stack:
+  Error: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+  at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+  at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:264:42)
+  at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:202:34)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:342:24)
+  at process.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/logger.js:266:23)
+  at process.emit (node:events:521:24)
+[2026-07-29T02:41:55.796Z] [WARN] [Process] Warning: Warning — Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+Message: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+    at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+    at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+    at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:343:24)
+Stack:
+  Error: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+  at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+  at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+  at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:343:24)
+  at process.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/logger.js:266:23)
+  at process.emit (node:events:521:24)
+[2026-07-29T02:48:42.096Z] [WARN] [Process] Warning: Warning — Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+Message: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+    at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+    at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+    at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+Stack:
+  Error: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+  at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+  at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+  at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+  at process.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/logger.js:266:23)
+  at process.emit (node:events:521:24)
+[2026-07-29T02:52:01.180Z] [WARN] [Process] Warning: Warning — Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+Message: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+    at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+    at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+    at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+Stack:
+  Error: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+  at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+  at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+  at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+  at process.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/logger.js:266:23)
+  at process.emit (node:events:521:24)
+[2026-07-29T02:53:50.728Z] [WARN] [Process] Warning: Warning — Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+Message: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+    at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+    at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+    at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+Stack:
+  Error: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+  at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+  at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:265:42)
+  at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:203:34)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+  at process.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/logger.js:266:23)
+  at process.emit (node:events:521:24)
+[2026-07-29T02:57:39.176Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Unknown interaction
+Code: 10062
+Stack:
+  DiscordAPIError[10062]: Unknown interaction
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handlePilotRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-pilot.js:22:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:325:24)
+  Context: {
+  "customId": "register_pilot_modal",
+  "type": 5,
+  "user": "443586407521583124"
+}
+[2026-07-29T02:57:58.168Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.deferUpdate (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:305:22)
+  at async handleApprovePilot (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-approvals.js:176:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:379:24)
+  Context: {
+  "customId": "approve_pilot_443586407521583124-yes",
+  "type": 3,
+  "user": "247136835011215360"
+}
+[2026-07-29T02:59:06.337Z] [WARN] [Process] Warning: Warning — Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+Message: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+    at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+    at findOrCreateRole (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:43:30)
+    at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:299:30)
+    at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:237:34)
+    at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+Stack:
+  Error: Warning: Passing "color" to RoleManager#create() is deprecated. Use "colors" instead.
+  at RoleManager.create (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\managers\RoleManager.js:199:17)
+  at findOrCreateRole (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:43:30)
+  at setupWorld (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:299:30)
+  at handleSetupConfirm (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/setup-handler.js:237:34)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:341:24)
+  at process.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/logger.js:266:23)
+  at process.emit (node:events:521:24)
+[2026-07-29T03:16:31.249Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "838605119712002100"
+}
+[2026-07-29T03:16:35.751Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_838605119712002100-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T03:17:03.176Z] [ERROR] [AutoSetup] Failed to auto-setup channels
+Message: Cannot write to db: no currentWorld set
+Stack:
+  Error: Cannot write to db: no currentWorld set
+  at Object.set (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/core/state.js:162:38)
+  at setupAllChannels (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/auto-channel-setup.js:58:22)
+  at Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:179:19)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-07-29T06:21:23.215Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "891634726081810433"
+}
+[2026-07-29T09:56:02.633Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_345304340107493376-yes",
+  "type": 3,
+  "user": "371164072927821825"
+}
+[2026-07-29T12:09:54.880Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.deferUpdate (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:305:22)
+  at async handleApprovePilot (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-approvals.js:176:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:379:24)
+  Context: {
+  "customId": "approve_pilot_282506076375613445-yes",
+  "type": 3,
+  "user": "1461218665306263589"
+}
+[2026-07-29T13:10:52.361Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async StringSelectMenuInteraction.deferUpdate (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:305:22)
+  at async handleSelectRegistrationNickname (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:133:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:284:24)
+  Context: {
+  "customId": "select_reg_nickname_891634726081810433",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T13:10:54.684Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_891634726081810433-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T14:38:16.307Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "1470342453671235616"
+}
+[2026-07-29T14:43:31.507Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "1470342453671235616"
+}
+[2026-07-29T17:51:45.636Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_1470342453671235616-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T18:04:01.542Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "414386018373074944"
+}
+[2026-07-29T18:04:36.163Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "414386018373074944"
+}
+[2026-07-29T18:04:46.200Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_414386018373074944-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T18:04:49.605Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Unknown interaction
+Code: 10062
+Stack:
+  DiscordAPIError[10062]: Unknown interaction
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_414386018373074944-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T19:52:38.248Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "1178032132807995553"
+}
+[2026-07-29T19:52:42.421Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_1178032132807995553-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T19:54:25.021Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "1425338932987432980"
+}
+[2026-07-29T19:56:05.363Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_1425338932987432980-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T19:59:32.057Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "737463601190797335"
+}
+[2026-07-29T20:06:21.224Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "782665807078490112"
+}
+[2026-07-29T20:09:09.652Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_782665807078490112-yes",
+  "type": 3,
+  "user": "1506299654671958205"
+}
+[2026-07-29T20:14:56.808Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "1179552897571225613"
+}
+[2026-07-29T20:23:08.908Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ModalSubmitInteraction.deferReply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:122:22)
+  at async handleOwnerRegistrationModal (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-registration.js:19:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:322:24)
+  Context: {
+  "customId": "register_owner_modal",
+  "type": 5,
+  "user": "709128744941518878"
+}
+[2026-07-29T20:23:18.627Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_709128744941518878-yes",
+  "type": 3,
+  "user": "190590241122418688"
+}
+[2026-07-29T20:23:23.674Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_737463601190797335-yes",
+  "type": 3,
+  "user": "190590241122418688"
+}
+[2026-07-29T20:46:16.301Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ButtonInteraction.update (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:354:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:374:24)
+  Context: {
+  "customId": "approve_owner_1179552897571225613-yes",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:03:05.822Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ChatInputCommandInteraction.reply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:193:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:244:28)
+  Context: {
+  "command": "manualforce",
+  "type": 2,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:27:57.279Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ChatInputCommandInteraction.reply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:193:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:244:28)
+  Context: {
+  "command": "manualregister",
+  "type": 2,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:28:03.528Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async StringSelectMenuInteraction.deferUpdate (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:305:22)
+  at async handleSelectManualNickname (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-commands.js:1118:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:289:24)
+  Context: {
+  "customId": "select_manual_nickname_864108100880171009",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:29:08.416Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Unknown interaction
+Code: 10062
+Stack:
+  DiscordAPIError[10062]: Unknown interaction
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ChatInputCommandInteraction.reply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:193:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:244:28)
+  Context: {
+  "command": "manualforce",
+  "type": 2,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:30:27.570Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Unknown interaction
+Code: 10062
+Stack:
+  DiscordAPIError[10062]: Unknown interaction
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ChatInputCommandInteraction.reply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:193:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:244:28)
+  Context: {
+  "command": "manualregister",
+  "type": 2,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:30:30.988Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async StringSelectMenuInteraction.deferUpdate (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:305:22)
+  at async handleSelectManualNickname (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-commands.js:1118:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:289:24)
+  Context: {
+  "customId": "select_manual_nickname_864108100880171009",
+  "type": 3,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:31:45.331Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Unknown interaction
+Code: 10062
+Stack:
+  DiscordAPIError[10062]: Unknown interaction
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async ChatInputCommandInteraction.reply (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:193:22)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:244:28)
+  Context: {
+  "command": "manualregister",
+  "type": 2,
+  "user": "864108100880171009"
+}
+[2026-07-29T21:31:48.078Z] [ERROR] [Router] Error caught in unified interaction router
+Message: Interaction has already been acknowledged.
+Code: 40060
+Stack:
+  DiscordAPIError[40060]: Interaction has already been acknowledged.
+  at handleErrors (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:762:13)
+  at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  at async BurstHandler.runRequest (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:866:23)
+  at async _REST.request (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\@discordjs\rest\dist\index.js:1307:22)
+  at async StringSelectMenuInteraction.deferUpdate (C:\Users\Jorge\Documents\GitHub\dsadsa\node_modules\discord.js\src\structures\interfaces\InteractionResponses.js:305:22)
+  at async handleSelectManualNickname (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/handlers/ranking-commands.js:1118:5)
+  at async Client.<anonymous> (file:///C:/Users/Jorge/Documents/GitHub/dsadsa/src/index.js:289:24)
+  Context: {
+  "customId": "select_manual_nickname_864108100880171009",
+  "type": 3,
+  "user": "864108100880171009"
+}

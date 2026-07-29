@@ -1,0 +1,1400 @@
+{
+  "7peak": {
+    "type": "peak",
+    "title": "Secret Peak 7F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "left": {
+      "name": "⬅️ Left",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "red": {
+      "name": "🟥 Red",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "right": {
+      "name": "➡️ Right",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "7squarenormal": {
+    "type": "normal",
+    "title": "Magic Square 7F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "boss1": {
+      "name": "1️⃣ Leader 1",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss2": {
+      "name": "2️⃣ Leader 2",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss3": {
+      "name": "3️⃣ Leader 3",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "7squareantidemon": {
+    "type": "antidemon",
+    "title": "Antidemon 7F",
+    "left": {
+      "name": "LEFT ROOM",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "mid": {
+      "name": "MID ROOM",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "right": {
+      "name": "RIGHT ROOM",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    }
+  },
+  "8peak": {
+    "type": "peak",
+    "title": "Secret Peak 8F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "left": {
+      "name": "⬅️ Left",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "red": {
+      "name": "🟥 Red",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "right": {
+      "name": "➡️ Right",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 1785317479000,
+      "_lastKilledTimeStr": "05:31",
+      "_lastKilledAt": 1785313878000
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "8squarenormal": {
+    "type": "normal",
+    "title": "Magic Square 8F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "boss1": {
+      "name": "1️⃣ Leader 1",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss2": {
+      "name": "2️⃣ Leader 2",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss3": {
+      "name": "3️⃣ Leader 3",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "8squareantidemon": {
+    "type": "antidemon",
+    "title": "Antidemon 8F",
+    "left": {
+      "name": "LEFT ROOM",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "mid": {
+      "name": "MID ROOM",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "right": {
+      "name": "RIGHT ROOM",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    }
+  },
+  "9peak": {
+    "type": "peak",
+    "title": "Secret Peak 9F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "left": {
+      "name": "⬅️ Left",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "red": {
+      "name": "🟥 Red",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "right": {
+      "name": "➡️ Right",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "9squarenormal": {
+    "type": "normal",
+    "title": "Magic Square 9F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "boss1": {
+      "name": "1️⃣ Leader 1",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss2": {
+      "name": "2️⃣ Leader 2",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 1785316893000,
+      "_lastKilledTimeStr": "05:21",
+      "_lastKilledAt": 1785313286000
+    },
+    "boss3": {
+      "name": "3️⃣ Leader 3",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 1785315048000,
+      "_lastKilledTimeStr": "05:20",
+      "_lastKilledAt": 1785313247000
+    }
+  },
+  "10peak": {
+    "type": "peak",
+    "title": "Secret Peak 10F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "left": {
+      "name": "⬅️ Left",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "red": {
+      "name": "🟥 Red",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "right": {
+      "name": "➡️ Right",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "10squarenormal": {
+    "type": "normal",
+    "title": "Magic Square 10F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "boss1": {
+      "name": "1️⃣ Leader 1",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss2": {
+      "name": "2️⃣ Leader 2",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss3": {
+      "name": "3️⃣ Leader 3",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "plant": {
+      "name": "🌱 Plant",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "ore": {
+      "name": "⛏️ Ore",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "9squareantidemon": {
+    "type": "antidemon",
+    "title": "Antidemon 9F",
+    "v1l": {
+      "name": "1-1 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1m": {
+      "name": "1-1 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1r": {
+      "name": "1-1 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2l": {
+      "name": "1-2 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2m": {
+      "name": "1-2 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2r": {
+      "name": "1-2 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    }
+  },
+  "10squareantidemon": {
+    "type": "antidemon",
+    "title": "Antidemon 10F",
+    "v1l": {
+      "name": "1-1 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1m": {
+      "name": "1-1 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1r": {
+      "name": "1-1 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2l": {
+      "name": "1-2 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2m": {
+      "name": "1-2 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2r": {
+      "name": "1-2 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    }
+  },
+  "11squareantidemon": {
+    "type": "antidemon",
+    "title": "Antidemon 11F",
+    "v1l": {
+      "name": "1-1 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1m": {
+      "name": "1-1 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1r": {
+      "name": "1-1 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2l": {
+      "name": "1-2 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2m": {
+      "name": "1-2 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2r": {
+      "name": "1-2 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v3l": {
+      "name": "1-3 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v3m": {
+      "name": "1-3 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v3r": {
+      "name": "1-3 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    }
+  },
+  "12squareantidemon": {
+    "type": "antidemon",
+    "title": "Antidemon 12F",
+    "v1l": {
+      "name": "1-1 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1m": {
+      "name": "1-1 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v1r": {
+      "name": "1-1 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2l": {
+      "name": "1-2 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2m": {
+      "name": "1-2 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v2r": {
+      "name": "1-2 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v3l": {
+      "name": "1-3 LEFT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v3m": {
+      "name": "1-3 MID",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    },
+    "v3r": {
+      "name": "1-3 RIGHT",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null,
+      "password": ""
+    }
+  },
+  "11peak": {
+    "type": "peak",
+    "title": "Secret Peak 11F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "left": {
+      "name": "⬅️ Left",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "red": {
+      "name": "🟥 Red",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": "",
+      "schedules": [
+        1,
+        7,
+        13,
+        19
+      ]
+    },
+    "right": {
+      "name": "➡️ Right",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "11squareleaders": {
+    "type": "normal",
+    "title": "Magic Square 11F - Leaders",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "boss1": {
+      "name": "1️⃣ Leader 1",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss2": {
+      "name": "2️⃣ Leader 2",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss3": {
+      "name": "3️⃣ Leader 3",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "11squareevents": {
+    "type": "event_group",
+    "title": "Magic Square 11F - Events",
+    "fury": {
+      "name": "🔴 Fury",
+      "type": "fixed",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "timeWindow": "",
+      "_claimTimestamp": null,
+      "reservedFor": null,
+      "reservedByName": null,
+      "reservations": null,
+      "schedules": [
+        0,
+        3,
+        6,
+        9,
+        12,
+        15,
+        18,
+        21
+      ],
+      "scheduleMinutes": 30
+    },
+    "frenzy": {
+      "name": "🟣 Frenzy",
+      "type": "fixed",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "timeWindow": "",
+      "_claimTimestamp": null,
+      "reservedFor": null,
+      "reservedByName": null,
+      "reservations": null,
+      "schedules": [
+        2,
+        5,
+        8,
+        11,
+        14,
+        17,
+        20,
+        23
+      ]
+    }
+  },
+  "12peak": {
+    "type": "peak",
+    "title": "Secret Peak 12F",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "left": {
+      "name": "⬅️ Left",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "red": {
+      "name": "🟥 Red",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": "",
+      "schedules": [
+        1,
+        7,
+        13,
+        19
+      ]
+    },
+    "right": {
+      "name": "➡️ Right",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "12squareleaders": {
+    "type": "normal",
+    "title": "Magic Square 12F - Leaders",
+    "timeWindow": "",
+    "next": null,
+    "ownerId": null,
+    "ownerName": null,
+    "boss1": {
+      "name": "1️⃣ Leader 1",
+      "status": "🟢 Available",
+      "cooldown": 30,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss2": {
+      "name": "2️⃣ Leader 2",
+      "status": "🟢 Available",
+      "cooldown": 60,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    },
+    "boss3": {
+      "name": "3️⃣ Leader 3",
+      "status": "🟢 Available",
+      "cooldown": 180,
+      "_freeSince": 0,
+      "_lastKilledTimeStr": ""
+    }
+  },
+  "12squareevents": {
+    "type": "event_group",
+    "title": "Magic Square 12F - Events",
+    "fury": {
+      "name": "🔴 Fury",
+      "type": "fixed",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "timeWindow": "",
+      "_claimTimestamp": null,
+      "reservedFor": null,
+      "reservedByName": null,
+      "reservations": null,
+      "schedules": [
+        0,
+        3,
+        6,
+        9,
+        12,
+        15,
+        18,
+        21
+      ],
+      "scheduleMinutes": 30
+    },
+    "frenzy": {
+      "name": "🟣 Frenzy",
+      "type": "fixed",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "timeWindow": "",
+      "_claimTimestamp": null,
+      "reservedFor": null,
+      "reservedByName": null,
+      "reservations": null,
+      "schedules": [
+        2,
+        5,
+        8,
+        11,
+        14,
+        17,
+        20,
+        23
+      ]
+    }
+  },
+  "12randomevent": {
+    "type": "fixed",
+    "title": "🎲 Random Event (SP12)",
+    "status": "🟢 Available",
+    "ownerId": null,
+    "ownerName": null,
+    "timeWindow": "",
+    "_claimTimestamp": null,
+    "schedules": [
+      3,
+      9,
+      15,
+      21
+    ],
+    "scheduleMinutes": 0
+  },
+  "11goblin": {
+    "type": "summon",
+    "title": "⭐ SP 11F Goblin",
+    "sp11": {
+      "name": "⭐ SP 11F Goblin",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null
+    }
+  },
+  "12goblin": {
+    "type": "summon",
+    "title": "⭐ SP 12F Goblin",
+    "sp12": {
+      "name": "⭐ SP 12F Goblin",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null
+    }
+  },
+  "11msgoblin": {
+    "type": "summon",
+    "title": "👹 MS 11 Goblin",
+    "ms11": {
+      "name": "👹 MS 11 Goblin",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null
+    }
+  },
+  "12msgoblin": {
+    "type": "summon",
+    "title": "👹 MS 12 Goblin",
+    "ms12": {
+      "name": "👹 MS 12 Goblin",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null
+    }
+  },
+  "summon": {
+    "type": "summon",
+    "title": "🌀 Summon Locations",
+    "sp2": {
+      "name": "⭐ SP 2F",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null
+    },
+    "sp4": {
+      "name": "⭐ SP 4F",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null
+    },
+    "sp7": {
+      "name": "⭐ SP 7F",
+      "status": "🟢 Available",
+      "ownerId": null,
+      "ownerName": null,
+      "time": "",
+      "timeWindow": "",
+      "nextId": null,
+      "nextName": null,
+      "formattedTimeNext": "",
+      "endLimit": null
+    }
+  },
+  "_panelMapping": {
+    "7peak": {
+      "channelId": "1531866473595928656",
+      "messageId": "1531866474682122282"
+    },
+    "7squarenormal": {
+      "channelId": "1531866476527751189",
+      "messageId": "1531866478750728353"
+    },
+    "7squareantidemon": {
+      "channelId": "1531866476527751189",
+      "messageId": "1531866480113750121"
+    },
+    "8peak": {
+      "channelId": "1531866481619505192",
+      "messageId": "1531866483091832995"
+    },
+    "8squarenormal": {
+      "channelId": "1531866485394247681",
+      "messageId": "1531866486619115655"
+    },
+    "8squareantidemon": {
+      "channelId": "1531866485394247681",
+      "messageId": "1531866487780806747"
+    },
+    "9peak": {
+      "channelId": "1531866489555128340",
+      "messageId": "1531866491312410676"
+    },
+    "9squarenormal": {
+      "channelId": "1531866492809904138",
+      "messageId": "1531866494013800589"
+    },
+    "9squareantidemon": {
+      "channelId": "1531866492809904138",
+      "messageId": "1531866495196336180"
+    },
+    "10peak": {
+      "channelId": "1531866504595902485",
+      "messageId": "1531866505866772583"
+    },
+    "10squarenormal": {
+      "channelId": "1531866507724722216",
+      "messageId": "1531866509234667521"
+    },
+    "10squareantidemon": {
+      "channelId": "1531866507724722216",
+      "messageId": "1531866510354813080"
+    },
+    "11peak": {
+      "channelId": "1531866511642329218",
+      "messageId": "1531866513001414657"
+    },
+    "11goblin": {
+      "channelId": "1531866511642329218",
+      "messageId": "1531866514297323591"
+    },
+    "11squareleaders": {
+      "channelId": "1531866515790364672",
+      "messageId": "1531866517308969212"
+    },
+    "11squareevents": {
+      "channelId": "1531866515790364672",
+      "messageId": "1531866518785101855"
+    },
+    "11squareantidemon": {
+      "channelId": "1531866515790364672",
+      "messageId": "1531866520043393115"
+    },
+    "11msgoblin": {
+      "channelId": "1531866515790364672",
+      "messageId": "1531866520131473552"
+    },
+    "12peak": {
+      "channelId": "1531866523105366077",
+      "messageId": "1531866524388954245"
+    },
+    "12randomevent": {
+      "channelId": "1531866523105366077",
+      "messageId": "1531866525403971597"
+    },
+    "12goblin": {
+      "channelId": "1531866523105366077",
+      "messageId": "1531866526754410578"
+    },
+    "12squareleaders": {
+      "channelId": "1531866528398708736",
+      "messageId": "1531866531649290504"
+    },
+    "12squareevents": {
+      "channelId": "1531866528398708736",
+      "messageId": "1531866532991471798"
+    },
+    "12squareantidemon": {
+      "channelId": "1531866528398708736",
+      "messageId": "1531866534379655309"
+    },
+    "12msgoblin": {
+      "channelId": "1531866528398708736",
+      "messageId": "1531866535365185608"
+    },
+    "summon": {
+      "channelId": "1531866537332441178",
+      "messageId": "1531866538552987720"
+    }
+  },
+  "_panels": {
+    "7peak": {
+      "channelId": "1531866558220206171",
+      "messageId": "1531866559470108804"
+    },
+    "7squarenormal": {
+      "channelId": "1531866560677941280",
+      "messageId": "1531866562775089294"
+    },
+    "7squareantidemon": {
+      "channelId": "1531866560677941280",
+      "messageId": "1531866563936915509"
+    },
+    "8peak": {
+      "channelId": "1531866565648322643",
+      "messageId": "1531866567074386064"
+    },
+    "8squarenormal": {
+      "channelId": "1531866568605040640",
+      "messageId": "1531866571079942195"
+    },
+    "8squareantidemon": {
+      "channelId": "1531866568605040640",
+      "messageId": "1531866572275323015"
+    },
+    "9peak": {
+      "channelId": "1531866573860634806",
+      "messageId": "1531866575072919553"
+    },
+    "9squarenormal": {
+      "channelId": "1531866576838594702",
+      "messageId": "1531866578147348551"
+    },
+    "10peak": {
+      "channelId": "1531866583067136020",
+      "messageId": "1531866584312840304"
+    },
+    "10squarenormal": {
+      "channelId": "1531866585512542240",
+      "messageId": "1531866589018984529"
+    },
+    "9squareantidemon": {
+      "channelId": "1531866576838594702",
+      "messageId": "1531866581486010541"
+    },
+    "10squareantidemon": {
+      "channelId": "1531866585512542240",
+      "messageId": "1531866590977724589"
+    },
+    "11squareantidemon": {
+      "channelId": "1531866596937564211",
+      "messageId": "1531866600712572929"
+    },
+    "12squareantidemon": {
+      "channelId": "1531866609444978818",
+      "messageId": "1531866613433893116"
+    },
+    "11peak": {
+      "channelId": "1531866592730812708",
+      "messageId": "1531866593901150219"
+    },
+    "11squareleaders": {
+      "channelId": "1531866596937564211",
+      "messageId": "1531866598166761483"
+    },
+    "11squareevents": {
+      "channelId": "1531866596937564211",
+      "messageId": "1531866599210881167"
+    },
+    "12peak": {
+      "channelId": "1531866603820683427",
+      "messageId": "1531866605397606555"
+    },
+    "12squareleaders": {
+      "channelId": "1531866609444978818",
+      "messageId": "1531866610942607451"
+    },
+    "12squareevents": {
+      "channelId": "1531866609444978818",
+      "messageId": "1531866612192247989"
+    },
+    "12randomevent": {
+      "channelId": "1531866603820683427",
+      "messageId": "1531866606626672661"
+    },
+    "11goblin": {
+      "channelId": "1531866592730812708",
+      "messageId": "1531866594987475140"
+    },
+    "12goblin": {
+      "channelId": "1531866603820683427",
+      "messageId": "1531866607561736317"
+    },
+    "11msgoblin": {
+      "channelId": "1531866596937564211",
+      "messageId": "1531866602138636349"
+    },
+    "12msgoblin": {
+      "channelId": "1531866609444978818",
+      "messageId": "1531866614360702980"
+    },
+    "summon": {
+      "channelId": "1531866616294281398",
+      "messageId": "1531866617548636191"
+    }
+  },
+  "_updatedAt": "2026-07-29T13:09:16.727Z"
+}

@@ -1,0 +1,161 @@
+[2026-07-29T02:02:22.922Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:02:24.621Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:02:24.632Z] [INFO] [Claim] Salary poll opened for week 2026-07-27
+[2026-07-29T02:02:27.633Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:04:39.465Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:04:40.794Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:04:40.814Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:04:43.830Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:06:13.032Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:06:14.032Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:06:14.050Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:06:17.060Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:07:07.629Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:07:08.632Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:07:09.035Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:07:12.057Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:12:19.496Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:12:20.652Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:12:20.961Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:12:23.989Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:39:20.947Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:39:22.760Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:39:23.137Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:39:26.163Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:48:18.567Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:48:19.716Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:48:19.988Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:48:22.998Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:51:45.723Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:51:46.742Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:51:47.005Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:51:50.016Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:53:09.025Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:53:10.182Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:53:10.472Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:53:31.008Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:55:05.752Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:55:07.025Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:55:07.327Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:55:48.457Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T02:57:02.735Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T02:57:05.370Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T02:57:05.683Z] [INFO] [Claim] Migrated _lastKilledAt timestamp for 3 existing boss entries.
+[2026-07-29T02:57:05.706Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T02:57:35.475Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T03:00:01.572Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T03:00:03.307Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T03:00:03.627Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T03:01:12.552Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T03:11:08.603Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T03:11:10.621Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T03:11:10.912Z] [INFO] [ClaimDB] No existing database for EU011, starting fresh.
+[2026-07-29T03:11:10.913Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:11:10.914Z] [INFO] [ClaimDB] No existing database for EU013, starting fresh.
+[2026-07-29T03:11:10.914Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:11:10.915Z] [INFO] [ClaimDB] No existing database for EU021, starting fresh.
+[2026-07-29T03:11:10.915Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:14:15.494Z] [INFO] [ClaimDB] Saved database for _boot (27 panels).
+[2026-07-29T03:14:15.495Z] [INFO] [ClaimDB] Saved database for EU011 (26 panels).
+[2026-07-29T03:14:15.496Z] [INFO] [ClaimDB] Saved database for EU013 (26 panels).
+[2026-07-29T03:14:15.498Z] [INFO] [ClaimDB] Saved database for EU021 (26 panels).
+[2026-07-29T03:14:39.676Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T03:14:40.834Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T03:14:41.127Z] [INFO] [ClaimDB] No existing database for EU011, starting fresh.
+[2026-07-29T03:14:41.129Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:14:41.129Z] [INFO] [ClaimDB] No existing database for EU013, starting fresh.
+[2026-07-29T03:14:41.130Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:14:41.130Z] [INFO] [ClaimDB] No existing database for EU021, starting fresh.
+[2026-07-29T03:14:41.131Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:14:48.653Z] [INFO] [ClaimDB] Saved database for _boot (27 panels).
+[2026-07-29T03:14:48.654Z] [INFO] [ClaimDB] Saved database for EU011 (26 panels).
+[2026-07-29T03:14:48.655Z] [INFO] [ClaimDB] Saved database for EU013 (26 panels).
+[2026-07-29T03:14:48.657Z] [INFO] [ClaimDB] Saved database for EU021 (26 panels).
+[2026-07-29T03:15:06.524Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T03:15:07.717Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T03:15:08.038Z] [INFO] [ClaimDB] No existing database for EU011, starting fresh.
+[2026-07-29T03:15:08.039Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:15:08.040Z] [INFO] [ClaimDB] No existing database for EU013, starting fresh.
+[2026-07-29T03:15:08.040Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:15:08.041Z] [INFO] [ClaimDB] No existing database for EU021, starting fresh.
+[2026-07-29T03:15:08.041Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:16:57.505Z] [INFO] [ClaimDB] Saved database for _boot (27 panels).
+[2026-07-29T03:16:57.506Z] [INFO] [ClaimDB] Saved database for EU011 (26 panels).
+[2026-07-29T03:16:57.507Z] [INFO] [ClaimDB] Saved database for EU013 (26 panels).
+[2026-07-29T03:16:57.508Z] [INFO] [ClaimDB] Saved database for EU021 (26 panels).
+[2026-07-29T03:17:01.284Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T03:17:02.835Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T03:17:03.165Z] [INFO] [ClaimDB] Loaded database for EU011 (26 panels).
+[2026-07-29T03:17:03.166Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:17:03.167Z] [INFO] [ClaimDB] Loaded database for EU013 (26 panels).
+[2026-07-29T03:17:03.167Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:17:03.168Z] [INFO] [ClaimDB] Loaded database for EU021 (26 panels).
+[2026-07-29T03:17:03.168Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:17:03.173Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T03:17:06.183Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T03:19:05.442Z] [INFO] [ClaimDB] Saved database for _boot (27 panels).
+[2026-07-29T03:19:05.444Z] [INFO] [ClaimDB] Saved database for EU011 (26 panels).
+[2026-07-29T03:19:05.446Z] [INFO] [ClaimDB] Saved database for EU013 (26 panels).
+[2026-07-29T03:19:05.448Z] [INFO] [ClaimDB] Saved database for EU021 (26 panels).
+[2026-07-29T03:19:13.900Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T03:19:15.001Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T03:19:15.263Z] [INFO] [ClaimDB] Loaded database for EU011 (26 panels).
+[2026-07-29T03:19:15.263Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:19:15.264Z] [INFO] [ClaimDB] Loaded database for EU013 (26 panels).
+[2026-07-29T03:19:15.264Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:19:15.265Z] [INFO] [ClaimDB] Loaded database for EU021 (26 panels).
+[2026-07-29T03:19:15.265Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:19:15.269Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T03:19:15.272Z] [INFO] [ClaimDB] Loaded database for EU011 (26 panels).
+[2026-07-29T03:19:15.272Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:19:32.464Z] [INFO] [ClaimDB] Loaded database for EU013 (26 panels).
+[2026-07-29T03:19:32.465Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:19:50.555Z] [INFO] [ClaimDB] Loaded database for EU021 (26 panels).
+[2026-07-29T03:19:50.556Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:20:14.159Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T03:29:53.920Z] [INFO] [ClaimDB] Saved database for _boot (27 panels).
+[2026-07-29T03:29:53.922Z] [INFO] [ClaimDB] Saved database for EU011 (27 panels).
+[2026-07-29T03:29:53.924Z] [INFO] [ClaimDB] Saved database for EU013 (27 panels).
+[2026-07-29T03:29:53.926Z] [INFO] [ClaimDB] Saved database for EU021 (27 panels).
+[2026-07-29T03:30:04.386Z] [INFO] [Logger] Global error handlers installed.
+[2026-07-29T03:30:05.565Z] [INFO] [Boot] Claim database loaded successfully.
+[2026-07-29T03:30:05.850Z] [INFO] [ClaimDB] Loaded database for EU011 (26 panels).
+[2026-07-29T03:30:05.851Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:30:05.851Z] [INFO] [ClaimDB] Loaded database for EU013 (26 panels).
+[2026-07-29T03:30:05.852Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:30:05.853Z] [INFO] [ClaimDB] Loaded database for EU021 (26 panels).
+[2026-07-29T03:30:05.853Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:30:05.862Z] [INFO] [Claim] Migrated _lastKilledAt timestamp for 2 existing boss entries.
+[2026-07-29T03:30:05.866Z] [INFO] [Claim] Migrated _lastKilledAt timestamp for 1 existing boss entries.
+[2026-07-29T03:30:05.867Z] [INFO] [Claim] Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).
+[2026-07-29T03:30:05.870Z] [INFO] [ClaimDB] Loaded database for EU011 (26 panels).
+[2026-07-29T03:30:05.871Z] [INFO] [ClaimDB] Initialized EU011 with 26 panel(s).
+[2026-07-29T03:30:23.150Z] [INFO] [ClaimDB] Loaded database for EU013 (26 panels).
+[2026-07-29T03:30:23.151Z] [INFO] [ClaimDB] Initialized EU013 with 26 panel(s).
+[2026-07-29T03:30:43.731Z] [INFO] [ClaimDB] Loaded database for EU021 (26 panels).
+[2026-07-29T03:30:43.732Z] [INFO] [ClaimDB] Initialized EU021 with 26 panel(s).
+[2026-07-29T03:31:05.483Z] [INFO] [Boot] Re-exporting votes to Google Sheets...
+[2026-07-29T06:37:48.474Z] [INFO] [Claim] Failed to refresh panel 8peak: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.138.232:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.128.233:443, timeout: 10000ms)
+[2026-07-29T06:37:59.060Z] [INFO] [Claim] Failed to refresh panel 11squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.138.232:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.128.233:443, timeout: 10000ms)
+[2026-07-29T06:38:03.084Z] [INFO] [Claim] Failed to refresh panel 8peak: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.138.232:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.128.233:443, timeout: 10000ms)
+[2026-07-29T06:38:09.625Z] [INFO] [Claim] Failed to refresh panel 12squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.138.232:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.128.233:443, timeout: 10000ms)
+[2026-07-29T06:38:13.640Z] [INFO] [Claim] Failed to refresh panel 11squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.138.232:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.128.233:443, timeout: 10000ms)
+[2026-07-29T06:38:18.169Z] [INFO] [Claim] Failed to refresh panel 8peak: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:20.188Z] [INFO] [Claim] Failed to refresh panel 12randomevent: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:24.221Z] [INFO] [Claim] Failed to refresh panel 12squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:28.747Z] [INFO] [Claim] Failed to refresh panel 11squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:30.752Z] [INFO] [Claim] Failed to refresh panel 8peak: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:33.280Z] [INFO] [Claim] Failed to refresh panel 8peak: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:34.783Z] [INFO] [Claim] Failed to refresh panel 12randomevent: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:39.307Z] [INFO] [Claim] Failed to refresh panel 12squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:41.310Z] [INFO] [Claim] Failed to refresh panel 11squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:45.356Z] [INFO] [Claim] Failed to refresh panel 8peak: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:48.389Z] [INFO] [Claim] Failed to refresh panel 8peak: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:49.909Z] [INFO] [Claim] Failed to refresh panel 12randomevent: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:51.915Z] [INFO] [Claim] Failed to refresh panel 12squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T06:38:51.918Z] [INFO] [Claim] Failed to refresh panel 11squareevents: Connect Timeout Error (attempted addresses: 162.159.136.232:443, 162.159.128.233:443, 162.159.135.232:443, 162.159.137.232:443, 162.159.138.232:443, timeout: 10000ms)
+[2026-07-29T13:09:16.592Z] [INFO] [ClaimDB] Saved database for _boot (27 panels).
+[2026-07-29T13:09:16.669Z] [INFO] [ClaimDB] Saved database for EU011 (27 panels).
+[2026-07-29T13:09:16.728Z] [INFO] [ClaimDB] Saved database for EU013 (27 panels).
+[2026-07-29T13:09:16.782Z] [INFO] [ClaimDB] Saved database for EU021 (27 panels).
+[2026-07-29T16:00:00.022Z] [INFO] [Claim] Salary poll closed for week 2026-07-27

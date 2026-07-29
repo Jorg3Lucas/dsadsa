@@ -42,34 +42,42 @@ async function processDMQueue() {
     dmQueueProcessing = false;
 }
 
-/** Edit a panel's embed + buttons in-place, or recover by re-sending if the cached message is gone. @param {string} key - Panel key */
+/**
+ * Edit a panel's embed + buttons in-place, or recover by re-sending if the cached message is gone.
+ * Uses db._panelMapping (which IS per-world via the Proxy) as the primary source of truth,
+ * so it works correctly even when lastMessages has entries from a different world.
+ * @param {string} key - Panel key
+ */
 export async function refreshVisualPanel(key) {
-    const cachedMsg = lastMessages[key];
-    if (cachedMsg) {try {
-        await cachedMsg.edit({
+    // Primary source: per-world _panelMapping (works correctly across all worlds)
+    const mapping = db._panelMapping?.[key];
+    if (!mapping?.channelId || !mapping?.messageId) return;
+
+    try {
+        // Fetch the message from the correct channel
+        const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+        if (!channel) return;
+        const msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
+        if (msg) {
+            await msg.edit({
+                embeds: [renderEmbed(key)],
+                components: renderButtons(key)
+            });
+            // Update lastMessages cache with the correct message
+            lastMessages[key] = msg;
+            return;
+        }
+        // Message was deleted — re-send
+        const newMsg = await channel.send({
             embeds: [renderEmbed(key)],
             components: renderButtons(key)
-        })
-    } catch (n) {
-        delete lastMessages[key];
-        try {
-            const mapping = db._panelMapping && db._panelMapping[key];
-            if (mapping && mapping.channelId && mapping.messageId) {
-                const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
-                if (channel) {
-                    const newMsg = await channel.send({
-                        embeds: [renderEmbed(key)],
-                        components: renderButtons(key)
-                    });
-                    lastMessages[key] = newMsg;
-                    db._panelMapping[key] = { channelId: channel.id, messageId: newMsg.id };
-                    saveLocalStorage();
-                }
-            }
-        } catch (e) {
-            logEvent(`Failed to recover panel ${key}: ${e.message}`);
-        }
-    }}
+        });
+        lastMessages[key] = newMsg;
+        db._panelMapping[key] = { channelId: channel.id, messageId: newMsg.id };
+        saveLocalStorage();
+    } catch (e) {
+        logEvent(`Failed to refresh panel ${key}: ${e.message}`);
+    }
 }
 
 /** Send a DM to a user through the rate-limited queue (auto-skips opt-outs). @param {string} uid - Discord user ID @param {string} msgContent - Message text */

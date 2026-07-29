@@ -11,12 +11,12 @@ import {
     EmbedBuilder as e
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
-import { db, saveLocalStorage } from "../core/state.js";
+import { db, saveLocalStorage, setCurrentWorld, worldDbs } from "../core/state.js";
 import { refreshVisualPanel } from "./panel-utils.js";
 import { noop } from "../core/config.js";
 import { sendTimedConfirm, clearConfirmTimeout } from "./management-helpers.js";
 
-/** Show the reservation management panel with Fury/Frenzy reservation status. */
+/** Show the reservation management panel with Fury/Frenzy reservation status across ALL worlds. */
 export async function handleMgmtReservations(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
@@ -28,39 +28,46 @@ export async function handleMgmtReservations(interaction) {
     const furyReservations = [];
     const frenzyReservations = [];
 
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        const current = db[key];
-        if ("event_group" !== current.type) continue;
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
 
-        const floor = key.includes("11") ? "MS11" : "MS12";
+        for (const key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            const current = db[key];
+            if ("event_group" !== current.type) continue;
 
-        for (const ev of ["fury", "frenzy"]) {
-            const evData = current[ev];
-            if (!evData || evData.type !== "fixed") continue;
+            const floor = `[${world}] ${key.includes("11") ? "MS11" : "MS12"}`;
 
-            if (evData.reservedFor || evData.reservations) {
-                const targetList = ev === "fury" ? furyReservations : frenzyReservations;
-                let desc = `**${floor}** — `;
+            for (const ev of ["fury", "frenzy"]) {
+                const evData = current[ev];
+                if (!evData || evData.type !== "fixed") continue;
 
-                if (evData.reservedFor) {
-                    desc += `All hours → ${evData.reservedByName || evData.reservedFor}`;
-                } else if (evData.reservations) {
-                    if (evData.reservations._all) {
-                        desc += `All hours → ${evData.reservations._all.userName}`;
-                    } else {
-                        const slots = Object.entries(evData.reservations)
-                            .filter(([h]) => !h.startsWith("_"))
-                            .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                            .map(([h, u]) => `${h}:00→${u.userName}`)
-                            .join(", ");
-                        desc += slots || "None";
+                if (evData.reservedFor || evData.reservations) {
+                    const targetList = ev === "fury" ? furyReservations : frenzyReservations;
+                    let desc = `**${floor}** — `;
+
+                    if (evData.reservedFor) {
+                        desc += `All hours → ${evData.reservedByName || evData.reservedFor}`;
+                    } else if (evData.reservations) {
+                        if (evData.reservations._all) {
+                            desc += `All hours → ${evData.reservations._all.userName}`;
+                        } else {
+                            const slots = Object.entries(evData.reservations)
+                                .filter(([h]) => !h.startsWith("_"))
+                                .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                .map(([h, u]) => `${h}:00→${u.userName}`)
+                                .join(", ");
+                            desc += slots || "None";
+                        }
                     }
+                    targetList.push(desc);
                 }
-                targetList.push(desc);
             }
         }
     }
+
+    setCurrentWorld(null);
 
     const noRes = getMsg("management.reservations.noRes");
     const embed = new e()
@@ -86,7 +93,7 @@ export async function handleMgmtReservations(interaction) {
     }).catch(noop);
 }
 
-/** Show confirmation prompt before clearing all reservations. */
+/** Show confirmation prompt before clearing all reservations across ALL worlds. */
 export async function handleMgmtReservationsClear(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
@@ -96,16 +103,21 @@ export async function handleMgmtReservationsClear(interaction) {
     }
 
     let totalCount = 0;
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        if ("event_group" !== db[key].type) continue;
-        for (const ev of ["fury", "frenzy"]) {
-            const evData = db[key][ev];
-            if (evData && evData.type === "fixed" && (evData.reservedFor || evData.reservations)) {
-                totalCount++;
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
+        for (const key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            if ("event_group" !== db[key].type) continue;
+            for (const ev of ["fury", "frenzy"]) {
+                const evData = db[key][ev];
+                if (evData && evData.type === "fixed" && (evData.reservedFor || evData.reservations)) {
+                    totalCount++;
+                }
             }
         }
     }
+    setCurrentWorld(null);
 
     if (totalCount === 0) {
         return await interaction.update({
@@ -130,7 +142,7 @@ export async function handleMgmtReservationsClear(interaction) {
     );
 }
 
-/** Execute clearing all Fury+Frenzy reservations. */
+/** Execute clearing all Fury+Frenzy reservations across ALL worlds. */
 export async function handleMgmtReservationsClearExecute(interaction) {
     clearConfirmTimeout(interaction);
     if (!interaction.member.permissions.has("ManageMessages")) {
@@ -141,31 +153,39 @@ export async function handleMgmtReservationsClearExecute(interaction) {
     }
 
     let clearedCount = 0;
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        const current = db[key];
-        if ("event_group" !== current.type) continue;
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
 
-        for (const ev of ["fury", "frenzy"]) {
-            const evData = current[ev];
-            if (!evData || evData.type !== "fixed") continue;
-            if (evData.reservedFor || evData.reservations) {
-                evData.reservedFor = null;
-                evData.reservedByName = null;
-                evData.reservations = null;
-                clearedCount++;
+        let worldCleared = 0;
+        for (const key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            const current = db[key];
+            if ("event_group" !== current.type) continue;
+
+            for (const ev of ["fury", "frenzy"]) {
+                const evData = current[ev];
+                if (!evData || evData.type !== "fixed") continue;
+                if (evData.reservedFor || evData.reservations) {
+                    evData.reservedFor = null;
+                    evData.reservedByName = null;
+                    evData.reservations = null;
+                    worldCleared++;
+                    clearedCount++;
+                }
+            }
+        }
+
+        if (worldCleared > 0) {
+            saveLocalStorage();
+            for (const key in db) {
+                if (!db[key] || key.startsWith("_")) continue;
+                await refreshVisualPanel(key);
             }
         }
     }
 
-    if (clearedCount > 0) {
-        saveLocalStorage();
-        for (const key in db) {
-            if (!db[key] || key.startsWith("_")) continue;
-            await refreshVisualPanel(key);
-        }
-    }
-
+    setCurrentWorld(null);
     return await interaction.update({
         content: getMsg("management.reservations.clearDone", { count: clearedCount }),
         components: [

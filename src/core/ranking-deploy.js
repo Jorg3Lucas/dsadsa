@@ -97,6 +97,11 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 6, name: 'member', description: 'The Discord member to assign as elder.', required: true }
                 ]
             },
+            {
+                name: 'nuke',
+                description: '💣 [Admin] Delete ALL setup-created channels, categories, and roles. Irreversible!',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {

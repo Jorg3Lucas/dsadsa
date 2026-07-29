@@ -10,14 +10,14 @@ import {
     StringSelectMenuBuilder as i
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
-import { db, saveLocalStorage } from "../core/state.js";
+import { db, saveLocalStorage, setCurrentWorld, worldDbs } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import { STATUS_CLAIMED } from "../core/constants.js";
 import { freeAntidemonRoom, getAntidemonRoomKeys, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 import { noop } from "../core/config.js";
 
-/** Show the kick menu with a select of all active claims grouped by panel. */
+/** Show the kick menu with a select of all active claims grouped by panel across ALL worlds. */
 export async function handleMgmtPanelsKickMenu(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
@@ -27,54 +27,79 @@ export async function handleMgmtPanelsKickMenu(interaction) {
     }
 
     const optionsList = [];
-    for (const key in db) {
-        const current = db[key];
-        if (!current || key.startsWith("_")) continue;
-        const cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
-        if ("event_group" === current.type) {
-            const egKeys = getEventGroupKeys(current);
-            for (const ev of egKeys) {
-                const evData = current[ev];
-                if (evData.ownerId) {
-                    optionsList.push({
-                        label: `${cleanedTitle} - ${evData.name}`,
-                        description: `👑 ${evData.ownerName}`,
-                        value: `kick-${key}-${ev}-${evData.ownerId}`
-                    });
+    const seenValues = new Set();
+
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
+
+        for (const key in db) {
+            const current = db[key];
+            if (!current || key.startsWith("_")) continue;
+            const cleanedTitle = current.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "");
+            if ("event_group" === current.type) {
+                const egKeys = getEventGroupKeys(current);
+                for (const ev of egKeys) {
+                    const evData = current[ev];
+                    if (evData.ownerId) {
+                        const val = `kick-${key}-${ev}-${evData.ownerId}`;
+                        if (!seenValues.has(val)) {
+                            seenValues.add(val);
+                            optionsList.push({
+                                label: `[${world}] ${cleanedTitle} - ${evData.name}`,
+                                description: `👑 ${evData.ownerName}`,
+                                value: val
+                            });
+                        }
+                    }
                 }
-            }
-        } else if ("antidemon" === current.type) {
-            const antiRoomKeys = getAntidemonRoomKeys(key);
-            for (const room of antiRoomKeys) {
-                if (current[room].status === STATUS_CLAIMED && current[room].ownerId) {
-                    optionsList.push({
-                        label: `${cleanedTitle} - ${room.toUpperCase()} Room`,
-                        description: `👑 ${current[room].ownerName}`,
-                        value: `kick-${key}-${room}-${current[room].ownerId}`
-                    });
+            } else if ("antidemon" === current.type) {
+                const antiRoomKeys = getAntidemonRoomKeys(key);
+                for (const room of antiRoomKeys) {
+                    if (current[room].status === STATUS_CLAIMED && current[room].ownerId) {
+                        const val = `kick-${key}-${room}-${current[room].ownerId}`;
+                        if (!seenValues.has(val)) {
+                            seenValues.add(val);
+                            optionsList.push({
+                                label: `[${world}] ${cleanedTitle} - ${room.toUpperCase()} Room`,
+                                description: `👑 ${current[room].ownerName}`,
+                                value: val
+                            });
+                        }
+                    }
                 }
-            }
-        } else if ("summon" === current.type) {
-            const summonProps = getSummonRoomKeys(key);
-            for (const loc of summonProps) {
-                if (current[loc].status === STATUS_CLAIMED && current[loc].ownerId) {
-                    optionsList.push({
-                        label: `${cleanedTitle} - ${current[loc].name}`,
-                        description: `👑 ${current[loc].ownerName}`,
-                        value: `kick-${key}-${loc}-${current[loc].ownerId}`
-                    });
+            } else if ("summon" === current.type) {
+                const summonProps = getSummonRoomKeys(key);
+                for (const loc of summonProps) {
+                    if (current[loc].status === STATUS_CLAIMED && current[loc].ownerId) {
+                        const val = `kick-${key}-${loc}-${current[loc].ownerId}`;
+                        if (!seenValues.has(val)) {
+                            seenValues.add(val);
+                            optionsList.push({
+                                label: `[${world}] ${cleanedTitle} - ${current[loc].name}`,
+                                description: `👑 ${current[loc].ownerName}`,
+                                value: val
+                            });
+                        }
+                    }
                 }
-            }
-        } else {
-            if (current.ownerId) {
-                optionsList.push({
-                    label: `${cleanedTitle}`,
-                    description: `👑 ${current.ownerName}`,
-                    value: `kick-${key}-floor-${current.ownerId}`
-                });
+            } else {
+                if (current.ownerId) {
+                    const val = `kick-${key}-floor-${current.ownerId}`;
+                    if (!seenValues.has(val)) {
+                        seenValues.add(val);
+                        optionsList.push({
+                            label: `[${world}] ${cleanedTitle}`,
+                            description: `👑 ${current.ownerName}`,
+                            value: val
+                        });
+                    }
+                }
             }
         }
     }
+
+    setCurrentWorld(null);
 
     if (optionsList.length === 0) {
         return await interaction.update({
@@ -99,7 +124,7 @@ export async function handleMgmtPanelsKickMenu(interaction) {
     }).catch(noop);
 }
 
-/** Execute the panel kick for the selected claim — removes owner, logs event, refreshes panel. */
+/** Execute the panel kick for the selected claim — removes owner, logs event, refreshes panel. Searches all worlds. */
 export async function handleMgmtPanelsKickExecute(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
@@ -113,9 +138,23 @@ export async function handleMgmtPanelsKickExecute(interaction) {
     const pKey = parts[1];
     const roomType = parts[2];
     const targetUid = parts.slice(3).join("-");
-    const targetFloor = db[pKey];
 
-    if (targetFloor) {
+    // Search for the panel key in all worlds
+    let targetFloor = null;
+    let foundWorld = null;
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
+        targetFloor = db[pKey];
+        if (targetFloor) {
+            foundWorld = world;
+            break;
+        }
+    }
+
+    if (targetFloor && foundWorld) {
+        setCurrentWorld(foundWorld);
+
         if ("event_group" === targetFloor.type) {
             const evData = targetFloor[roomType];
             if (evData && evData.ownerId) {
@@ -160,6 +199,7 @@ export async function handleMgmtPanelsKickExecute(interaction) {
         }
     }
 
+    setCurrentWorld(null);
     return await interaction.update({
         content: getMsg("system.kickSuccess"),
         components: [

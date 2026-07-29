@@ -10,7 +10,7 @@ import {
     StringSelectMenuBuilder as i
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
-import { db, lastMessages, saveLocalStorage } from "../core/state.js";
+import { db, lastMessages, saveLocalStorage, setCurrentWorld, worldDbs } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { noop } from "../core/config.js";
 
@@ -50,7 +50,7 @@ export async function handleMgmtPanelsDeploy(interaction) {
     }).catch(noop);
 }
 
-/** Execute the panel deploy for the selected configuration — sends embeds and stores message IDs. */
+/** Execute the panel deploy for the selected configuration — sends embeds and stores message IDs. Deploys from ALL worlds. */
 export async function handleMgmtPanelsDeployExecute(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
@@ -94,31 +94,40 @@ export async function handleMgmtPanelsDeployExecute(interaction) {
         panelKeys.push("12randomevent", "summon");
     }
 
-    if (!db._panelMapping) db._panelMapping = {};
     let deployedCount = 0;
 
-    for (const key of panelKeys) {
-        if (db._panelMapping[key] && db._panelMapping[key].channelId === interaction.channelId) {
-            try {
-                const oldMsg = await interaction.channel.messages.fetch(db._panelMapping[key].messageId).catch(() => null);
-                if (oldMsg) await oldMsg.delete().catch(noop);
-            } catch (e) {
-                // Silently ignore — message may have been deleted already
+    // Deploy panels for each world
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
+
+        if (!db._panelMapping) db._panelMapping = {};
+
+        for (const key of panelKeys) {
+            if (db._panelMapping[key] && db._panelMapping[key].channelId === interaction.channelId) {
+                try {
+                    const oldMsg = await interaction.channel.messages.fetch(db._panelMapping[key].messageId).catch(() => null);
+                    if (oldMsg) await oldMsg.delete().catch(noop);
+                } catch { /* message may have been deleted */ }
             }
+
+            if (!db[key]) continue; // skip if this world doesn't have this panel
+
+            const sent = await interaction.channel.send({
+                embeds: [renderEmbed(key)],
+                components: renderButtons(key)
+            });
+            lastMessages[key] = sent;
+            db._panelMapping[key] = { channelId: interaction.channelId, messageId: sent.id };
+            deployedCount++;
         }
 
-        const sent = await interaction.channel.send({
-            embeds: [renderEmbed(key)],
-            components: renderButtons(key)
-        });
-        lastMessages[key] = sent;
-        db._panelMapping[key] = { channelId: interaction.channelId, messageId: sent.id };
-        deployedCount++;
+        saveLocalStorage();
     }
 
-    saveLocalStorage();
+    setCurrentWorld(null);
     return await interaction.update({
-        content: `✅ **Deployed ${deployedCount} panel(s)** in this channel.`,
+        content: `✅ **Deployed ${deployedCount} panel(s)** across ${Object.keys(worldDbs).filter(w => w !== '_boot').length} world(s).`,
         components: [
             new t().addComponents(new n().setCustomId("mgmt-panels").setEmoji("🔙").setLabel("Back").setStyle(a.Secondary))
         ]

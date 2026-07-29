@@ -18,7 +18,37 @@ export function setAdminChannelId(id) {
     adminChannelId = id;
 }
 
-export const DISCORD_SERVER_ID = '1481566364631044119';
+// ==========================================
+// 🏷️ CLAN / WORLD ROLE MAPPINGS
+// Maps world/server names → Discord role IDs.
+// Populated dynamically via /setup or manually.
+// Start empty — defaults to MEMBER_ROLE_ID fallback.
+// ==========================================
+
+/** @type {Object<string, string>} worldName → roleId */
+export const CLAN_ROLES = {};
+
+/** Single global elder role ID (null until configured or set via world setup). */
+export let ELDER_ROLE_ID = null;
+
+/**
+ * Set the global elder role ID.
+ */
+export function setElderRoleId(id) {
+    ELDER_ROLE_ID = id;
+}
+
+/** Single approval channel ID for owner/pilot registrations (null until configured). */
+export let APPROVAL_CHANNEL_ID = null;
+
+/**
+ * Set the approval channel ID.
+ */
+export function setApprovalChannelId(id) {
+    APPROVAL_CHANNEL_ID = id;
+}
+
+export const DISCORD_SERVER_ID = process.env.GUILD_ID || process.env.DISCORD_SERVER_ID || '1481566364631044119';
 
 export const MEMBER_ROLE_ID = '1481568299966926879';
 

@@ -10,11 +10,11 @@ import {
     EmbedBuilder as e
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
-import { db } from "../core/state.js";
+import { db, setCurrentWorld, worldDbs } from "../core/state.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 import { noop } from "../core/config.js";
 
-/** Show the management panel overview with total panel and active claim counts. */
+/** Show the management panel overview with total panel and active claim counts across ALL worlds. */
 export async function handleMgmtPanels(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
@@ -25,30 +25,39 @@ export async function handleMgmtPanels(interaction) {
 
     let totalPanels = 0;
     let activeClaims = 0;
+    let worldCount = 0;
 
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        totalPanels++;
-        const current = db[key];
-        if (current.ownerId) activeClaims++;
-        if ("event_group" === current.type) {
-            const egKeys = getEventGroupKeys(current);
-            for (const ev of egKeys) {
-                if (current[ev] && current[ev].ownerId) activeClaims++;
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        worldCount++;
+        setCurrentWorld(world);
+
+        for (const key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            totalPanels++;
+            const current = db[key];
+            if (current.ownerId) activeClaims++;
+            if ("event_group" === current.type) {
+                const egKeys = getEventGroupKeys(current);
+                for (const ev of egKeys) {
+                    if (current[ev] && current[ev].ownerId) activeClaims++;
+                }
             }
-        }
-        if ("antidemon" === current.type || "summon" === current.type) {
-            const props = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
-            for (const p of props) {
-                if (current[p] && (current[p].status === "🔴 Claimed" || current[p].ownerId)) activeClaims++;
+            if ("antidemon" === current.type || "summon" === current.type) {
+                const props = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
+                for (const p of props) {
+                    if (current[p] && (current[p].status === "🔴 Claimed" || current[p].ownerId)) activeClaims++;
+                }
             }
         }
     }
 
+    setCurrentWorld(null);
+
     const embed = new e()
         .setTitle(getMsg("management.panels.title"))
         .setColor("#2b2d31")
-        .setDescription(getMsg("management.panels.desc", { total: totalPanels, active: activeClaims }))
+        .setDescription(getMsg("management.panels.desc", { total: totalPanels, active: activeClaims }) + `\n\n🌍 **${worldCount} world(s)** configured.`)
         .setTimestamp();
 
     return await interaction.update({

@@ -126,6 +126,11 @@ const commands = [
     description: '📧 [Admin] Send notifications to server members',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
+  {
+    name: 'nuke',
+    description: '💣 [Admin] Delete ALL setup-created channels, categories, and roles. Irreversible!',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

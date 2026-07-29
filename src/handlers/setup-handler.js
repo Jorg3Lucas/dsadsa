@@ -10,7 +10,8 @@ import {
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
     ButtonStyle,
-    EmbedBuilder
+    EmbedBuilder,
+    PermissionFlagsBits
 } from 'discord.js';
 import { WORLD_IDS, WELCOME_PANEL_MESSAGE, ensureConfig, setAdminChannelId } from '../core/ranking-constants.js';
 import { setupTicketPanel } from './ticket-system.js';
@@ -29,6 +30,40 @@ function worldCategoryName(world) { return `🌍 ${world}`; }
 function worldClaimsCatName(world) { return `📁 ${world} Claims`; }
 function worldLogsCatName(world) { return `📁 ${world} Logs`; }
 function worldChatName(world) { return `💬・chat-${world.toLowerCase()}`; }
+
+// ══════════════════════════════════════════
+// HELPER: Find existing by name or create
+// Prevents duplicate name errors on re-setup.
+// ══════════════════════════════════════════
+
+/** Find an existing guild role by name or create a new one. */
+async function findOrCreateRole(guild, name, opts) {
+    const existing = guild.roles.cache.find(r => r.name === name);
+    if (existing) return existing;
+    return await guild.roles.create({ name, ...opts });
+}
+
+/** Find an existing guild category by name or create a new one. */
+async function findOrCreateCategory(guild, name, opts) {
+    const existing = guild.channels.cache.find(c => c.name === name && c.type === 4);
+    if (existing) return existing;
+    return await guild.channels.create({ name, type: 4, ...opts });
+}
+
+/**
+ * Find an existing text channel by name under a parent, or create a new one.
+ * If a channel with the same name exists, it is deleted and re-created
+ * to ensure clean state.
+ */
+async function findOrCreateTextChannel(guild, name, parentId, opts = {}) {
+    const existing = guild.channels.cache.find(
+        c => c.name === name && c.type === 0 && c.parentId === parentId
+    );
+    if (existing) {
+        await existing.delete('Re-creating channel via /setup').catch(() => {});
+    }
+    return await guild.channels.create({ name, type: 0, parent: parentId, ...opts });
+}
 
 
 
@@ -211,7 +246,7 @@ export async function handleSetupConfirm(interaction, db, saveLocalStorage, logE
                 ticketChannelId: result.ticketChannelId,
                 chatChannelId: result.chatChannelId,
                 elderPostIds: result.elderPostIds,
-                claimChannelIds: result.claimChannelIds,
+                floorChannels: result.floorChannels,
                 logChannelIds: result.logChannelIds,
                 elders: [],
                 setupAt: new Date().toISOString()
@@ -260,14 +295,12 @@ export async function handleSetupConfirm(interaction, db, saveLocalStorage, logE
 // ══════════════════════════════════════════
 
 async function setupWorld(guild, world, db) {
-    // ── Create roles ──
-    const memberRole = await guild.roles.create({
-        name: worldRoleName(world),
+    // ── Create or reuse roles (prevents duplicate name errors) ──
+    const memberRole = await findOrCreateRole(guild, worldRoleName(world), {
         color: 0x2b2d31,
         reason: `[Setup] ${world} member role`
     });
-    const elderRole = await guild.roles.create({
-        name: worldElderRoleName(world),
+    const elderRole = await findOrCreateRole(guild, worldElderRoleName(world), {
         color: 0xffaa00,
         reason: `[Setup] ${world} elder role`
     });
@@ -275,9 +308,7 @@ async function setupWorld(guild, world, db) {
     // ═════════════════════════════════════
     // CATEGORY 1: MAIN WORLD CHANNELS
     // ═════════════════════════════════════
-    const mainCat = await guild.channels.create({
-        name: worldCategoryName(world),
-        type: 4,
+    const mainCat = await findOrCreateCategory(guild, worldCategoryName(world), {
         reason: `[Setup] ${world} main`
     });
     // Category default: deny everyone, member can view+send, elder can view+send+manage
@@ -289,11 +320,25 @@ async function setupWorld(guild, world, db) {
         ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true, ManageMessages: true
     }).catch(() => {});
 
-    // ── Welcome channel (everyone can view after getting member role) ──
-    const welcomeChannel = await guild.channels.create({
-        name: '👋・welcome', type: 0, parent: mainCat.id,
+    // ── Welcome channel ──
+    // Visible to EVERYONE (no role needed) — so newcomers can register.
+    // Hidden from members once they get the {World} Member role.
+    // Elders can still see and manage it.
+    const welcomeChannel = await findOrCreateTextChannel(guild, '👋・welcome', mainCat.id, {
         reason: `[Setup] ${world} welcome`
     });
+
+    // Override category permissions: @everyone can VIEW, members CANNOT view
+    await welcomeChannel.permissionOverwrites.create(guild.roles.everyone, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: false
+    }).catch(() => {});
+    await welcomeChannel.permissionOverwrites.create(memberRole.id, {
+        ViewChannel: false
+    }).catch(() => {});
+    await welcomeChannel.permissionOverwrites.create(elderRole.id, {
+        ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true
+    }).catch(() => {});
+
     await welcomeChannel.send({
         embeds: [{
             color: 0x57f287,
@@ -312,8 +357,7 @@ async function setupWorld(guild, world, db) {
     await welcomeChannel.send({ content: WELCOME_PANEL_MESSAGE, components: [regRow] });
 
     // ── Approvals channel (elder view only) ──
-    const approvalsChannel = await guild.channels.create({
-        name: '📋・approvals', type: 0, parent: mainCat.id,
+    const approvalsChannel = await findOrCreateTextChannel(guild, '📋・approvals', mainCat.id, {
         reason: `[Setup] ${world} approvals`
     });
     await approvalsChannel.permissionOverwrites.create(memberRole.id, { ViewChannel: false }).catch(() => {});
@@ -323,8 +367,7 @@ async function setupWorld(guild, world, db) {
     }
 
     // ── Tickets channel ──
-    const ticketChannel = await guild.channels.create({
-        name: '🎫・tickets', type: 0, parent: mainCat.id,
+    const ticketChannel = await findOrCreateTextChannel(guild, '🎫・tickets', mainCat.id, {
         reason: `[Setup] ${world} tickets`
     });
     await setupTicketPanel(ticketChannel);
@@ -338,8 +381,7 @@ async function setupWorld(guild, world, db) {
     ];
     const elderPostIds = {};
     for (const ch of elderPostChannels) {
-        const channel = await guild.channels.create({
-            name: ch.name, type: 0, parent: mainCat.id,
+        const channel = await findOrCreateTextChannel(guild, ch.name, mainCat.id, {
             reason: `[Setup] ${world} ${ch.name}`
         });
         // Remove send permission from members
@@ -350,17 +392,17 @@ async function setupWorld(guild, world, db) {
     }
 
     // ── Per-world chat (all members can talk) ──
-    const chatChannel = await guild.channels.create({
-        name: worldChatName(world), type: 0, parent: mainCat.id,
+    const chatChannel = await findOrCreateTextChannel(guild, worldChatName(world), mainCat.id, {
         reason: `[Setup] ${world} chat`
     });
 
     // ═════════════════════════════════════
     // CATEGORY 2: CLAIMS (read-only for all)
+    // Creates floor claim channels directly under the Claims
+    // category (Discord does NOT support nested categories).
+    // Panel embeds are sent by auto-channel-setup on boot.
     // ═════════════════════════════════════
-    const claimsCat = await guild.channels.create({
-        name: worldClaimsCatName(world),
-        type: 4,
+    const claimsCat = await findOrCreateCategory(guild, worldClaimsCatName(world), {
         reason: `[Setup] ${world} claims`
     });
     // Deny everyone, allow member+elder to VIEW only (no send)
@@ -372,29 +414,43 @@ async function setupWorld(guild, world, db) {
         ViewChannel: true, ReadMessageHistory: true, SendMessages: false
     }).catch(() => {});
 
-    const claimChannels = ['⚔️・claim-sp', '⚔️・claim-ms', '🎪・events'];
-    const claimChannelIds = {};
-    for (const name of claimChannels) {
-        const ch = await guild.channels.create({
-            name, type: 0, parent: claimsCat.id,
-            reason: `[Setup] ${world} ${name}`
+    // ── Floor channels (created directly under Claims category) ──
+    // Channel names are prefixed with floor to group them visually.
+    const floorChannelDefs = [
+        { name: '🔸┃7F-sp7',    panels: ['7peak'] },
+        { name: '🔹┃7F-ms7',    panels: ['7squarenormal', '7squareantidemon'] },
+        { name: '🔸┃8F-sp8',    panels: ['8peak'] },
+        { name: '🔹┃8F-ms8',    panels: ['8squarenormal', '8squareantidemon'] },
+        { name: '🔸┃9F-sp9',    panels: ['9peak'] },
+        { name: '🔹┃9F-ms9',    panels: ['9squarenormal', '9squareantidemon'] },
+        { name: '🔸┃10F-sp10',  panels: ['10peak'] },
+        { name: '🔹┃10F-ms10',  panels: ['10squarenormal', '10squareantidemon'] },
+        { name: '🔸┃11F-sp11',  panels: ['11peak', '11goblin'] },
+        { name: '🔹┃11F-ms11',  panels: ['11squareleaders', '11squareevents', '11squareantidemon', '11msgoblin'] },
+        { name: '🔸┃12F-sp12',  panels: ['12peak', '12randomevent', '12goblin'] },
+        { name: '🔹┃12F-ms12',  panels: ['12squareleaders', '12squareevents', '12squareantidemon', '12msgoblin'] },
+        { name: '🌀┃summons',    panels: ['summon'] }
+    ];
+
+    const floorChannels = {}; // { '🔸┃7F-sp7': channelId, ... }
+    for (const chDef of floorChannelDefs) {
+        const ch = await findOrCreateTextChannel(guild, chDef.name, claimsCat.id, {
+            reason: `[Setup] ${world} ${chDef.name}`
         });
-        // Explicitly deny send for both member and elder
+        // Read-only for members and elders
         await ch.permissionOverwrites.create(memberRole.id, {
             ViewChannel: true, ReadMessageHistory: true, SendMessages: false
         }).catch(() => {});
         await ch.permissionOverwrites.create(elderRole.id, {
             ViewChannel: true, ReadMessageHistory: true, SendMessages: false
         }).catch(() => {});
-        claimChannelIds[name] = ch.id;
+        floorChannels[chDef.name] = ch.id;
     }
 
     // ═════════════════════════════════════
     // CATEGORY 3: ACTIVITY LOGS (all can post)
     // ═════════════════════════════════════
-    const logsCat = await guild.channels.create({
-        name: worldLogsCatName(world),
-        type: 4,
+    const logsCat = await findOrCreateCategory(guild, worldLogsCatName(world), {
         reason: `[Setup] ${world} logs`
     });
     await logsCat.permissionOverwrites.create(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
@@ -408,8 +464,7 @@ async function setupWorld(guild, world, db) {
     const logChannels = ['🐉・world-boss', '💎・heist', '⚔️・valley-war', '🛡️・altar-defense', '🏰・ms-and-sp', '🤺・pvp'];
     const logChannelIds = {};
     for (const name of logChannels) {
-        const ch = await guild.channels.create({
-            name, type: 0, parent: logsCat.id,
+        const ch = await findOrCreateTextChannel(guild, name, logsCat.id, {
             reason: `[Setup] ${world} ${name}`
         });
         logChannelIds[name] = ch.id;
@@ -426,7 +481,7 @@ async function setupWorld(guild, world, db) {
         ticketChannelId: ticketChannel.id,
         chatChannelId: chatChannel.id,
         elderPostIds,
-        claimChannelIds,
+        floorChannels,
         logChannelIds
     };
 }
@@ -439,9 +494,7 @@ async function setupGeneralChannels(guild, db) {
     if (db.config._generalChannelsDone) return;
 
     // ── Alliance General category ──
-    const generalCat = await guild.channels.create({
-        name: '🌐 Alliance General',
-        type: 4,
+    const generalCat = await findOrCreateCategory(guild, '🌐 Alliance General', {
         reason: '[Setup] Alliance General'
     });
     // Restrict to @everyone deny by default
@@ -458,20 +511,17 @@ async function setupGeneralChannels(guild, db) {
     }
 
     // Market & Main chat — all members can write
-    const marketChannel = await guild.channels.create({
-        name: '🛒・market', type: 0, parent: generalCat.id,
+    const marketChannel = await findOrCreateTextChannel(guild, '🛒・market', generalCat.id, {
         reason: '[Setup] Alliance market'
     });
-    const mainChatChannel = await guild.channels.create({
-        name: '💬・main-chat', type: 0, parent: generalCat.id,
+    const mainChatChannel = await findOrCreateTextChannel(guild, '💬・main-chat', generalCat.id, {
         reason: '[Setup] Alliance main chat'
     });
 
     // Tower rules & Announcements & Allied list — all can view, only elders+admins write
     // We need to create these with proper permissions
     async function createElderPostChannel(name, emoji) {
-        const ch = await guild.channels.create({
-            name: `${emoji}・${name}`, type: 0, parent: generalCat.id,
+        const ch = await findOrCreateTextChannel(guild, `${emoji}・${name}`, generalCat.id, {
             reason: `[Setup] Alliance ${name}`
         });
         // Members can't send; elders keep send permission
@@ -495,12 +545,10 @@ async function setupGeneralChannels(guild, db) {
     const alliedListChannel = await createElderPostChannel('allied-list', '📋');
 
     // Create reminders + events channels under general category
-    const remindersChannel = await guild.channels.create({
-        name: '📢・reminders', type: 0, parent: generalCat.id,
+    const remindersChannel = await findOrCreateTextChannel(guild, '📢・reminders', generalCat.id, {
         reason: '[Setup] General reminders'
     });
-    const eventsChannel = await guild.channels.create({
-        name: '📅・events', type: 0, parent: generalCat.id,
+    const eventsChannel = await findOrCreateTextChannel(guild, '📅・events', generalCat.id, {
         reason: '[Setup] General events'
     });
 
@@ -624,4 +672,195 @@ export function getWorldElderIds(world, db) {
  */
 export function getWorldMemberRoleId(world, db) {
     return db.config?.worldSetup?.[world]?.roleMemberId || null;
+}
+
+// ══════════════════════════════════════════
+// 7. NUKE — Delete EVERYTHING in the guild
+// ══════════════════════════════════════════
+
+/**
+ * Confirmation timeout (5 minutes).
+ * Key: `${userId}-nuke` → { confirmed: boolean }
+ */
+const nukeConfirmations = {};
+const NUKE_CONFIRM_EXPIRY = 5 * 60 * 1000;
+
+// Roles that must NEVER be deleted
+const PROTECTED_ROLE_NAMES = new Set(['@everyone', 'Discord Bot', 'discord']);
+
+/**
+ * /nuke — Deletes ALL channels, categories, and editable roles in the guild.
+ * Only the channel where the command was run is preserved.
+ * Steps:
+ *   1. Confirm with a button (ephemeral).
+ *   2. Delete all text/voice channels
+ *   3. Delete all categories
+ *   4. Delete all editable, non-protected roles
+ *   5. Clear db.config
+ */
+export async function handleNuke(interaction, db, saveLocalStorage, logEvent) {
+    const cacheKey = `${interaction.user.id}-nuke`;
+
+    // ── Step 1: Show confirmation ──
+    const totalChannels = interaction.guild.channels.cache.size;
+    const totalRoles = interaction.guild.roles.cache.size;
+
+    const confirmEmbed = new EmbedBuilder()
+        .setTitle('💣 Confirm Nuke?')
+        .setColor(0xed4245)
+        .setDescription(
+            '⚠️ **This will permanently delete EVERYTHING:**\n\n' +
+            `📊 **Guild stats:**\n` +
+            `   🗂️ **${totalChannels}** channels/categories\n` +
+            `   🏷️ **${totalRoles}** roles\n\n` +
+            '• All channels will be deleted\n' +
+            '• All categories will be deleted\n' +
+            '• All custom roles will be deleted\n' +
+            '• **Exception:** The current channel is preserved\n' +
+            '• **Exception:** @everyone, bot roles, and managed roles are kept\n' +
+            '• All setup configuration will be cleared from the database\n\n' +
+            '**This action CANNOT be undone.** Click the button below to confirm.'
+        )
+        .setFooter({ text: 'Confirmation expires in 5 minutes' })
+        .setTimestamp();
+
+    const confirmRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('nuke_confirm')
+            .setLabel('💣 YES, NUKE EVERYTHING')
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('nuke_cancel')
+            .setLabel('❌ Cancel')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    nukeConfirmations[cacheKey] = { confirmed: false, timestamp: Date.now() };
+
+    return interaction.reply({
+        embeds: [confirmEmbed],
+        components: [confirmRow],
+        flags: 64
+    });
+}
+
+/**
+ * Handle the nuke confirmation button or cancel button.
+ */
+export async function handleNukeButton(interaction, db, saveLocalStorage, logEvent) {
+    const cacheKey = `${interaction.user.id}-nuke`;
+    const confirmation = nukeConfirmations[cacheKey];
+
+    if (!confirmation || (Date.now() - confirmation.timestamp > NUKE_CONFIRM_EXPIRY)) {
+        delete nukeConfirmations[cacheKey];
+        return interaction.update({
+            content: '⌛ This confirmation has expired. Run `/nuke` again.',
+            embeds: [],
+            components: [],
+            flags: 64
+        });
+    }
+
+    // Handle cancel
+    if (interaction.customId === 'nuke_cancel') {
+        delete nukeConfirmations[cacheKey];
+        return interaction.update({
+            content: '✅ Nuke cancelled. No changes were made.',
+            embeds: [],
+            components: [],
+            flags: 64
+        });
+    }
+
+    // ── Execute nuke ──
+    await interaction.update({
+        content: '💣 **Nuking...** Deleting channels, categories, and roles. This may take a moment.',
+        embeds: [],
+        components: [],
+        flags: 64
+    });
+
+    delete nukeConfirmations[cacheKey];
+
+    const guild = interaction.guild;
+    const safeChannelId = interaction.channelId;
+    const results = { channels: 0, categories: 0, roles: 0, errors: [] };
+
+    // ══════════════════════════════════════
+    // 1. DELETE ALL CHANNELS (except the safe channel)
+    // ══════════════════════════════════════
+    // Delete text/voice channels first, then categories.
+    // Sorting: text/voice channels sorted by position (higher first),
+    // then categories. This avoids permission issues.
+
+    const allChannels = [...guild.channels.cache.values()]
+        .filter(ch => ch.id !== safeChannelId) // Never delete the channel where /nuke was run
+        .sort((a, b) => (b.position || 0) - (a.position || 0));
+
+    for (const ch of allChannels) {
+        try {
+            await ch.delete('💣 Nuke command');
+            if (ch.type === 4) {
+                results.categories++;
+            } else {
+                results.channels++;
+            }
+        } catch (err) {
+            results.errors.push(`#${ch.name} (${ch.id}): ${err.message}`);
+        }
+    }
+
+    // ══════════════════════════════════════
+    // 2. DELETE ALL ROLES (except protected ones)
+    // ══════════════════════════════════════
+    const rolesToDelete = [...guild.roles.cache.values()]
+        .filter(role => {
+            // Never delete @everyone
+            if (role.name === '@everyone') return false;
+            // Never delete managed roles (Discord integrations, bots)
+            if (role.managed) return false;
+            // Never delete roles the bot can't edit (above its highest role)
+            if (!role.editable) return false;
+            // Skip roles with protected names
+            if (PROTECTED_ROLE_NAMES.has(role.name)) return false;
+            return true;
+        })
+        .sort((a, b) => b.position - a.position); // Highest positions first
+
+    for (const role of rolesToDelete) {
+        try {
+            await role.delete('💣 Nuke command');
+            results.roles++;
+        } catch (err) {
+            results.errors.push(`@${role.name} (${role.id}): ${err.message}`);
+        }
+    }
+
+    // ══════════════════════════════════════
+    // 3. CLEAR DATABASE CONFIG
+    // ══════════════════════════════════════
+    delete db.config.worldSetup;
+    delete db.config._generalChannelsDone;
+    delete db.config.generalChannels;
+    delete db.config._setupState;
+    if (db.config.adminChannelId) delete db.config.adminChannelId;
+    saveLocalStorage();
+
+    logEvent(`💣 Nuke executed by ${interaction.user.tag}: ${results.channels} channels, ${results.categories} categories, ${results.roles} roles deleted`);
+
+    // ── Build report ──
+    const reportEmbed = new EmbedBuilder()
+        .setTitle('💣 Nuke Complete!')
+        .setColor(results.errors.length === 0 ? 0x57f287 : 0xffee88)
+        .setDescription([
+            `📊 **Results:**`,
+            `   🗑️ Channels deleted: **${results.channels}**`,
+            `   🗑️ Categories deleted: **${results.categories}**`,
+            `   🗑️ Roles deleted: **${results.roles}**`,
+            `   ✅ Channel preserved: <#${safeChannelId}>`,
+            results.errors.length > 0 ? `\n⚠️ **Errors (${results.errors.length}):**\n${results.errors.slice(0, 10).join('\n')}` : ''
+        ].join('\n'))
+        .setTimestamp();
+
+    await interaction.followUp({ embeds: [reportEmbed], flags: 64 }).catch(() => {});
 }

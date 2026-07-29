@@ -5,7 +5,7 @@
 // ==========================================
 
 import { getMsg } from "../core/lang.js";
-import { db, dailyLogs, saveLocalStorage } from "../core/state.js";
+import { db, dailyLogs, saveLocalStorage, setCurrentWorld, worldDbs } from "../core/state.js";
 import { refreshVisualPanel, resetPanelData, notifyUserDM } from "../handlers/panel-utils.js";
 import { pushToDailyLogs, saveDailyLogs } from "../core/daily-logs.js";
 import { getFormattedTime12h } from "../core/time-utils.js";
@@ -70,29 +70,51 @@ async function handleAdminResetMenu(interaction) {
 
     if ("__all__" === resetKey) {
         let count = 0;
-        for (const key in db) {
-            if (!db[key] || key.startsWith("_")) continue;
-            resetPanelData(key);
-            await refreshVisualPanel(key);
-            count++;
+        // Iterate over all worlds
+        for (const world of Object.keys(worldDbs)) {
+            if (world === '_boot') continue;
+            setCurrentWorld(world);
+            for (const key in db) {
+                if (!db[key] || key.startsWith("_")) continue;
+                resetPanelData(key);
+                await refreshVisualPanel(key);
+                count++;
+            }
         }
         return await interaction.update({
-            content: `✅ Reset ${count} panels to defaults.`,
+            content: `✅ Reset ${count} panels to defaults across all worlds.`,
             components: []
         }).catch(noop);
     }
 
-    if (!db[resetKey]) {return await interaction.update({
+    // Single key reset — try current world first, then all worlds
+    if (db[resetKey]) {
+        resetPanelData(resetKey);
+        await refreshVisualPanel(resetKey);
+        return await interaction.update({
+            content: getMsg("system.resetPanelSuccess", { key: resetKey }),
+            components: []
+        }).catch(noop);
+    }
+
+    // Try other worlds
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
+        if (db[resetKey]) {
+            resetPanelData(resetKey);
+            await refreshVisualPanel(resetKey);
+            return await interaction.update({
+                content: getMsg("system.resetPanelSuccess", { key: resetKey }),
+                components: []
+            }).catch(noop);
+        }
+    }
+
+    return await interaction.update({
         content: getMsg("system.resetPanelNotFound", { key: resetKey }),
         components: [],
         flags: 64
-    }).catch(noop);}
-
-    resetPanelData(resetKey);
-    await refreshVisualPanel(resetKey);
-    return await interaction.update({
-        content: getMsg("system.resetPanelSuccess", { key: resetKey }),
-        components: []
     }).catch(noop);
 }
 
@@ -111,7 +133,17 @@ async function handleAdminKickMenu(interaction, _uid) {
 
     const [, , roomType, targetUid] = interaction.values[0].split("-");
     const pKey = interaction.values[0].split("-")[1];
-    const targetFloor = db[pKey];
+    let targetFloor = db[pKey];
+
+    // If not found in current world, search all worlds
+    if (!targetFloor) {
+        for (const world of Object.keys(worldDbs)) {
+            if (world === '_boot') continue;
+            setCurrentWorld(world);
+            targetFloor = db[pKey];
+            if (targetFloor) break;
+        }
+    }
 
     if (targetFloor) {
         if ("event_group" === targetFloor.type) {

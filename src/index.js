@@ -21,7 +21,8 @@ import {
     handleSetupSelectWorlds,
     handleSetupNav,
     handleSetupConfirm,
-    handleSetupCancel
+    handleSetupCancel,
+    handleNukeButton
 } from './handlers/setup-handler.js';
 import {
     handleNotifyCommand,
@@ -43,6 +44,7 @@ import {
 import { startAutoBackup, runBackup } from './auto-backup.js';
 import { DISCORD_SERVER_ID } from './core/ranking-constants.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
+import { saveAllWorldClaimDbs } from './core/claim-db-manager.js';
 
 // ── Claim system (eu11) ──
 import { initClaimSystem, handleClaimInteractions } from './handlers/bot.js';
@@ -171,15 +173,13 @@ client.once('clientReady', async () => {
     startAutoBackup(6);
 
     // ── Initialize claim system ──
-    initClaimSystem(client, claimDb, saveClaimStorage, (msg) => logger.info('Claim', msg), claimLastMessages, rankingDb, true);
-
-    // Auto-setup claim channels
-    try {
-        const { setupAllChannels } = await import('./handlers/auto-channel-setup.js');
-        await setupAllChannels(client, DISCORD_SERVER_ID);
-    } catch (err) {
-        logger.error('AutoSetup', 'Failed to auto-setup channels', err);
-    }
+    initClaimSystem(client, claimDb, saveClaimStorage, (msg) => logger.info('Claim', msg), claimLastMessages, rankingDb, true);    // Auto-setup claim channels (pass rankingDb so it reads per-world floor categories)
+        try {
+            const { setupAllChannels } = await import('./handlers/auto-channel-setup.js');
+            await setupAllChannels(client, DISCORD_SERVER_ID, rankingDb);
+        } catch (err) {
+            logger.error('AutoSetup', 'Failed to auto-setup channels', err);
+        }
 
     // Start tick interval
     try {
@@ -214,7 +214,7 @@ client.once('clientReady', async () => {
 // Graceful shutdown
 function handleShutdown(signal) {
     console.log(`\n🛑 [${signal}] Shutting down gracefully...`);
-    saveClaimStorage();
+    saveAllWorldClaimDbs();
     saveRankingDb(rankingDb);
     logEvent(`Shutting down (${signal})`);
     process.exit(0);
@@ -343,6 +343,11 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (interaction.customId === 'setup_cancel') {
                 return await handleSetupCancel(interaction, rankingDb, saveRankingDb, logEvent);
+            }
+
+            // Nuke buttons
+            if (interaction.customId === 'nuke_confirm' || interaction.customId === 'nuke_cancel') {
+                return await handleNukeButton(interaction, rankingDb, saveRankingDb, logEvent);
             }
             if (interaction.customId === 'setup_next_page') {
                 return await handleSetupNav(interaction, rankingDb, saveRankingDb, logEvent, 'next');

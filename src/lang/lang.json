@@ -1,98 +1,58 @@
 {
     "ranking": {
         "commands": {
-            "removepilot": {
-                "description": "Remove a specific pilot assigned to your account."
-            },
-            "forcesync": {
-                "description": "⚡ [Admin] Force an immediate synchronization with the official ranking portal."
-            },
+            "removepilot": { "description": "Remove a specific pilot assigned to your account." },
+            "forcesync": { "description": "⚡ [Admin] Force an immediate synchronization with the official ranking portal." },
             "manualregister": {
                 "description": "👑 [Admin] Register a player via cache lookup.",
-                "options": {
-                    "member": "Discord member.",
-                    "nickname": "In-game character name."
-                }
+                "options": { "member": "Discord member.", "nickname": "In-game character name." }
             },
             "manualpilot": {
                 "description": "👑 [Admin] Manually link a pilot to a character owner.",
-                "options": {
-                    "owner": "Select the primary character owner.",
-                    "pilot": "Select the Discord user acting as pilot."
-                }
+                "options": { "owner": "Select the primary character owner.", "pilot": "Select the Discord user acting as pilot." }
             },
-            "cleandb": {
-                "description": "👑 [Admin] Remove all duplicate nickname entries from the database."
-            },
+            "cleandb": { "description": "👑 [Admin] Remove all duplicate nickname entries from the database." },
             "manualremove": {
                 "description": "👑 [Admin] Completely remove a player's registration and profile.",
-                "options": {
-                    "member": "Discord member to clear."
-                }
+                "options": { "member": "Discord member to clear." }
             },
             "manualremovepilot": {
                 "description": "👑 [Admin] Manually remove a pilot from a character owner.",
-                "options": {
-                    "owner": "Select the character owner.",
-                    "pilot": "Select the pilot to remove."
-                }
+                "options": { "owner": "Select the character owner.", "pilot": "Select the pilot to remove." }
             },
-            "sendpanel": {
-                "description": "📋 [Admin] Send a fixed registration panel to this channel."
-            },
-            "listunregistered": {
-                "description": "📋 [Admin] List members with role but no registration, optionally DM them."
-            },
-            "pending": {
-                "description": "⏳ [Admin] List all pending registration requests with time remaining."
-            },
+            "sendpanel": { "description": "📋 [Admin] Send a fixed registration panel to this channel." },
+            "listunregistered": { "description": "📋 [Admin] List members with role but no registration, optionally DM them." },
+            "pending": { "description": "⏳ [Admin] List all pending registration requests with time remaining." },
             "fixnick": {
                 "description": "🔍 [Admin] Auto-correct a member's nickname via fuzzy ranking match.",
-                "options": {
-                    "member": "The member whose nickname needs fixing.",
-                    "nickname": "Optional: the correct nickname. If omitted, auto-detect from ranking."
-                }
+                "options": { "member": "The member whose nickname needs fixing.", "nickname": "Optional: the correct nickname. If omitted, auto-detect from ranking." }
             },
             "manualforce": {
                 "description": "👑 [Admin] Force register a member as permanent — no fuzzy/ranking checks.",
-                "options": {
-                    "member": "Discord member to register.",
-                    "nickname": "In-game character name (exact as typed)."
-                }
+                "options": { "member": "Discord member to register.", "nickname": "In-game character name (exact as typed)." }
             },
-            "notify": {
-                "description": "📧 [Admin] Send notifications to server members"
-            }
+            "notify": { "description": "📧 [Admin] Send notifications to server members" }
         },
         "responses": {
             "notify": {
                 "prompt": "📧 **Select the type of notification to send:**",
                 "placeholder": "Choose an option...",
-                "optionNoRole": {
-                    "label": "📧 No Role",
-                    "description": "Notify members with no roles via DM to register"
-                },
-                "optionDomination": {
-                    "label": "⚔️ Domination",
-                    "description": "Call all members to Domination"
-                },
-                "optionStandby": {
-                    "label": "⏳ Standby",
-                    "description": "Call all members to the Standby channel"
-                },
+                "optionNoRole": { "label": "📧 No Role", "description": "Notify members with no roles via DM to register" },
+                "optionDomination": { "label": "⚔️ Domination", "description": "Call all members to Domination" },
+                "optionStandby": { "label": "⏳ Standby", "description": "Call all members to the Standby channel" },
                 "confirmBtn": "✅ Yes, notify",
                 "cancelBtn": "❌ Cancel",
-                "noRoleConfirm": "⚠️ **Are you sure you want to DM ALL members with no roles?**\n\nThis may take a few minutes depending on the number of members.",
-                "dominationConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Domination?**\n\nThis may take a few minutes depending on the number of members.",
-                "standbyConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Standby?**\n\nThis may take a few minutes depending on the number of members.",
-                "sendingDms": "📧 **Sending DMs to {count} members...**\nPlease wait, this may take a few minutes.",
+                "noRoleConfirm": "⚠️ **Are you sure you want to DM ALL members with no roles?**\\n\\nThis may take a few minutes depending on the number of members.",
+                "dominationConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Domination?**\\n\\nThis may take a few minutes depending on the number of members.",
+                "standbyConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Standby?**\\n\\nThis may take a few minutes depending on the number of members.",
+                "sendingDms": "📧 **Sending DMs to {count} members...**\\nPlease wait, this may take a few minutes.",
                 "cancelled": "❌ **Notification cancelled.**",
-                "noRoleDm": "👋 Hey **{displayName}**, you don't have any roles on the server yet!\n\nPlease go to <#{channelId}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nGet your roles and join the fun! 🚀",
-                "noRoleResult": "📧 **Notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
-                "dominationDm": "⚔️ **ATTENTION — DOMINATION!**\n\n{displayName}, all members must join the Domination channel to fight NOW!\n\n🔗 <#{channelId}>\n\nJoin and help the clan win! 💪",
-                "standbyDm": "⏳ **ATTENTION — STANDBY!**\n\n{displayName}, all members must join the Standby channel and await commands!\n\n🔗 <#{channelId}>\n\nGet ready for instructions! 🎯",
-                "dominationResult": "⚔️ **Domination notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
-                "standbyResult": "⏳ **Standby notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**"
+                "noRoleDm": "👋 Hey **{displayName}**, you don't have any roles on the server yet!\\n\\nPlease go to <#{channelId}> and click:\\n👑 **Register as Owner** — if this is your main account\\n✈️ **Register as Pilot** — if you play for someone else\\n\\nGet your roles and join the fun! 🚀",
+                "noRoleResult": "📧 **Notification complete!**\\n\\n✉️ Sent: **{sent}** ✅\\n❌ Failed: **{failed}**",
+                "dominationDm": "⚔️ **ATTENTION — DOMINATION!**\\n\\n{displayName}, all members must join the Domination channel to fight NOW!\\n\\n🔗 <#{channelId}>\\n\\nJoin and help the clan win! 💪",
+                "standbyDm": "⏳ **ATTENTION — STANDBY!**\\n\\n{displayName}, all members must join the Standby channel and await commands!\\n\\n🔗 <#{channelId}>\\n\\nGet ready for instructions! 🎯",
+                "dominationResult": "⚔️ **Domination notification complete!**\\n\\n✉️ Sent: **{sent}** ✅\\n❌ Failed: **{failed}**",
+                "standbyResult": "⏳ **Standby notification complete!**\\n\\n✉️ Sent: **{sent}** ✅\\n❌ Failed: **{failed}**"
             },
             "removepilot": {
                 "noPilots": "❌ You don't have any active pilots on your account.",
@@ -127,7 +87,7 @@
             },
             "cleandb": {
                 "noDuplicates": "✨ **No duplicate entries found.**",
-                "success": "✅ **Database Cleanup complete!**\n\nDuplicate profiles removed:\n{list}"
+                "success": "✅ **Database Cleanup complete!**\\n\\nDuplicate profiles removed:\\n{list}"
             },
             "manualremove": {
                 "noRegistration": "❌ This user has no valid registration records.",
@@ -173,6 +133,177 @@
             "leaveError": "❌ Error executing member leave cleanup: {error}",
             "commandsRegistered": "✅ All slash commands registered successfully.",
             "commandsError": "❌ Slash command registration failed: {error}"
+        }
+    },
+    "system": {
+        "errorTitle": "❌ Error",
+        "permissionDeniedAdminDropped": "❌ You no longer have permission to use this.",
+        "resetNoPanels": "❌ No panels available to reset.",
+        "resetMenuTitle": "🔄 **Select a panel to reset to defaults:**",
+        "resetPanelNotFound": "❌ Panel **{key}** not found.",
+        "resetPanelSuccess": "✅ Panel **{key}** reset to defaults.",
+        "kickNoClaims": "✅ No active claims to kick.",
+        "kickPanelTitle": "👢 **Select a panel to kick the current owner:**",
+        "kickPanelPlaceholder": "Choose a panel...",
+        "kickSuccess": "✅ Player kicked successfully.",
+        "accessDenied": "❌ **Access denied.** This room is currently claimed by **{ownerName}**."
+    },
+    "rooms": {
+        "statusOverview": "📊 Status Overview",
+        "limitReached": "❌ You already have an active claim or queue. Resolve it first.",
+        "antidemonPasswordNotFound": "❌ Room not found.",
+        "antidemonPasswordNotOwner": "❌ You are not the owner of this room.",
+        "antidemonPasswordInputLabel": "Enter the password for this room:",
+        "antidemonPasswordInputPlaceholder": "Type the password...",
+        "antidemonPasswordSet": "✅ Password set for **{room}**: `{password}`",
+        "antidemonPasswordCleared": "✅ Password cleared for **{room}**.",
+        "antidemonPasswordNoChange": "ℹ️ Password is already set to this value.",
+        "antidemonPasswordLabel": "🔑 Password: {password}",
+        "antidemonPromptSelection": "Select a room to claim:",
+        "antidemonTicketPlaceholder": "Choose a room...",
+        "antidemonTimeoutCache": "⌛ This interaction expired. Please try again.",
+        "antidemonQueueLocked": "🔒 All rooms are currently occupied. Try again later.",
+        "antidemonQueueSuccessEphemeral": "✅ You joined the queue! You'll be notified when it's your turn.",
+        "antidemonMenuSelectClaim": "Select a room to claim:",
+        "antidemonSelectPlaceholder": "Choose a room...",
+        "antidemonRoomMidLeft": "Claim MID + LEFT rooms",
+        "antidemonRoomMidRight": "Claim MID + RIGHT rooms",
+        "antidemonRoomLeft": "Claim LEFT room only",
+        "antidemonRoomMid": "Claim MID room only",
+        "antidemonRoomRight": "Claim RIGHT room only",
+        "antidemonQueueLeft": "Queue for LEFT room",
+        "antidemonQueueMid": "Queue for MID room",
+        "antidemonQueueRight": "Queue for RIGHT room",
+        "antidemonQueueMidLeft": "Queue for MID + LEFT",
+        "antidemonQueueMidRight": "Queue for MID + RIGHT",
+        "slotAlreadyClaimed": "❌ **{room}** is already claimed by **{ownerName}**.",
+        "dmClaimStartedNotice": "✅ **Claim started!**\\n\\nYou claimed **{title}**.\\n⏱️ Window: {window}",
+        "dmQueueJoinedNotice": "⏳ **Queue joined!**\\n\\nYou're next in line for **{title}**. You'll be notified when it's your turn.",
+        "dmRemovedNotice": "❌ **Claim removed.**\\n\\nYour claim on **{title}** was removed.\\n📝 Reason: {reason}",
+        "floorTurnArrivedDM": "🎯 **It's your turn!**\\n\\nYou are now first in line for **{title}**. Click the claim button to start your window!",
+        "summonTurnArrivedDM": "🎯 **It's your turn!**\\n\\nYou are now first in line for **{title}**. Click the claim button to start your window!",
+        "floorReleasedSuccess": "✅ Floor released successfully.",
+        "removedFromQueueFeedback": "✅ You've been removed from the queue.",
+        "noActiveClaimsFeedback": "ℹ️ No active claims or queue positions found.",
+        "actionsCanceledFeedback": "✅ Actions cancelled.",
+        "summonClaimSuccessEphemeral": "✅ **Summon claimed!** Check the panel for details.",
+        "summonQueueSuccessEphemeral": "✅ You joined the queue! You'll be notified when it's your turn.",
+        "summonMenuSelectClaim": "Select a location to claim:",
+        "summonMenuSelectNext": "Select a location to queue for:",
+        "summonSelectPlaceholder": "Choose a location...",
+        "deathUpdateConfirm": "⚠️ Confirm death?\\nOld: {oldTime}\\nNew: {currTime}",
+        "deathUpdateExpired": "⌛ This death confirmation has expired.",
+        "deathLogged": "✅ Death logged! Status updated.",
+        "deathUpdateConfirmed": "✅ Death confirmed!\\n{newTime}",
+        "deathUpdateCancelled": "❌ Death update cancelled.",
+        "eventOpensIn": "⏳ This event opens in **{minutes} minutes**.",
+        "eventEarlyClaimDenied": "❌ This event opens at **{time}**. Please wait.",
+        "claimBefore": "⏳ Claim before {endLimit}",
+        "expectedAt": "Expected at {formattedTime} ({timezone})",
+        "roomIsOpen": "Open — Claim now!",
+        "eventEnded": "Closed",
+        "nextOpeningTitle": "⏰ Next Opening"
+    },
+    "render": {
+        "countdownUntil": "until",
+        "unknownUser": "Unknown",
+        "joinedAsNext": "Joined as next",
+        "windowPrefix": "Window",
+        "memberLabel": "Member"
+    },
+    "reserve": {
+        "interactive": {
+            "selectFloors": "📋 **Select which floors to reserve**",
+            "optAll": "⏰ All hours",
+            "hourFormat": "🕐 {hour}:00 - {nextHour}:00",
+            "selectHours": "📋 **Select hours for {event}**\\n📌 Floors: {floors}\\n👤 User: {userName}",
+            "confirm": "⚠️ **Confirm reservation**\\n\\n📌 {event}\\n🏰 Floors: {floors}\\n🕐 Hours: {hours}\\n👤 User: {userName}",
+            "btnConfirm": "✅ Confirm",
+            "btnCancel": "❌ Cancel"
+        },
+        "reservedNotice": "🔒 Reserved for {userName}",
+        "noEvent": "❌ No event named **{event}** found."
+    },
+    "cooldowns": {
+        "timeRemaining": "⏱️ {minutes} min remaining",
+        "floorReservedNotice": "🔒 **{userName}** is next in line.\\n{timeRemaining}",
+        "canceledClaimFeedback": "❌ Claim cancelled due to cooldown penalty.",
+        "activeTimeout": "⏳ **Cooldown active.**\\n⏱️ {remaining} minutes remaining."
+    },
+    "logs": {
+        "title": "📋 Daily Activity Log — {date}",
+        "noActivity": "No activity recorded.",
+        "adminRemove": "Admin action",
+        "staffCancel": "Staff cancelled",
+        "userCancel": "User cancelled",
+        "staffQueueCancel": "Staff removed from queue",
+        "userQueueCancel": "User left queue",
+        "voluntaryLeave": "Voluntary leave"
+    },
+    "buttons": {
+        "claimLabel": "🎯 Claim",
+        "cancelLabel": "❌ Cancel",
+        "nextLabel": "⏭️ Next"
+    },
+    "management": {
+        "btnBack": "🔙 Back",
+        "btnBackChannels": "🔙 Channels",
+        "btnBackReservations": "🔒 Reservations",
+        "promptExpired": "⌛ This interaction has expired.",
+        "channels": {
+            "title": "📡 **Channel Configuration**",
+            "desc": "Configure which channels are used for bot notifications.\\n\\n📜 **Logs:** {logsStatus}\\n🚨 **Boss Alerts:** {bossStatus}\\n📅 **Event Reminders:** {eventStatus}",
+            "btnSetLogs": "📜 Set Logs",
+            "btnSetBoss": "🚨 Boss Alerts",
+            "btnSetEvents": "📅 Events",
+            "configYes": "✅ Configured",
+            "configNo": "❌ Not configured",
+            "permDenied": "❌ You must be in a text channel to set this.",
+            "logsDone": "✅ Daily logs channel set to <#{channel}>.",
+            "bossDone": "✅ Boss spawn alerts channel set to <#{channel}>.",
+            "eventsDone": "✅ Scheduled event alerts channel set to <#{channel}>."
+        },
+        "panels": {
+            "title": "🛠️ **Panel Management**",
+            "desc": "Manage all claim panels.\\n\\n📊 Total panels: **{total}**\\n👑 Active claims: **{active}**",
+            "btnReset": "🔄 Reset",
+            "btnKick": "👢 Kick",
+            "resetAll": "🔄 All Panels",
+            "resetAllDesc": "Reset all panels to defaults",
+            "resetDone": "✅ Reset {count} panels to defaults."
+        },
+        "reservations": {
+            "title": "🔒 **Reservation Management**",
+            "noRes": "No active reservations",
+            "btnClearAll": "🗑️ Clear All",
+            "clearNone": "ℹ️ No reservations to clear.",
+            "clearConfirm": "⚠️ Clear **{count}** reservation(s)?",
+            "clearYes": "✅ Yes, clear",
+            "clearCancel": "❌ Cancel",
+            "clearDone": "✅ Cleared {count} reservation(s).",
+            "clearCancelled": "❌ Clear cancelled."
+        },
+        "players": {
+            "title": "👤 **Player Management**",
+            "desc": "Manage registered players and pilots.",
+            "btnRegister": "📝 Register",
+            "btnPilot": "👤 Pilot",
+            "btnRemovePilot": "🗑️ Remove Pilot",
+            "btnForceSync": "🔄 Force Sync",
+            "registerTitle": "📝 **Register a Player**",
+            "registerLabel": "Character Name",
+            "registerPlaceholder": "Enter the character name...",
+            "syncConfirm": "⚠️ **Force sync all players?** This will update roles and nicknames.",
+            "syncYes": "🔄 Yes, sync",
+            "syncNo": "❌ Cancel"
+        },
+        "salary": {
+            "title": "💰 **Salary Management**",
+            "amount": "Amount",
+            "spreadsheetTitle": "📊 **Google Spreadsheet URL**",
+            "spreadsheetLabel": "Spreadsheet URL",
+            "spreadsheetPlaceholder": "https://docs.google.com/spreadsheets/...",
+            "addDone": "✅ Spreadsheet configured!"
         }
     }
 }

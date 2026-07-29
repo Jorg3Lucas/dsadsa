@@ -1,4 +1,4 @@
-import { db, client, saveLocalStorage, logEvent, lastMessages } from "../core/state.js";
+import { db, client, saveLocalStorage, logEvent, lastMessages, setCurrentWorld, worldDbs } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { noop } from "../core/config.js";
 import { STATUS_AVAILABLE } from "../core/constants.js";
@@ -221,37 +221,43 @@ export function resetPanelData(key) {
 // 🔄 AUTO-RECOVERY ON BOOT
 // ==========================================
 
-/** Re-send all panels with fresh embeds on bot startup, recovering from stale message references. */
+/** Re-send all panels with fresh embeds on bot startup, recovering from stale message references. Iterates over ALL worlds. */
 export async function processAutoRecoveryOnBoot() {
     logEvent("Starting automatic panel recovery and chat cleanup...");
-    if (!db._panelMapping) db._panelMapping = {};
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        const mapping = db._panelMapping[key];
-        if (mapping && mapping.channelId && mapping.messageId) {try {
-            const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
-            if (!channel) continue;
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
+
+        if (!db._panelMapping) db._panelMapping = {};
+        for (const key in db) {
+            if (!db[key] || key.startsWith("_")) continue;
+            const mapping = db._panelMapping[key];
+            if (!mapping?.channelId || !mapping?.messageId) continue;
+
             try {
-                const msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
-                if (msg) await msg.delete().catch(noop);
-            } catch (i) {
-        // Silently ignored — non-critical operation
-    }
-            const newMsg = await channel.send({
-                embeds: [renderEmbed(key)],
-                components: renderButtons(key)
-            }).catch(() => null);
-            if (newMsg) {
-                lastMessages[key] = newMsg;
-                db._panelMapping[key] = {
-                    channelId: channel.id,
-                    messageId: newMsg.id
-                };
+                const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+                if (!channel) continue;
+                try {
+                    const msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
+                    if (msg) await msg.delete().catch(noop);
+                } catch { /* non-critical */ }
+                const newMsg = await channel.send({
+                    embeds: [renderEmbed(key)],
+                    components: renderButtons(key)
+                }).catch(() => null);
+                if (newMsg) {
+                    lastMessages[key] = newMsg;
+                    db._panelMapping[key] = {
+                        channelId: channel.id,
+                        messageId: newMsg.id
+                    };
+                }
+            } catch (s) {
+                logger.error('Panel', `Failed to restore panel ${key} in ${world}`, s);
+                logEvent(`Failed to restore panel ${key} in ${world}: ${s.message}`);
             }
-        } catch (s) {
-            logger.error('Panel', `Failed to restore panel ${key}`, s);
-            logEvent(`Failed to restore panel ${key}: ${s.message}`);
-        }}
+        }
+        saveLocalStorage();
     }
-    saveLocalStorage();
+    setCurrentWorld(null);
 }

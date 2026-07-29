@@ -1,7 +1,7 @@
 import { getLocalTime, parseStringToDate, usesScheduleRespawn, redBossSchedules, leader3Schedules } from "../core/time-utils.js";
 import { sendBossSpawnAlerts, sendScheduledEventAlerts, resetScheduledEventAlertCache } from "./boss-spawn-scheduler.js";
 import { getMsg, reloadLanguage } from "../core/lang.js";
-import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "../core/state.js";
+import { db, alertCache, bossSpawnAlertCache, saveLocalStorage, setCurrentWorld, worldDbs } from "../core/state.js";
 import { dispatchDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys } from "./claim-core.js";
@@ -22,8 +22,7 @@ import { handleFloor } from "./tick-floor.js";
 /** Start the 15-second tick interval that handles daily log dispatch, boss alerts, panel auto-respawn, claim timeouts, and force-refresh. */
 export function startTickInterval() {
     setInterval(async () => {
-        let updateNeeded = false;
-            const now = getLocalTime();
+        const now = getLocalTime();
         reloadLanguage();
 
         // Daily logs dispatch at 18:00 Berlin time
@@ -54,133 +53,140 @@ export function startTickInterval() {
             await sendScheduledEventAlerts();
         }
 
-        // Main panel loop
-        for (const key in db) {
-            const current = db[key];
-            if (!current || key.startsWith("_")) continue;
-            let panelUpdate = false;
+        // ── Process each world's panels ──
+        for (const world of Object.keys(worldDbs)) {
+            if (world === '_boot') continue; // skip legacy boot db
+            setCurrentWorld(world);
+            let worldUpdateNeeded = false;
 
-            // Peak (Red Boss) + Normal (Leader 3) auto-respawn
+            // Main panel loop for this world
+            for (const key in db) {
+                const current = db[key];
+                if (!current || key.startsWith("_")) continue;
+                let panelUpdate = false;                // Peak (Red Boss) + Normal (Leader 3) auto-respawn
             if (await handlePeakNormal(current, key, now, redBossSchedules, leader3Schedules)) {
                 panelUpdate = true;
-                updateNeeded = true;
+                worldUpdateNeeded = true;
             }
 
-            // Fixed panel auto-release (freeFloorAndActivateNextGracePeriod called inside tick-fixed.js)
+            // Fixed panel auto-release
             if (await handleFixed(current, now)) {
                 panelUpdate = true;
-                updateNeeded = true;
+                worldUpdateNeeded = true;
             }
 
             // Event group handlers (schedule/fixed/summon)
             if (await handleEventGroup(current, key, now)) {
                 panelUpdate = true;
-                updateNeeded = true;
+                worldUpdateNeeded = true;
             }
 
-            // Antidemon / Summon timeout + absence (freeAntidemonRoom called inside tick-antidemon-summon.js)
+            // Antidemon / Summon timeout + absence
             if (await handleAntidemonSummon(current, key, now)) {
                 panelUpdate = true;
-                updateNeeded = true;
+                worldUpdateNeeded = true;
             }
 
-            // Floor claim timeout + queue absence (freeFloorAndActivateNextGracePeriod called inside tick-floor.js)
+            // Floor claim timeout + queue absence
             if (await handleFloor(current, now)) {
                 panelUpdate = true;
-                updateNeeded = true;
+                worldUpdateNeeded = true;
             }
 
-            // Normal boss cooldown (non-event-group, non-antidemon, non-fixed panels)
-            if ("event_group" !== current.type && "antidemon" !== current.type && "fixed" !== current.type) {
-                for (const prop in current) {
-                    if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
+                // Normal boss cooldown (non-event-group, non-antidemon, non-fixed panels)
+                if ("event_group" !== current.type && "antidemon" !== current.type && "fixed" !== current.type) {
+                    for (const prop in current) {
+                        if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
 
-                    if (current[prop].status && current[prop].status.startsWith(STATUS_KILLED)) {
-                        if (usesScheduleRespawn(current, prop)) continue;
+                        if (current[prop].status && current[prop].status.startsWith(STATUS_KILLED)) {
+                            if (usesScheduleRespawn(current, prop)) continue;
 
-                        const killedTimeStr = current[prop].status.replace(STATUS_KILLED_PREFIX, "").trim();
-                        let killedTime;
-                        if (current[prop]._lastKilledAt) {
-                            killedTime = new Date(current[prop]._lastKilledAt);
-                        } else {
-                            killedTime = parseStringToDate(killedTimeStr);
-                        }
-                        if (killedTime) {
-                            const secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
-                            const totalCooldownSeconds = 60 * current[prop].cooldown;
-
-                            if (secondsPassed >= totalCooldownSeconds) {
+                            const killedTimeStr = current[prop].status.replace(STATUS_KILLED_PREFIX, "").trim();
+                            let killedTime;
+                            if (current[prop]._lastKilledAt) {
+                                killedTime = new Date(current[prop]._lastKilledAt);
+                            } else {
+                                killedTime = parseStringToDate(killedTimeStr);
+                            }
+                            if (killedTime) {
+                                const secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
+                                const totalCooldownSeconds = 60 * current[prop].cooldown;                                if (secondsPassed >= totalCooldownSeconds) {
                                 current[prop].status = STATUS_AVAILABLE;
                                 current[prop]._freeSince = now.getTime();
                                 current[prop]._lastKilledTimeStr = killedTimeStr;
                                 delete alertCache.warning5mAfter[`${key}-${prop}`];
                                 panelUpdate = true;
-                                updateNeeded = true;
+                                worldUpdateNeeded = true;
 
-                                if (current.ownerId) {
-                                    const spawnKeyAlert = `${key}-${prop}-spawn-${now.getHours()}-${now.getMinutes()}`;
-                                    if (!alertCache.spawnAlerted[spawnKeyAlert]) {
-                                        await notifyUserDM(current.ownerId, getMsg("rooms.dmImmediateSpawn", {
-                                            title: current.title,
-                                            boss: current[prop].name
-                                        })).catch(noop);
-                                        alertCache.spawnAlerted[spawnKeyAlert] = true;
+                                    if (current.ownerId) {
+                                        const spawnKeyAlert = `${key}-${prop}-spawn-${now.getHours()}-${now.getMinutes()}`;
+                                        if (!alertCache.spawnAlerted[spawnKeyAlert]) {
+                                            await notifyUserDM(current.ownerId, getMsg("rooms.dmImmediateSpawn", {
+                                                title: current.title,
+                                                boss: current[prop].name
+                                            })).catch(noop);
+                                            alertCache.spawnAlerted[spawnKeyAlert] = true;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // DM warning: 5min after respawn, only if respawn happened AFTER claim started
-                    if (STATUS_AVAILABLE === current[prop].status && current[prop]._freeSince > 0 && current._claimTimestamp) {
-                        if (current[prop]._freeSince > current._claimTimestamp) {
-                            const minutesIdle = Math.floor((now.getTime() - current[prop]._freeSince) / 6e4);
-                            if (minutesIdle >= 5 && current.ownerId && !alertCache.warning5mAfter[`${key}-${prop}`]) {
-                                await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
-                                    title: current.title,
-                                    boss: current[prop].name
-                                })).catch(noop);
-                                alertCache.warning5mAfter[`${key}-${prop}`] = Date.now();
+                        // DM warning: 5min after respawn
+                        if (STATUS_AVAILABLE === current[prop].status && current[prop]._freeSince > 0 && current._claimTimestamp) {
+                            if (current[prop]._freeSince > current._claimTimestamp) {
+                                const minutesIdle = Math.floor((now.getTime() - current[prop]._freeSince) / 6e4);
+                                if (minutesIdle >= 5 && current.ownerId && !alertCache.warning5mAfter[`${key}-${prop}`]) {
+                                    await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
+                                        title: current.title,
+                                        boss: current[prop].name
+                                    })).catch(noop);
+                                    alertCache.warning5mAfter[`${key}-${prop}`] = Date.now();
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Force refresh for countdown timers
-            if (!panelUpdate) {
-                if ("event_group" === current.type) {
-                    panelUpdate = true;
-                } else if ("antidemon" === current.type || "summon" === current.type) {
-                    const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
-                    for (const room of roomList) {
-                        const rData = current[room];
-                        if ((STATUS_CLAIMED === rData.status && rData.timeWindow) || rData.endLimit) {
-                            panelUpdate = true;
-                            break;
+                // Force refresh for countdown timers
+                if (!panelUpdate) {
+                    if ("event_group" === current.type) {
+                        panelUpdate = true;
+                    } else if ("antidemon" === current.type || "summon" === current.type) {
+                        const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
+                        for (const room of roomList) {
+                            const rData = current[room];
+                            if ((STATUS_CLAIMED === rData.status && rData.timeWindow) || rData.endLimit) {
+                                panelUpdate = true;
+                                break;
+                            }
                         }
+                    } else if ("fixed" === current.type) {
+                        panelUpdate = true;
+                    } else {
+                        for (const prop in current) {
+                            if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
+                            if (current[prop].status && current[prop].status.startsWith("🔴 Killed at") && current[prop].cooldown) {
+                                panelUpdate = true;
+                                break;
+                            }
+                            if (current[prop]._freeSince > 0) {
+                                panelUpdate = true;
+                                break;
+                            }
+                        }
+                        if (!panelUpdate && current.ownerId) panelUpdate = true;
+                        if (!panelUpdate && current.next) panelUpdate = true;
                     }
-                } else if ("fixed" === current.type) {
-                    panelUpdate = true;
-                } else {
-                    for (const prop in current) {
-                        if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
-                        if (current[prop].status && current[prop].status.startsWith("🔴 Killed at") && current[prop].cooldown) {
-                            panelUpdate = true;
-                            break;
-                        }
-                        if (current[prop]._freeSince > 0) {
-                            panelUpdate = true;
-                            break;
-                        }
-                    }
-                    if (!panelUpdate && current.ownerId) panelUpdate = true;
-                    if (!panelUpdate && current.next) panelUpdate = true;
                 }
+
+                if (panelUpdate) await refreshVisualPanel(key);
             }
 
-            if (panelUpdate) await refreshVisualPanel(key);
+            // Save per-world if anything changed
+            if (worldUpdateNeeded) saveLocalStorage();
         }
-        if (updateNeeded) saveLocalStorage();
+
+        setCurrentWorld(null);
     }, 1.5e4);
 }

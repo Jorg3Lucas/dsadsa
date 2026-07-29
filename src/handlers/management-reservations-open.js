@@ -11,7 +11,7 @@ import {
     StringSelectMenuBuilder as i
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
-import { db, saveLocalStorage } from "../core/state.js";
+import { db, saveLocalStorage, setCurrentWorld, worldDbs } from "../core/state.js";
 import { refreshVisualPanel } from "./panel-utils.js";
 import { noop } from "../core/config.js";
 
@@ -44,7 +44,7 @@ export async function handleMgmtReservationsOpen(interaction) {
     }).catch(noop);
 }
 
-/** Execute opening reservations for the selected event type (Fury/Frenzy/Both). */
+/** Execute opening reservations for the selected event type (Fury/Frenzy/Both) across ALL worlds. */
 export async function handleMgmtReservationsOpenExecute(interaction) {
     if (!interaction.member.permissions.has("ManageMessages")) {
         return await interaction.update({
@@ -57,36 +57,46 @@ export async function handleMgmtReservationsOpenExecute(interaction) {
     const eventsToClear = choice === "both" ? ["fury", "frenzy"] : [choice];
     let clearedCount = 0;
 
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        const current = db[key];
-        if ("event_group" !== current.type) continue;
+    for (const world of Object.keys(worldDbs)) {
+        if (world === '_boot') continue;
+        setCurrentWorld(world);
 
-        for (const ev of eventsToClear) {
-            const evData = current[ev];
-            if (!evData || evData.type !== "fixed") continue;
-            if (evData.reservedFor || evData.reservations) {
-                evData.reservedFor = null;
-                evData.reservedByName = null;
-                evData.reservations = null;
-                clearedCount++;
-            }
-        }
-    }
-
-    if (clearedCount > 0) {
+        let worldCleared = 0;
         for (const key in db) {
             if (!db[key] || key.startsWith("_")) continue;
-            await refreshVisualPanel(key);
+            const current = db[key];
+            if ("event_group" !== current.type) continue;
+
+            for (const ev of eventsToClear) {
+                const evData = current[ev];
+                if (!evData || evData.type !== "fixed") continue;
+                if (evData.reservedFor || evData.reservations) {
+                    evData.reservedFor = null;
+                    evData.reservedByName = null;
+                    evData.reservations = null;
+                    worldCleared++;
+                    clearedCount++;
+                }
+            }
         }
+
+        if (worldCleared > 0) {
+            for (const key in db) {
+                if (!db[key] || key.startsWith("_")) continue;
+                await refreshVisualPanel(key);
+            }
+        }
+
+        saveLocalStorage();
     }
 
+    setCurrentWorld(null);
+
     const eventLabel = choice === "both" ? "Fury + Frenzy" : choice.charAt(0).toUpperCase() + choice.slice(1);
-    saveLocalStorage();
 
     return await interaction.update({
         content: clearedCount > 0
-            ? `✅ **${eventLabel}** — cleared ${clearedCount} reservation(s). Panels refreshed.`
+            ? `✅ **${eventLabel}** — cleared ${clearedCount} reservation(s) across all worlds. Panels refreshed.`
             : `ℹ️ **${eventLabel}** — no reservations found to clear.`,
         components: [
             new t().addComponents(
