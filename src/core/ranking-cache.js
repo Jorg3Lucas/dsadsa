@@ -63,7 +63,11 @@ export function findNicknameInCache(nickname, cache) {
 // Clean helper: strips formatting characters for comparison
 function cleanNickname(s) {
     return s.trim().normalize('NFKC').toLowerCase()
+        // Strip visible decorative/formatting characters
         .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,•·●○.,«»‹›★☆♡♥▪▫・҉]/g, '')
+        // Strip all invisible Unicode format chars (zero-width spaces, BOM, joiners, soft hyphen, etc.)
+        .replace(/\p{Cf}+/gu, '')
+        // Strip all whitespace
         .replace(/\s+/g, '');
 }
 
