@@ -194,7 +194,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         db.users[cached.targetId] = {
             ...db.users[cached.targetId],
             nickname: cached.nickname,
-            registeredAt: new Date().toISOString()
+            registeredAt: new Date().toISOString(),
+            manualPermanent: true
         };
 
         // Clean up any stale temp fields if they exist

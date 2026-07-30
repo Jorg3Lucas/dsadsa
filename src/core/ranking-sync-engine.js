@@ -297,7 +297,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             // ── ROLE MANAGEMENT ──
             if (isRegistered) {
-                if (inAlliedClan) {
+                if (ownerData?.manualPermanent) {
+                    // 👑 ManualForce user — always ensure role is present, never remove
+                    if (!hasMemberRole) {
+                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        logEvent(`[Sync] Restored role for manualforce user ${member.user.username}`);
+                    }
+                } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure role is present
                     if (!hasMemberRole) {
                         await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
@@ -319,7 +325,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             // ── NICKNAME MANAGEMENT ──
             // Only set nickname if in allied clan (has role). Otherwise reset to Discord username.
             // Never change a user's registered nickname in the database — keep what they registered with.
-            if (isRegistered && inAlliedClan) {
+            // manualPermanent users always keep their nickname regardless of clan status.
+            if (isRegistered && (inAlliedClan || ownerData?.manualPermanent)) {
                 // Has role — ensure correct nickname
                 let desiredNickname = "";
                 if (isPilot) {
@@ -333,7 +340,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if ((member.nickname || '').normalize('NFC') !== desiredNickname) {
                     await member.setNickname(desiredNickname).catch(() => {});
                 }
-            } else if (isRegistered && !inAlliedClan) {
+            } else if (isRegistered && !inAlliedClan && !ownerData?.manualPermanent) {
                 // No role — reset nickname to Discord username (but keep DB registration)
                 if (member.nickname && member.nickname !== member.user.username) {
                     await member.setNickname(member.user.username).catch(() => {});
