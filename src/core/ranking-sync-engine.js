@@ -277,12 +277,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             // ── If registered, check allied clan status ──
             let inAlliedClan = false;
-            let foundInRanking = false;
 
             if (isRegistered && ownerData && ownerData.nickname && syncCache) {
                 const lookup = lookupNickname(ownerData.nickname, db, syncCache);
                 if (lookup.found) {
-                    foundInRanking = true;
                     inAlliedClan = lookup.inAlliedClan;
                 }
             }
@@ -317,26 +315,24 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             }
 
             // ── NICKNAME MANAGEMENT ──
-            // Only set nickname if in allied clan (has role). Otherwise reset to Discord username.
+            // All registered users keep their character name + server prefix, regardless of role status.
+            // The role is managed separately above — nickname is always set to the registered name.
             // Never change a user's registered nickname in the database — keep what they registered with.
             // manualPermanent users always keep their nickname regardless of clan status.
-            if (isRegistered && (inAlliedClan || ownerData?.manualPermanent)) {
-                // Has role — ensure correct nickname
+            if (isRegistered && (ownerData?.nickname || isPilot)) {
+                // Ensure correct nickname — ServerName - CharacterName (or - Pilot suffix)
                 let desiredNickname = "";
                 if (isPilot) {
                     const ownerNick = db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC');
                     desiredNickname = buildPrefixedNickname(ownerNick, db, 'Pilot');
-                } else {
-                    const nick = db.users[memberId].nickname.trim().normalize('NFC');
+                } else if (ownerData?.nickname) {
+                    const nick = ownerData.nickname.trim().normalize('NFC');
                     desiredNickname = buildPrefixedNickname(nick, db);
                 }
 
-                if ((member.nickname || '').normalize('NFC') !== desiredNickname) {
+                if (desiredNickname && (member.nickname || '').normalize('NFC') !== desiredNickname) {
                     await member.setNickname(desiredNickname).catch(() => {});
                 }
-            } else if (isRegistered && !inAlliedClan && !ownerData?.manualPermanent) {
-                // No role — keep the nickname as-is (already removed role above)
-                // Do NOT reset the nickname. User keeps their registered name.
             }
         }
 
