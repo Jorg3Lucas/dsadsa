@@ -182,28 +182,24 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             });
         }
 
-        // Not found in ranking — register as temporary (3 days)
-        const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-
-        db.users[targetMember.id] = {
-            ...db.users[targetMember.id],
+        // Not found in ranking — ask for confirmation before registering as temporary (3 days)
+        confirmationCache[`${user.id}-manualregister`] = {
+            targetId: targetMember.id,
             nickname: nickname,
-            registeredAt: new Date().toISOString(),
-            tempUntil: threeDaysFromNow.toISOString(),
-            tempRegisteredAt: new Date().toISOString()
+            clan: '',
+            worldId: '',
+            needsTempApproval: true,
+            selectedNickname: nickname
         };
-        if (!db.users[targetMember.id].pilotIds) db.users[targetMember.id].pilotIds = [];
-        saveLocalStorage();
-
-        await targetMember.setNickname(buildPrefixedNickname(nickname, db)).catch(() => {});
-        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-        }
-
-        logEvent(`👑 Admin ${interaction.user.tag} manually registered ${targetMember.id} as ${nickname} (temporary — not in ranking)`);
 
         return interaction.reply({
-            content: `⏳ **${nickname}** registered as temporary (3 days). They will be converted to permanent once found in an allied clan in the ranking.`,
+            content: `❌ **"${nickname}" not found in ranking.** Register as temporary (3 days) anyway? The user will be converted to permanent once found in an allied clan during daily sync.`,
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
             flags: 64
         });
     }

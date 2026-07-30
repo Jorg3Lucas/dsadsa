@@ -295,6 +295,12 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                         logEvent(`[Sync] Restored role for manualforce user ${member.user.username}`);
                     }
+                } else if (ownerData?.tempUntil) {
+                    // ⏳ Temporary registration — keep role until expiry (handled in step 2.75)
+                    if (!hasMemberRole) {
+                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        logEvent(`[Sync] Restored role for temp user ${member.user.username} (expires ${new Date(ownerData.tempUntil).toLocaleDateString()})`);
+                    }
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure role is present
                     if (!hasMemberRole) {
