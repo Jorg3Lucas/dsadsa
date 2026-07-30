@@ -238,6 +238,9 @@ async function restoreWelcomePanel(client, db, saveLocalStorage, logEvent) {
 }
 
 export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
+    // Ensure db.config and alliedClans are initialized
+    ensureConfig(db);
+
     // Load persisted admin channel ID on startup
     if (db.config?.adminChannelId && !adminChannelId) {
         setAdminChannelId(db.config.adminChannelId);

@@ -32,7 +32,7 @@ import {
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
-import { DISCORD_SERVER_ID } from './core/ranking-constants.js';
+import { DISCORD_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
@@ -60,6 +60,9 @@ client.once('clientReady', async () => {
 
     rankingDb = loadLocalStorageRanking();
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
+
+    // Ensure db.config and alliedClans are initialized before any system runs
+    ensureConfig(rankingDb);
 
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
     if (guild) {
