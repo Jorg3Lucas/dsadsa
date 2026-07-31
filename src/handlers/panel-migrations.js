@@ -164,7 +164,7 @@ export function migrateMS1112() {
     for (const floor of ["11", "12"]) {
         const key = `${floor}squareevents`;
         if (!db[key]) {
-            db[key] = { type: "event_group", title: `Magic Square ${floor}F - Events`, fury: { name: "🔴 Fury", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [0, 3, 6, 9, 12, 15, 18, 21], scheduleMinutes: 30 }, frenzy: { name: "🟣 Frenzy", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [2, 5, 8, 11, 14, 17, 20, 23] } };
+            db[key] = { type: "event_group", title: `Magic Square ${floor}F - Events`, fury: { name: "🔴 Fury", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [0, 3, 6, 9, 12, 15, 18, 21], scheduleMinutes: 30 }, frenzy: { name: "🟣 Frenzy", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [2, 5, 8, 11, 14, 17, 20, 23], scheduleMinutes: 0 } };
             migrated++;
             logEvent(`Created missing MS${floor} events panel.`);
         }
@@ -214,7 +214,8 @@ export function migrateMS1112() {
                 const sub = panel[ev];
                 if (sub) {
                     if (!sub.type) { sub.type = "fixed"; changed = true; }
-                    if (!sub.schedules) { sub.schedules = ev === "fury" ? [0, 3, 6, 9, 12, 15, 18, 21] : [2, 5, 8, 11, 14, 17, 20, 23]; if (ev === "fury" && !sub.scheduleMinutes) sub.scheduleMinutes = 30; changed = true; }
+                    if (!sub.schedules) { sub.schedules = ev === "fury" ? [0, 3, 6, 9, 12, 15, 18, 21] : [2, 5, 8, 11, 14, 17, 20, 23]; changed = true; }
+                    if (sub.scheduleMinutes === undefined) { sub.scheduleMinutes = ev === "fury" ? 30 : 0; changed = true; }
                     if (sub.ownerId && !sub.ownerName && sub.status === STATUS_AVAILABLE) { sub.ownerId = null; changed = true; }
                     if (sub.ownerId === "") { sub.ownerId = null; changed = true; }
                 }

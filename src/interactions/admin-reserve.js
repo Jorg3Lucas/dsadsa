@@ -47,9 +47,10 @@ async function handleReserveSelectFloors(interaction) {
 
     const isFury = cache.eventName === "fury";
     const scheduleHours = isFury ? [0, 3, 6, 9, 12, 15, 18, 21] : [2, 5, 8, 11, 14, 17, 20, 23];
+    const minuteStr = String(isFury ? 30 : 0).padStart(2, "0");
     const hourOptions = [
         { label: getMsg("reserve.interactive.optAll"), value: "_all", emoji: "⏰" },
-        ...scheduleHours.map(h => ({ label: getMsg("reserve.interactive.hourFormat", { hour: h, nextHour: (h + 1) % 24 }), value: String(h), emoji: "🕐" }))
+        ...scheduleHours.map(h => ({ label: getMsg("reserve.interactive.hourFormat", { hour: h, minute: minuteStr, nextHour: (h + 1) % 24, nextMinute: minuteStr }), value: String(h), emoji: "🕐" }))
     ];
     const eventLabel = cache.eventName.charAt(0).toUpperCase() + cache.eventName.slice(1);
     const floorsLabel = cache.floors.includes("11") && cache.floors.includes("12") ? "MS11 + MS12" : cache.floors.map(f => `MS${f}`).join(", ");
@@ -74,8 +75,9 @@ async function handleReserveSelectHours(interaction) {
     const eventLabel = cache.eventName.charAt(0).toUpperCase() + cache.eventName.slice(1);
     const floorsLabel = cache.floors.includes("11") && cache.floors.includes("12") ? "MS11 + MS12" : cache.floors.map(f => `MS${f}`).join(", ");
     let hoursLabel;
+    const minuteStr = String(cache.eventName === "fury" ? 30 : 0).padStart(2, "0");
     if (cache.hours.includes("_all")) { hoursLabel = "All hours"; }
-    else { hoursLabel = cache.hours.sort((a, b) => parseInt(a) - parseInt(b)).map(h => `${h}:00-${(parseInt(h) + 1) % 24}:00`).join(", "); }
+    else { hoursLabel = cache.hours.sort((a, b) => parseInt(a) - parseInt(b)).map(h => `${h}:${minuteStr}-${(parseInt(h) + 1) % 24}:${minuteStr}`).join(", "); }
 
     return await interaction.update({
         content: getMsg("reserve.interactive.confirm", { event: eventLabel, floors: floorsLabel, hours: hoursLabel, userName: cache.targetUserName }),
@@ -122,7 +124,8 @@ async function handleReserveConfirm(interaction) {
 
     const eventLabel = eventName.charAt(0).toUpperCase() + eventName.slice(1);
     const floorsLabel = floors.includes("11") && floors.includes("12") ? "MS11 + MS12" : floors.map(f => `MS${f}`).join(", ");
-    const hoursLabel = hours.includes("_all") ? "All hours" : hours.sort((a, b) => parseInt(a) - parseInt(b)).map(h => `${h}:00`).join(", ");
+    const minuteStr = String(eventName === "fury" ? 30 : 0).padStart(2, "0");
+    const hoursLabel = hours.includes("_all") ? "All hours" : hours.sort((a, b) => parseInt(a) - parseInt(b)).map(h => `${h}:${minuteStr}`).join(", ");
 
     saveLocalStorage();
     return await interaction.update({ content: getMsg("reserve.interactive.applied", { event: eventLabel, floors: floorsLabel, hours: hoursLabel, userName: targetUserName }), components: [] }).catch(noop);

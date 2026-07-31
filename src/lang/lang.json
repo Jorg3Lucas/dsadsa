@@ -411,7 +411,7 @@
             "btnConfirm": "✅ Confirm",
             "btnCancel": "❌ Cancel",
             "optAll": "All Hours",
-            "hourFormat": "{hour}:00 - {nextHour}:00"
+            "hourFormat": "{hour}:{minute} - {nextHour}:{nextMinute}"
         }
     }
 }

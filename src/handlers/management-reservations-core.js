@@ -52,7 +52,7 @@ export async function handleMgmtReservations(interaction) {
                         const slots = Object.entries(evData.reservations)
                             .filter(([h]) => !h.startsWith("_"))
                             .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                            .map(([h, u]) => `${h}:00→${u.userName}`)
+                            .map(([h, u]) => `${h}:${String(evData.scheduleMinutes || 0).padStart(2, "0")}→${u.userName}`)
                             .join(", ");
                         desc += slots || "None";
                     }

@@ -140,7 +140,8 @@ export function buildPanelDefaults(key) {
                 status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                 timeWindow: "", _claimTimestamp: null,
                 reservedFor: null, reservedByName: null, reservations: null,
-                schedules: [2, 5, 8, 11, 14, 17, 20, 23]
+                schedules: [2, 5, 8, 11, 14, 17, 20, 23],
+                scheduleMinutes: 0
             }
         };
     }

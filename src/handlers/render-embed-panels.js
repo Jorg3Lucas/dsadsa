@@ -127,16 +127,25 @@ function renderEventGroupPanel(embed, current, now) {
                 } else {
                     const resHours = Object.keys(evData.reservations).filter(k => !k.startsWith("_")).sort((a, b) => parseInt(a) - parseInt(b));
                     if (resHours.length > 0) {
-                        const currentSlot = evData.reservations[String(nowHour)];
+                        // Current schedule slot honoring the minute offset (e.g. Fury runs h:30-(h+1):30)
+                        const nowMinutes = nowHour * 60 + now.getMinutes();
+                        let activeHour = null;
+                        for (const h of evData.schedules || []) {
+                            const startMin = h * 60 + minuteOffset;
+                            const endMin = startMin + 60;
+                            if (nowMinutes >= startMin && nowMinutes < endMin) { activeHour = h; break; }
+                        }
+                        const currentSlot = activeHour !== null ? evData.reservations[String(activeHour)] : undefined;
                         if (currentSlot) lines.push(`🟢 Now: ${currentSlot.userName}`);
-                        const nextSlot = resHours.find(h => parseInt(h) > nowHour);
+                        const lookupHour = activeHour !== null ? activeHour : nowHour;
+                        const nextSlot = resHours.find(h => parseInt(h) > lookupHour);
                         if (nextSlot) {
                             const slotUser = evData.reservations[nextSlot].userName;
-                            lines.push(`⏭️ Next: ${nextSlot}:00 -> ${slotUser}`);
+                            lines.push(`⏭️ Next: ${nextSlot}:${String(minuteOffset).padStart(2, "0")} -> ${slotUser}`);
                         }
                         if (!currentSlot && !nextSlot) {
                             const firstSlot = resHours[0];
-                            lines.push(`# ${firstSlot}:00 -> ${evData.reservations[firstSlot].userName}`);
+                            lines.push(`# ${firstSlot}:${String(minuteOffset).padStart(2, "0")} -> ${evData.reservations[firstSlot].userName}`);
                         }
                         if (resHours.length > 1) lines.push(`📌 ${resHours.length} slot(s) reserved`);
                     }
