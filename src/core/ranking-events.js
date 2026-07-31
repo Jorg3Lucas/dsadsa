@@ -5,7 +5,7 @@ import { getMsg } from './lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { noop } from "./config.js";
 import { addEarlyClaimUser, removeEarlyClaimUser, earlyClaimUsers } from './state.js';
-import { deployRegistrationPanel, setRegistrationChannel } from '../handlers/registration-panel.js';
+import { deployRegistrationPanel, setRegistrationChannel, deployWelcomeMessage, setWelcomeChannel } from '../handlers/registration-panel.js';
 import { logger } from './logger.js';
 
 
@@ -41,6 +41,9 @@ async function handleTextCommands(message, db, saveLocalStorage) {
         if (!db.config) db.config = {};
         db.config.welcomeChannelId = message.channel.id;
         saveLocalStorage();
+
+        // Deploy the fixed welcome message in this channel
+        await setWelcomeChannel(message.channel);
 
         return message.reply(getMsg('ranking.responses.setwelcome.success', { channel: message.channel.toString() }));
     }
@@ -155,7 +158,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         await runDailySynchronization(client, db, saveLocalStorage, logEvent, true);
     }, { scheduled: true, timezone: "America/Sao_Paulo" });
 
-    // ── Deploy registration panel on boot if configured ──
+    // ── Deploy registration panel + welcome message on boot if configured ──
     setTimeout(async () => {
         try {
             if (db.config && db.config.registrationChannelId) {
@@ -165,8 +168,15 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                     logEvent('📝 Registration panel deployed on boot.');
                 }
             }
+            if (db.config && db.config.welcomeChannelId) {
+                const welcomeChannel = client.channels.cache.get(db.config.welcomeChannelId);
+                if (welcomeChannel) {
+                    await deployWelcomeMessage(welcomeChannel);
+                    logEvent('👋 Welcome message deployed on boot.');
+                }
+            }
         } catch (err) {
-                logger.error('Ranking', 'Failed to deploy registration panel on boot', err);
+                logger.error('Ranking', 'Failed to deploy panels on boot', err);
         }
     }, 8000);
 }

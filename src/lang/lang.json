@@ -239,7 +239,7 @@
             }
         },
         "welcome": {
-            "message": "👋 Hello {member}, welcome to our server!\n\n⚠️ **Important:** Your character **MUST** be visible in the official server ranking (Top 1000) for the bot to find you and assign roles.\n\n🔄 **Ranking Updates:** The database cache and role assignments refresh daily at **22:00 (EU Server Time)**.\n\n📌 **How to get your roles automatically:**\n1️⃣ Use `/register` to open the form and type your in-game name exactly.\n2️⃣ Have pilots handling your characters? Grant them roles using `/pilot` (**Limit of up to 4 pilots**).\n3️⃣ Need to remove a pilot? Use `/removepilot` and select them from the menu.\n\nEnjoy your stay! 🚀"
+            "message": "👋 Hello {member}, welcome to our server!\n\n⚠️ **Important:** Your character **MUST** be visible in the official server ranking (Top 1000) for the bot to find you and assign roles.\n\n📌 **How to get your roles automatically:**\n1️⃣ Use the **📝 Register** button below to type your in-game name exactly.\n2️⃣ Have pilots handling your characters? Use **✈️ Register as Pilot** (**up to 4 pilots** per owner).\n3️⃣ Need to remove a pilot? Use **🗑️ Remove Pilot**.\n\n🔄 **Ranking Updates:** Roles refresh automatically every day at **22:00 BRT**.\n\nEnjoy your stay! 🚀"
         },
         "salary": {
             "setupSuccess": "✅ Salary poll channel configured! Voting opens every Monday at 12:30 (BRT).",

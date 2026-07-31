@@ -1827,6 +1827,79 @@ async function handleHelpButton(interaction) {
 }
 
 // ==========================================
+// 👋 WELCOME MESSAGE DEPLOYMENT
+// ==========================================
+
+// ── Deployed welcome message tracking ──
+let welcomeMessage = null;
+
+/** Build the fixed welcome embed posted in the welcome channel — consistent with the registration panel. */
+export function buildWelcomeEmbed() {
+    return regEmbed(
+        '👋 Welcome to the Server!',
+        '#5865F2',
+        'Get your **in-game clan roles** and manage your characters below! 👇\n\n' +
+        '━━━━━━━━━━━━━━━━━━━━━━━━'
+    )
+        .addFields(
+            {
+                name: '⚠️ Important',
+                value: 'Your character **MUST** be visible in the official server ranking (Top 1000) for the bot to find you and assign roles.',
+                inline: false
+            },
+            {
+                name: '📌 How to get your roles automatically',
+                value: [
+                    '**1.** Click **📝 Register** and type your in-game name **exactly**.',
+                    '**2.** Have pilots handling your characters? Use **✈️ Register as Pilot** (**up to 4 pilots** per owner).',
+                    '**3.** Need to remove a pilot? Use **🗑️ Remove Pilot**.',
+                    '**4.** Your request is approved by the **Elders** — you\'ll get a DM when it\'s done.'
+                ].join('\n'),
+                inline: false
+            },
+            {
+                name: '🔄 Ranking Updates',
+                value: 'The database cache and role assignments refresh automatically every day at **22:00 BRT**.',
+                inline: false
+            },
+            {
+                name: 'ℹ️ Need help?',
+                value: 'Click the **❓ Help** button to see all commands and tips.',
+                inline: false
+            }
+        );
+}
+
+/** Post or update the fixed welcome message in the configured channel. @param {import('discord.js').TextChannel} channel */
+export async function deployWelcomeMessage(channel) {
+    const embed = buildWelcomeEmbed();
+
+    try {
+        if (welcomeMessage) {
+            // Update existing message
+            welcomeMessage = await welcomeMessage.edit({ embeds: [embed] }).catch(() => null);
+        }
+
+        if (!welcomeMessage) {
+            // Send new message
+            welcomeMessage = await channel.send({ embeds: [embed] });
+        }
+
+        logger.info('Registration', `Welcome message deployed in #${channel.name}`);
+        return welcomeMessage;
+    } catch (err) {
+        logger.error('Registration', 'Failed to deploy welcome message', err);
+        return null;
+    }
+}
+
+/** Configure the welcome channel and deploy the fixed welcome message. @param {import('discord.js').TextChannel} channel */
+export async function setWelcomeChannel(channel) {
+    welcomeMessage = null; // Force re-deploy
+    await deployWelcomeMessage(channel);
+}
+
+// ==========================================
 // 🔧 UTILITY: Set registration channel
 // ==========================================
 
