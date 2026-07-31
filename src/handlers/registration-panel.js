@@ -142,13 +142,13 @@ export function buildRegPanelEmbed(rankingDb) {
         .map(([clan, count]) => `▸ **${count}** — ${clan}`)
         .join('\n') || 'No registered members yet.';
 
-    const embed = new EmbedBuilder()
-        .setTitle('🎮 Character Registration System')
-        .setColor('#5865F2')
-        .setDescription(
-            'Welcome! Link your **in-game character** to unlock your clan role and manage pilots.\n\n' +
-            '━━━━━━━━━━━━━━━━━━━━━━━━'
-        )
+    const embed = regEmbed(
+        '🎮 Character Registration System',
+        '#5865F2',
+        'Welcome! Link your **in-game character** to unlock your clan role and manage pilots.\n\n' +
+        '━━━━━━━━━━━━━━━━━━━━━━━━',
+        'Click a button below to manage your account'
+    )
         .addFields(
             {
                 name: '📊 Server Stats',
@@ -180,12 +180,6 @@ export function buildRegPanelEmbed(rankingDb) {
                 inline: true
             }
         )
-        .setFooter({
-            text: 'Click a button below to manage your account',
-            iconURL: client?.user?.displayAvatarURL()
-        })
-        .setTimestamp();
-
     return embed;
 }
 
@@ -314,14 +308,13 @@ async function handleRegisterButton(interaction, rankingDb, saveLocalStorage, lo
 
     if (isRegistered) {
         // Show a confirmation to re-register
-        const embed = new EmbedBuilder()
-            .setTitle('⚠️ Already Registered')
-            .setColor('#FEE75C')
-            .setDescription(
-                `You are already registered as **${userData.nickname}**.\n\n` +
-                'Re-registering will update your nickname. Continue?'
-            )
-            .setFooter({ text: 'Click Cancel to keep your current registration' });
+        const embed = regEmbed(
+            '⚠️ Already Registered',
+            '#FEE75C',
+            `You are already registered as **${userData.nickname}**.\n\n` +
+            'Re-registering will update your nickname. Continue?',
+            'Click Cancel to keep your current registration'
+        );
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -375,13 +368,13 @@ async function handleRegisterPilotButton(interaction, rankingDb) {
     if (isRegistered) {
         return interaction.reply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ You Are Already Registered')
-                    .setColor('#ED4245')
-                    .setDescription(
-                        'You are already registered as a character owner (**' + userData.nickname + '**).\n\n' +
-                        'If you want to be a pilot for someone else, ask the owner to use the **🗑️ Remove Pilot** button to free up a slot first.'
-                    )
+                regEmbed(
+                    '❌ You Are Already Registered',
+                    '#ED4245',
+                    'You are already registered as a character owner (**' + userData.nickname + '**).\n\n' +
+                    'If you want to be a pilot for someone else, ask the owner to use the **🗑️ Remove Pilot** button to free up a slot first.',
+                    '✈️ Character Registration System'
+                )
             ],
             flags: 64
         });
@@ -426,14 +419,14 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
     if (!ownerId || !ownerData) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Owner Not Found')
-                    .setColor('#ED4245')
-                    .setDescription(
-                        `No registered user found with the character name **${ownerName}**.\n\n` +
-                        'Make sure you typed the name exactly as they registered it. ' +
-                        'Ask the owner to check their character name (it must match exactly what they registered).'
-                    )
+                regEmbed(
+                    '❌ Owner Not Found',
+                    '#ED4245',
+                    `No registered user found with the character name **${ownerName}**.\n\n` +
+                    'Make sure you typed the name exactly as they registered it. ' +
+                    'Ask the owner to check their character name (it must match exactly what they registered).',
+                    '✈️ Character Registration System'
+                )
             ]
         });
     }
@@ -443,13 +436,13 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
     if (ownerData.pilotIds.length >= 4) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Owner Pilot Limit Reached')
-                    .setColor('#ED4245')
-                    .setDescription(
-                        `**${ownerData.nickname}** already has the maximum of **4 pilots**.\n\n` +
-                        'Ask them to remove a pilot first before adding you.'
-                    )
+                regEmbed(
+                    '❌ Owner Pilot Limit Reached',
+                    '#ED4245',
+                    `**${ownerData.nickname}** already has the maximum of **4 pilots**.\n\n` +
+                    'Ask them to remove a pilot first before adding you.',
+                    '✈️ Character Registration System'
+                )
             ]
         });
     }
@@ -458,12 +451,12 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
     if (ownerData.pilotIds.includes(interaction.user.id)) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Already a Pilot')
-                    .setColor('#ED4245')
-                    .setDescription(
-                        `You are already linked as a pilot for **${ownerData.nickname}**.`
-                    )
+                regEmbed(
+                    '❌ Already a Pilot',
+                    '#ED4245',
+                    `You are already linked as a pilot for **${ownerData.nickname}**.`,
+                    '✈️ Character Registration System'
+                )
             ]
         });
     }
@@ -475,13 +468,13 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
     if (existingKey) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('⏳ Pending Request')
-                    .setColor('#FEE75C')
-                    .setDescription(
-                        'You already have a pending pilot request for **' + ownerData.nickname + '**.\n\n' +
-                        'This request expires in **48 hours**. Please wait for the owner to respond, or contact an Elder if needed.'
-                    )
+                regEmbed(
+                    '⏳ Pending Request',
+                    '#FEE75C',
+                    'You already have a pending pilot request for **' + ownerData.nickname + '**.\n\n' +
+                    'This request expires in **48 hours**. Please wait for the owner to respond, or contact an Elder if needed.',
+                    '✈️ Character Registration System'
+                )
             ]
         });
     }
@@ -506,13 +499,13 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
         saveRegistrationRequests();
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Cannot Send Request')
-                    .setColor('#ED4245')
-                    .setDescription(
-                        'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
-                        'The owner may have left the server or has DMs disabled.'
-                    )
+                regEmbed(
+                    '❌ Cannot Send Request',
+                    '#ED4245',
+                    'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
+                    'The owner may have left the server or has DMs disabled.',
+                    '✈️ Character Registration System'
+                )
             ]
         });
     }
@@ -596,13 +589,13 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
         logger.error('Registration', 'Failed to send pilot request DM', err);
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Cannot Send Request')
-                    .setColor('#ED4245')
-                    .setDescription(
-                        'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
-                        'The owner may have DMs disabled. Ask them to enable DMs in server settings.'
-                    )
+                regEmbed(
+                    '❌ Cannot Send Request',
+                    '#ED4245',
+                    'Could not send the pilot request to **' + ownerData.nickname + '**.\n\n' +
+                    'The owner may have DMs disabled. Ask them to enable DMs in server settings.',
+                    '✈️ Character Registration System'
+                )
             ]
         });
     }
@@ -874,10 +867,12 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
     if (duplicate) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Registration Failed')
-                    .setColor('#ED4245')
-                    .setDescription(`**${nickname}** is already registered by another user.`)
+                regEmbed(
+                    '❌ Registration Failed',
+                    '#ED4245',
+                    `**${nickname}** is already registered by another user.`,
+                    '📝 Character Registration System'
+                )
             ]
         });
     }
@@ -930,13 +925,13 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
             logEvent(`⚠️ User ${interaction.user.tag} — auto-correct blocked: "${nickname}" → "${finalNickname}" conflicts`);
             return interaction.editReply({
                 embeds: [
-                    new EmbedBuilder()
-                        .setTitle('❌ Registration Failed')
-                        .setColor('#ED4245')
-                        .setDescription(
-                            `**${nickname}** would be auto-corrected to **${finalNickname}**, ` +
-                            'but that name is already registered.\n\nPlease contact an admin or use a different name.'
-                        )
+                    regEmbed(
+                        '❌ Registration Failed',
+                        '#ED4245',
+                        `**${nickname}** would be auto-corrected to **${finalNickname}**, ` +
+                        'but that name is already registered.\n\nPlease contact an admin or use a different name.',
+                        '📝 Character Registration System'
+                    )
                 ]
             });
         }
@@ -962,10 +957,12 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
         saveRegistrationRequests();
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Error')
-                    .setColor('#ED4245')
-                    .setDescription('Could not send approval request. Please try again later.')
+                regEmbed(
+                    '❌ Error',
+                    '#ED4245',
+                    'Could not send approval request. Please try again later.',
+                    '📝 Character Registration System'
+                )
             ]
         });
     }
@@ -1544,10 +1541,12 @@ async function handleRemovePilotButton(interaction, rankingDb) {
     if (!isRegistered || !userData.pilotIds || userData.pilotIds.length === 0) {
         return interaction.reply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ No Pilots Found')
-                    .setColor('#ED4245')
-                    .setDescription("You don't have any pilots linked to your account.")
+                regEmbed(
+                    '❌ No Pilots Found',
+                    '#ED4245',
+                    "You don't have any pilots linked to your account.",
+                    '🗑️ Character Registration System'
+                )
             ],
             flags: 64
         });
@@ -1581,10 +1580,12 @@ async function handleRemovePilotButton(interaction, rankingDb) {
 
     return interaction.reply({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('🗑️ Remove a Pilot')
-                .setColor('#ED4245')
-                .setDescription('Select a pilot to remove from your account:')
+            regEmbed(
+                '🗑️ Remove a Pilot',
+                '#ED4245',
+                'Select a pilot to remove from your account:',
+                '🗑️ Character Registration System'
+            )
         ],
         components: [row, cancelBtn],
         flags: 64
@@ -1599,10 +1600,12 @@ export async function handleRegRemovePilotSelect(interaction, rankingDb, saveLoc
     if (!userData || !userData.pilotIds || !userData.pilotIds.includes(pilotToRemoveId)) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Error')
-                    .setColor('#ED4245')
-                    .setDescription('This pilot is no longer linked to your account.')
+                regEmbed(
+                    '❌ Error',
+                    '#ED4245',
+                    'This pilot is no longer linked to your account.',
+                    '🗑️ Character Registration System'
+                )
             ],
             components: [],
             flags: 64
@@ -1627,10 +1630,12 @@ export async function handleRegRemovePilotSelect(interaction, rankingDb, saveLoc
 
     await interaction.editReply({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('✅ Pilot Removed')
-                .setColor('#57F287')
-                .setDescription('The pilot has been removed from your account.')
+            regEmbed(
+                '✅ Pilot Removed',
+                '#57F287',
+                'The pilot has been removed from your account.',
+                '🗑️ Character Registration System'
+            )
         ],
         components: [],
         flags: 64
@@ -1648,23 +1653,25 @@ async function handleSyncButton(interaction, rankingDb, saveLocalStorage, logEve
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Permission Denied')
-                    .setColor('#ED4245')
-                    .setDescription('Only **Administrators** can trigger a force sync.')
+                regEmbed(
+                    '❌ Permission Denied',
+                    '#ED4245',
+                    'Only **Administrators** can trigger a force sync.',
+                    '🔄 Character Registration System'
+                )
             ],
             flags: 64
         });
     }
 
-    const embed = new EmbedBuilder()
-        .setTitle('🔄 Force Synchronization')
-        .setColor('#FEE75C')
-        .setDescription(
-            'This will force a **full synchronization** with the official MIR4 ranking portal.\n\n' +
-            'All registered player data (nicknames, clans) will be updated according to the current ranking.\n\n' +
-            '**Are you sure you want to proceed?**'
-        );
+    const embed = regEmbed(
+        '🔄 Force Synchronization',
+        '#FEE75C',
+        'This will force a **full synchronization** with the official MIR4 ranking portal.\n\n' +
+        'All registered player data (nicknames, clans) will be updated according to the current ranking.\n\n' +
+        '**Are you sure you want to proceed?**',
+        '🔄 Character Registration System'
+    );
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -1690,10 +1697,12 @@ export async function handleRegSyncConfirm(interaction, rankingDb, saveLocalStor
         delete confirmationCache[cacheKey];
         return interaction.update({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('⌛ Expired')
-                    .setColor('#FEE75C')
-                    .setDescription('This confirmation has expired. Please try again.')
+                regEmbed(
+                    '⌛ Expired',
+                    '#FEE75C',
+                    'This confirmation has expired. Please try again.',
+                    '🔄 Character Registration System'
+                )
             ],
             components: [],
             flags: 64
@@ -1703,10 +1712,12 @@ export async function handleRegSyncConfirm(interaction, rankingDb, saveLocalStor
 
     await interaction.update({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('🔄 Syncing...')
-                .setColor('#5865F2')
-                .setDescription('Synchronizing with the official ranking portal. This may take a moment.')
+            regEmbed(
+                '🔄 Syncing...',
+                '#5865F2',
+                'Synchronizing with the official ranking portal. This may take a moment.',
+                '🔄 Character Registration System'
+            )
         ],
         components: [],
         flags: 64
@@ -1716,20 +1727,24 @@ export async function handleRegSyncConfirm(interaction, rankingDb, saveLocalStor
         await runDailySynchronization(interaction.client, rankingDb, saveLocalStorage, logEvent, true);
         await interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('✅ Sync Complete')
-                    .setColor('#57F287')
-                    .setDescription('Force sync completed! Player data has been updated from the ranking portal.')
+                regEmbed(
+                    '✅ Sync Complete',
+                    '#57F287',
+                    'Force sync completed! Player data has been updated from the ranking portal.',
+                    '🔄 Character Registration System'
+                )
             ],
             flags: 64
         });
     } catch (err) {
         await interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Sync Failed')
-                    .setColor('#ED4245')
-                    .setDescription(`\`\`\`\n${(err.message || String(err)).slice(0, 1900)}\n\`\`\``)
+                regEmbed(
+                    '❌ Sync Failed',
+                    '#ED4245',
+                    `\`\`\`\n${(err.message || String(err)).slice(0, 1900)}\n\`\`\``,
+                    '🔄 Character Registration System'
+                )
             ],
             flags: 64
         });
@@ -1744,13 +1759,13 @@ export async function handleRegSyncConfirm(interaction, rankingDb, saveLocalStor
 
 /** Shows a help embed with all available commands and info. */
 async function handleHelpButton(interaction) {
-    const embed = new EmbedBuilder()
-        .setTitle('❓ Help & Commands')
-        .setColor('#5865F2')
-        .setDescription(
-            'Everything you need to know about the **Character Registration System**! 👇\n\n' +
-            '━━━━━━━━━━━━━━━━━━━━━━━━'
-        )
+    const embed = regEmbed(
+        '❓ Help & Commands',
+        '#5865F2',
+        'Everything you need to know about the **Character Registration System**! 👇\n\n' +
+        '━━━━━━━━━━━━━━━━━━━━━━━━',
+        '❓ Character Registration System'
+    )
         .addFields(
             {
                 name: '📝 Register',
