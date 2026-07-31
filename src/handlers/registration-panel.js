@@ -92,6 +92,10 @@ const BUTTON_IDS = {
 let regPanelMessage = null;
 let regPanelChannelId = null;
 
+// ── Fixed-message embed titles (used to recover existing messages after a restart) ──
+const WELCOME_EMBED_TITLE = '👋 Welcome to the Server!';
+const REG_PANEL_EMBED_TITLE = '🎮 Character Registration System';
+
 // ==========================================
 // 🎨 EMBED BUILDER
 // ==========================================
@@ -143,7 +147,7 @@ export function buildRegPanelEmbed(rankingDb) {
         .join('\n') || 'No registered members yet.';
 
     const embed = regEmbed(
-        '🎮 Character Registration System',
+        REG_PANEL_EMBED_TITLE,
         '#5865F2',
         'Welcome! Link your **in-game character** to unlock your clan role and manage pilots.\n\n' +
         '━━━━━━━━━━━━━━━━━━━━━━━━',
@@ -187,12 +191,59 @@ export function buildRegPanelEmbed(rankingDb) {
 // 📦 PANEL DEPLOYMENT
 // ==========================================
 
+/**
+ * Try to recover an already-deployed fixed bot message (welcome/panel) in a channel
+ * by scanning recent bot-authored messages for a matching embed title.
+ * Returns the message if found, otherwise null.
+ * @param {import('discord.js').TextChannel} channel
+ * @param {string} embedTitle
+ * @returns {Promise<import('discord.js').Message|null>}
+ */
+async function findExistingFixedMessage(channel, embedTitle) {
+    try {
+        const botId = client.user?.id;
+        if (!botId) return null;
+        const messages = await channel.messages.fetch({ limit: 100 });
+        return messages.find(
+            m => m.author?.id === botId && m.embeds?.[0]?.title === embedTitle
+        ) || null;
+    } catch {
+        return null;
+    }
+}
+
+/** Best-effort cleanup of older duplicate fixed messages (welcome/panel) left by previous restarts. @param {import('discord.js').TextChannel} channel @param {string} embedTitle @param {import('discord.js').Message} keep */
+async function cleanupOldFixedMessages(channel, embedTitle, keep) {
+    try {
+        const botId = client.user?.id;
+        if (!botId) return;
+        const messages = await channel.messages.fetch({ limit: 100 });
+        const stale = messages.filter(
+            m => m.id !== keep.id && m.author?.id === botId && m.embeds?.[0]?.title === embedTitle
+        );
+        for (const msg of stale.values()) {
+            await msg.delete().catch(noop);
+        }
+    } catch {
+        // Ignore — cleanup is best-effort
+    }
+}
+
 /** Post or update the registration panel in the configured channel. @param {import('discord.js').TextChannel} channel @param {object} rankingDb */
 export async function deployRegistrationPanel(channel, rankingDb) {
     const embed = buildRegPanelEmbed(rankingDb);
     const components = buildRegPanelButtons(false);
 
     try {
+        if (!regPanelMessage) {
+            // Recover the previously deployed panel after a restart (avoid duplicates)
+            regPanelMessage = await findExistingFixedMessage(channel, REG_PANEL_EMBED_TITLE);
+            if (regPanelMessage) {
+                regPanelChannelId = channel.id;
+                await cleanupOldFixedMessages(channel, REG_PANEL_EMBED_TITLE, regPanelMessage);
+            }
+        }
+
         if (regPanelMessage) {
             // Update existing message
             regPanelMessage = await regPanelMessage.edit({
@@ -1836,7 +1887,7 @@ let welcomeMessage = null;
 /** Build the fixed welcome embed posted in the welcome channel — consistent with the registration panel. */
 export function buildWelcomeEmbed() {
     return regEmbed(
-        '👋 Welcome to the Server!',
+        WELCOME_EMBED_TITLE,
         '#5865F2',
         'Get your **in-game clan roles** and manage your characters below! 👇\n\n' +
         '━━━━━━━━━━━━━━━━━━━━━━━━'
@@ -1875,6 +1926,14 @@ export async function deployWelcomeMessage(channel) {
     const embed = buildWelcomeEmbed();
 
     try {
+        if (!welcomeMessage) {
+            // Recover the previously deployed welcome message after a restart (avoid duplicates)
+            welcomeMessage = await findExistingFixedMessage(channel, WELCOME_EMBED_TITLE);
+            if (welcomeMessage) {
+                await cleanupOldFixedMessages(channel, WELCOME_EMBED_TITLE, welcomeMessage);
+            }
+        }
+
         if (welcomeMessage) {
             // Update existing message
             welcomeMessage = await welcomeMessage.edit({ embeds: [embed] }).catch(() => null);
