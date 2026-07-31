@@ -1922,9 +1922,10 @@ export function buildWelcomeEmbed() {
         );
 }
 
-/** Post or update the fixed welcome message in the configured channel. @param {import('discord.js').TextChannel} channel */
+/** Post or update the fixed welcome message in the configured channel. Always attaches the registration action buttons for consistency with the panel. @param {import('discord.js').TextChannel} channel */
 export async function deployWelcomeMessage(channel) {
     const embed = buildWelcomeEmbed();
+    const components = buildRegPanelButtons(false);
 
     try {
         if (!welcomeMessage) {
@@ -1937,12 +1938,12 @@ export async function deployWelcomeMessage(channel) {
 
         if (welcomeMessage) {
             // Update existing message
-            welcomeMessage = await welcomeMessage.edit({ embeds: [embed] }).catch(() => null);
+            welcomeMessage = await welcomeMessage.edit({ embeds: [embed], components }).catch(() => null);
         }
 
         if (!welcomeMessage) {
             // Send new message
-            welcomeMessage = await channel.send({ embeds: [embed] });
+            welcomeMessage = await channel.send({ embeds: [embed], components });
         }
 
         logger.info('Registration', `Welcome message deployed in #${channel.name}`);
