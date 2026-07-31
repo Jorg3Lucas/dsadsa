@@ -96,33 +96,82 @@ let regPanelChannelId = null;
 // 🎨 EMBED BUILDER
 // ==========================================
 
-/** Build the beautiful registration panel embed. @param {object} rankingDb - The ranking database */
+/** Build a branded embed consistent with the registration panel: colored bar, separator-ready description, footer with bot avatar + timestamp. @param {string} title @param {string} color @param {string} description @param {string} [footerText] @returns {import('discord.js').EmbedBuilder} */
+function regEmbed(title, color, description, footerText) {
+    return new EmbedBuilder()
+        .setTitle(title)
+        .setColor(color)
+        .setDescription(description)
+        .setFooter({
+            text: footerText || 'Character Registration System',
+            iconURL: client?.user?.displayAvatarURL()
+        })
+        .setTimestamp();
+}
+
+/** Build the beautiful registration panel embed. Shows live server stats, clan distribution and clear steps. @param {object} rankingDb - The ranking database */
 export function buildRegPanelEmbed(rankingDb) {
-    const registeredCount = Object.values(rankingDb.users || {}).filter(
+    const users = rankingDb.users || {};
+    const registered = Object.values(users).filter(
         u => u && (u.registeredAt || u.manual === true)
-    ).length;
+    );
+    const registeredCount = registered.length;
+
+    // ── Live stats ──
+    const pilotCount = registered.reduce((acc, u) => acc + (Array.isArray(u.pilotIds) ? u.pilotIds.length : 0), 0);
+    const pendingApprovals = Object.keys(pendingOwnerRegistrations).length + Object.keys(pilotRequests).length;
+
+    // ── Clan distribution (clanManual override first, then local ranking cache) ──
+    const localCache = getLocalRankingCache() || {};
+    const cleanedCache = new Map(Object.keys(localCache).map(k => [cleanNickname(k), k]));
+    const clanCounts = {};
+    for (const u of registered) {
+        let clan = null;
+        if (u.clanManual) {
+            clan = u.clanManual;
+        } else if (u.nickname) {
+            const cleanedNick = cleanNickname(u.nickname);
+            const exactKey = cleanedCache.get(cleanedNick);
+            clan = exactKey ? localCache[exactKey] : null;
+        }
+        if (clan) clanCounts[clan] = (clanCounts[clan] || 0) + 1;
+    }
+    const clanDistribution = Object.entries(clanCounts)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 6)
+        .map(([clan, count]) => `▸ **${count}** — ${clan}`)
+        .join('\n') || 'No registered members yet.';
 
     const embed = new EmbedBuilder()
-        .setTitle('📝 Character Registration')
+        .setTitle('🎮 Character Registration System')
         .setColor('#5865F2')
         .setDescription(
-            'Welcome to the **Character Registration System**! Link your in-game character to unlock clan roles, manage pilots, and more.\n\n' +
+            'Welcome! Link your **in-game character** to unlock your clan role and manage pilots.\n\n' +
             '━━━━━━━━━━━━━━━━━━━━━━━━'
         )
         .addFields(
             {
-                name: '📋 How It Works',
+                name: '📊 Server Stats',
                 value: [
-                    '**1.** Click **📝 Register** and type your exact in-game nickname.',
-                    '**2.** The bot auto-detects your clan from the ranking and assigns the role.',
-                    '**3.** Want to be a pilot for someone? Use **✈️ Register as Pilot** button!',
-                    '**4.** Your nickname and role stay synced automatically every day at **22:00 BRT**.'
+                    `👥 **${registeredCount}** registered member(s)`,
+                    `✈️ **${pilotCount}** linked pilot(s)`,
+                    `⏳ **${pendingApprovals}** pending approval(s)`
                 ].join('\n'),
                 inline: false
             },
             {
-                name: '👥 Registered Members',
-                value: `**${registeredCount}** players are currently registered.`,
+                name: '📋 How It Works',
+                value: [
+                    '**1.** Click **📝 Register** and type your exact in-game nickname.',
+                    '**2.** The bot auto-detects your clan from the official ranking and assigns the role.',
+                    '**3.** Want to pilot for someone? Use **✈️ Register as Pilot** (up to **4 pilots** per owner).',
+                    '**4.** Roles & nicknames sync automatically every day at **22:00 BRT**.'
+                ].join('\n'),
+                inline: false
+            },
+            {
+                name: '🏛️ Clan Distribution',
+                value: clanDistribution,
                 inline: true
             },
             {
@@ -132,7 +181,7 @@ export function buildRegPanelEmbed(rankingDb) {
             }
         )
         .setFooter({
-            text: 'Use the buttons below to manage your account',
+            text: 'Click a button below to manage your account',
             iconURL: client?.user?.displayAvatarURL()
         })
         .setTimestamp();
@@ -469,18 +518,17 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
     }
 
     try {
-        const dmEmbed = new EmbedBuilder()
-            .setTitle('✈️ Pilot Request')
-            .setColor('#5865F2')
-            .setDescription(
-                `**${interaction.user.tag}** wants to be your pilot!`
-            )
+        const dmEmbed = regEmbed(
+            '✈️ Pilot Request',
+            '#5865F2',
+            `**${interaction.user.tag}** wants to be your pilot!\n\n` +
+            '━━━━━━━━━━━━━━━━━━━━━━━━',
+            '⏳ This request expires in 48 hours'
+        )
             .addFields(
-                { name: '👤 Pilot', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
+                { name: '👤 Pilot', value: `**${interaction.user.tag}**\n\`${interaction.user.id}\``, inline: false },
                 { name: '🎮 Your Character', value: `**${ownerData.nickname}**`, inline: true }
-            )
-            .setFooter({ text: 'This request expires in 48 hours' })
-            .setTimestamp();
+            );
 
         const dmRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -501,17 +549,18 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
         try {
             const approvalChannel = await client.channels.fetch(APPROVAL_CHANNEL_ID).catch(() => null);
             if (approvalChannel) {
-                const elderEmbed = new EmbedBuilder()
-                    .setTitle('✈️ Pilot Request')
-                    .setColor('#5865F2')
-                    .setDescription(`**${interaction.user.tag}** wants to be a pilot for **${ownerData.nickname}**`)
+                const elderEmbed = regEmbed(
+                    '✈️ Pilot Request',
+                    '#5865F2',
+                    `**${interaction.user.tag}** wants to be a pilot for **${ownerData.nickname}**\n\n` +
+                    '━━━━━━━━━━━━━━━━━━━━━━━━',
+                    '🛡️ Only Elders and Admins can approve/reject'
+                )
                     .addFields(
-                        { name: '👤 Pilot', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
-                        { name: '🎮 Owner', value: `**${ownerData.nickname}** (${ownerId})`, inline: true },
-                        { name: '📬 Status', value: '⏳ Awaiting Elder/Admin approval', inline: false }
-                    )
-                    .setFooter({ text: 'Only Elders and Admins can approve/reject' })
-                    .setTimestamp();
+                        { name: '👤 Pilot', value: `**${interaction.user.tag}**\n\`${interaction.user.id}\``, inline: true },
+                        { name: '👑 Owner', value: `**${ownerData.nickname}**\n\`${ownerId}\``, inline: true },
+                        { name: '📬 Status', value: '⏳ **Awaiting Elder/Admin approval**', inline: false }
+                    );
 
                 const elderRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
@@ -532,13 +581,13 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
 
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('✅ Request Sent!')
-                    .setColor('#57F287')
-                    .setDescription(
-                        `Your pilot request has been sent to **${ownerData.nickname}**!\n\n` +
-                        'They will receive a DM with your request. Once they approve, you will be linked as their pilot.'
-                    )
+                regEmbed(
+                    '✅ Request Sent!',
+                    '#57F287',
+                    `Your pilot request has been sent to **${ownerData.nickname}**!\n\n` +
+                    'They will receive a DM with your request. Once they approve, you will be linked as their pilot.',
+                    '✈️ Character Registration System'
+                )
             ]
         });
     } catch (err) {
@@ -571,10 +620,12 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     if (!request) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('⌛ Request Expired')
-                    .setColor('#FEE75C')
-                    .setDescription('This pilot request has expired or was already processed.')
+                regEmbed(
+                    '⌛ Request Expired',
+                    '#FEE75C',
+                    'This pilot request has expired or was already processed.',
+                    '✈️ Character Registration System'
+                )
             ],
             components: []
         });
@@ -584,10 +635,12 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     if (interaction.user.id !== request.ownerId) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Not Your Request')
-                    .setColor('#ED4245')
-                    .setDescription('Only the account owner can approve this request.')
+                regEmbed(
+                    '❌ Not Your Request',
+                    '#ED4245',
+                    'Only the account owner can approve this request.',
+                    '✈️ Character Registration System'
+                )
             ],
             components: []
         });
@@ -601,10 +654,12 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     if (!ownerData) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Error')
-                    .setColor('#ED4245')
-                    .setDescription('Your account data could not be found. Please re-register.')
+                regEmbed(
+                    '❌ Error',
+                    '#ED4245',
+                    'Your account data could not be found. Please re-register.',
+                    '✈️ Character Registration System'
+                )
             ],
             components: []
         });
@@ -614,10 +669,12 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     if (ownerData.pilotIds.length >= 4) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Pilot Limit Reached')
-                    .setColor('#ED4245')
-                    .setDescription('You already have the maximum of **4 pilots**. Remove one first.')
+                regEmbed(
+                    '❌ Pilot Limit Reached',
+                    '#ED4245',
+                    'You already have the maximum of **4 pilots**. Remove one first.',
+                    '✈️ Character Registration System'
+                )
             ],
             components: []
         });
@@ -626,10 +683,12 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     if (ownerData.pilotIds.includes(request.pilotId)) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('ℹ️ Already Linked')
-                    .setColor('#5865F2')
-                    .setDescription('This user is already linked as your pilot.')
+                regEmbed(
+                    'ℹ️ Already Linked',
+                    '#5865F2',
+                    'This user is already linked as your pilot.',
+                    '✈️ Character Registration System'
+                )
             ],
             components: []
         });
@@ -670,10 +729,12 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
         if (pilotUser) {
             await pilotUser.send({
                 embeds: [
-                    new EmbedBuilder()
-                        .setTitle('✅ Pilot Request Approved!')
-                        .setColor('#57F287')
-                        .setDescription(`**${request.ownerNick}** has approved you as their pilot! 🎉`)
+                    regEmbed(
+                        '✅ Pilot Request Approved!',
+                        '#57F287',
+                        `**${request.ownerNick}** has approved you as their pilot! 🎉`,
+                        '✈️ Character Registration System'
+                    )
                 ]
             }).catch(noop);
         }
@@ -682,11 +743,13 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     // ── Update the DM embed ──
     return interaction.editReply({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('✅ Pilot Approved!')
-                .setColor('#57F287')
-                .setDescription(`You approved **${request.pilotTag}** as your pilot for **${request.ownerNick}**.`)
-                .setTimestamp()
+            regEmbed(
+                '✅ Pilot Approved!',
+                '#57F287',
+                `You approved **${request.pilotTag}** as your pilot for **${request.ownerNick}**.\n\n` +
+                '━━━━━━━━━━━━━━━━━━━━━━━━',
+                '✈️ Character Registration System'
+            )
         ],
         components: []
     });
@@ -704,10 +767,12 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
     if (!request) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('⌛ Request Expired')
-                    .setColor('#FEE75C')
-                    .setDescription('This pilot request has expired or was already processed.')
+                regEmbed(
+                    '⌛ Request Expired',
+                    '#FEE75C',
+                    'This pilot request has expired or was already processed.',
+                    '✈️ Character Registration System'
+                )
             ],
             components: []
         });
@@ -717,10 +782,12 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
     if (interaction.user.id !== request.ownerId) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('❌ Not Your Request')
-                    .setColor('#ED4245')
-                    .setDescription('Only the account owner can reject this request.')
+                regEmbed(
+                    '❌ Not Your Request',
+                    '#ED4245',
+                    'Only the account owner can reject this request.',
+                    '✈️ Character Registration System'
+                )
             ],
             components: []
         });
@@ -737,10 +804,12 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
         if (pilotUser) {
             await pilotUser.send({
                 embeds: [
-                    new EmbedBuilder()
-                        .setTitle('❌ Pilot Request Rejected')
-                        .setColor('#ED4245')
-                        .setDescription(`**${request.ownerNick}** has declined your pilot request.`)
+                    regEmbed(
+                        '❌ Pilot Request Rejected',
+                        '#ED4245',
+                        `**${request.ownerNick}** has declined your pilot request.`,
+                        '✈️ Character Registration System'
+                    )
                 ]
             }).catch(noop);
         }
@@ -749,11 +818,13 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
     // ── Update the DM embed ──
     return interaction.editReply({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('❌ Request Rejected')
-                .setColor('#ED4245')
-                .setDescription(`You rejected **${request.pilotTag}** as your pilot.`)
-                .setTimestamp()
+            regEmbed(
+                '❌ Request Rejected',
+                '#ED4245',
+                `You rejected **${request.pilotTag}** as your pilot.\n\n` +
+                '━━━━━━━━━━━━━━━━━━━━━━━━',
+                '✈️ Character Registration System'
+            )
         ],
         components: []
     });
@@ -899,17 +970,18 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
         });
     }
 
-    const approveEmbed = new EmbedBuilder()
-        .setTitle('📝 Registration Request')
-        .setColor('#5865F2')
-        .setDescription(`${interaction.user} wants to register!`)
+    const approveEmbed = regEmbed(
+        '📝 Registration Request',
+        '#5865F2',
+        `**${interaction.user}** wants to register!\n\n` +
+        '━━━━━━━━━━━━━━━━━━━━━━━━',
+        '⏳ Expires in 48 hours • 🛡️ Only Elders and Admins can approve/reject'
+    )
         .addFields(
-            { name: '👤 User', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
+            { name: '👤 User', value: `**${interaction.user.tag}**\n\`${interaction.user.id}\``, inline: false },
             { name: '🎮 Character', value: `**${finalNickname}**`, inline: true },
             { name: '✏️ Original Input', value: nickname !== finalNickname ? `~~${nickname}~~` : 'Same', inline: true }
-        )
-        .setFooter({ text: 'This request expires in 48 hours • Only Elders and Admins can approve/reject' })
-        .setTimestamp();
+        );
 
     const approveRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -930,14 +1002,13 @@ export async function handleRegModalSubmit(interaction, rankingDb, saveLocalStor
 
     return interaction.editReply({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('✅ Request Sent for Approval')
-                .setColor('#57F287')
-                .setDescription(
-                    `Your registration request for **${finalNickname}** has been sent to the **Elders** for approval.\n\n` +
-                    'This request expires in **48 hours**. You will be notified when it is approved or rejected.'
-                )
-                .setTimestamp()
+            regEmbed(
+                '✅ Request Sent for Approval',
+                '#57F287',
+                `Your registration request for **${finalNickname}** has been sent to the **Elders** for approval.\n\n` +
+                'This request expires in **48 hours**. You will be notified when it is approved or rejected.',
+                '📝 Character Registration System'
+            )
         ]
     });
 }
@@ -968,10 +1039,12 @@ export async function handleRegElderApproveOwner(interaction, rankingDb, saveLoc
     if (!request) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('⌛ Request Expired')
-                    .setColor('#FEE75C')
-                    .setDescription('This registration request has expired or was already processed.')
+                regEmbed(
+                    '⌛ Request Expired',
+                    '#FEE75C',
+                    'This registration request has expired or was already processed.',
+                    '📝 Character Registration System'
+                )
             ],
             components: []
         });
@@ -1009,11 +1082,12 @@ export async function handleRegElderApproveOwner(interaction, rankingDb, saveLoc
         if (user) {
             await user.send({
                 embeds: [
-                    new EmbedBuilder()
-                        .setTitle('✅ Registration Approved!')
-                        .setColor('#57F287')
-                        .setDescription(`Your registration for **${request.nickname}** has been approved! 🎉`)
-                        .setTimestamp()
+                    regEmbed(
+                        '✅ Registration Approved!',
+                        '#57F287',
+                        `Your registration for **${request.nickname}** has been approved! 🎉`,
+                        '📝 Character Registration System'
+                    )
                 ]
             }).catch(noop);
         }
@@ -1022,15 +1096,17 @@ export async function handleRegElderApproveOwner(interaction, rankingDb, saveLoc
     // ── Update the approval message ──
     return interaction.editReply({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('✅ Registration Approved')
-                .setColor('#57F287')
-                .setDescription(`Approved by ${interaction.user}.`)
+            regEmbed(
+                '✅ Registration Approved',
+                '#57F287',
+                `Approved by ${interaction.user}.\n\n` +
+                '━━━━━━━━━━━━━━━━━━━━━━━━',
+                '🛡️ Character Registration System'
+            )
                 .addFields(
-                    { name: '👤 User', value: `${request.userTag} (${request.userId})`, inline: false },
+                    { name: '👤 User', value: `**${request.userTag}**\n\`${request.userId}\``, inline: false },
                     { name: '🎮 Character', value: `**${request.nickname}**`, inline: true }
                 )
-                .setTimestamp()
         ],
         components: []
     });
@@ -1062,10 +1138,12 @@ export async function handleRegElderRejectOwner(interaction, rankingDb, saveLoca
     if (!request) {
         return interaction.editReply({
             embeds: [
-                new EmbedBuilder()
-                    .setTitle('⌛ Request Expired')
-                    .setColor('#FEE75C')
-                    .setDescription('This registration request has expired or was already processed.')
+                regEmbed(
+                    '⌛ Request Expired',
+                    '#FEE75C',
+                    'This registration request has expired or was already processed.',
+                    '📝 Character Registration System'
+                )
             ],
             components: []
         });
@@ -1082,11 +1160,12 @@ export async function handleRegElderRejectOwner(interaction, rankingDb, saveLoca
         if (user) {
             await user.send({
                 embeds: [
-                    new EmbedBuilder()
-                        .setTitle('❌ Registration Rejected')
-                        .setColor('#ED4245')
-                        .setDescription(`Your registration for **${request.nickname}** has been rejected by the Elders.`)
-                        .setTimestamp()
+                    regEmbed(
+                        '❌ Registration Rejected',
+                        '#ED4245',
+                        `Your registration for **${request.nickname}** has been rejected by the Elders.`,
+                        '📝 Character Registration System'
+                    )
                 ]
             }).catch(noop);
         }
@@ -1095,15 +1174,17 @@ export async function handleRegElderRejectOwner(interaction, rankingDb, saveLoca
     // ── Update the approval message ──
     return interaction.editReply({
         embeds: [
-            new EmbedBuilder()
-                .setTitle('❌ Registration Rejected')
-                .setColor('#ED4245')
-                .setDescription(`Rejected by ${interaction.user}.`)
+            regEmbed(
+                '❌ Registration Rejected',
+                '#ED4245',
+                `Rejected by ${interaction.user}.\n\n` +
+                '━━━━━━━━━━━━━━━━━━━━━━━━',
+                '🛡️ Character Registration System'
+            )
                 .addFields(
-                    { name: '👤 User', value: `${request.userTag} (${request.userId})`, inline: false },
+                    { name: '👤 User', value: `**${request.userTag}**\n\`${request.userId}\``, inline: false },
                     { name: '🎮 Character', value: `**${request.nickname}**`, inline: true }
                 )
-                .setTimestamp()
         ],
         components: []
     });
@@ -1146,11 +1227,12 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
 
     if (!request) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('⌛ Request Expired')
-                .setColor('#FEE75C')
-                .setDescription('This pilot request has expired or was already processed.')
-            ],
+            embeds: [regEmbed(
+                '⌛ Request Expired',
+                '#FEE75C',
+                'This pilot request has expired or was already processed.',
+                '🛡️ Character Registration System'
+            )],
             components: []
         });
     }
@@ -1162,11 +1244,12 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
     const ownerData = rankingDb.users[request.ownerId];
     if (!ownerData) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('❌ Error')
-                .setColor('#ED4245')
-                .setDescription('The owner account could not be found.')
-            ],
+            embeds: [regEmbed(
+                '❌ Error',
+                '#ED4245',
+                'The owner account could not be found.',
+                '🛡️ Character Registration System'
+            )],
             components: []
         });
     }
@@ -1174,22 +1257,24 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
     if (!ownerData.pilotIds) ownerData.pilotIds = [];
     if (ownerData.pilotIds.length >= 4) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('❌ Pilot Limit Reached')
-                .setColor('#ED4245')
-                .setDescription('This owner already has the maximum of **4 pilots**.')
-            ],
+            embeds: [regEmbed(
+                '❌ Pilot Limit Reached',
+                '#ED4245',
+                'This owner already has the maximum of **4 pilots**.',
+                '🛡️ Character Registration System'
+            )],
             components: []
         });
     }
 
     if (ownerData.pilotIds.includes(request.pilotId)) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('ℹ️ Already Linked')
-                .setColor('#5865F2')
-                .setDescription('This user is already linked as a pilot.')
-            ],
+            embeds: [regEmbed(
+                'ℹ️ Already Linked',
+                '#5865F2',
+                'This user is already linked as a pilot.',
+                '🛡️ Character Registration System'
+            )],
             components: []
         });
     }
@@ -1221,16 +1306,18 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
                     .setStyle(ButtonStyle.Danger)
             );
             await ownerUser.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('✅ Pilot Approved by Elders')
-                    .setColor('#57F287')
-                    .setDescription(`**${request.pilotTag}** has been approved as your pilot by ${interaction.user.tag}.`)
+                embeds: [regEmbed(
+                    '✅ Pilot Approved by Elders',
+                    '#57F287',
+                    `**${request.pilotTag}** has been approved as your pilot by ${interaction.user.tag}.\n\n` +
+                    '━━━━━━━━━━━━━━━━━━━━━━━━',
+                    '✈️ Character Registration System'
+                )
                     .addFields(
-                        { name: '👤 Pilot', value: request.pilotTag, inline: true },
-                        { name: '🎮 Character', value: request.ownerNick, inline: true },
+                        { name: '👤 Pilot', value: `**${request.pilotTag}**`, inline: true },
+                        { name: '🎮 Character', value: `**${request.ownerNick}**`, inline: true },
                         { name: 'ℹ️', value: 'If you want to revoke this pilot, click the button below.', inline: false }
                     )
-                    .setTimestamp()
                 ],
                 components: [revokeRow]
             }).catch(noop);
@@ -1242,26 +1329,29 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
         const pilotUser = await client.users.fetch(request.pilotId).catch(() => null);
         if (pilotUser) {
             await pilotUser.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('✅ Pilot Request Approved!')
-                    .setColor('#57F287')
-                    .setDescription(`**${request.ownerNick}** has approved you as their pilot! 🎉`)
-                ]
+                embeds: [regEmbed(
+                    '✅ Pilot Request Approved!',
+                    '#57F287',
+                    `**${request.ownerNick}** has approved you as their pilot! 🎉`,
+                    '✈️ Character Registration System'
+                )]
             }).catch(noop);
         }
     } catch { /* ignore */ }
 
     // ── Update the channel message ──
     return interaction.editReply({
-        embeds: [new EmbedBuilder()
-            .setTitle('✅ Pilot Approved')
-            .setColor('#57F287')
-            .setDescription(`Approved by ${interaction.user}.`)
+        embeds: [regEmbed(
+            '✅ Pilot Approved',
+            '#57F287',
+            `Approved by ${interaction.user}.\n\n` +
+            '━━━━━━━━━━━━━━━━━━━━━━━━',
+            '🛡️ Character Registration System'
+        )
             .addFields(
-                { name: '👤 Pilot', value: request.pilotTag, inline: true },
-                { name: '🎮 Owner', value: request.ownerNick, inline: true }
+                { name: '👤 Pilot', value: `**${request.pilotTag}**`, inline: true },
+                { name: '👑 Owner', value: `**${request.ownerNick}**`, inline: true }
             )
-            .setTimestamp()
         ],
         components: []
     });
@@ -1291,11 +1381,12 @@ export async function handleRegElderRejectPilot(interaction, rankingDb, saveLoca
 
     if (!request) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('⌛ Request Expired')
-                .setColor('#FEE75C')
-                .setDescription('This pilot request has expired or was already processed.')
-            ],
+            embeds: [regEmbed(
+                '⌛ Request Expired',
+                '#FEE75C',
+                'This pilot request has expired or was already processed.',
+                '🛡️ Character Registration System'
+            )],
             components: []
         });
     }
@@ -1311,11 +1402,12 @@ export async function handleRegElderRejectPilot(interaction, rankingDb, saveLoca
         const pilotUser = await client.users.fetch(request.pilotId).catch(() => null);
         if (pilotUser) {
             await pilotUser.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('❌ Pilot Request Rejected')
-                    .setColor('#ED4245')
-                    .setDescription(`Your pilot request for **${ownerNick}** has been rejected by the Elders.`)
-                ]
+                embeds: [regEmbed(
+                    '❌ Pilot Request Rejected',
+                    '#ED4245',
+                    `Your pilot request for **${ownerNick}** has been rejected by the Elders.`,
+                    '✈️ Character Registration System'
+                )]
             }).catch(noop);
         }
     } catch { /* ignore */ }
@@ -1325,26 +1417,29 @@ export async function handleRegElderRejectPilot(interaction, rankingDb, saveLoca
         const ownerUser = await client.users.fetch(request.ownerId).catch(() => null);
         if (ownerUser) {
             await ownerUser.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('❌ Pilot Request Rejected')
-                    .setColor('#ED4245')
-                    .setDescription(`The pilot request from **${request.pilotTag}** has been rejected by the Elders.`)
-                ]
+                embeds: [regEmbed(
+                    '❌ Pilot Request Rejected',
+                    '#ED4245',
+                    `The pilot request from **${request.pilotTag}** has been rejected by the Elders.`,
+                    '✈️ Character Registration System'
+                )]
             }).catch(noop);
         }
     } catch { /* ignore */ }
 
     // ── Update the channel message ──
     return interaction.editReply({
-        embeds: [new EmbedBuilder()
-            .setTitle('❌ Pilot Request Rejected')
-            .setColor('#ED4245')
-            .setDescription(`Rejected by ${interaction.user}.`)
+        embeds: [regEmbed(
+            '❌ Pilot Request Rejected',
+            '#ED4245',
+            `Rejected by ${interaction.user}.\n\n` +
+            '━━━━━━━━━━━━━━━━━━━━━━━━',
+            '🛡️ Character Registration System'
+        )
             .addFields(
-                { name: '👤 Pilot', value: request.pilotTag, inline: true },
-                { name: '🎮 Owner', value: ownerNick, inline: true }
+                { name: '👤 Pilot', value: `**${request.pilotTag}**`, inline: true },
+                { name: '👑 Owner', value: `**${ownerNick}**`, inline: true }
             )
-            .setTimestamp()
         ],
         components: []
     });
@@ -1367,11 +1462,12 @@ export async function handleRegPilotRevoke(interaction, rankingDb, saveLocalStor
     // Verify the person clicking is the actual owner
     if (interaction.user.id !== ownerId) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('❌ Not Your Account')
-                .setColor('#ED4245')
-                .setDescription('Only the account owner can revoke a pilot.')
-            ],
+            embeds: [regEmbed(
+                '❌ Not Your Account',
+                '#ED4245',
+                'Only the account owner can revoke a pilot.',
+                '✈️ Character Registration System'
+            )],
             components: []
         });
     }
@@ -1379,11 +1475,12 @@ export async function handleRegPilotRevoke(interaction, rankingDb, saveLocalStor
     const ownerData = rankingDb.users[ownerId];
     if (!ownerData || !ownerData.pilotIds || !ownerData.pilotIds.includes(pilotId)) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('❌ Not Found')
-                .setColor('#ED4245')
-                .setDescription('This pilot is no longer linked to your account.')
-            ],
+            embeds: [regEmbed(
+                '❌ Not Found',
+                '#ED4245',
+                'This pilot is no longer linked to your account.',
+                '✈️ Character Registration System'
+            )],
             components: []
         });
     }
@@ -1412,23 +1509,25 @@ export async function handleRegPilotRevoke(interaction, rankingDb, saveLocalStor
         const pilotUser = await client.users.fetch(pilotId).catch(() => null);
         if (pilotUser) {
             await pilotUser.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('❌ Pilot Revoked')
-                    .setColor('#ED4245')
-                    .setDescription(`Your pilot role has been revoked by **${ownerData.nickname}**.`)
-                ]
+                embeds: [regEmbed(
+                    '❌ Pilot Revoked',
+                    '#ED4245',
+                    `Your pilot role has been revoked by **${ownerData.nickname}**.`,
+                    '✈️ Character Registration System'
+                )]
             }).catch(noop);
         }
     } catch { /* ignore */ }
 
     // ── Update the DM embed ──
     return interaction.editReply({
-        embeds: [new EmbedBuilder()
-            .setTitle('🗑️ Pilot Revoked')
-            .setColor('#ED4245')
-            .setDescription(`You have revoked that pilot from your account.`)
-            .setTimestamp()
-        ],
+        embeds: [regEmbed(
+            '🗑️ Pilot Revoked',
+            '#ED4245',
+            `You have revoked that pilot from your account.\n\n` +
+            '━━━━━━━━━━━━━━━━━━━━━━━━',
+            '✈️ Character Registration System'
+        )],
         components: []
     });
 }
@@ -1648,31 +1747,61 @@ async function handleHelpButton(interaction) {
     const embed = new EmbedBuilder()
         .setTitle('❓ Help & Commands')
         .setColor('#5865F2')
-        .setDescription('Here\'s everything you can do with the registration system:')
+        .setDescription(
+            'Everything you need to know about the **Character Registration System**! 👇\n\n' +
+            '━━━━━━━━━━━━━━━━━━━━━━━━'
+        )
         .addFields(
             {
                 name: '📝 Register',
-                value: 'Link your in-game character nickname. The bot will auto-detect your clan from the ranking and assign the role.',
+                value: [
+                    'Click **📝 Register** and type your **exact** in-game nickname.',
+                    'The bot auto-detects your clan from the official ranking and assigns the role.',
+                    '',
+                    '> ⏳ Your request is sent to the **Elders** for approval (expires in **48 hours**).',
+                    '> 🔔 You\'ll receive a DM once it\'s approved or rejected.'
+                ].join('\n'),
                 inline: false
             },
             {
                 name: '✈️ Register as Pilot',
-                value: 'Want to pilot for someone? Click the **✈️ Register as Pilot** button! Enter the owner\'s character name and they\'ll receive a DM to approve or reject your request.',
+                value: [
+                    'Play on behalf of an owner? Click **✈️ Register as Pilot** and type the **owner\'s** character name.',
+                    '',
+                    '> ⚠️ Maximum of **4 pilots** per owner.',
+                    '> 📬 The owner receives a DM to **approve** or **reject** your request.',
+                    '> ✅ Once approved, you get the owner\'s clan role and nickname.'
+                ].join('\n'),
                 inline: false
             },
             {
                 name: '🗑️ Remove Pilot',
-                value: 'Remove a pilot from your account. Their clan role will be revoked.',
+                value: [
+                    'Remove a pilot from your account.',
+                    'Their clan role and pilot nickname are revoked automatically.',
+                    '',
+                    '> ℹ️ Pilots can also be removed via the **Manage Players** system.'
+                ].join('\n'),
                 inline: false
             },
             {
-                name: '🔄 Force Sync (Admin only)',
-                value: 'Trigger an immediate synchronization with the official MIR4 ranking portal to update all nicknames and roles.',
-                inline: false
+                name: '🔄 Force Sync',
+                value: '**Admin only.** Immediately re-syncs with the official MIR4 ranking to refresh all nicknames and roles.',
+                inline: true
             },
             {
                 name: '📌 Auto-Sync Schedule',
-                value: 'The bot automatically syncs every day at **22:00 BRT** — roles and nicknames update without any action needed.',
+                value: 'The bot syncs automatically every day at **22:00 BRT** — nicknames, clans and roles update by themselves.',
+                inline: true
+            },
+            {
+                name: '❓ Quick Tips',
+                value: [
+                    '• Your in-game name must match **exactly** (accents and symbols included).',
+                    '• Keep DMs open so the bot can notify you about approvals.',
+                    '• Already registered? Click **📝 Register** again to update your nickname.',
+                    '• Pilots are linked to an owner — a pilot cannot register a second character.'
+                ].join('\n'),
                 inline: false
             }
         )
