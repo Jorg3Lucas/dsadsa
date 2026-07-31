@@ -269,12 +269,13 @@ export async function deployRegistrationPanel(channel, rankingDb) {
     }
 }
 
-/** Refresh the registration panel embed (e.g. after a registration). @param {object} rankingDb */
+/** Refresh the registration panel embed (e.g. after a registration). Always re-attaches the action buttons so they are never lost. @param {object} rankingDb */
 export async function refreshRegPanel(rankingDb) {
     if (!regPanelMessage) return;
     const embed = buildRegPanelEmbed(rankingDb);
+    const components = buildRegPanelButtons(false);
     try {
-        regPanelMessage = await regPanelMessage.edit({ embeds: [embed] }).catch(() => null);
+        regPanelMessage = await regPanelMessage.edit({ embeds: [embed], components }).catch(() => null);
     } catch {
         regPanelMessage = null;
     }
