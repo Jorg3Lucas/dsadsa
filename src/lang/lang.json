@@ -121,6 +121,7 @@
     },
     "render": {
         "unknownUser": "Unknown User",
+        "todayLabel": "Hoje",
         "joinedAsNext": "Joined as Next",
         "windowPrefix": "Window",
         "joinedNextLine": "Joined next line",
