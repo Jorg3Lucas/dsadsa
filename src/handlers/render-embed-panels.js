@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import { getLocalTime, isRoomOpen, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
-import { db, client } from "../core/state.js";
+import { db } from "../core/state.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT } from "../core/constants.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 import { getEmbedColor } from "./render-embed-core.js";
@@ -37,8 +37,6 @@ export function renderEmbed(key) {
         renderSummonPanel(embed, current, key, now);
     } else if ("antidemon" === current.type) {
         renderAntidemonPanel(embed, current, key, now);
-    } else if ("peak" === current.type) {
-        renderPeakPanel(embed, current, key, now);
     } else {
         renderDefaultPanel(embed, current, now);
     }
@@ -296,139 +294,87 @@ function renderDefaultPanel(embed, current, now) {
     } else {
         for (const prop in current) {
             if (!["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp", "scheduleMinutes"].includes(prop)) {
+                let displayStatus = current[prop].status;
+
+                if (displayStatus.startsWith(STATUS_KILLED) && current[prop].cooldown) {
+                    let killedTime;
+                    if (current[prop]._lastKilledAt) {
+                        killedTime = new Date(current[prop]._lastKilledAt);
+                    } else {
+                        const killedTimeStr = displayStatus.replace(STATUS_KILLED_PREFIX, "").trim();
+                        killedTime = parseStringToDate(killedTimeStr);
+                    }
+                    if (killedTime) {
+                        if (usesScheduleRespawn(current, prop)) {
+                            const schedules = getBossSchedules(current, prop);
+                            const nextSpawn = getNextScheduleAfter(killedTime, schedules);
+                            if (nextSpawn) {
+                                const remainingMs = nextSpawn.getTime() - now.getTime();
+                                if (remainingMs > 0) {
+                                    const totalMins = Math.ceil(remainingMs / 6e4);
+                                    const hrs = Math.floor(totalMins / 60);
+                                    const mins = totalMins % 60;
+                                    displayStatus = hrs > 0 ? `🔴 Respawn in ${hrs}h ${mins}m` : `🔴 Respawn in ${mins}m`;
+                                } else {
+                                    displayStatus = STATUS_ANY_MOMENT;
+                                }
+                            }
+                        } else {
+                            const totalCooldownSeconds = 60 * current[prop].cooldown;
+                            const secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
+                            const remainingSeconds = totalCooldownSeconds - secondsPassed;
+                            if (remainingSeconds > 0) {
+                                const mins = Math.floor(remainingSeconds / 60);
+                                const secs = remainingSeconds % 60;
+                                displayStatus = `🔴 Respawn in ${mins}m ${secs}s`;
+                            } else {
+                                displayStatus = STATUS_ANY_MOMENT;
+                            }
+                        }
+                    }
+                }
+
+                if (displayStatus === STATUS_AVAILABLE && current[prop]._freeSince > 0) {
+                    const freeDate = new Date(current[prop]._freeSince);
+                    const diffMs = now.getTime() - freeDate.getTime();
+                    if (diffMs >= 0) {
+                        const diffMins = Math.floor(diffMs / 6e4);
+                        const diffHours = Math.floor(diffMs / 36e5);
+                        if (diffMins < 1) displayStatus = `🟢 Now`;
+                        else if (diffHours < 1) displayStatus = `🟢 ${diffMins}m ago`;
+                        else {
+                            const remainingMins = diffMins % 60;
+                            displayStatus = remainingMins > 0 ? `🟢 ${diffHours}h ${remainingMins}m ago` : `🟢 ${diffHours}h ago`;
+                        }
+                    }
+                } else if (displayStatus === STATUS_AVAILABLE && !current[prop]._freeSince && (current[prop]._lastKilledAt || current[prop]._lastKilledTimeStr)) {
+                    let killedDate;
+                    if (current[prop]._lastKilledAt) {
+                        killedDate = new Date(current[prop]._lastKilledAt);
+                    } else {
+                        killedDate = parseStringToDate(current[prop]._lastKilledTimeStr);
+                    }
+                    if (killedDate && !isNaN(killedDate.getTime())) {
+                        const diffMs = now.getTime() - killedDate.getTime();
+                        if (diffMs >= 0) {
+                            const diffMins = Math.floor(diffMs / 6e4);
+                            const diffHours = Math.floor(diffMs / 36e5);
+                            if (diffMins < 1) displayStatus = `🟢 Now`;
+                            else if (diffHours < 1) displayStatus = `🟢 ${diffMins}m ago`;
+                            else {
+                                const remainingMins = diffMins % 60;
+                                displayStatus = remainingMins > 0 ? `🟢 ${diffHours}h ${remainingMins}m ago` : `🟢 ${diffHours}h ago`;
+                            }
+                        }
+                    }
+                }
+
                 embed.addFields({
                     name: current[prop].name,
-                    value: `\`\`\`yaml\n${computePropStatus(current, prop, now)}\n\`\`\``,
+                    value: `\`\`\`yaml\n${displayStatus}\n\`\`\``,
                     inline: true
                 });
             }
         }
     }
-}
-
-/** Compute the display status string for a boss/room prop (respawn countdowns, \"X ago\" timers). @param {object} current - Panel data @param {string} prop - Prop key @param {Date} now @returns {string} */
-function computePropStatus(current, prop, now) {
-    let displayStatus = current[prop].status;
-
-    if (displayStatus.startsWith(STATUS_KILLED) && current[prop].cooldown) {
-        let killedTime;
-        if (current[prop]._lastKilledAt) {
-            killedTime = new Date(current[prop]._lastKilledAt);
-        } else {
-            const killedTimeStr = displayStatus.replace(STATUS_KILLED_PREFIX, "").trim();
-            killedTime = parseStringToDate(killedTimeStr);
-        }
-        if (killedTime) {
-            if (usesScheduleRespawn(current, prop)) {
-                const schedules = getBossSchedules(current, prop);
-                const nextSpawn = getNextScheduleAfter(killedTime, schedules);
-                if (nextSpawn) {
-                    const remainingMs = nextSpawn.getTime() - now.getTime();
-                    if (remainingMs > 0) {
-                        const totalMins = Math.ceil(remainingMs / 6e4);
-                        const hrs = Math.floor(totalMins / 60);
-                        const mins = totalMins % 60;
-                        displayStatus = hrs > 0 ? `🔴 Respawn in ${hrs}h ${mins}m` : `🔴 Respawn in ${mins}m`;
-                    } else {
-                        displayStatus = STATUS_ANY_MOMENT;
-                    }
-                }
-            } else {
-                const totalCooldownSeconds = 60 * current[prop].cooldown;
-                const secondsPassed = Math.floor((now.getTime() - killedTime.getTime()) / 1e3);
-                const remainingSeconds = totalCooldownSeconds - secondsPassed;
-                if (remainingSeconds > 0) {
-                    const mins = Math.floor(remainingSeconds / 60);
-                    const secs = remainingSeconds % 60;
-                    displayStatus = `🔴 Respawn in ${mins}m ${secs}s`;
-                } else {
-                    displayStatus = STATUS_ANY_MOMENT;
-                }
-            }
-        }
-    }
-
-    if (displayStatus === STATUS_AVAILABLE && current[prop]._freeSince > 0) {
-        const freeDate = new Date(current[prop]._freeSince);
-        const diffMs = now.getTime() - freeDate.getTime();
-        if (diffMs >= 0) {
-            const diffMins = Math.floor(diffMs / 6e4);
-            const diffHours = Math.floor(diffMs / 36e5);
-            if (diffMins < 1) displayStatus = `🟢 Now`;
-            else if (diffHours < 1) displayStatus = `🟢 ${diffMins}m ago`;
-            else {
-                const remainingMins = diffMins % 60;
-                displayStatus = remainingMins > 0 ? `🟢 ${diffHours}h ${remainingMins}m ago` : `🟢 ${diffHours}h ago`;
-            }
-        }
-    } else if (displayStatus === STATUS_AVAILABLE && !current[prop]._freeSince && (current[prop]._lastKilledAt || current[prop]._lastKilledTimeStr)) {
-        let killedDate;
-        if (current[prop]._lastKilledAt) {
-            killedDate = new Date(current[prop]._lastKilledAt);
-        } else {
-            killedDate = parseStringToDate(current[prop]._lastKilledTimeStr);
-        }
-        if (killedDate && !isNaN(killedDate.getTime())) {
-            const diffMs = now.getTime() - killedDate.getTime();
-            if (diffMs >= 0) {
-                const diffMins = Math.floor(diffMs / 6e4);
-                const diffHours = Math.floor(diffMs / 36e5);
-                if (diffMins < 1) displayStatus = `🟢 Now`;
-                else if (diffHours < 1) displayStatus = `🟢 ${diffMins}m ago`;
-                else {
-                    const remainingMins = diffMins % 60;
-                    displayStatus = remainingMins > 0 ? `🟢 ${diffHours}h ${remainingMins}m ago` : `🟢 ${diffHours}h ago`;
-                }
-            }
-        }
-    }
-
-    return displayStatus;
-}
-
-// ==========================================
-// 🏔️ PEAK — New SP Visual (test)
-// Green while all up, red when a boss respawns
-// ==========================================
-
-/** Build the Secret Peak embed: colored bar, window + channel tag, inline boss fields with dot status, \"Hoje\" footer. @param {import('discord.js').EmbedBuilder} embed @param {object} current - Panel data @param {string} key - Panel key @param {Date} now @returns {void} */
-function renderPeakPanel(embed, current, key, now) {
-    const peakProps = ["left", "red", "right", "plant", "ore"].filter(p => current[p]);
-
-    // Green while everything is up; red as soon as any boss is respawning
-    let anyRespawning = false;
-    const statusLines = {};
-    for (const prop of peakProps) {
-        statusLines[prop] = computePropStatus(current, prop, now);
-        if (statusLines[prop].startsWith("🔴")) anyRespawning = true;
-    }
-    embed.setColor(anyRespawning ? 0xe24b4a : 0x639922);
-
-    // Title + window + channel tag in the description
-    embed.setTitle(current.title);
-    let desc = "";
-    if (current.timeWindow) desc += `\`⏱️ ${current.timeWindow}\``;
-    const mapping = db._panelMapping && db._panelMapping[key];
-    const channel = mapping && mapping.channelId ? client.channels.cache.get(mapping.channelId) : null;
-    if (channel && channel.name) desc += `${desc ? "\n" : ""}\`#${channel.name}\``;
-
-    // Keep claim/queue visibility
-    if (current.ownerId) {
-        desc += `${desc ? "\n" : ""}👑 ${current.ownerName || getMsg("render.unknownUser")}`;
-        if (current.next) desc += `\n⏭️ ${current.next.userName}`;
-    } else if (current.next) {
-        desc += `${desc ? "\n" : ""}⏭️ ${current.next.userName}`;
-    }
-    embed.setDescription(desc || "\u200B");
-
-    // Inline fields: dot + status
-    for (const prop of peakProps) {
-        embed.addFields({
-            name: current[prop].name,
-            value: statusLines[prop],
-            inline: true
-        });
-    }
-
-    embed.setFooter({ text: getMsg("render.todayLabel") });
 }
