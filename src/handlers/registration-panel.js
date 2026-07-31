@@ -561,11 +561,15 @@ export async function handleRegPilotModal(interaction, rankingDb, saveLocalStora
 
 /** Handle pilot request approval from DM. */
 export async function handleRegPilotApprove(interaction, rankingDb, saveLocalStorage, logEvent) {
+    // Acknowledge immediately — the flow below (member fetch, role changes, DM notify)
+    // can exceed Discord's 3-second interaction window and cause error 10062.
+    await interaction.deferUpdate().catch(noop);
+
     const requestKey = interaction.customId.replace('reg_pilot_approve_', '');
     const request = pilotRequests[requestKey];
 
     if (!request) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('⌛ Request Expired')
@@ -578,7 +582,7 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
 
     // Verify the person responding is the actual owner
     if (interaction.user.id !== request.ownerId) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Not Your Request')
@@ -595,7 +599,7 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     // ── Add pilot to owner's list ──
     const ownerData = rankingDb.users[request.ownerId];
     if (!ownerData) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Error')
@@ -608,7 +612,7 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
 
     if (!ownerData.pilotIds) ownerData.pilotIds = [];
     if (ownerData.pilotIds.length >= 4) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Pilot Limit Reached')
@@ -620,7 +624,7 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     }
 
     if (ownerData.pilotIds.includes(request.pilotId)) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('ℹ️ Already Linked')
@@ -676,7 +680,7 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
     } catch { /* ignore */ }
 
     // ── Update the DM embed ──
-    return interaction.update({
+    return interaction.editReply({
         embeds: [
             new EmbedBuilder()
                 .setTitle('✅ Pilot Approved!')
@@ -690,11 +694,15 @@ export async function handleRegPilotApprove(interaction, rankingDb, saveLocalSto
 
 /** Handle pilot request rejection from DM. */
 export async function handleRegPilotReject(interaction, rankingDb, saveLocalStorage, logEvent) {
+    // Acknowledge immediately — the flow below (member fetch, DM notify)
+    // can exceed Discord's 3-second interaction window and cause error 10062.
+    await interaction.deferUpdate().catch(noop);
+
     const requestKey = interaction.customId.replace('reg_pilot_reject_', '');
     const request = pilotRequests[requestKey];
 
     if (!request) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('⌛ Request Expired')
@@ -707,7 +715,7 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
 
     // Verify the person responding is the actual owner
     if (interaction.user.id !== request.ownerId) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Not Your Request')
@@ -739,7 +747,7 @@ export async function handleRegPilotReject(interaction, rankingDb, saveLocalStor
     } catch { /* ignore */ }
 
     // ── Update the DM embed ──
-    return interaction.update({
+    return interaction.editReply({
         embeds: [
             new EmbedBuilder()
                 .setTitle('❌ Request Rejected')
@@ -950,11 +958,15 @@ export async function handleRegElderApproveOwner(interaction, rankingDb, saveLoc
         });
     }
 
+    // Acknowledge immediately — the flow below (member fetch, role changes, DM notify)
+    // can exceed Discord's 3-second interaction window and cause error 10062.
+    await interaction.deferUpdate().catch(noop);
+
     const requestKey = interaction.customId.replace('reg_elder_approve_owner_', '');
     const request = pendingOwnerRegistrations[requestKey];
 
     if (!request) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('⌛ Request Expired')
@@ -1008,7 +1020,7 @@ export async function handleRegElderApproveOwner(interaction, rankingDb, saveLoc
     } catch { /* ignore */ }
 
     // ── Update the approval message ──
-    return interaction.update({
+    return interaction.editReply({
         embeds: [
             new EmbedBuilder()
                 .setTitle('✅ Registration Approved')
@@ -1040,11 +1052,15 @@ export async function handleRegElderRejectOwner(interaction, rankingDb, saveLoca
         });
     }
 
+    // Acknowledge immediately — the flow below (member fetch, DM notify)
+    // can exceed Discord's 3-second interaction window and cause error 10062.
+    await interaction.deferUpdate().catch(noop);
+
     const requestKey = interaction.customId.replace('reg_elder_reject_owner_', '');
     const request = pendingOwnerRegistrations[requestKey];
 
     if (!request) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('⌛ Request Expired')
@@ -1077,7 +1093,7 @@ export async function handleRegElderRejectOwner(interaction, rankingDb, saveLoca
     } catch { /* ignore */ }
 
     // ── Update the approval message ──
-    return interaction.update({
+    return interaction.editReply({
         embeds: [
             new EmbedBuilder()
                 .setTitle('❌ Registration Rejected')
@@ -1121,11 +1137,15 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
         });
     }
 
+    // Acknowledge immediately — the flow below (member fetch, role changes, DM notify)
+    // can exceed Discord's 3-second interaction window and cause error 10062.
+    await interaction.deferUpdate().catch(noop);
+
     const requestKey = interaction.customId.replace('reg_elder_approve_pilot_', '');
     const request = pilotRequests[requestKey];
 
     if (!request) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('⌛ Request Expired')
                 .setColor('#FEE75C')
@@ -1141,7 +1161,7 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
     // ── Add pilot to owner's list ──
     const ownerData = rankingDb.users[request.ownerId];
     if (!ownerData) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('❌ Error')
                 .setColor('#ED4245')
@@ -1153,7 +1173,7 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
 
     if (!ownerData.pilotIds) ownerData.pilotIds = [];
     if (ownerData.pilotIds.length >= 4) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('❌ Pilot Limit Reached')
                 .setColor('#ED4245')
@@ -1164,7 +1184,7 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
     }
 
     if (ownerData.pilotIds.includes(request.pilotId)) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('ℹ️ Already Linked')
                 .setColor('#5865F2')
@@ -1232,7 +1252,7 @@ export async function handleRegElderApprovePilot(interaction, rankingDb, saveLoc
     } catch { /* ignore */ }
 
     // ── Update the channel message ──
-    return interaction.update({
+    return interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('✅ Pilot Approved')
             .setColor('#57F287')
@@ -1262,11 +1282,15 @@ export async function handleRegElderRejectPilot(interaction, rankingDb, saveLoca
         });
     }
 
+    // Acknowledge immediately — the flow below (member fetch, DM notify)
+    // can exceed Discord's 3-second interaction window and cause error 10062.
+    await interaction.deferUpdate().catch(noop);
+
     const requestKey = interaction.customId.replace('reg_elder_reject_pilot_', '');
     const request = pilotRequests[requestKey];
 
     if (!request) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('⌛ Request Expired')
                 .setColor('#FEE75C')
@@ -1311,7 +1335,7 @@ export async function handleRegElderRejectPilot(interaction, rankingDb, saveLoca
     } catch { /* ignore */ }
 
     // ── Update the channel message ──
-    return interaction.update({
+    return interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('❌ Pilot Request Rejected')
             .setColor('#ED4245')
@@ -1332,13 +1356,17 @@ export async function handleRegElderRejectPilot(interaction, rankingDb, saveLoca
 
 /** Handle pilot revocation by the owner from DM (clicking Revoke button). */
 export async function handleRegPilotRevoke(interaction, rankingDb, saveLocalStorage, logEvent) {
+    // Acknowledge immediately — the flow below (member fetch, role changes, DM notify)
+    // can exceed Discord's 3-second interaction window and cause error 10062.
+    await interaction.deferUpdate().catch(noop);
+
     const parts = interaction.customId.replace('reg_pilot_revoke_', '').split('_');
     const ownerId = parts[0];
     const pilotId = parts[1];
 
     // Verify the person clicking is the actual owner
     if (interaction.user.id !== ownerId) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('❌ Not Your Account')
                 .setColor('#ED4245')
@@ -1350,7 +1378,7 @@ export async function handleRegPilotRevoke(interaction, rankingDb, saveLocalStor
 
     const ownerData = rankingDb.users[ownerId];
     if (!ownerData || !ownerData.pilotIds || !ownerData.pilotIds.includes(pilotId)) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('❌ Not Found')
                 .setColor('#ED4245')
@@ -1394,7 +1422,7 @@ export async function handleRegPilotRevoke(interaction, rankingDb, saveLocalStor
     } catch { /* ignore */ }
 
     // ── Update the DM embed ──
-    return interaction.update({
+    return interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🗑️ Pilot Revoked')
             .setColor('#ED4245')
@@ -1470,7 +1498,7 @@ export async function handleRegRemovePilotSelect(interaction, rankingDb, saveLoc
     const userData = rankingDb.users[interaction.user.id];
 
     if (!userData || !userData.pilotIds || !userData.pilotIds.includes(pilotToRemoveId)) {
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('❌ Error')
@@ -1498,7 +1526,7 @@ export async function handleRegRemovePilotSelect(interaction, rankingDb, saveLoc
         }
     } catch { /* ignore */ }
 
-    await interaction.update({
+    await interaction.editReply({
         embeds: [
             new EmbedBuilder()
                 .setTitle('✅ Pilot Removed')
