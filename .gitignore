@@ -14,10 +14,6 @@ punishments.json
 early-claim-users.json
 dm-optout.json
 
-# Backups & logs
-backups/
-ticket-logs/
-
 # OS files
 .DS_Store
 Thumbs.db
@@ -29,4 +25,6 @@ Thumbs.db
 *.swo
 *~
 nul
+
+# Logs
 /logs

@@ -11,7 +11,6 @@ import {
     handleClaimInteractions
 } from './handlers/bot.js';
 import { initEarlyClaimCommands } from './handlers/early-claim.js';
-import { startAutoBackup, runBackup } from './auto-backup.js';
 import { noop, getBotToken, DISCORD_SERVER_ID } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
@@ -55,9 +54,6 @@ try {
 
 function saveClaimStorage() {
     try {
-        // Backup before overwriting
-        runBackup(['./database.json']);
-
         const persistentMessages = {};
         for (const panelId in claimLastMessages) {
             if (claimLastMessages[panelId]) {
@@ -99,9 +95,6 @@ client.once('clientReady', async () => {
 
     // Early claim admin commands (!earlyclaim add/remove/list)
     initEarlyClaimCommands(client);
-
-    // Start auto-backup scheduler
-    startAutoBackup(6);
 });
 
 // ==========================================

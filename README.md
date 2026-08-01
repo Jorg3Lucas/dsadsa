@@ -98,7 +98,6 @@ Text commands (require **Manage Messages**):
 | **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |
 | **10 min before events** | 🚨 Scheduled event alerts with @everyone (Red Boss, Leader 3, Purgatory, weekly events, etc.) |
 | **18:00 daily** | 📤 Daily claim report dispatched (as `.txt` file + summary embed) |
-| **Every 6 hours** | 💾 Automatic database backup (keeps last 7 per file) |
 
 ---
 
@@ -130,7 +129,7 @@ Each channel gets its panel embeds + buttons posted automatically.
 | `early-claim-users.json` | Users allowed to claim early |
 | `dm-optout.json` | Users who disabled DMs |
 
-All are gitignored and backed up automatically.
+All are gitignored.
 
 ---
 
@@ -165,8 +164,7 @@ npm start
 
 ```
 src/
-├── index.js                        # Entry point — boots claim, auto-setup, tick, backups
-├── auto-backup.js                  # Backup scheduler (every 6h)
+├── index.js                        # Entry point — boots claim, auto-setup, tick
 ├── core/
 │   ├── config.js                   # DISCORD_SERVER_ID, token helpers
 │   ├── constants.js                # Status strings, embed colors
@@ -219,4 +217,3 @@ After any changes, verify:
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
 - [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts
-- [ ] **Auto backup** — `backups/` folder populated after 1 min
