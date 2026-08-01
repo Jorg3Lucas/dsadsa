@@ -4,7 +4,7 @@
 
 import fs from 'node:fs';
 import { runBackup } from '../auto-backup.js';
-import { pendingRegistrations, pendingPilotApprovals } from './ranking-constants.js';
+import { pendingRegistrations, pendingPilotApprovals, WORLD_IDS } from './ranking-constants.js';
 
 const DB_RANKING_PATH = './database_ranking.json';
 
@@ -47,6 +47,24 @@ export function loadLocalStorageRanking() {
             if (rankingDb._pendingPilotApprovals) {
                 Object.assign(pendingPilotApprovals, rankingDb._pendingPilotApprovals);
                 delete rankingDb._pendingPilotApprovals;
+            }
+
+            // Migration: prune allied clans configured for worlds outside the sync
+            // scope (EU11 only). Leftover entries from the main-branch deployment
+            // are dead data — they are never consulted since lookups only return
+            // worlds present in WORLD_IDS.
+            let prunedWorlds = 0;
+            if (rankingDb.config?.alliedClans) {
+                for (const worldId of Object.keys(rankingDb.config.alliedClans)) {
+                    if (!WORLD_IDS[worldId]) {
+                        delete rankingDb.config.alliedClans[worldId];
+                        prunedWorlds++;
+                    }
+                }
+                if (prunedWorlds > 0) {
+                    saveRankingStorage(rankingDb);
+                    console.log(`\ud83e\uddf9 Pruned allied clans for ${prunedWorlds} world(s) outside sync scope (EU11 only)`);
+                }
             }
 
             console.log('\u2705 Ranking database loaded successfully.');
