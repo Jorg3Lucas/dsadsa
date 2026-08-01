@@ -421,7 +421,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             new ButtonBuilder()
                 .setCustomId('welcome_register_pilot')
                 .setLabel('✈️ Register as Pilot')
-                .setStyle(ButtonStyle.Secondary)
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('welcome_remove_pilot')
+                .setLabel('🗑️ Remove Pilot')
+                .setStyle(ButtonStyle.Danger)
         );
 
         const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });

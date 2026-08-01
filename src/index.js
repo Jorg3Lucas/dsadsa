@@ -20,7 +20,7 @@ import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
 import { handleOwnerRegistrationModal, handleSelectRegistrationNickname } from './handlers/ranking-registration.js';
-import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './handlers/ranking-welcome.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm } from './handlers/ranking-pilot.js';
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
@@ -283,6 +283,9 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (interaction.customId === 'welcome_register_pilot') {
                 return handleWelcomeRegisterPilot(interaction);
+            }
+            if (interaction.customId === 'welcome_remove_pilot') {
+                return await handleWelcomeRemovePilot(interaction, getRankingDb());
             }
             if (interaction.customId.startsWith('approve_owner_')) {
                 return await handleApproveOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);

@@ -2,8 +2,11 @@ import {
     ActionRowBuilder,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder
 } from 'discord.js';
+import { getMsg } from '../lang/lang.js';
 
 // ==========================================
 // 👋 WELCOME BUTTON HANDLERS
@@ -46,4 +49,44 @@ export function handleWelcomeRegisterPilot(interaction) {
 
     modal.addComponents(new ActionRowBuilder().addComponents(ownerNickInput));
     return interaction.showModal(modal);
+}
+
+// ── Welcome: Remove Pilot ──
+// Shows the same pilot-removal select menu as /removepilot so the
+// existing handlePilotRemoveSelect (customId 'select_pilot_to_remove')
+// handles the actual removal, role cleanup, and nickname reset.
+export async function handleWelcomeRemovePilot(interaction, db) {
+    const userProfile = db.users[interaction.user.id];
+    const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
+
+    if (!isActuallyRegistered || !userProfile.pilotIds || userProfile.pilotIds.length === 0) {
+        return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), flags: 64 });
+    }
+
+    const menuOptions = [];
+    for (const pilotId of userProfile.pilotIds) {
+        const memberObj = await interaction.guild.members.fetch(pilotId).catch(() => null);
+        const pilotTag = memberObj ? memberObj.user.tag : `Disconnected User (${pilotId})`;
+        const pilotNick = memberObj ? (memberObj.nickname || memberObj.user.username) : 'Unknown';
+
+        menuOptions.push(
+            new StringSelectMenuOptionBuilder()
+                .setLabel(pilotTag.substring(0, 100))
+                .setDescription(`${pilotNick} - ${getMsg('ranking.responses.removepilot.optionDescription')}`)
+                .setValue(pilotId)
+        );
+    }
+
+    const pilotMenu = new StringSelectMenuBuilder()
+        .setCustomId('select_pilot_to_remove')
+        .setPlaceholder(getMsg('ranking.responses.removepilot.menuPlaceholder'))
+        .addOptions(menuOptions);
+
+    const row = new ActionRowBuilder().addComponents(pilotMenu);
+
+    return interaction.reply({
+        content: getMsg('ranking.responses.removepilot.menuContent'),
+        components: [row],
+        flags: 64
+    });
 }

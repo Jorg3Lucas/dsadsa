@@ -225,7 +225,11 @@ async function restoreWelcomePanel(client, db, saveLocalStorage, logEvent) {
             new ButtonBuilder()
                 .setCustomId('welcome_register_pilot')
                 .setLabel('✈️ Register as Pilot')
-                .setStyle(ButtonStyle.Secondary)
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('welcome_remove_pilot')
+                .setLabel('🗑️ Remove Pilot')
+                .setStyle(ButtonStyle.Danger)
         );
 
         const newMsg = await panelChannel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });
