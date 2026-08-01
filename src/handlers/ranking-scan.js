@@ -135,10 +135,14 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
             },
             parseNick(displayName) {
                 const pilotSuffix = ' - Pilot';
-                if (displayName.endsWith(pilotSuffix)) {
-                    return displayName.slice(0, -pilotSuffix.length).trim();
-                }
-                return displayName.trim();
+                let base = displayName.endsWith(pilotSuffix)
+                    ? displayName.slice(0, -pilotSuffix.length).trim()
+                    : displayName.trim();
+                // Strip known server prefix (e.g. "EU011 - Name" → "Name") so DB
+                // nicknames stay as plain character names.
+                const prefixMatch = base.match(/^[A-Z0-9]+ - (.+)$/);
+                if (prefixMatch) base = prefixMatch[1].trim();
+                return base;
             }
         }
     ];
@@ -301,7 +305,14 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
             // Skip if already processed by server 1 (Origin Server takes priority)
             if (processedMemberIds.has(memberId)) continue;
 
-            const displayName = member.nickname || member.user.displayName;
+            // Only harvest members with a custom nickname — members without one
+            // (showing their Discord username) were never registered.
+            if (!member.nickname) {
+                totalSkipped++;
+                continue;
+            }
+
+            const displayName = member.nickname;
             const isPilot = server.isPilot(displayName);
             let gameNick = server.parseNick(displayName);
 

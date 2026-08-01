@@ -83,6 +83,19 @@ export async function registerMir4SlashCommands(guild) {
                 description: '🔄 [Admin] Rebuild database from current Discord members with the member role.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'scanimport',
+                description: '📥 [Super Admin] Scan servers with custom nicknames and import registrations.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                options: [
+                    { type: 5, name: 'reset', description: 'Clear existing registrations from scan servers before re-importing.', required: false }
+                ]
+            },
+            {
+                name: 'scanimport_status',
+                description: '📊 [Admin] Check pre-registration status across scan servers.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {
