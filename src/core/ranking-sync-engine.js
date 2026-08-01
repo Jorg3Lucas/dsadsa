@@ -69,8 +69,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             }
         }
 
-        // 2.5. RANKING VALIDATION — remove registrations not found in the EU11 ranking (in an allied clan)
-        // Full removal: DB entry + member role + nickname reset.
+        // 2.5. RANKING VALIDATION — remove the member ROLE (keep nickname + registration)
+        // for users whose account name is NOT found in the EU11 ranking.
+        // The nickname and the database registration are kept — only the role is removed.
         // Exempt: manualforce users (manualPermanent) and temporary users (handled in 2.75).
         const rankingValidationEnabled = db.config?.rankingValidationEnabled === true;
         const rankingCache = getLocalRankingCache();
@@ -80,14 +81,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             if (totalPlayers === 0) {
                 logEvent('⚠️ [Ranking Validation] Ranking cache is empty — skipping removal to avoid mass deletion.');
             } else {
-                // If no allied clans are configured, we cannot enforce the allied-clan requirement.
-                // Fall back to removing only users not found in the ranking at all.
-                const alliedConfigured = Object.keys(db.config?.alliedClans || {}).length > 0;
-                if (!alliedConfigured) {
-                    logEvent('⚠️ [Ranking Validation] No allied clans configured — only removing users not found in the ranking (allied-clan check skipped).');
-                }
-
-                let removedCount = 0;
+                let removedRoleCount = 0;
 
                 for (const [memberId, userData] of Object.entries(db.users)) {
                     if (!userData.nickname) continue;
@@ -97,44 +91,34 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const nickname = userData.nickname.trim().normalize('NFC');
                     const lookup = lookupNickname(nickname, db, rankingCache);
 
-                    // Keep only if found in the ranking AND (when configured) in an allied clan
-                    const keep = lookup.found && (!alliedConfigured || lookup.inAlliedClan);
-                    if (keep) continue;
+                    // ✅ Found in the EU11 ranking — keep everything
+                    if (lookup.found) continue;
 
+                    // ❌ Not found in the EU11 ranking — remove the role, keep the name
                     const member = members.get(memberId);
                     const displayName = userData.nickname || member?.user.username || memberId;
-                    const reason = alliedConfigured ? 'not in the EU11 ranking in an allied clan' : 'not found in the EU11 ranking';
 
-                    logEvent(`🧹 [Ranking Validation] ${member?.user?.tag || memberId} (${displayName}) ${reason} — removing registration`);
-
-                    if (member) {
-                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                        }
-                        await member.setNickname(member.user.username).catch(() => {});
+                    if (member && member.roles.cache.has(MEMBER_ROLE_ID)) {
+                        await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        removedRoleCount++;
+                        logEvent(`🧹 [Ranking Validation] ${member.user.tag} (${displayName}) not found in the EU11 ranking — removed member role (nickname kept)`);
                     }
 
-                    // Also remove any pilots linked to this owner — role + nickname + registration
+                    // Also remove the role from any pilots linked to this owner (nickname kept)
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
                         for (const pId of userData.pilotIds) {
                             const pilotMember = members.get(pId);
-                            if (pilotMember) {
-                                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                                }
-                                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                            if (pilotMember && pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                                removedRoleCount++;
                             }
-                            delete db.users[pId];
                         }
                     }
-
-                    delete db.users[memberId];
-                    removedCount++;
                 }
 
-                if (removedCount > 0) {
+                if (removedRoleCount > 0) {
                     saveLocalStorage();
-                    logEvent(`🧹 [Ranking Validation] Removed ${removedCount} registration(s) ${alliedConfigured ? 'not in the EU11 ranking in an allied clan' : 'not found in the EU11 ranking'} (manualforce kept)`);
+                    logEvent(`🧹 [Ranking Validation] Removed member role from ${removedRoleCount} member(s) not found in the EU11 ranking (nicknames and registrations kept)`);
                 }
             }
         }
