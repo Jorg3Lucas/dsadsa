@@ -11,6 +11,8 @@ import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
     hasActiveClaim,
+    hasActiveQueue,
+    getEventGroupKeys,
     buildActiveClaimMessage
 } from "../handlers/claim-core.js";
 import {
@@ -32,6 +34,12 @@ export async function handleEGFixClaim(interaction, uid, uName) {
     if (hasActiveClaim(uid)) {
         const claimMsg = buildActiveClaimMessage(uid);
         return await interaction.reply({ content: claimMsg, flags: 64 }).catch(noop);
+    }
+    if (hasActiveQueue(uid)) {
+        const hasPriority = getEventGroupKeys(targetFloor).some(ev => targetFloor[ev] && targetFloor[ev].nextId === uid);
+        if (!hasPriority) {
+            return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(noop);
+        }
     }
 
     const evData = targetFloor[eventName];

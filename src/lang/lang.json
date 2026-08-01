@@ -114,6 +114,7 @@
         "dmBossNotMarkedWarning": "⚠️ **Boss Reminder**\n\n**{boss}** in **{title}** has been available for over 5 minutes.\nDon't forget to register the kill.",
         "slotAlreadyClaimed": "🔒 {room} is already claimed by {ownerName}.",
         "eventOpensIn": "⏳ This event opens in {minutes} minutes.",
+        "eventEarlyClaimActive": "🟡 Early claim open at {time}",
         "eventEarlyClaimDenied": "🔒 You are not authorized to claim early. Wait until **{time}** when the event opens.",
         "eventClaimedFixed": "🏆 {title} claimed! You have 1 full hour.",
         "dmImmediateSpawn": "🚨 **INSTANT SPAWN**\n\n**{boss}** has just spawned on **{title}**!",

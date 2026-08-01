@@ -7,7 +7,7 @@
 import {
     EmbedBuilder as e
 } from "discord.js";
-import { getLocalTime, isRoomOpen, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate } from "../core/time-utils.js";
+import { getLocalTime, isRoomOpen, getDynamicQueueETA, getEndLimitCountdown, calculateNextOpening, getNextScheduleAfter, usesScheduleRespawn, getBossSchedules, parseStringToDate, getFormattedTime12h } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { db } from "../core/state.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT } from "../core/constants.js";
@@ -163,7 +163,11 @@ function renderEventGroupPanel(embed, current, now) {
                 const nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
                 const diffMs = nextOpenDate.getTime() - now.getTime();
                 const diffMins = Math.floor(diffMs / 6e4);
-                lines.push(`🔴 Closed`);
+                const fiveMinBefore = new Date(nextOpenDate.getTime() - 5 * 60 * 1000);
+                const inEarlyWindow = now >= fiveMinBefore;
+                lines.push(inEarlyWindow
+                    ? `🟡 ${getMsg("rooms.eventEarlyClaimActive", { time: getFormattedTime12h(nextOpenDate) })}`
+                    : `🔴 Closed`);
                 timerLine = diffMins < 60 ? `⏱️ Next in ${diffMins}m` : `⏱️ Next in ${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
             }
             block = timerLine
@@ -266,9 +270,17 @@ function renderDefaultPanel(embed, current, now) {
     } else if (current.next && current.next.endLimit) {
         desc += `\`\`\`md\n⏭️ ${current.next.userName} — ${getEndLimitCountdown(current.next.endLimit)}\n\`\`\`\n`;
     } else if ("fixed" === current.type) {
-        desc += isRoomOpen(current.schedules, current.scheduleMinutes || 0)
-            ? `\`\`\`fix\n🟢 ${getMsg("rooms.roomIsOpen")}\n\`\`\`\n`
-            : `\`\`\`yaml\n🔴 ${getMsg("rooms.eventEnded")}\n\`\`\`\n`;
+        const fixedMinuteOffset = current.scheduleMinutes || 0;
+        if (isRoomOpen(current.schedules, fixedMinuteOffset)) {
+            desc += `\`\`\`fix\n🟢 ${getMsg("rooms.roomIsOpen")}\n\`\`\`\n`;
+        } else {
+            const nextOpenDate = calculateNextOpening(current.schedules, fixedMinuteOffset);
+            const fiveMinBefore = new Date(nextOpenDate.getTime() - 5 * 60 * 1000);
+            const inEarlyWindow = now >= fiveMinBefore;
+            desc += inEarlyWindow
+                ? `\`\`\`fix\n🟡 ${getMsg("rooms.eventEarlyClaimActive", { time: getFormattedTime12h(nextOpenDate) })}\n\`\`\`\n`
+                : `\`\`\`yaml\n🔴 ${getMsg("rooms.eventEnded")}\n\`\`\`\n`;
+        }
     } else if (current.next) {
         desc += `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "Berlin" })}\n\`\`\`\n`;
     } else {
