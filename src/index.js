@@ -43,7 +43,7 @@ import {
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
-import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
+import { DISCORD_SERVER_ID as RANKING_SERVER_ID, MEMBER_ROLE_ID, ensureConfig } from './core/ranking-constants.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
@@ -137,6 +137,15 @@ client.once('clientReady', async () => {
         const guild = client.guilds.cache.get(RANKING_SERVER_ID);
         if (guild) {
             await registerMir4SlashCommands(guild);
+
+            // Verify the member role exists — a wrong MEMBER_ROLE_ID silently
+            // breaks role management and /scanrebuild, so surface it at boot.
+            const memberRole = guild.roles.cache.get(MEMBER_ROLE_ID);
+            if (memberRole) {
+                console.log(`✅ [Ranking] Member role found: ${memberRole.name} (${MEMBER_ROLE_ID})`);
+            } else {
+                console.error(`❌ [Ranking] MEMBER_ROLE_ID (${MEMBER_ROLE_ID}) not found in guild ${RANKING_SERVER_ID} — check the role ID.`);
+            }
         } else {
             console.error('❌ Error: Invalid Server ID configuration.');
         }

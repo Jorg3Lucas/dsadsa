@@ -20,7 +20,7 @@ export function setAdminChannelId(id) {
 
 export const DISCORD_SERVER_ID = '1432320162278670440';
 
-export const MEMBER_ROLE_ID = '1481568299966926879';
+export const MEMBER_ROLE_ID = '1503933709756141620';
 
 // Roles that can approve/reject member registrations (in addition to Administrator)
 export const APPROVER_ROLE_IDS = [

@@ -139,6 +139,8 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
     let totalSkipped = 0;
     let totalPilotsLinked = 0;
     let totalPilotPreReg = 0;
+    let membersFetched = 0;
+    let noNicknameCount = 0;
     const results = [];
     const pendingPilots = []; // { memberId, ownerNick, member }
 
@@ -285,10 +287,12 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
 
         for (const [memberId, member] of members) {
             if (member.user.bot) continue;
+            membersFetched++;
 
             // Only harvest members with a custom nickname — members without one
             // (showing their Discord username) were never registered.
             if (!member.nickname) {
+                noNicknameCount++;
                 totalSkipped++;
                 continue;
             }
@@ -473,11 +477,19 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
     }
 
 let report = `📥 **Scan Import Complete**\n\n`;
+    report += `👥 **Members fetched:** ${membersFetched}\n`;
     report += `✅ **Registered (owners):** ${totalRegistered}\n`;
     report += `✈️ **Pilots linked:** ${totalPilotsLinked}\n`;
     report += `⏳ **Pre-registered (owners):** ${totalPreReg}\n`;
     report += `⏳ **Pre-registered (pilots):** ${totalPilotPreReg}\n`;
-    report += `⏭️ **Skipped:** ${totalSkipped}\n\n`;
+    report += `🚫 **No custom nickname:** ${noNicknameCount}\n`;
+    report += `⏭️ **Skipped (total):** ${totalSkipped}\n\n`;
+
+    if (membersFetched === 0) {
+        report += '⚠️ **0 members fetched — o bot não consegue ver a lista de membros.\nVerifique se a intent privilegiada "Server Members Intent" está ATIVADA no Discord Developer Portal (Bot → Privileged Gateway Intents).**\n';
+    } else if (noNicknameCount === membersFetched) {
+        report += '⚠️ **Todos os membros estão sem nickname customizado — nada a importar por nickname.\nVerifique se os registrados têm nick definido no Discord, ou use o cargo de membro como filtro.**\n';
+    }
 
     if (results.length > 0) {
         report += `📋 **Details:**\n`;
