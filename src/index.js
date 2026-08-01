@@ -10,22 +10,9 @@ import {
     initClaimSystem,
     handleClaimInteractions
 } from './handlers/bot.js';
+import { initEarlyClaimCommands } from './handlers/early-claim.js';
 import { startAutoBackup, runBackup } from './auto-backup.js';
-import { initTempVoiceSystem } from './handlers/temp-voice.js';
-import { initTicketSystem } from './handlers/ticket-system.js';
-import {
-    registerMir4SlashCommands,
-    initMir4BotEvents,
-    handleMir4Interactions,
-    runDailySynchronization,
-    DISCORD_SERVER_ID
-} from './core/ranking_sync.js';
-import { loadRegistrationRequests } from './handlers/registration-panel.js';
-import { loadSalaryState } from './handlers/salary-state.js';
-import { initSalaryCron } from './handlers/salary-lifecycle.js';
-import { exportVotesToSheets } from './handlers/salary-sheets.js';
-import { handleManagementInteraction, handleMgmtSlash } from './handlers/management-menu.js';
-import { noop, getBotToken} from './core/config.js';
+import { noop, getBotToken, DISCORD_SERVER_ID } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
 const client = new Client({
@@ -42,20 +29,12 @@ const client = new Client({
 });
 
 const dbClaimPath = path.resolve('./database.json');
-const dbRankingPath = path.resolve('./database_ranking.json');
-const rankingLogsPath = path.resolve('./ranking_logs.txt');
 
 let claimDb = {};
-let rankingDb = {
-    users: {}
-};
 const claimLastMessages = {};
 
-function logRankingEvent(message) {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] ${message}\n`;
-    console.log(`[Ranking] ${message}`);
-    fs.appendFileSync(rankingLogsPath, logMessage, 'utf8');
+function logClaimEvent(message) {
+    console.log(`[Claim] ${message}`);
 }
 
 try {
@@ -97,62 +76,14 @@ function saveClaimStorage() {
     }
 }
 
-function saveRankingStorage() {
-    try {
-        // Backup before overwriting
-        runBackup(['./database_ranking.json']);
-
-        fs.writeFileSync(dbRankingPath, JSON.stringify(rankingDb, null, 2), 'utf8');
-    } catch (error) {
-        logger.error('Database', 'Error saving ranking database', error);
-    }
-}
-
-function loadLocalStorageRanking() {
-    try {
-        if (fs.existsSync(dbRankingPath)) {
-            const data = fs.readFileSync(dbRankingPath, 'utf8');
-            rankingDb = JSON.parse(data);
-            if (!rankingDb.users) rankingDb.users = {};
-            logger.info('Boot', 'Ranking database loaded successfully.');
-        } else {
-            saveRankingStorage();
-            logger.info('Boot', 'New database_ranking.json file created.');
-        }
-    } catch (error) {
-        logger.error('Database', 'Error loading ranking database', error);
-    }
-}
-
 // ==========================================
 // 🚀 READY EVENT
 // ==========================================
 client.once('clientReady', async () => {
     logger.info('Boot', `Bot connected successfully as ${client.user.tag}`);
 
-    loadLocalStorageRanking();
-    loadRegistrationRequests();
-    logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
-
-    const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
-    if (guild) {
-        await registerMir4SlashCommands(guild);
-    } else {
-        logger.error('Boot', 'Invalid Server ID configuration.');
-    }
-
-    initMir4BotEvents(client, rankingDb, saveRankingStorage, logRankingEvent);
-
-    setTimeout(async () => {
-        logger.info('Sync', 'Starting forced validation scan...');
-        await runDailySynchronization(client, rankingDb, saveRankingStorage, logRankingEvent, true);
-    }, 10000);
-
-    // Start auto-backup scheduler
-    startAutoBackup(6);
-
     // Inicializa dados dos painéis sem recovery (não envia para canais antigos)
-    initClaimSystem(client, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages, rankingDb, true);
+    initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, true);
 
     // Recria canais e envia painéis frescos para os canais novos
     try {
@@ -166,29 +97,11 @@ client.once('clientReady', async () => {
     const { startTickInterval } = await import('./handlers/panel-tick.js');
     startTickInterval();
 
-    // Initialize Temp Voice system
-    initTempVoiceSystem(client);
+    // Early claim admin commands (!earlyclaim add/remove/list)
+    initEarlyClaimCommands(client);
 
-    // Initialize Ticket system
-    initTicketSystem(client);
-
-    // Initialize Salary Poll system
-    loadSalaryState();
-    initSalaryCron();
-
-    // Re-export votes to Google Sheets on boot
-    // Ensures stones are re-applied to the spreadsheet after restart
-    setTimeout(async () => {
-        try {
-            logger.info('Boot', 'Re-exporting votes to Google Sheets...');
-            const result = await exportVotesToSheets();
-            if (result) logger.info('Boot', 'Votes re-exported successfully.');
-        } catch (err) {
-            logger.error('Boot', 'Error re-exporting votes to sheets', err);
-        }
-    }, 3000);
-
-
+    // Start auto-backup scheduler
+    startAutoBackup(6);
 });
 
 // ==========================================
@@ -196,75 +109,7 @@ client.once('clientReady', async () => {
 // ==========================================
 client.on('interactionCreate', async (interaction) => {
     try {
-        // A. SLASH COMMANDS (/)
-        if (interaction.isCommand()) {
-            // Management panel — show main menu
-            if (interaction.commandName === 'manage') {
-                return await handleMgmtSlash(interaction);
-            }
-
-            const rankingCommands = [
-                'register',
-                'pilot',
-                'removepilot',
-                'forcesync',
-                'manualregister',
-                'manualpilot',
-                'manualremove',
-                'manualremovepilot',
-                'cleandb'
-            ];
-
-            if (rankingCommands.includes(interaction.commandName)) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-        }
-
-        // B. USER SELECT MENUS (e.g. ticket add member)
-        if (interaction.isUserSelectMenu()) {
-            return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-        }
-
-        // C. STRING SELECT MENUS
-        if (interaction.isStringSelectMenu()) {
-            if (interaction.customId.startsWith('mgmt-')) {
-                return await handleManagementInteraction(interaction);
-            }
-
-            const rankingMenus = ['select_pilot_to_remove', 'select_clan_manual_', 'manage_'];
-            const isRankingMenu = rankingMenus.some(id => interaction.customId.startsWith(id));
-
-            if (isRankingMenu) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            } else {
-                return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-            }
-        }
-
-        // D. MODAL SUBMITS
-        if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'register_modal' || interaction.customId === 'reg_modal' || interaction.customId === 'reg_pilot_modal') {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            } else if (interaction.customId === 'mgmt-salary-spreadsheet-modal' || interaction.customId === 'mgmt-reservations-add-modal') {
-                return await handleManagementInteraction(interaction);
-            } else {
-                return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-            }
-        }
-
-        // E. PANEL BUTTON CLICKS
-        if (interaction.isButton()) {
-            if (interaction.customId.startsWith('mgmt-')) {
-                return await handleManagementInteraction(interaction);
-            }
-            if (interaction.customId.startsWith('confirm-manual') || interaction.customId.startsWith('manage_') || interaction.customId.startsWith('reg_')) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            return await handleClaimInteractions(interaction, claimDb, saveClaimStorage, (msg) => console.log(`[Claim] ${msg}`), claimLastMessages);
-        }
-
+        return await handleClaimInteractions(interaction);
     } catch (error) {
         logger.error('Router', 'Error caught in unified interaction router', error, {
             command: interaction.commandName,

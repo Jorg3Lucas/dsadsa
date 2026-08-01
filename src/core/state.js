@@ -31,12 +31,11 @@ export function isEarlyClaimUser(uid) {
     return earlyClaimUsers.has(uid);
 }
 
-export let client, db, rankingDb, saveLocalStorage, logEvent, lastMessages;
+export let client, db, saveLocalStorage, logEvent, lastMessages;
 
 export function initState(opts) {
     client = opts.client;
     db = opts.db;
-    rankingDb = opts.rankingDb || null;
     saveLocalStorage = opts.saveLocalStorage;
     logEvent = opts.logEvent;
     lastMessages = opts.lastMessages;

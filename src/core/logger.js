@@ -62,7 +62,7 @@ function formatStack(stack) {
 function formatError(err) {
   if (!err) return "Unknown error";
   if (err instanceof Error) {
-    let parts = [`Message: ${err.message}`];
+    const parts = [`Message: ${err.message}`];
     if (err.code) parts.push(`Code: ${err.code}`);
     if (err.stack) parts.push(`Stack:\n${formatStack(err.stack)}`);
     return parts.join("\n");

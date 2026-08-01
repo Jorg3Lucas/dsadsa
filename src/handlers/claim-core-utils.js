@@ -5,28 +5,14 @@
 // ==========================================
 
 import { getLocalTime, parseStringToDate } from "../core/time-utils.js";
-import { db, rankingDb, punishments, saveLocalStorage, savePunishmentsToDisk } from "../core/state.js";
+import { db, punishments, saveLocalStorage, savePunishmentsToDisk } from "../core/state.js";
 import { getMsg } from "../core/lang.js";
 import { getEventGroupKeys, getAntidemonRoomKeys, getSummonRoomKeys, getAntidemonRoomName } from "./claim-core-rooms.js";
 
-// Returns all Discord user IDs linked to the same in-game account (owner + all pilots)
+// Returns all Discord user IDs linked to the same in-game account.
+// The registration/pilot system was removed, so each user is treated independently.
 export function getAllLinkedIds(userId) {
-    const linkedIds = new Set([userId]);
-    const usersData = rankingDb && rankingDb.users ? rankingDb.users : null;
-    // If user has pilots, add them
-    if (usersData && usersData[userId] && usersData[userId].pilotIds) {
-        usersData[userId].pilotIds.forEach(id => linkedIds.add(id));
-    }
-    // If user is a pilot of someone, add owner and their other pilots
-    if (usersData) {
-        for (const uid in usersData) {
-            if (usersData[uid].pilotIds && usersData[uid].pilotIds.includes(userId)) {
-                linkedIds.add(uid);
-                usersData[uid].pilotIds.forEach(id => linkedIds.add(id));
-            }
-        }
-    }
-    return [...linkedIds];
+    return [userId];
 }
 
 export function hasActiveClaim(uid) {

@@ -5,12 +5,10 @@
 // ==========================================
 
 import { canHandleAdminInteraction, handleAdminInteraction } from "../interactions/admin-interactions.js";
-import { canHandleTicketInteraction, handleTicketInteraction } from "./ticket-system.js";
 import { canHandleAntidemonInteraction, handleAntidemonInteraction, canHandleAntidemonModal, handleAntidemonModal } from "../interactions/antidemon-interactions.js";
 import { canHandleSummonInteraction, handleSummonInteraction } from "../interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "../interactions/floor-interactions.js";
 import { dmOptOut, saveDmOptOutToDisk } from "../core/state.js";
-import { canHandleSalaryInteraction, handleSalaryInteraction } from "../interactions/salary-interactions.js";
 
 
 // ==========================================
@@ -41,22 +39,12 @@ export async function handleClaimInteractions(interaction) {
         return await handleSummonInteraction(interaction, uid, uName);
     }
 
-    // 4. Salary interactions (vote, select, confirm, check)
-    if (canHandleSalaryInteraction(interaction)) {
-        return await handleSalaryInteraction(interaction);
-    }
-
-    // 5. Ticket interactions (open, close, confirm, cancel)
-    if (canHandleTicketInteraction(interaction)) {
-        return await handleTicketInteraction(interaction);
-    }
-
-    // 6. Antidemon password modal submits
+    // 4. Antidemon password modal submits
     if (canHandleAntidemonModal(interaction)) {
         return await handleAntidemonModal(interaction);
     }
 
-    // 8. Floor interactions (buttons: death, claim, cancel, next)
+    // 5. Floor interactions (buttons: death, claim, cancel, next)
     if (canHandleFloorInteraction(interaction)) {
         return await handleFloorInteraction(interaction, uid, uName);
     }

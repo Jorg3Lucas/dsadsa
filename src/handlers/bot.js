@@ -8,8 +8,8 @@ import { startTickInterval } from "./panel-tick.js";
 // 🚀 INITIALIZATION
 // ==========================================
 
-export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, rankingDatabase, skipRecovery = false) {
-    initState({ client: botClient, db: database, rankingDb: rankingDatabase || null, saveLocalStorage: saveStorageFn, logEvent: logEventFn, lastMessages: messagesTracker });
+export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, skipRecovery = false) {
+    initState({ client: botClient, db: database, saveLocalStorage: saveStorageFn, logEvent: logEventFn, lastMessages: messagesTracker });
 
     // Build all known panel keys and initialize if missing
     const allPanelKeys = [];

@@ -8,6 +8,9 @@
  */
 export const noop = () => {};
 
+/** The guild (server) ID the claim bot operates on. */
+export const DISCORD_SERVER_ID = '1432320162278670440';
+
 /**
  * Returns the bot token from environment variables.
  * Supports both TOKEN and DISCORD_TOKEN env vars.
