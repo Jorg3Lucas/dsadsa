@@ -45,11 +45,11 @@ export const WORLD_IDS = {
 export const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ==========================================
-// 📥 ORIGIN SERVERS FOR SCAN IMPORT
+// 📥 SCAN SOURCE SERVER
 // ==========================================
-
-export const ORIGIN_SERVER_ID = '1301149441171914785';
-export const SECONDARY_SERVER_ID = '1432320162278670440';
+// The only Discord server this bot operates on (claim server).
+// /scanimport harvests registrations from here.
+export const SCAN_SERVER_ID = '1432320162278670440';
 
 // Pre-registration validity (7 days)
 export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;

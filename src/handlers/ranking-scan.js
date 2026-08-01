@@ -9,8 +9,7 @@ import {
     MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
     PRE_REGISTER_MAX_AGE_MS,
-    ORIGIN_SERVER_ID,
-    SECONDARY_SERVER_ID
+    SCAN_SERVER_ID
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname } from '../core/ranking-service.js';
@@ -40,8 +39,7 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
 
     if (doReset) {
         const resetServers = [
-            { id: ORIGIN_SERVER_ID, name: 'Origin Server' },
-            { id: SECONDARY_SERVER_ID, name: 'Secondary Server' }
+            { id: SCAN_SERVER_ID, name: 'Claim Server' }
         ];
 
         for (const srv of resetServers) {
@@ -114,22 +112,11 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
         logEvent(`📥 [ScanImport] 🔄 RESET: removed ${totalResetOwners} owners and ${totalResetPilots} pilots from scan servers — re-importing fresh`);
     }
 
-    // Define origin servers with their parsing strategy
+    // Scan source — the single Discord server this bot operates on (claim server)
     const originServers = [
         {
-            id: ORIGIN_SERVER_ID,
-            name: 'Origin Server',
-            isPilot(displayName) {
-                return displayName.startsWith('Pilot -');
-            },
-            parseNick(displayName) {
-                const match = displayName.match(/-\s*(.+?)\s*\|/);
-                return match ? match[1].trim() : null;
-            }
-        },
-        {
-            id: SECONDARY_SERVER_ID,
-            name: 'Secondary Server',
+            id: SCAN_SERVER_ID,
+            name: 'Claim Server',
             isPilot(displayName) {
                 return displayName.endsWith(' - Pilot');
             },
@@ -283,9 +270,6 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
         }
     };
 
-    // Track processed members across servers — server 1 (origin) takes priority
-    const processedMemberIds = new Set();
-
     for (const server of originServers) {
         const guild = interaction.client.guilds.cache.get(server.id);
         if (!guild) {
@@ -302,9 +286,6 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
         for (const [memberId, member] of members) {
             if (member.user.bot) continue;
 
-            // Skip if already processed by server 1 (Origin Server takes priority)
-            if (processedMemberIds.has(memberId)) continue;
-
             // Only harvest members with a custom nickname — members without one
             // (showing their Discord username) were never registered.
             if (!member.nickname) {
@@ -320,9 +301,6 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                 totalSkipped++;
                 continue;
             }
-
-            // Mark as processed — server 1 (origin) nickname takes priority over server 2
-            processedMemberIds.add(memberId);
 
             // User already registered — do NOT change their DB nickname, never swap pilot/owner
             if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
