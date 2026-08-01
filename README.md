@@ -1,259 +1,222 @@
-# 🤖 MIR4 Discord Bot
+# 🤖 MIR4 Claim Bot
 
-Multi-functional Discord bot for managing MIR4 guild operations, including claim systems, ranking synchronization, salary polls, and more.
+Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** — floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and daily claim reports.
+
+> The bot is **claim-only**: registration, ranking sync, salary polls, tickets, and temp-voice were removed.
 
 ---
 
 ## 📋 Overview
 
-All management features are accessible through the **`/manage`** slash command, which opens an interactive button panel. No text commands are needed — everything is done via buttons, menus, and modals.
+On every boot, the bot **deletes and recreates all floor channels** and deploys fresh claim panels (see [Auto Channel Setup](#-auto-channel-setup)). All claiming is done via **buttons on the panels** — no slash commands needed.
 
 ---
 
-## 🖱️ Main Commands
+## 🧩 Panels
 
-### 👤 Player Commands
+### 🗺️ Magic Square (MS)
+
+| Floor | Panels |
+|-------|--------|
+| **MS7–MS10** | Normal floor + Antidemon |
+| **MS11–MS12** | Leaders, Events, Antidemon, Goblin |
+
+### 🏔️ Secret Peak (SP)
+
+| Floor | Panels |
+|-------|--------|
+| **SP7–SP10** | Regular Secret Peak |
+| **SP11** | Secret Peak + Goblin |
+| **SP12** | Secret Peak + Random Event + Goblin |
+
+### 🌀 Summons
+
+Single **Summon** panel for summon location claims.
+
+---
+
+## 🎮 Claiming
+
+### Standard Floors & Secret Peak
+1. Click the **Claim** button on the floor/boss you want
+2. The panel updates to **🔴 Claimed** with your name + a time window
+3. Click **Leave** when done — a grace period opens for the next player
+4. After a boss is **killed**, a respawn cooldown runs automatically
+
+### 🛡️ Antidemon Rooms (MS)
+- Rooms **LEFT / MID / RIGHT** (or **MID + LEFT** / **MID + RIGHT** combos)
+- **Slide / Ticket / Queue** interactions — join a queue if the room is taken
+- **🔒 PT Password** — set, update, or clear a party password via modal
+- Rooms auto-release on timeout or when the owner is absent
+
+### ⚔️ Event Groups (Fury / Frenzy / Fixed / Summon)
+- **Fixed events** (Fury/Frenzy) open on a schedule — claim inside the window
+- **Slide events** — claim when the panel slides open
+- Early claim: see [Early Claim](#-early-claim)
+
+### 🔔 DM Notifications
+Claim confirmations, boss respawn reminders, and warnings are sent via **DM**. Each user can toggle DMs with the **🔕** button on any panel.
+
+---
+
+## 👑 Admin Tools
+
+### 🔄 Reset Panel
+**`admin-reset-menu`** select menu — reset one panel (or **all**) to defaults.
+
+### 👢 Kick User
+**`admin-kick-menu`** select menu — remove a user from any claim (floor, room, or event) and open the spot for the next in queue.
+
+### 📤 Reset Logs
+**`confirm-resetlogs-yes/no`** — clear the accumulated daily log queue.
+
+### 📅 Reserve Fury / Frenzy (admin-reserve flow)
+Multi-step interactive flow:
+1. Select **event** (Fury / Frenzy / Both)
+2. Select **floors** (MS11 / MS12 / Both)
+3. Select **hours** (All or specific slots)
+4. **Confirm** — panels refresh with the reservation locked in
+
+Reserved slots are blocked for other users until the reservation passes.
+
+### 👑 Early Claim (`!earlyclaim`)
+Text commands (require **Manage Messages**):
+
 | Command | Description |
 |---------|-------------|
-| `/register` | Link your Discord account to your MIR4 character (fuzzy auto-correct included) |
-| `/pilot @user` | Add a pilot to your account (max 4) |
-| `/removepilot` | Remove a pilot from your account |
-
-### 👑 Admin Commands
-| Command | Description |
-|---------|-------------|
-| `/manage` | Open the **Management Panel** — the central hub for all bot controls |
-| `/forcesync` | Force immediate sync with official MIR4 ranking |
-| `/manualregister @user nickname` | Manually register a user |
-| `/manualpilot @owner @pilot` | Manually link a pilot |
-| `/manualremove @user` | Remove a user's registration |
-| `/manualremovepilot @owner @pilot` | Remove a pilot link |
-| `/cleandb` | Remove duplicate entries from the database |
-
----
-
-## 🛠️ Management Panel (`/manage`)
-
-The management panel is the **central hub** for all bot controls. Organized into **8 categories**, each with interactive buttons and select menus.
-
-### 🏗️ Panels
-| Button | Description |
-|--------|-------------|
-| **🔄 Reset Panel** | Reset any panel to defaults (or select **Reset All**) |
-| **👢 Kick User** | Remove a user from their claim — select from a list of active claims |
-| **📋 Deploy Panels** | Deploy MS, SP, Summon panels in the current channel |
-
-**Deploy Panels options:**
-- **MS7–MS10** — Normal floor + Antidemon (2 panels each)
-- **MS11–MS12** — Leaders, Events, Antidemon, Goblin (4 panels each)
-- **SP7–10** — All regular Secret Peaks (4 panels)
-- **SP11** — SP11 + Goblin (2 panels)
-- **SP12** — SP12 + Random Event + Goblin (3 panels)
-- **ALL** — Deploy all 26 panels at once
-
-### 🔒 Reservations
-| Button | Description |
-|--------|-------------|
-| **➕ Reserve** | Start a multi-step interactive flow to reserve Fury/Frenzy slots |
-| **🔓 Open Event** | Clear reservations for Fury, Frenzy, or Both |
-| **🗑️ Clear All** | Remove ALL reservations at once |
-
-**➕ Reserve flow:**
-1. Click **➕ Reserve** → modal asks **"Who is this for?"**
-2. Enter the player's nickname → Submit
-3. Select **Fury** or **Frenzy**
-4. Select **MS11**, **MS12**, or both floors
-5. Select **All hours** or specific time slots
-6. Review and **Confirm** ✅
-7. Panels are automatically updated
-
-**🔓 Open Event:**
-- Select **Fury**, **Frenzy**, or **Both** to clear all reservations for that event
-- All affected panels are refreshed automatically
-
-### 📢 Channels
-| Button | Description |
-|--------|-------------|
-| **📜 Set Logs Channel** | Configure daily report channel (uses current channel) |
-| **🚨 Set Boss Channel** | Configure boss spawn alerts |
-| **📅 Set Events Channel** | Configure event notifications |
-
-### 👥 Players
-| Button | Description |
-|--------|-------------|
-| **📝 Register** | Opens the same register modal as `/register` |
-| **👤 Pilot** | Info about adding pilots |
-| **🗑️ Remove Pilot** | Info about removing pilots |
-| **🔄 Force Sync** | Trigger full ranking sync (with timed confirmation) |
-
-### 📋 Logs
-| Button | Description |
-|--------|-------------|
-| **📤 Dispatch Now** | Send daily activity report to the configured log channel |
-
-### 💰 Salary
-| Button | Description |
-|--------|-------------|
-| **📢 Set Channel** | Configure salary poll channel (uses current channel) |
-| **📈 Set Spreadsheet** | Link Google Spreadsheet ID (modal input) |
-| **📤 Export** | Force-export votes to spreadsheet |
-| **📊 Post Report** | Post salary report to configured channel (cleans old bot messages first) |
-
-### 🎫 Tickets
-Create a ticket panel in the current channel — users can open support tickets.
-
-### 🔄 Update
-**Update Bot** — Git pull + npm install + pm2 restart (with timed confirmation, 30s timeout)
-
----
-
-## 📊 Salary Poll System
-
-The salary poll runs automatically on a weekly schedule:
-
-| Day | Time (BRT) | Event |
-|-----|-----------|-------|
-| **Monday** | 12:30 | 🟢 Poll opens — channel is cleaned (old bot msgs deleted), fresh poll sent with @everyone |
-| **Monday–Wednesday** | — | 🗳️ Members vote on salary composition |
-| **Wednesday** | 13:00 | 🔴 Poll closes — votes exported to Google Sheets |
-| **Wednesday** | 16:00 | 📊 Salary report posted — @everyone with "Check Your Salary" button |
-| **Friday** | 13:00 | 🔄 Votes reset to 100% Darksteel default |
-
-### Voting
-1. Click **🗳️ Vote / Change Vote** on the poll message
-2. Select **% of Yellow Stones** and **% of Purple Stones**
-3. Darksteel % is automatically calculated as remainder
-4. Click **✅ Confirm Vote**
-
-> Pilots vote on behalf of their owner. The vote is recorded under the owner's name.
-
-### Salary Check
-After Wednesday's report, click **🔍 Check Your Salary** to see your personal breakdown:
-- ⚪ Darksteel % and quantity
-- 🎨 Yellow Stones % and pts
-- 🟣 Purple Stones % and pts
-
----
-
-## 🔍 Fuzzy Auto-Correct
-
-The bot includes fuzzy matching (Levenshtein distance) to handle common typos:
-
-### `/register`
-- If you type a name close to one in the ranking cache, it **auto-corrects** and shows `✏️ Auto-corrected from "X" → "Y"`
-- If the corrected name conflicts with another registered user, the registration is **blocked** with a clear error message
-- Detects conflicts if your name is very similar (>70%) to another registered user
-
-### `/manualregister`
-- If exact match fails, tries **fuzzy match** against the ranking cache
-- Shows 3 buttons: **✅ Use suggestion**, **✍️ Register as typed**, **❌ Cancel**
-
----
-
-## 🔑 Antidemon Password Flow
-
-After claiming an antidemon room, you can set a party password:
-
-1. Click **🔒 Set PT LEFT** (or **🎮 PT LEFT** if already set)
-2. If no password: bot asks **"Did you create a private party?"**
-   - **✅ Yes** → Modal opens to enter the password
-   - **❌ No** → "No problem! Party hidden by default."
-3. If already set: modal opens **directly** with the current password pre-filled
-4. You can update or clear the password at any time
+| `!earlyclaim add @user` | Allow a user to claim Fury/Frenzy **5 minutes before** the window opens |
+| `!earlyclaim remove @user` | Remove that permission |
+| `!earlyclaim list` | Show all users with early-claim permission |
 
 ---
 
 ## ⏰ Automatic Schedules
 
-| Time (BRT) | Action |
-|-----------|--------|
-| **Daily 17:00** | Ranking sync — updates nicknames, roles, and pilot links |
-| **Monday 12:30** | Salary poll opens (channel cleaned first — old bot msgs deleted) |
-| **Wednesday 13:00** | Salary poll closes + exports to spreadsheet |
-| **Wednesday 16:00** | Salary report posted |
-| **Friday 13:00** | Salary votes reset to default |
-| **Every 6 hours** | Automatic database backup |
+| Time (Server/Berlin) | Action |
+|----------------------|--------|
+| **Every 15s** | Panel tick — countdowns, cooldowns, auto-respawn, timeouts, force refresh |
+| **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |
+| **10 min before events** | 🚨 Scheduled event alerts with @everyone (Red Boss, Leader 3, Purgatory, weekly events, etc.) |
+| **18:00 daily** | 📤 Daily claim report dispatched (as `.txt` file + summary embed) |
+| **Every 6 hours** | 💾 Automatic database backup (keeps last 7 per file) |
+
+---
+
+## 🏗️ Auto Channel Setup
+
+On boot, `auto-channel-setup.js` **deletes all text channels** in the configured categories and recreates them:
+
+```
+7F:  🔸┃sp7  🔹┃ms7
+8F:  🔸┃sp8  🔹┃ms8
+9F:  🔸┃sp9  🔹┃ms9
+10F: 🔸┃sp10 🔹┃ms10
+11F: 🔸┃sp11 🔹┃ms11
+12F: 🔸┃sp12 🔹┃ms12
+Summons: 🌀┃summons
+```
+
+Each channel gets its panel embeds + buttons posted automatically.
+
+---
+
+## 📦 Data Files
+
+| File | Contents |
+|------|----------|
+| `database.json` | Panel state, claims, owners, queues (gitignored) |
+| `daily-logs.json` | Accumulated claim log queue + configured channel IDs |
+| `punishments.json` | Temporary claim cooldowns after kick/leave |
+| `early-claim-users.json` | Users allowed to claim early |
+| `dm-optout.json` | Users who disabled DMs |
+
+All are gitignored and backed up automatically.
 
 ---
 
 ## ⚙️ Setup
 
-### Initial Configuration
-1. Use `/manage` to open the management panel
-2. Go to **📢 Channels** to configure log/boss/event channels
-3. Go to **💰 Salary** → **Set Channel** to configure salary poll
-4. Use **📋 Deploy Panels** in **🏗️ Panels** to deploy MS/SP/Summon panels
+### 1. Environment
+Create a `.env` file:
+```
+TOKEN=your-bot-token
+```
 
-### Salary Spreadsheet
-1. Go to **💰 Salary** → **Set Spreadsheet**
-2. Enter the Google Spreadsheet ID
-3. The sheet must have a **PLAYERS** tab with names in column B (starting row 7)
+### 2. Configuration
+- **`src/core/config.js`** — `DISCORD_SERVER_ID` (the guild the bot operates on)
+- **`src/handlers/auto-channel-setup.js`** — category IDs + channel/panel definitions
+- **Daily logs / boss alerts / event alerts** — configured **manually in `daily-logs.json`**: set `configChannelId` (daily claim report), `bossSpawnChannelId` (boss spawn alerts), and `scheduledEventChannelId` (event alerts) to the target channel IDs before boot
 
----
-
-## 🔐 Permissions
-
+### 3. Permissions
 | Permission | Required For |
 |-----------|-------------|
-| **Manage Messages** | Access to `/manage` panel and all admin features |
-| **Manage Guild** | Configuring channels (logs, boss, events, salary) |
+| **Manage Messages** | `!earlyclaim`, reset/kick/reset-logs admin actions |
+| **Manage Channels** | Auto channel setup (delete/recreate channels on boot) |
+
+### 4. Run
+```
+npm install
+npm start
+```
 
 ---
 
 ## 🏗️ Project Structure
 
 ```
-├── index.js                     # Bot entry point & interaction router
-├── state.js                     # Module-level state (db, client, configs)
-├── bot.js                       # Claim system initialization
-├── claim-core.js                # Core claim logic
-├── claim-handlers.js            # Interaction router
-├── management-menu.js           # /manage button panel (all management UI)
-├── panel-render.js              # Embed & button rendering
-├── panel-utils.js               # Panel utilities
-├── panel-tick.js                # Real-time panel updates
-├── salary-poll.js               # Salary poll system
-│
-├── interactions/
-│   ├── antidemon-interactions.js # Antidemon room handlers (password, slide, ticket, queue)
-│   ├── summon-interactions.js    # Summon location handlers
-│   ├── floor-interactions.js     # Regular floor handlers
-│   ├── admin-interactions.js     # Admin interaction handlers (reset, kick, reserve flow)
-│   └── salary-interactions.js    # Salary vote handlers
-│
-├── ranking-handlers.js          # Ranking (MIR4) slash command handlers
-├── ranking-commands.js          # Slash command registration
-├── ranking-sync-engine.js       # Ranking sync logic
-├── ranking-scraper.js           # MIR4 ranking web scraper
-├── ranking-cache.js             # Ranking cache + fuzzy matching
-├── ranking-events.js            # Discord events (welcome, leave, cron)
-├── ranking-constants.js         # Constants (clan roles, server IDs)
-│
-├── lang.js / lang.json          # Localization
-├── time-utils.js                # Time utilities
-├── constants.js                 # Bot constants
-├── auto-backup.js               # Automatic backup system
-├── daily-logs.js                # Daily activity logs
-├── ticket-system.js             # Ticket support system
-├── temp-voice.js                # Temporary voice channels
-├── salary-poll.js               # Salary poll system
-└── auto-channel-setup.js        # Auto channel setup
+src/
+├── index.js                        # Entry point — boots claim, auto-setup, tick, backups
+├── auto-backup.js                  # Backup scheduler (every 6h)
+├── core/
+│   ├── config.js                   # DISCORD_SERVER_ID, token helpers
+│   ├── constants.js                # Status strings, embed colors
+│   ├── state.js                    # Module-level state (db, logs, punishments, early claim, DM opt-out)
+│   ├── lang.js / lang.json         # Localization (all UI text)
+│   ├── time-utils.js               # Time helpers, boss schedules
+│   ├── logger.js                   # Structured logger + global error handlers
+│   ├── daily-logs.js               # Claim report builder + dispatch
+│   └── discord-utils.js            # Shared Discord send helpers
+├── handlers/
+│   ├── bot.js                      # Claim system initialization + router export
+│   ├── claim-handlers.js           # Unified interaction router
+│   ├── claim-core*.js              # Claim logic (utils, rooms, options, actions)
+│   ├── panel-render.js             # Embed + button rendering
+│   ├── render-embed*.js            # Panel embed builders
+│   ├── render-buttons.js           # Panel button builders
+│   ├── panel-tick.js               # 15s tick (cooldowns, respawn, alerts, dispatch)
+│   ├── tick-*.js                   # Per-panel-type tick logic
+│   ├── panel-utils.js              # Panel refresh helpers + DM notifications
+│   ├── panel-dm.js                 # DM message handling
+│   ├── panel-migrations.js         # Data migrations
+│   ├── auto-channel-setup.js       # Channel recreation + panel deployment on boot
+│   ├── boss-spawn-scheduler.js     # Boss + scheduled event alerts
+│   └── early-claim.js              # !earlyclaim admin commands
+└── interactions/
+    ├── floor-interactions.js       # Floor/peak buttons (claim, cancel, next)
+    ├── floor-*.js                  # Floor-specific handlers
+    ├── antidemon-interactions*.js  # Antidemon rooms (slide, ticket, queue, password)
+    ├── summon-interactions.js      # Summon handlers
+    ├── floor-summon.js             # Summon claim flow
+    ├── admin-interactions.js       # Admin reset/kick/reset-logs
+    └── admin-reserve.js            # Fury/Frenzy reservation flow
 ```
 
 ---
 
 ## 🧪 Test Checklist
 
-After any changes, verify these flows:
+After any changes, verify:
 
-- [ ] `/manage` opens the management panel with all buttons
-- [ ] **Panels → Deploy Panels** — MS7, MS11, ALL deploy correctly
-- [ ] **Reservations → Reserve** — full multi-step flow works (Fury/Frenzy, MS11/MS12, All hours/specific slots)
-- [ ] **Reservations → Open Event** — clears Fury/Frenzy/Both, panels refresh
-- [ ] **Reservations → Clear All** — removes all reservations
-- [ ] **Channels → Set Logs/Boss/Events** — saves channel ID
-- [ ] **Salary → Post Report** — cleans old bot messages, sends report
-- [ ] **Salary → Export** — exports votes to spreadsheet
-- [ ] **Update Bot** — timed confirm, git pull, npm install, restart
-- [ ] **🔒 Password flow** — set, update, clear password on antidemon rooms
-- [ ] **Fuzzy auto-correct** — typo in `/register` auto-corrects; duplicate detection blocks conflicts
+- [ ] Boot → all floor channels recreated + panels deployed (auto-setup)
+- [ ] **Floor claim** — claim, leave, queue promotion, grace period
+- [ ] **Boss killed** → cooldown → auto-respawn → DM reminder
+- [ ] **Antidemon rooms** — left/mid/right, combo rooms, password modal
+- [ ] **Antidemon queue** — slide / ticket / queue join
+- [ ] **Fury/Frenzy fixed events** — claim inside window, reservation blocks
+- [ ] **Early claim** — `!earlyclaim add/remove/list` + claiming 5 min early
+- [ ] **Admin** — reset panel (single + all), kick user, reset logs
+- [ ] **Reserve flow** — reserve Fury/Frenzy slots, panel refresh
+- [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
+- [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
+- [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts
+- [ ] **Auto backup** — `backups/` folder populated after 1 min
