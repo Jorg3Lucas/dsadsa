@@ -30,17 +30,12 @@ export const APPROVER_ROLE_IDS = [
     '1481568065081573467'
 ];
 
+// 🌍 WORLDS TO SYNC — only EU11 (world 611)
+// The scraper, lookups, allied-clan management and server display
+// all derive from this map, so restricting it here limits the whole
+// sync pipeline to the EU11 world only.
 export const WORLD_IDS = {
-    611: "EU011",
-    612: "EU012",
-    613: "EU013",
-    614: "EU014",
-    621: "EU021",
-    622: "EU022",
-    623: "EU023",
-    624: "EU024",
-    652: "EU031",
-    653: "EU32"
+    611: "EU011"
 };
 
 // ==========================================

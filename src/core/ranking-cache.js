@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { runBackup } from '../auto-backup.js';
+import { WORLD_IDS } from './ranking-constants.js';
 
 // ==========================================
 // 💾 RANKING CACHE (Local JSON)
@@ -26,7 +27,13 @@ export function getLocalRankingCache() {
                 console.log('⚠️ [Ranking Cache] Old flat format detected. Re-fetching with multi-world format...');
                 return null;
             }
-            return data;
+            // Restrict to configured sync worlds (EU11 only) — ignore stale worlds
+            // from other servers that may remain in the cache file.
+            const filtered = {};
+            for (const [worldId, players] of Object.entries(data)) {
+                if (WORLD_IDS[worldId]) filtered[worldId] = players;
+            }
+            return filtered;
         }
     } catch (err) { console.error('❌ Error reading cache:', err.message); }
     return null;

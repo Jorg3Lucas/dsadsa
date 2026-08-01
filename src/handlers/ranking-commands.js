@@ -10,7 +10,6 @@ import {
 import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
-    WORLD_IDS,
     confirmationCache,
     pendingRegistrations,
     pendingPilotApprovals,

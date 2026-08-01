@@ -5,7 +5,7 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder
 } from 'discord.js';
-import { WORLD_IDS, pendingRegistrations, adminChannelId } from '../core/ranking-constants.js';
+import { pendingRegistrations, adminChannelId } from '../core/ranking-constants.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 
 // ==========================================
