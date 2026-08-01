@@ -219,12 +219,18 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         }
         }
 
-        // 2.85. PRE-REGISTRATION AUTO-CONVERSION — convert pre-registered users who are now in allied clans
+        // 2.85. PRE-REGISTRATION AUTO-CONVERSION — convert pre-registered users who are now in allied clans,
+        // and remove pre-registrations (e.g. from scanimport) whose nickname is not in the EU11 ranking
         if (db.preRegistrations && Object.keys(db.preRegistrations).length > 0) {
             const preRegCache = getLocalRankingCache();
             if (preRegCache) {
                 let converted = 0;
                 let expired = 0;
+                let removed = 0;
+
+                // Safety guard: don't mass-remove pre-regs when the cache is empty
+                const preRegTotalPlayers = Object.values(preRegCache).reduce((sum, world) => sum + (world ? Object.keys(world).length : 0), 0);
+                const preRegAlliedConfigured = Object.keys(db.config?.alliedClans || {}).length > 0;
 
                 for (const [memberId, preReg] of Object.entries(db.preRegistrations)) {
                     // Check expiry
@@ -241,6 +247,16 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
                     // Check ranking + allied clan via centralized service
                     const lookup = lookupNickname(preReg.nickname, db, preRegCache);
+
+                    // Not in the EU11 ranking (in an allied clan) — remove immediately instead of
+                    // waiting for the 7-day expiry. Covers scanimport pre-registrations.
+                    if (preRegTotalPlayers > 0 && (!lookup.found || (preRegAlliedConfigured && !lookup.inAlliedClan))) {
+                        delete db.preRegistrations[memberId];
+                        removed++;
+                        logEvent(`🧹 [PreReg Sync] Removed pre-registration "${preReg.nickname}" (${memberId}) — not in the EU11 ranking${preRegAlliedConfigured ? ' in an allied clan' : ''}`);
+                        continue;
+                    }
+
                     if (!lookup.found || !lookup.inAlliedClan) continue;
 
                     // Auto-convert!
@@ -276,9 +292,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     converted++;
                 }
 
-                if (converted > 0 || expired > 0) {
+                if (converted > 0 || expired > 0 || removed > 0) {
                     saveLocalStorage();
-                    logEvent(`🧹 [PreReg Sync] ${converted} auto-converted, ${expired} expired pre-registrations cleaned up`);
+                    logEvent(`🧹 [PreReg Sync] ${converted} auto-converted, ${expired} expired, ${removed} not-in-ranking pre-registrations cleaned up`);
                 }
             }
         }
