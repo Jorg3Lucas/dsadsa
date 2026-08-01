@@ -68,7 +68,15 @@ if (!guildId) {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-async function api(path, options = {}) {
+// Maximum retries when Discord rate-limits us (HTTP 429)
+const MAX_RETRIES = 5;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Discord API request with automatic 429 rate-limit handling.
+ * Respects the server-provided `retry_after` and retries with backoff.
+ */
+async function api(path, options = {}, retries = 0) {
   const res = await fetch(`${API}${path}`, {
     method: options.method || "GET",
     headers: {
@@ -78,6 +86,23 @@ async function api(path, options = {}) {
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
+
+  if (res.status === 429) {
+    if (retries >= MAX_RETRIES) {
+      throw new Error(`Rate limited after ${MAX_RETRIES} retries on ${path}`);
+    }
+    let retryAfterMs = 1000; // default fallback
+    try {
+      const body = await res.json();
+      retryAfterMs = Math.ceil((body.retry_after || 1) * 1000);
+    } catch {
+      // fall back to default
+    }
+    console.log(`⏳ Rate limited — waiting ${(retryAfterMs / 1000).toFixed(1)}s before retry...`);
+    await sleep(retryAfterMs);
+    return api(path, options, retries + 1);
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Discord API ${res.status} on ${path}: ${text.slice(0, 300)}`);
