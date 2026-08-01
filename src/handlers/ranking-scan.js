@@ -8,7 +8,6 @@ import {
     SUPER_ADMIN_USER_ID,
     MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
-    PRE_REGISTER_MAX_AGE_MS,
     SCAN_SERVER_ID
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache } from '../core/ranking-cache.js';
@@ -164,14 +163,12 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
 
         // Also create pre-registration to track the pending link
         if (!db.preRegistrations) db.preRegistrations = {};
-        const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
         db.preRegistrations[pilotMemberId] = {
             nickname: ownerNick,
             pilotIds: [],
             ownerNick,
             ownerId: null,
-            registeredAt: new Date().toISOString(),
-            expiresAt
+            registeredAt: new Date().toISOString()
         };
         saveLocalStorage();
 
@@ -252,23 +249,20 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                 existing.ownerNick = ownerNick;
                 existing.ownerId = ownerId;
                 existing.registeredAt = new Date().toISOString();
-                existing.expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
                 saveLocalStorage();
                 logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} pre-registration updated as pilot of "${ownerNick}"`);
             } else if (!existing) {
-                const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
                 db.preRegistrations[pilotMemberId] = {
                     nickname: ownerNick,
                     pilotIds: [],
                     ownerNick,
                     ownerId,
-                    registeredAt: new Date().toISOString(),
-                    expiresAt
+                    registeredAt: new Date().toISOString()
                 };
                 saveLocalStorage();
             }
             logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} pre-registered as pilot of "${ownerNick}"`);
-            return `⏳ pre-registered as pilot of "${ownerNick}" (expires in 7d)`;
+            return `⏳ pre-registered as pilot of "${ownerNick}" (waiting to join)`;
         }
     };
 
@@ -426,23 +420,20 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                     const oldNick = existing.nickname;
                     existing.nickname = gameNick;
                     existing.registeredAt = new Date().toISOString();
-                    existing.expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
                     saveLocalStorage();
                     logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) pre-registration updated: "${oldNick}" → "${gameNick}"`);
                 } else if (!existing) {
-                    const expiresAt = new Date(Date.now() + PRE_REGISTER_MAX_AGE_MS).toISOString();
                     db.preRegistrations[memberId] = {
                         nickname: gameNick,
                         pilotIds: [],
-                        registeredAt: new Date().toISOString(),
-                        expiresAt
+                        registeredAt: new Date().toISOString()
                     };
                     saveLocalStorage();
                 }
 
                 ownerNickLowerToId[gameNick.toLowerCase()] = memberId;
                 totalPreReg++;
-                if (results.length < 20) results.push(`⏳ ${member.user.tag} → pre-registered as "${gameNick}" (expires in 7d)`);
+                if (results.length < 20) results.push(`⏳ ${member.user.tag} → pre-registered as "${gameNick}" (waiting for ranking validation)`);
                 logEvent(`📥 [ScanImport] ${member.user.tag} (${memberId}) pre-registered as owner "${gameNick}"`);
             }
         }
@@ -528,7 +519,6 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
     }
 
     let totalChecked = 0;
-    let totalExpired = 0;
     let totalConverted = 0;
     let totalInAlliedClan = 0;
     let totalNotFound = 0;
@@ -541,15 +531,6 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
 
     for (const [memberId, preReg] of Object.entries(db.preRegistrations)) {
         totalChecked++;
-
-        // ── Check expiry ──
-        if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < Date.now()) {
-            delete db.preRegistrations[memberId];
-            totalExpired++;
-            if (results.length < 30) results.push(`🗑️ **${preReg.nickname}** — expired, removed`);
-            logEvent(`📊 [ScanImportStatus] Removed expired pre-registration for "${preReg.nickname}" (${memberId})`);
-            continue;
-        }
 
         // ── Check if user is in production server ──
         const prodMember = prodMembers ? prodMembers.get(memberId) : null;
@@ -564,8 +545,11 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
         const lookup = lookupNickname(preReg.nickname, db, rankingCache);
 
         if (!lookup.found) {
+            // Not found in the EU11 ranking — remove immediately (no time-based expiry)
+            delete db.preRegistrations[memberId];
             totalNotFound++;
-            if (results.length < 30) results.push(`❌ **${preReg.nickname}** — not found in ranking`);
+            if (results.length < 30) results.push(`🗑️ **${preReg.nickname}** — not found in ranking, removed`);
+            logEvent(`📊 [ScanImportStatus] Removed pre-registration "${preReg.nickname}" (${memberId}) — not in the EU11 ranking`);
             continue;
         }
 
@@ -620,9 +604,8 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
 
     let report = `📊 **Pre-Registration Status**\n\n`;
     report += `📋 **Total checked:** ${totalChecked}\n`;
-    report += `🗑️ **Expired (removed):** ${totalExpired}\n`;
     report += `⏳ **Not in prod server:** ${totalNotInProd}\n`;
-    report += `❌ **Not found in ranking:** ${totalNotFound}\n`;
+    report += `❌ **Not found in ranking (removed):** ${totalNotFound}\n`;
     report += `⚠️ **Not in allied clan:** ${totalInAlliedClan}\n`;
     report += `✅ **CONVERTED to permanent:** ${totalConverted}\n\n`;
 
@@ -635,6 +618,6 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
         report = report.substring(0, 1900) + '\n\n... (truncated)';
     }
 
-    logEvent(`📊 [ScanImportStatus] ${interaction.user.tag} checked ${totalChecked} pre-registrations — ${totalConverted} auto-converted, ${totalExpired} expired`);
+    logEvent(`📊 [ScanImportStatus] ${interaction.user.tag} checked ${totalChecked} pre-registrations — ${totalConverted} auto-converted, ${totalNotFound} not-in-ranking removed`);
     return interaction.editReply(report);
 }

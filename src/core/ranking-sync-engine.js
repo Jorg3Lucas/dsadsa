@@ -209,35 +209,25 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             const preRegCache = getLocalRankingCache();
             if (preRegCache) {
                 let converted = 0;
-                let expired = 0;
                 let removed = 0;
 
                 // Safety guard: don't mass-remove pre-regs when the cache is empty
                 const preRegTotalPlayers = Object.values(preRegCache).reduce((sum, world) => sum + (world ? Object.keys(world).length : 0), 0);
-                const preRegAlliedConfigured = Object.keys(db.config?.alliedClans || {}).length > 0;
 
                 for (const [memberId, preReg] of Object.entries(db.preRegistrations)) {
-                    // Check expiry
-                    if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < Date.now()) {
-                        delete db.preRegistrations[memberId];
-                        expired++;
-                        logEvent(`🧹 [PreReg Sync] Removed expired pre-registration for "${preReg.nickname}" (${memberId})`);
-                        continue;
-                    }
-
                     // Check if user is in the production server
                     const prodMember = members.get(memberId);
                     if (!prodMember) continue;
 
-                    // Check ranking + allied clan via centralized service
+                    // Check ranking via centralized service
                     const lookup = lookupNickname(preReg.nickname, db, preRegCache);
 
-                    // Not in the EU11 ranking (in an allied clan) — remove immediately instead of
-                    // waiting for the 7-day expiry. Covers scanimport pre-registrations.
-                    if (preRegTotalPlayers > 0 && (!lookup.found || (preRegAlliedConfigured && !lookup.inAlliedClan))) {
+                    // Not found in the EU11 ranking — remove immediately (no time-based expiry).
+                    // Covers scanimport pre-registrations.
+                    if (preRegTotalPlayers > 0 && !lookup.found) {
                         delete db.preRegistrations[memberId];
                         removed++;
-                        logEvent(`🧹 [PreReg Sync] Removed pre-registration "${preReg.nickname}" (${memberId}) — not in the EU11 ranking${preRegAlliedConfigured ? ' in an allied clan' : ''}`);
+                        logEvent(`🧹 [PreReg Sync] Removed pre-registration "${preReg.nickname}" (${memberId}) — not in the EU11 ranking`);
                         continue;
                     }
 
@@ -276,9 +266,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     converted++;
                 }
 
-                if (converted > 0 || expired > 0 || removed > 0) {
+                if (converted > 0 || removed > 0) {
                     saveLocalStorage();
-                    logEvent(`🧹 [PreReg Sync] ${converted} auto-converted, ${expired} expired, ${removed} not-in-ranking pre-registrations cleaned up`);
+                    logEvent(`🧹 [PreReg Sync] ${converted} auto-converted, ${removed} not-in-ranking pre-registrations cleaned up`);
                 }
             }
         }

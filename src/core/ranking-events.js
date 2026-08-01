@@ -250,22 +250,8 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         setAdminChannelId(db.config.adminChannelId);
     }
 
-    // Clean up expired pre-registrations on startup
-    if (db.preRegistrations) {
-        const now = Date.now();
-        const entries = Object.entries(db.preRegistrations);
-        let cleaned = 0;
-        for (const [userId, preReg] of entries) {
-            if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < now) {
-                delete db.preRegistrations[userId];
-                cleaned++;
-            }
-        }
-        if (cleaned > 0) {
-            saveLocalStorage();
-            logEvent(`🧹 [PreReg] Cleaned up ${cleaned} expired pre-registration(s) on startup`);
-        }
-    }
+    // Pre-registrations no longer expire by time — they are validated against the
+    // EU11 ranking on every sync (not found in the ranking → removed immediately).
 
     // Restore the welcome/fixed panel on startup if it was deleted
     restoreWelcomePanel(client, db, saveLocalStorage, logEvent).catch(err => {
@@ -293,10 +279,12 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
             // ── Check for pre-registration first ──
             if (member.guild.id === DISCORD_SERVER_ID && db.preRegistrations && db.preRegistrations[member.id]) {
                 const preReg = db.preRegistrations[member.id];
-                const expiresAt = new Date(preReg.expiresAt).getTime();
 
-                if (expiresAt > Date.now()) {
-                    // Valid pre-registration — check if pilot (has ownerNick)
+                // Pre-registration is always applied on join — no time-based expiry.
+                // Ranking validity is enforced by the sync engine (not in the EU11
+                // ranking → removed immediately).
+                {
+                    // Check if pilot (has ownerNick)
                     if (preReg.ownerNick) {
                         // Try to find the owner: by ownerId or by nickname lookup
                         let ownerId = preReg.ownerId;
@@ -369,11 +357,6 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
 
                         logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                     }
-                } else {
-                    // Expired — remove pre-registration
-                    delete db.preRegistrations[member.id];
-                    saveLocalStorage();
-                    logEvent(`📥 [PreReg] ${member.user.tag} joined — pre-registration expired (was "${preReg.nickname}")`);
                 }
             }
 

@@ -51,8 +51,9 @@ export const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 // /scanimport harvests registrations from here.
 export const SCAN_SERVER_ID = '1432320162278670440';
 
-// Pre-registration validity (7 days)
-export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// Pre-registrations no longer expire by time — they are validated against the
+// EU11 ranking on every sync. Not found in the ranking → removed immediately.
+// (PRE_REGISTER_MAX_AGE_MS removed)
 
 // Super admin — only this user can use high-risk commands
 export const SUPER_ADMIN_USER_ID = '864108100880171009';

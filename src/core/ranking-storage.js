@@ -67,6 +67,24 @@ export function loadLocalStorageRanking() {
                 }
             }
 
+            // Migration: pre-registrations no longer expire by time (7-day expiry
+            // removed). Strip stale expiresAt fields from the current database —
+            // validity is now enforced only by the EU11 ranking sync, which removes
+            // pre-regs not found in the ranking immediately.
+            let prunedPreRegs = 0;
+            if (rankingDb.preRegistrations) {
+                for (const preReg of Object.values(rankingDb.preRegistrations)) {
+                    if (preReg.expiresAt) {
+                        delete preReg.expiresAt;
+                        prunedPreRegs++;
+                    }
+                }
+                if (prunedPreRegs > 0) {
+                    saveRankingStorage(rankingDb);
+                    console.log(`\ud83e\uddf9 Pruned expiresAt from ${prunedPreRegs} pre-registration(s) — time-based expiry removed`);
+                }
+            }
+
             console.log('\u2705 Ranking database loaded successfully.');
             console.log(`\ud83d\udccb Restored ${Object.keys(pendingRegistrations).length} pending registration(s), ${Object.keys(pendingPilotApprovals).length} pending pilot approval(s)`);
         } else {
