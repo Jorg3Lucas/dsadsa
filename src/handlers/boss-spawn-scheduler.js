@@ -88,6 +88,26 @@ const bossSpawns = [
   { world: "W2", layer: "1", map: "Nine Dragon Palace", boss: "Wi Gwangryeong",
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
 
+  // ═══ LAYER 1 — W3 (level 158+) ═══
+  { world: "W3", layer: "1", map: "Underground Jail", boss: "Molgrash",
+    times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Nine Dragon Palace", boss: "Wi Gwangryeong",
+    times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Primal Nefariox Ruins", boss: "Krog",
+    times: (() => { const t=[]; for(const h of[1,7,13,19])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Frozen Gorge", boss: "Kelis",
+    times: (() => { const t=[]; for(const h of[2,8,14,20])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Frozen Gorge", boss: "Talasa",
+    times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Ancient One's Old Castle", boss: "Barkas",
+    times: (() => { const t=[]; for(const h of[3,9,15,21])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Hydra's Temple", boss: "Bargan",
+    times: (() => { const t=[]; for(const h of[4,10,16,22])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Hydra's Temple", boss: "Morg",
+    times: (() => { const t=[]; for(const h of[3,6,9,12,15,18,21,0])t.push({h,m:30}); return t; })() },
+  { world: "W3", layer: "1", map: "Hydra's Depths", boss: "Bordo",
+    times: (() => { const t=[]; for(const h of[5,11,17,23])t.push({h,m:30}); return t; })() },
+
 ];
 
 // ─── Build spawn time key for cache ──────────────────────
