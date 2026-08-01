@@ -9,9 +9,9 @@ import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
 import { handleOwnerRegistrationModal, handleSelectRegistrationNickname } from './handlers/ranking-registration.js';
-import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot } from './handlers/ranking-welcome.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
-import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm } from './handlers/ranking-pilot.js';
+import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
 import {
@@ -118,6 +118,11 @@ client.on('interactionCreate', async (interaction) => {
                 return await handleNotifySelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
+            // Pilot registration: user picks the correct owner from fuzzy candidates
+            if (interaction.customId.startsWith('user_select_pilot_owner_')) {
+                return await handleUserSelectPilotOwner(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
             // Pilot removal (user removing their own pilot)
             if (interaction.customId === 'select_pilot_to_remove') {
                 return await handlePilotRemoveSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
@@ -182,6 +187,17 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (interaction.customId === 'welcome_register_pilot') {
                 return handleWelcomeRegisterPilot(interaction);
+            }
+
+            // Welcome: self-service remove registration / pilot
+            if (interaction.customId === 'welcome_remove_registration') {
+                return await handleWelcomeRemoveRegistration(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'welcome_remove_pilot') {
+                return await handleWelcomeRemovePilot(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'selfremove_yes' || interaction.customId === 'selfremove_no') {
+                return await handleSelfRemoveConfirm(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
             // Admin approval buttons (approve/reject owner registration)

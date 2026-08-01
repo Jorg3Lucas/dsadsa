@@ -5,6 +5,7 @@ import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { buildPrefixedNickname } from './ranking-utils.js';
+import { buildWelcomePanelComponents } from '../handlers/ranking-welcome.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
@@ -88,6 +89,17 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
 
         for (const [userId, pending] of pendingEntries) {
             if (!pending.nickname) continue;
+
+            // Registrations still awaiting the user's fuzzy-nickname selection:
+            // clean up expired ones, otherwise skip (no admin panel sent yet)
+            if (pending.awaitingSelection) {
+                const timeSinceSelection = Date.now() - (pending.timestamp || 0);
+                if (timeSinceSelection > PENDING_MAX_AGE_MS) {
+                    delete pendingRegistrations[userId];
+                    expiredCount++;
+                }
+                continue;
+            }
 
             // Check if this registration has expired (>24h) while the bot was offline
             const timeSinceSubmission = Date.now() - (pending.timestamp || 0);
@@ -217,18 +229,7 @@ async function restoreWelcomePanel(client, db, saveLocalStorage, logEvent) {
         }
 
         // Re-send the panel
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('welcome_register_owner')
-                .setLabel('👑 Register as Owner')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('welcome_register_pilot')
-                .setLabel('✈️ Register as Pilot')
-                .setStyle(ButtonStyle.Secondary)
-        );
-
-        const newMsg = await panelChannel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });
+        const newMsg = await panelChannel.send({ content: WELCOME_PANEL_MESSAGE, components: buildWelcomePanelComponents() });
         db.config.panelMessageId = newMsg.id;
         saveLocalStorage();
         logEvent('🔄 [Panel Restore] Welcome panel was missing — re-sent and saved new message ID');

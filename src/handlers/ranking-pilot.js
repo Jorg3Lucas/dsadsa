@@ -1,7 +1,9 @@
 import {
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
@@ -17,71 +19,111 @@ import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 // ==========================================
 // Extracted from ranking-handlers.js
 
+// ── Fuzzy owner candidates (shared with modal + select flow) ──
+// Returns up to `limit` registered owners sorted by similarity to the typed nickname.
+function findOwnerCandidates(ownerNick, db, limit = 3) {
+    const cleanedInput = cleanNickname(ownerNick);
+    if (cleanedInput.length < 2) return [];
+
+    const pilotIds = new Set();
+    for (const [, data] of Object.entries(db.users || {})) {
+        if (data.pilotIds && data.pilotIds.length > 0) {
+            for (const pid of data.pilotIds) {
+                pilotIds.add(pid);
+            }
+        }
+    }
+
+    const candidates = [];
+    for (const [id, data] of Object.entries(db.users || {})) {
+        if (!data.nickname) continue;
+        if (pilotIds.has(id)) continue;
+        const cleanedNick = cleanNickname(data.nickname);
+        if (cleanedNick.length < 2) continue;
+
+        const inputChars = new Set(cleanedInput);
+        const nickChars = new Set(cleanedNick);
+        let commonChars = 0;
+        for (const c of inputChars) {
+            if (nickChars.has(c)) commonChars++;
+        }
+        const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+        if (overlap < 0.3) continue;
+
+        const distance = levenshteinDistance(cleanedInput, cleanedNick);
+        const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+        const similarity = 1 - (distance / maxLen);
+
+        if (similarity >= 0.55) {
+            candidates.push({ id, nickname: data.nickname, score: similarity });
+        }
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates.slice(0, limit);
+}
+
 // ── Pilot Registration Modal ──
 export async function handlePilotRegistrationModal(interaction, db, saveLocalStorage, logEvent) {
     await interaction.deferReply({ flags: 64 });
 
     const ownerNick = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
+    const pilotId = interaction.user.id;
 
     let ownerEntry = Object.entries(db.users).find(([id, data]) =>
         data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === ownerNick.toLowerCase()
     );
 
-    // ── Fuzzy matching: if exact owner not found, try closest match ──
-    let fuzzyCorrectedNick = null;
+    // ── Fuzzy matching: if exact owner not found, show candidates so the user picks ──
     if (!ownerEntry) {
-        const cleanedInput = cleanNickname(ownerNick);
+        const candidates = findOwnerCandidates(ownerNick, db, 3);
 
-        if (cleanedInput.length >= 2) {
-            const pilotIds = new Set();
-            for (const [, data] of Object.entries(db.users)) {
-                if (data.pilotIds && data.pilotIds.length > 0) {
-                    for (const pid of data.pilotIds) {
-                        pilotIds.add(pid);
-                    }
-                }
-            }
+        if (candidates.length > 0) {
+            const selectOptions = candidates.map(c => new StringSelectMenuOptionBuilder()
+                .setLabel(`${c.nickname.substring(0, 80)}`)
+                .setValue(c.id)
+                .setDescription(`Similarity ${Math.round(c.score * 100)}%`)
+            );
 
-            let bestMatch = null;
-            let bestScore = 0;
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId(`user_select_pilot_owner_${pilotId}`)
+                    .setPlaceholder('Select the correct owner')
+                    .addOptions(selectOptions)
+            );
 
-            for (const [id, data] of Object.entries(db.users)) {
-                if (!data.nickname) continue;
-                if (pilotIds.has(id)) continue;
-                const cleanedNick = cleanNickname(data.nickname);
-                if (cleanedNick.length < 2) continue;
-
-                const inputChars = new Set(cleanedInput);
-                const nickChars = new Set(cleanedNick);
-                let commonChars = 0;
-                for (const c of inputChars) {
-                    if (nickChars.has(c)) commonChars++;
-                }
-                const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
-                if (overlap < 0.3) continue;
-
-                const distance = levenshteinDistance(cleanedInput, cleanedNick);
-                const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
-                const similarity = 1 - (distance / maxLen);
-
-                if (similarity > bestScore && similarity >= 0.55) {
-                    bestScore = similarity;
-                    bestMatch = { id, nickname: data.nickname };
-                }
-            }
-
-            if (bestMatch) {
-                fuzzyCorrectedNick = bestMatch.nickname;
-                ownerEntry = [bestMatch.id, db.users[bestMatch.id]];
-                logEvent(`✈️ ${interaction.user.tag} — fuzzy matched owner "${ownerNick}" → "${bestMatch.nickname}" for pilot registration`);
-            }
+            logEvent(`🔍 ${interaction.user.tag} — fuzzy candidates shown for owner "${ownerNick}" (pilot registration)`);
+            return interaction.editReply({
+                content: `🔍 **"${ownerNick}" not found exactly.** We found similar registered owners. Select the correct one below:`,
+                components: [row]
+            });
         }
-    }
 
-    if (!ownerEntry) {
         return interaction.editReply('❌ Owner not found. Verify the nickname is spelled correctly and the owner is already registered.');
     }
 
+    return completePilotRegistration(interaction, db, saveLocalStorage, logEvent, ownerEntry, ownerNick);
+}
+
+// ── Select Menu: user picks which registered owner is their pilot's owner ──
+export async function handleUserSelectPilotOwner(interaction, db, saveLocalStorage, logEvent) {
+    await interaction.deferUpdate();
+
+    const pilotId = interaction.customId.replace('user_select_pilot_owner_', '');
+    const ownerId = interaction.values[0];
+    const ownerData = db.users[ownerId];
+
+    if (!ownerData) {
+        await interaction.editReply({ content: '❌ That owner is no longer registered.', components: [] });
+        return;
+    }
+
+    logEvent(`🔍 ${interaction.user.tag} selected owner "${ownerData.nickname}" for pilot registration`);
+    return completePilotRegistration(interaction, db, saveLocalStorage, logEvent, [ownerId, ownerData], ownerData.nickname);
+}
+
+// ── Shared: finish pilot registration request (DM owner for approval) ──
+async function completePilotRegistration(interaction, db, saveLocalStorage, logEvent, ownerEntry, ownerNick) {
     const [ownerId, ownerData] = ownerEntry;
     const pilotId = interaction.user.id;
 
@@ -138,10 +180,7 @@ export async function handlePilotRegistrationModal(interaction, db, saveLocalSto
             }
         }
 
-        const fuzzyReply = fuzzyCorrectedNick
-            ? `\n🔍 **Corrected:** you typed "${ownerNick}" → using "${fuzzyCorrectedNick}"`
-            : '';
-        return interaction.editReply(`✅ **Request sent!** The owner **${ownerData.nickname}** received a DM to approve your pilot registration.${fuzzyReply}`);
+        return interaction.editReply(`✅ **Request sent!** The owner **${ownerData.nickname}** received a DM to approve your pilot registration.`);
     } catch (error) {
         logEvent(`❌ Failed to send pilot DM: ${interaction.user.tag} → owner ${ownerData.nickname} (${ownerId}): ${error.message}`);
         delete pendingPilotApprovals[pilotId];
