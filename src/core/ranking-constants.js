@@ -58,6 +58,11 @@ export const SCAN_SERVER_ID = '1432320162278670440';
 // Super admin — only this user can use high-risk commands
 export const SUPER_ADMIN_USER_ID = '864108100880171009';
 
+// Channels that must NEVER be deleted by the /nuke command
+export const NUKE_PROTECTED_CHANNEL_IDS = [
+    '1432320163033645136'
+];
+
 // ==========================================
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================

@@ -96,6 +96,11 @@ export async function registerMir4SlashCommands(guild) {
                 description: '📊 [Admin] Check pre-registration status across scan servers.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'nuke',
+                description: '💣 [Super Admin] Delete ALL channels and categories from the server (irreversible).',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {
