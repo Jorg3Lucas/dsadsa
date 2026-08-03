@@ -137,39 +137,86 @@ async function applyClaimPermissions(guild, botId, clanRoleIds, tempRoleId) {
 // ==========================================
 
 /**
- * Apply claim-channel permissions using the clan roles stored in the database
- * (db.config.clanRoles + db.config.tempRoleId). Runs at bot boot and after
- * /setup so the claim channels are always restricted to clan-role holders
- * (+ GoW Kids), without requiring a full /syncroles pass.
+ * Apply claim-channel permissions using the clan roles stored in the database.
+ * Reads db.config.clanRoles + db.config.tempRoleId AND auto-discovers clan
+ * roles on the server by matching role names against the allied clans saved in
+ * db.config.alliedClans (so permissions work even when db.config.clanRoles is
+ * empty — e.g. roles were created manually or the DB was reset). Discovered
+ * IDs are persisted back into db.config so later runs are instant.
+ * Runs at bot boot and after /setup so the claim channels are always
+ * restricted to clan-role holders (+ GoW Kids), without requiring a full
+ * /syncroles pass.
  * @param {import('discord.js').Client} client
  * @param {object} db
  * @param {Function} [logEvent]
- * @returns {Promise<{applied: boolean, clanRoles: number, tempRoleApplied: boolean, reason?: string}>}
+ * @param {Function} [saveLocalStorage]
+ * @returns {Promise<{applied: boolean, clanRoles: number, tempRoleApplied: boolean, discovered: number, reason?: string}>}
  */
-export async function applyClaimChannelPermissions(client, db, logEvent) {
+export async function applyClaimChannelPermissions(client, db, logEvent, saveLocalStorage) {
     ensureConfig(db);
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
     if (!guild) {
         if (logEvent) logEvent('⚠️ [Clan Perms] Guild not found — claim permissions not applied.');
-        return { applied: false, clanRoles: 0, tempRoleApplied: false, reason: 'guild-not-found' };
+        return { applied: false, clanRoles: 0, tempRoleApplied: false, discovered: 0, reason: 'guild-not-found' };
     }
 
-    // Read the roles from the DB (skip IDs that no longer exist on the server)
-    const clanRoleIds = Object.values(db.config?.clanRoles || {})
-        .filter(id => id && guild.roles.cache.has(id));
-    const tempRoleId = db.config?.tempRoleId && guild.roles.cache.has(db.config.tempRoleId)
+    // ── 1. Roles already mapped in the DB (skip IDs that no longer exist) ──
+    const clanRoleIds = new Set(
+        Object.values(db.config?.clanRoles || {}).filter(id => id && guild.roles.cache.has(id))
+    );
+
+    // ── 2. Auto-discover clan roles by name from the allied-clan config ──
+    //    e.g. role "⚔️ ClanA" → clean "ClanA" matches db.config.alliedClans.
+    if (!db.config.clanRoles) db.config.clanRoles = {};
+    let discovered = 0;
+    for (const [worldId, clans] of Object.entries(db.config?.alliedClans || {})) {
+        for (const clanName of clans) {
+            const clean = cleanNickname(clanName);
+            // Already mapped? Keep the mapped ID if it still exists.
+            if (db.config.clanRoles[clanName] && guild.roles.cache.has(db.config.clanRoles[clanName])) {
+                clanRoleIds.add(db.config.clanRoles[clanName]);
+                continue;
+            }
+            // Otherwise find the role on the server by cleaned name (emoji prefix tolerated)
+            const role = guild.roles.cache.find(r => cleanNickname(stripRoleEmoji(r.name)) === clean);
+            if (role) {
+                db.config.clanRoles[clanName] = role.id;
+                clanRoleIds.add(role.id);
+                discovered++;
+                if (logEvent) logEvent(`🔒 [Clan Perms] Discovered clan role "${role.name}" (${clanName}).`);
+            }
+        }
+    }
+
+    // ── 3. Temp role: from the DB, or discovered by name ("GoW Kids") ──
+    let tempRoleId = db.config?.tempRoleId && guild.roles.cache.has(db.config.tempRoleId)
         ? db.config.tempRoleId
         : null;
-
-    if (clanRoleIds.length === 0 && !tempRoleId) {
-        if (logEvent) logEvent('⚠️ [Clan Perms] No clan/temp roles stored in the DB — run /syncroles first.');
-        return { applied: false, clanRoles: 0, tempRoleApplied: false, reason: 'no-roles' };
+    let tempDiscovered = false;
+    if (!tempRoleId) {
+        const tempRole = guild.roles.cache.find(r => r.name === TEMP_ROLE_NAME);
+        if (tempRole) {
+            tempRoleId = tempRole.id;
+            db.config.tempRoleId = tempRoleId;
+            tempDiscovered = true;
+            if (logEvent) logEvent(`🔒 [Clan Perms] Discovered temp role "${TEMP_ROLE_NAME}".`);
+        }
     }
 
-    await applyClaimPermissions(guild, client.user.id, clanRoleIds, tempRoleId);
+    // Persist any discovered mappings so future runs are instant.
+    if (saveLocalStorage && (discovered > 0 || tempDiscovered)) {
+        saveLocalStorage();
+    }
 
-    if (logEvent) logEvent(`🔒 [Clan Perms] Claim channels restricted to ${clanRoleIds.length} clan role(s)${tempRoleId ? ' + GoW Kids' : ''} (from DB).`);
-    return { applied: true, clanRoles: clanRoleIds.length, tempRoleApplied: !!tempRoleId };
+    if (clanRoleIds.size === 0 && !tempRoleId) {
+        if (logEvent) logEvent('⚠️ [Clan Perms] No clan/temp roles found in the DB or on the server — run /syncroles first.');
+        return { applied: false, clanRoles: 0, tempRoleApplied: false, discovered: 0, reason: 'no-roles' };
+    }
+
+    await applyClaimPermissions(guild, client.user.id, [...clanRoleIds], tempRoleId);
+
+    if (logEvent) logEvent(`🔒 [Clan Perms] Claim channels restricted to ${clanRoleIds.size} clan role(s)${tempRoleId ? ' + GoW Kids' : ''} (from DB/server).`);
+    return { applied: true, clanRoles: clanRoleIds.size, tempRoleApplied: !!tempRoleId, discovered };
 }
 
 // ==========================================

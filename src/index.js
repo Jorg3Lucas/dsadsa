@@ -184,9 +184,11 @@ client.once('clientReady', async () => {
     // no banco (db.config.clanRoles + tempRoleId) — roda após a recriação dos
     // canais para que a restrição de acesso seja reaplicada a cada boot.
     try {
-        const result = await applyClaimChannelPermissions(client, rankingDb, logRankingEvent);
+        const result = await applyClaimChannelPermissions(client, rankingDb, logRankingEvent, (db) => saveRankingStorage(db || rankingDb));
         if (!result.applied && result.reason === 'no-roles') {
-            console.log('ℹ️ [Ranking] No clan roles stored yet — run /syncroles after adding allied clans to restrict claim channels.');
+            console.log('ℹ️ [Ranking] No clan/temp roles found in the DB or on the server — run /syncroles after adding allied clans to restrict claim channels.');
+        } else if (result.discovered > 0) {
+            console.log(`🔒 [Ranking] Discovered ${result.discovered} clan role(s) by name — permissions applied and saved.`);
         }
     } catch (err) {
         logger.error('ClanPerms', 'Failed to apply claim-channel permissions at boot', err);
