@@ -18,7 +18,7 @@ import {
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
-import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildMemberOverwrites, LEGACY_DELETED_CHANNELS, findTextChannel } from '../core/server-structure.js';
+import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildEldersOverwrites, buildMemberOverwrites, buildMemberViewOverwrites, LEGACY_DELETED_CHANNELS, findTextChannel } from '../core/server-structure.js';
 import { renderEmbed, renderButtons } from './panel-render.js';
 import { saveDailyLogs } from '../core/daily-logs.js';
 import {
@@ -296,18 +296,29 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         const everyoneRole = guild.roles.everyone;
         const elderRole = guild.roles.cache.get(ELDER_ROLE_ID);
         if (!elderRole) {
-            console.error(`⚠️ [Setup] Elder role ${ELDER_ROLE_ID} not found — elder-only channels will be view-only for everyone.`);
+            console.error(`⚠️ [Setup] Elder role ${ELDER_ROLE_ID} not found — tower-rules/announcements/allied-list will be view-only for members (no one writes besides the bot).`);
         }
 
         // Build permission overwrites for a given channel mode
         const buildOverwrites = (mode) => {
             // member → only registered members (clan roles + GoW Kids) can view and chat (market, main-chat)
-            if (mode === 'member') {
+            // member-view → members see, only the bot sends (reminders, events)
+            if (mode === 'member' || mode === 'member-view') {
                 const memberRoleIds = [
                     ...Object.values(db.config?.clanRoles || {}).filter(id => id && guild.roles.cache.has(id)),
                     ...(db.config?.tempRoleId && guild.roles.cache.has(db.config.tempRoleId) ? [db.config.tempRoleId] : [])
                 ];
-                return buildMemberOverwrites(everyoneRole.id, botId, memberRoleIds);
+                return mode === 'member'
+                    ? buildMemberOverwrites(everyoneRole.id, botId, memberRoleIds)
+                    : buildMemberViewOverwrites(everyoneRole.id, botId, memberRoleIds);
+            }
+            // elders → members view-only, only the elder role (+ bot) can write (tower-rules, announcements, allied-list)
+            if (mode === 'elders') {
+                const memberRoleIds = [
+                    ...Object.values(db.config?.clanRoles || {}).filter(id => id && guild.roles.cache.has(id)),
+                    ...(db.config?.tempRoleId && guild.roles.cache.has(db.config.tempRoleId) ? [db.config.tempRoleId] : [])
+                ];
+                return buildEldersOverwrites(everyoneRole.id, botId, memberRoleIds, elderRole?.id || null);
             }
             // staff → only approver roles (+ admins/bot) can view and chat (approvals)
             if (mode === 'staff') {
@@ -320,15 +331,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
                 }
                 return overwrites;
             }
-            // elders/bot/system → everyone views, only elders/bot write
-            const overwrites = [
+            // bot/system → everyone views, only the bot writes (claim creation, registration)
+            return [
                 { id: everyoneRole.id, deny: [PermissionFlagsBits.SendMessages] },
                 { id: botId, allow: [PermissionFlagsBits.SendMessages] }
             ];
-            if (mode === 'elders' && elderRole) {
-                overwrites.push({ id: elderRole.id, allow: [PermissionFlagsBits.SendMessages] });
-            }
-            return overwrites;
         };
 
         // Find a category by name (fallback to legacy ID)
@@ -556,6 +563,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
         summary += `\n\n🔒 Claim channels restricted to clan roles + GoW Kids (run /syncroles to ensure the roles exist).`;
         summary += `\n💬 market/main-chat open to registered members only (clan roles + GoW Kids).`;
+        summary += `\n📅 events/reminders view-only for members (only the bot posts alerts).`;
+        summary += `\n📜 tower-rules/announcements/allied-list view-only for members (only the Elder role posts).`;
         summary += `\n\nℹ️ On the next restart the bot rebuilds the claim channels with fresh panels.`;
         summary += `\n👤 Executed by: ${interaction.user.tag}\n🕐 ${new Date().toLocaleString('en-US')}`;
         try {

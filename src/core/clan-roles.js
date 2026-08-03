@@ -16,7 +16,7 @@
 
 import { ChannelType } from 'discord.js';
 import { DISCORD_SERVER_ID, ensureConfig } from './ranking-constants.js';
-import { CLAIM_CATEGORIES, GENERAL_CATEGORY, buildClaimOverwrites, buildMemberOverwrites, findTextChannel } from './server-structure.js';
+import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildEldersOverwrites, buildMemberOverwrites, buildMemberViewOverwrites, findTextChannel } from './server-structure.js';
 import { getLocalRankingCache, cleanNickname } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 
@@ -194,22 +194,37 @@ function resolveMemberRoleIds(guild, db, logEvent) {
 }
 
 /**
- * Apply permissions to the General member channels (market, main-chat): only
- * registered members (clan roles + GoW Kids) can view AND send messages;
- * @everyone is locked out; the bot can still post.
+ * Apply permissions to the General member channels:
+ * - market/main-chat ('member') → registered members (clan roles + GoW Kids)
+ *   can view AND send messages;
+ * - events/reminders ('member-view') → members can VIEW only, only the bot sends;
+ * - tower-rules/announcements/allied-list ('elders') → members VIEW only, the
+ *   elder role (and the bot) can write.
+ * @everyone is locked out of all of them; the bot can always post.
  * @param {import('discord.js').Guild} guild
  * @param {string} botId
  * @param {string[]} memberRoleIds - member role IDs (clan roles + GoW Kids)
  */
 async function applyMemberChannelPermissions(guild, botId, memberRoleIds) {
     const everyone = guild.roles.everyone;
-    const overwrites = buildMemberOverwrites(everyone.id, botId, memberRoleIds);
+    const memberOverwrites = buildMemberOverwrites(everyone.id, botId, memberRoleIds);
+    const viewOverwrites = buildMemberViewOverwrites(everyone.id, botId, memberRoleIds);
+    const eldersOverwrites = buildEldersOverwrites(
+        everyone.id,
+        botId,
+        memberRoleIds,
+        guild.roles.cache.has(ELDER_ROLE_ID) ? ELDER_ROLE_ID : null
+    );
     const category = findCategory(guild, GENERAL_CATEGORY);
     if (!category) return;
     for (const chanDef of GENERAL_CATEGORY.channels) {
-        if (chanDef.mode !== 'member') continue;
+        if (chanDef.mode !== 'member' && chanDef.mode !== 'member-view' && chanDef.mode !== 'elders') continue;
         const channel = findTextChannel(guild, category.id, chanDef);
         if (!channel) continue;
+        const overwrites =
+            chanDef.mode === 'member-view' ? viewOverwrites :
+            chanDef.mode === 'elders' ? eldersOverwrites :
+            memberOverwrites;
         try {
             await channel.permissionOverwrites.set(overwrites, '🔒 /syncperms member access');
         } catch (e) {
@@ -260,7 +275,7 @@ export async function applyClaimChannelPermissions(client, db, logEvent, saveLoc
     await applyClaimPermissions(guild, client.user.id, [...clanRoleIds], tempRoleId);
     await applyMemberChannelPermissions(guild, client.user.id, memberRoleIds);
 
-    if (logEvent) logEvent(`🔒 [Clan Perms] Claim channels restricted to ${clanRoleIds.size} clan role(s)${tempRoleId ? ' + GoW Kids' : ''}; market/main-chat open to registered members.`);
+    if (logEvent) logEvent(`🔒 [Clan Perms] Claim channels restricted to ${clanRoleIds.size} clan role(s)${tempRoleId ? ' + GoW Kids' : ''}; market/main-chat open to members; events/reminders + elders channels members view-only.`);
     return { applied: true, clanRoles: clanRoleIds.size, tempRoleApplied: !!tempRoleId, discovered };
 }
 

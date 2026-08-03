@@ -1162,7 +1162,9 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 `⏳ GoW Kids temp role: ${result.tempRoleApplied ? '✅ included' : '❌ not found'}\n` +
                 (result.discovered > 0 ? `🔍 Roles discovered by name: **${result.discovered}** (saved to DB)\n` : '') +
                 `\nClaim channels (7F–12F, Summons): view-only for clan-role holders (+ GoW Kids).` +
-                `\nmarket/main-chat: open to registered members only (they can view and send).`;
+                `\nmarket/main-chat: open to registered members only (they can view and send).` +
+                `\nevents/reminders: view-only for members (only the bot posts alerts).` +
+                `\ntower-rules/announcements/allied-list: view-only for members (only the Elder role posts).`;
         } else if (result.reason === 'no-roles') {
             report = `⚠️ **No clan roles stored in the DB yet.**\n\nAdd allied clans and run **/syncroles** first — it creates the roles and applies the channel permissions.`;
         } else {

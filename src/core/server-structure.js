@@ -78,10 +78,13 @@ export const CLAIM_CATEGORIES = [
 
 // ── General category — one category with every general channel ──
 // mode:
-//   member  → members-only: only registered members (clan roles + GoW Kids) can
-//             view and chat (market, main-chat)
-//   elders  → only the elder role (+ admins/bot) can chat
-//   bot     → bot-managed: everyone views, only the bot sends (reminders, events)
+//   member      → members-only: only registered members (clan roles + GoW Kids)
+//                 can view and chat (market, main-chat)
+//   member-view → members-only view: members see the posts, only the bot sends
+//                 (reminders, events)
+//   elders  → members view-only, only the elder role (+ bot) can write
+//             (tower-rules, announcements, allied-list)
+//   bot     → bot-managed: everyone views, only the bot sends (claim channels at creation)
 //   staff   → staff-only: only approver roles (+ admins/bot) can view and chat (approvals)
 //   system  → bot-managed registration channel (registration)
 export const GENERAL_CATEGORY = {
@@ -92,8 +95,8 @@ export const GENERAL_CATEGORY = {
         { name: '📜 tower-rules', key: 'tower-rules', legacyName: 'tower-rules', mode: 'elders' },
         { name: '📢 announcements', key: 'announcements', legacyName: 'announcements', mode: 'elders' },
         { name: '🤝 allied-list', key: 'allied-list', legacyName: 'allied-list', mode: 'elders' },
-        { name: '⏰ reminders', key: 'reminders', legacyName: 'reminders', mode: 'bot' },
-        { name: '📅 events', key: 'events', legacyName: 'events', mode: 'bot' },
+        { name: '⏰ reminders', key: 'reminders', legacyName: 'reminders', mode: 'member-view' },
+        { name: '📅 events', key: 'events', legacyName: 'events', mode: 'member-view' },
         { name: '📝 registration', key: 'registration', legacyName: 'registro', mode: 'system', system: 'registration' },
         { name: '📨 approvals', key: 'approvals', legacyName: 'approvals', mode: 'staff', system: 'approvals' }
     ]
@@ -146,7 +149,7 @@ export function findTextChannel(guild, categoryId, chanDef) {
 }
 
 /**
- * Build permission overwrites for claim categories/channels:
+ * Alias of buildMemberViewOverwrites used by the claim channels (7F-12F, Summons):
  * @everyone cannot view (or send), the bot and the given roles can VIEW ONLY,
  * only the bot can send (panels). Members holding a clan role (or GoW Kids)
  * can read the panels and click the buttons, but are explicitly denied sending
@@ -156,6 +159,20 @@ export function findTextChannel(guild, categoryId, chanDef) {
  * @param {string[]} allowViewIds - role IDs allowed to view (clan roles, GoW Kids temp role)
  */
 export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
+    return buildMemberViewOverwrites(everyoneId, botId, allowViewIds);
+}
+
+/**
+ * Build permission overwrites for members-view channels (reminders, events and
+ * claim channels): @everyone is locked out, the given member roles (clan roles
+ * + GoW Kids) can VIEW only, only the bot (and any extra writer roles) can send
+ * (panels/alerts).
+ * @param {string} everyoneId
+ * @param {string} botId
+ * @param {string[]} allowViewIds - member role IDs allowed to view
+ * @param {string[]} [extraWriters] - extra role IDs allowed to view and write
+ */
+export function buildMemberViewOverwrites(everyoneId, botId, allowViewIds, extraWriters = []) {
     const unique = [...new Set([botId, ...allowViewIds])];
     const viewOnlyDeny = [
         PermissionFlagsBits.SendMessages,
@@ -163,13 +180,31 @@ export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
         PermissionFlagsBits.CreatePrivateThreads,
         PermissionFlagsBits.SendMessagesInThreads
     ];
-    return [
+    const overwrites = [
         { id: everyoneId, deny: [PermissionFlagsBits.ViewChannel, ...viewOnlyDeny] },
         { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
         ...unique
             .filter(id => id !== botId)
             .map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel], deny: [...viewOnlyDeny] }))
     ];
+    for (const rid of new Set(extraWriters.filter(id => id && id !== botId))) {
+        overwrites.push({ id: rid, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+    }
+    return overwrites;
+}
+
+/**
+ * Build permission overwrites for the elders channels (tower-rules,
+ * announcements, allied-list): @everyone is locked out, member roles (clan
+ * roles + GoW Kids) can VIEW only, the elder role (and the bot) can view AND
+ * write.
+ * @param {string} everyoneId
+ * @param {string} botId
+ * @param {string[]} memberViewIds - member role IDs allowed to view
+ * @param {string|null} elderId - elder role ID allowed to view and write
+ */
+export function buildEldersOverwrites(everyoneId, botId, memberViewIds, elderId) {
+    return buildMemberViewOverwrites(everyoneId, botId, memberViewIds, elderId ? [elderId] : []);
 }
 
 /**
