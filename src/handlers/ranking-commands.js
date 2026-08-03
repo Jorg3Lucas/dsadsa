@@ -26,7 +26,7 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
-import { syncClanRoles, hasMemberRole } from '../core/clan-roles.js';
+import { syncClanRoles, hasMemberRole, applyClaimChannelPermissions } from '../core/clan-roles.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -1140,6 +1140,33 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         await interaction.deferReply({ flags: 64 });
         const report = await syncClanRoles(interaction.client, db, saveLocalStorage, logEvent);
+        return interaction.editReply(report);
+    }
+
+    // ── syncperms: re-apply claim channel permissions from the roles stored in the DB ──
+    if (commandName === 'syncperms') {
+        // High-risk-ish command: only the super admin may use it
+        if (user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
+        }
+
+        await interaction.deferReply({ flags: 64 });
+        logEvent(`🔒 Admin ${user.tag} ran /syncperms`);
+
+        const result = await applyClaimChannelPermissions(interaction.client, db, logEvent);
+
+        let report;
+        if (result.applied) {
+            report = `🔒 **Claim Permissions Synced!**\n\n` +
+                `🏰 Clan roles applied: **${result.clanRoles}**\n` +
+                `⏳ GoW Kids temp role: ${result.tempRoleApplied ? '✅ included' : '❌ not found'}\n\n` +
+                `All claim categories/channels (7F–12F, Summons) are now restricted to clan-role holders (+ GoW Kids).`;
+        } else if (result.reason === 'no-roles') {
+            report = `⚠️ **No clan roles stored in the DB yet.**\n\nAdd allied clans and run **/syncroles** first — it creates the roles and applies the channel permissions.`;
+        } else {
+            report = `❌ **Could not apply permissions.** Reason: ${result.reason || 'unknown'}`;
+        }
+
         return interaction.editReply(report);
     }
 

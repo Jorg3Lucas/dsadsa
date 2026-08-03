@@ -144,14 +144,14 @@ async function applyClaimPermissions(guild, botId, clanRoleIds, tempRoleId) {
  * @param {import('discord.js').Client} client
  * @param {object} db
  * @param {Function} [logEvent]
- * @returns {Promise<{applied: boolean, clanRoles: number, reason?: string}>}
+ * @returns {Promise<{applied: boolean, clanRoles: number, tempRoleApplied: boolean, reason?: string}>}
  */
 export async function applyClaimChannelPermissions(client, db, logEvent) {
     ensureConfig(db);
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
     if (!guild) {
         if (logEvent) logEvent('⚠️ [Clan Perms] Guild not found — claim permissions not applied.');
-        return { applied: false, clanRoles: 0, reason: 'guild-not-found' };
+        return { applied: false, clanRoles: 0, tempRoleApplied: false, reason: 'guild-not-found' };
     }
 
     // Read the roles from the DB (skip IDs that no longer exist on the server)
@@ -163,13 +163,13 @@ export async function applyClaimChannelPermissions(client, db, logEvent) {
 
     if (clanRoleIds.length === 0 && !tempRoleId) {
         if (logEvent) logEvent('⚠️ [Clan Perms] No clan/temp roles stored in the DB — run /syncroles first.');
-        return { applied: false, clanRoles: 0, reason: 'no-roles' };
+        return { applied: false, clanRoles: 0, tempRoleApplied: false, reason: 'no-roles' };
     }
 
     await applyClaimPermissions(guild, client.user.id, clanRoleIds, tempRoleId);
 
     if (logEvent) logEvent(`🔒 [Clan Perms] Claim channels restricted to ${clanRoleIds.length} clan role(s)${tempRoleId ? ' + GoW Kids' : ''} (from DB).`);
-    return { applied: true, clanRoles: clanRoleIds.length };
+    return { applied: true, clanRoles: clanRoleIds.length, tempRoleApplied: !!tempRoleId };
 }
 
 // ==========================================

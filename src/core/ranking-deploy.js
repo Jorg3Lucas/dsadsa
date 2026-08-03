@@ -111,6 +111,11 @@ export async function registerMir4SlashCommands(guild) {
                 description: '🤝 [Super Admin] Create one role per allied clan, assign to members and restrict claim channels.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'syncperms',
+                description: '🔒 [Super Admin] Re-apply claim channel permissions from the clan roles stored in the DB.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {

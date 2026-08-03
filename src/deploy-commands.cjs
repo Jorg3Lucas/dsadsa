@@ -141,6 +141,11 @@ const commands = [
     description: '🤝 [Super Admin] Create one role per allied clan, assign to members and restrict claim channels.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
+  {
+    name: 'syncperms',
+    description: '🔒 [Super Admin] Re-apply claim channel permissions from the clan roles stored in the DB.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
