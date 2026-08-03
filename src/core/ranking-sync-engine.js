@@ -4,6 +4,7 @@ import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { syncClanRoles } from './clan-roles.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -355,6 +356,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
         saveLocalStorage();
         logEvent(getMsg('ranking.logs.syncComplete'));
+
+        // 🤝 Keep clan roles in sync with allied clans after every synchronization
+        try {
+            await syncClanRoles(client, db, saveLocalStorage, logEvent);
+        } catch (syncRolesError) {
+            logEvent(`❌ [Clan Roles] Sync failed: ${syncRolesError.message}`);
+        }
     } catch (error) { 
         logEvent(getMsg('ranking.logs.syncError', { error: error.message }));
     }

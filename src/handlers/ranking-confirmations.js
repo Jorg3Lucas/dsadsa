@@ -478,8 +478,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         // Bot-managed alert channels → wire into daily-logs (only if newly created
         // or the previous target is empty/stale, so manual configs are preserved)
         let dailyLogsChanged = false;
-        if (createdChannelIds['reminder'] && shouldRewireDailyLogs('reminder', dailyLogs.bossSpawnChannelId)) {
-            dailyLogs.bossSpawnChannelId = createdChannelIds['reminder'];
+        if (createdChannelIds['reminders'] && shouldRewireDailyLogs('reminders', dailyLogs.bossSpawnChannelId)) {
+            dailyLogs.bossSpawnChannelId = createdChannelIds['reminders'];
             dailyLogsChanged = true;
         }
         if (createdChannelIds['events'] && shouldRewireDailyLogs('events', dailyLogs.scheduledEventChannelId)) {

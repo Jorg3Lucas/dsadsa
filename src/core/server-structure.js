@@ -72,7 +72,7 @@ export const CLAIM_CATEGORIES = [
 // mode:
 //   open    → everyone can view and chat (market, main-chat)
 //   elders  → only the elder role (+ admins/bot) can chat
-//   bot     → bot-managed: everyone views, only the bot sends (reminder, events)
+//   bot     → bot-managed: everyone views, only the bot sends (reminders, events)
 //   system  → bot-managed notification/registration channels (registro, domination, standby)
 export const GENERAL_CATEGORY = {
     name: 'General',
@@ -82,7 +82,7 @@ export const GENERAL_CATEGORY = {
         { name: 'tower-rules', mode: 'elders' },
         { name: 'announcements', mode: 'elders' },
         { name: 'allied-list', mode: 'elders' },
-        { name: 'reminder', mode: 'bot' },
+        { name: 'reminders', mode: 'bot' },
         { name: 'events', mode: 'bot' },
         { name: 'registro', mode: 'system', system: 'registration' },
         { name: 'domination', mode: 'system', system: 'domination' },
