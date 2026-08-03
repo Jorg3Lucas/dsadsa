@@ -146,19 +146,27 @@ export function findTextChannel(guild, categoryId, chanDef) {
 
 /**
  * Build permission overwrites for claim categories/channels:
- * @everyone cannot view (or send), the bot and the given roles can view,
- * only the bot can send (panels).
+ * @everyone cannot view (or send), the bot and the given roles can VIEW ONLY,
+ * only the bot can send (panels). Members holding a clan role (or GoW Kids)
+ * can read the panels and click the buttons, but are explicitly denied sending
+ * text messages — including in threads — so the channels stay clean.
  * @param {string} everyoneId
  * @param {string} botId
  * @param {string[]} allowViewIds - role IDs allowed to view (clan roles, GoW Kids temp role)
  */
 export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
     const unique = [...new Set([botId, ...allowViewIds])];
+    const viewOnlyDeny = [
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.CreatePublicThreads,
+        PermissionFlagsBits.CreatePrivateThreads,
+        PermissionFlagsBits.SendMessagesInThreads
+    ];
     return [
-        { id: everyoneId, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+        { id: everyoneId, deny: [PermissionFlagsBits.ViewChannel, ...viewOnlyDeny] },
         { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
         ...unique
             .filter(id => id !== botId)
-            .map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel] }))
+            .map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel], deny: [...viewOnlyDeny] }))
     ];
 }
