@@ -133,6 +133,46 @@ async function applyClaimPermissions(guild, botId, clanRoleIds, tempRoleId) {
 }
 
 // ==========================================
+// 🔐 CLAIM CHANNEL ACCESS (reads roles from the DB)
+// ==========================================
+
+/**
+ * Apply claim-channel permissions using the clan roles stored in the database
+ * (db.config.clanRoles + db.config.tempRoleId). Runs at bot boot and after
+ * /setup so the claim channels are always restricted to clan-role holders
+ * (+ GoW Kids), without requiring a full /syncroles pass.
+ * @param {import('discord.js').Client} client
+ * @param {object} db
+ * @param {Function} [logEvent]
+ * @returns {Promise<{applied: boolean, clanRoles: number, reason?: string}>}
+ */
+export async function applyClaimChannelPermissions(client, db, logEvent) {
+    ensureConfig(db);
+    const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
+    if (!guild) {
+        if (logEvent) logEvent('⚠️ [Clan Perms] Guild not found — claim permissions not applied.');
+        return { applied: false, clanRoles: 0, reason: 'guild-not-found' };
+    }
+
+    // Read the roles from the DB (skip IDs that no longer exist on the server)
+    const clanRoleIds = Object.values(db.config?.clanRoles || {})
+        .filter(id => id && guild.roles.cache.has(id));
+    const tempRoleId = db.config?.tempRoleId && guild.roles.cache.has(db.config.tempRoleId)
+        ? db.config.tempRoleId
+        : null;
+
+    if (clanRoleIds.length === 0 && !tempRoleId) {
+        if (logEvent) logEvent('⚠️ [Clan Perms] No clan/temp roles stored in the DB — run /syncroles first.');
+        return { applied: false, clanRoles: 0, reason: 'no-roles' };
+    }
+
+    await applyClaimPermissions(guild, client.user.id, clanRoleIds, tempRoleId);
+
+    if (logEvent) logEvent(`🔒 [Clan Perms] Claim channels restricted to ${clanRoleIds.length} clan role(s)${tempRoleId ? ' + GoW Kids' : ''} (from DB).`);
+    return { applied: true, clanRoles: clanRoleIds.length };
+}
+
+// ==========================================
 // 🛠️ SHARED HELPERS (used by registration flows)
 // ==========================================
 
