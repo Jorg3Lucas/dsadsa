@@ -1157,11 +1157,12 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         let report;
         if (result.applied) {
-            report = `🔒 **Claim Permissions Synced!**\n\n` +
+            report = `🔒 **Permissions Synced!**\n\n` +
                 `🏰 Clan roles applied: **${result.clanRoles}**\n` +
                 `⏳ GoW Kids temp role: ${result.tempRoleApplied ? '✅ included' : '❌ not found'}\n` +
                 (result.discovered > 0 ? `🔍 Roles discovered by name: **${result.discovered}** (saved to DB)\n` : '') +
-                `\nAll claim categories/channels (7F–12F, Summons) are now restricted to clan-role holders (+ GoW Kids).`;
+                `\nClaim channels (7F–12F, Summons): view-only for clan-role holders (+ GoW Kids).` +
+                `\nmarket/main-chat: open to registered members only (they can view and send).`;
         } else if (result.reason === 'no-roles') {
             report = `⚠️ **No clan roles stored in the DB yet.**\n\nAdd allied clans and run **/syncroles** first — it creates the roles and applies the channel permissions.`;
         } else {

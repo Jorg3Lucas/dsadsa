@@ -78,7 +78,8 @@ export const CLAIM_CATEGORIES = [
 
 // ── General category — one category with every general channel ──
 // mode:
-//   open    → everyone can view and chat (market, main-chat)
+//   member  → members-only: only registered members (clan roles + GoW Kids) can
+//             view and chat (market, main-chat)
 //   elders  → only the elder role (+ admins/bot) can chat
 //   bot     → bot-managed: everyone views, only the bot sends (reminders, events)
 //   staff   → staff-only: only approver roles (+ admins/bot) can view and chat (approvals)
@@ -86,8 +87,8 @@ export const CLAIM_CATEGORIES = [
 export const GENERAL_CATEGORY = {
     name: '🏠 General',
     channels: [
-        { name: '🛒 market', key: 'market', legacyName: 'market', mode: 'open' },
-        { name: '💬 main-chat', key: 'main-chat', legacyName: 'main-chat', mode: 'open' },
+        { name: '🛒 market', key: 'market', legacyName: 'market', mode: 'member' },
+        { name: '💬 main-chat', key: 'main-chat', legacyName: 'main-chat', mode: 'member' },
         { name: '📜 tower-rules', key: 'tower-rules', legacyName: 'tower-rules', mode: 'elders' },
         { name: '📢 announcements', key: 'announcements', legacyName: 'announcements', mode: 'elders' },
         { name: '🤝 allied-list', key: 'allied-list', legacyName: 'allied-list', mode: 'elders' },
@@ -168,5 +169,24 @@ export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
         ...unique
             .filter(id => id !== botId)
             .map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel], deny: [...viewOnlyDeny] }))
+    ];
+}
+
+/**
+ * Build permission overwrites for general member channels (market, main-chat):
+ * @everyone is locked out, while the bot and the given member roles (clan
+ * roles + GoW Kids) can view AND send — registered members chat freely.
+ * @param {string} everyoneId
+ * @param {string} botId
+ * @param {string[]} allowIds - member role IDs allowed to view and chat
+ */
+export function buildMemberOverwrites(everyoneId, botId, allowIds) {
+    const unique = [...new Set([botId, ...allowIds])];
+    return [
+        { id: everyoneId, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+        { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+        ...unique
+            .filter(id => id !== botId)
+            .map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }))
     ];
 }

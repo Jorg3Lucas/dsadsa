@@ -18,7 +18,7 @@ import {
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
-import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, LEGACY_DELETED_CHANNELS, findTextChannel } from '../core/server-structure.js';
+import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildMemberOverwrites, LEGACY_DELETED_CHANNELS, findTextChannel } from '../core/server-structure.js';
 import { renderEmbed, renderButtons } from './panel-render.js';
 import { saveDailyLogs } from '../core/daily-logs.js';
 import {
@@ -301,8 +301,14 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
         // Build permission overwrites for a given channel mode
         const buildOverwrites = (mode) => {
-            // open → everyone can chat (default); no overwrites needed
-            if (mode === 'open') return [];
+            // member → only registered members (clan roles + GoW Kids) can view and chat (market, main-chat)
+            if (mode === 'member') {
+                const memberRoleIds = [
+                    ...Object.values(db.config?.clanRoles || {}).filter(id => id && guild.roles.cache.has(id)),
+                    ...(db.config?.tempRoleId && guild.roles.cache.has(db.config.tempRoleId) ? [db.config.tempRoleId] : [])
+                ];
+                return buildMemberOverwrites(everyoneRole.id, botId, memberRoleIds);
+            }
             // staff → only approver roles (+ admins/bot) can view and chat (approvals)
             if (mode === 'staff') {
                 const overwrites = [
@@ -549,6 +555,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             summary += `\n\n⚠️ **Elder role not found** (${ELDER_ROLE_ID}) — tower-rules/announcements/allied-list are view-only for now.`;
         }
         summary += `\n\n🔒 Claim channels restricted to clan roles + GoW Kids (run /syncroles to ensure the roles exist).`;
+        summary += `\n💬 market/main-chat open to registered members only (clan roles + GoW Kids).`;
         summary += `\n\nℹ️ On the next restart the bot rebuilds the claim channels with fresh panels.`;
         summary += `\n👤 Executed by: ${interaction.user.tag}\n🕐 ${new Date().toLocaleString('en-US')}`;
         try {
