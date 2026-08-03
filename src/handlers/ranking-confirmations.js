@@ -2,16 +2,31 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ChannelType
+    ChannelType,
+    PermissionFlagsBits
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     SUPER_ADMIN_USER_ID,
     NUKE_PROTECTED_CHANNEL_IDS,
-    confirmationCache
+    confirmationCache,
+    WELCOME_PANEL_MESSAGE,
+    ensureConfig,
+    setRegistrationChannelId,
+    setDominationChannelId,
+    setStandbyChannelId
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID } from '../core/server-structure.js';
+import { renderEmbed, renderButtons } from './panel-render.js';
+import { saveDailyLogs } from '../core/daily-logs.js';
+import {
+    db as claimDb,
+    saveLocalStorage as saveClaimStorage,
+    lastMessages as claimLastMessages,
+    dailyLogs
+} from '../core/state.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS
@@ -260,6 +275,240 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         logEvent(`💣 SUPER ADMIN ${interaction.user.tag} (${interaction.user.id}) NUKE — deleted ${deleted} channels (${deletedCategories} categories), kept ${kept}`);
 
         // Nothing left to update — all channels (including this one) are gone
+        return null;
+    }
+
+    // ── setup: Create the full server structure (super admin only) ──
+    if (action === 'setup') {
+        const guild = interaction.guild;
+
+        // Safety: re-check super admin before creating anything
+        if (interaction.user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.update({
+                content: '❌ **Access denied.** Only the super admin can confirm this action.',
+                components: []
+            }).catch(() => {});
+        }
+
+        // Acknowledge before the (possibly long) creation loop
+        await interaction.update({
+            content: '🏗️ **SETUP STARTED** — creating missing channels and categories...',
+            components: []
+        }).catch(() => {});
+
+        const botId = interaction.client.user.id;
+        const everyoneRole = guild.roles.everyone;
+        const elderRole = guild.roles.cache.get(ELDER_ROLE_ID);
+        if (!elderRole) {
+            console.error(`⚠️ [Setup] Elder role ${ELDER_ROLE_ID} not found — elder-only channels will be view-only for everyone.`);
+        }
+
+        // Build permission overwrites for a given channel mode
+        const buildOverwrites = (mode) => {
+            // open → everyone can chat (default); no overwrites needed
+            if (mode === 'open') return [];
+            // elders/bot/system → everyone views, only elders/bot write
+            const overwrites = [
+                { id: everyoneRole.id, deny: [PermissionFlagsBits.SendMessages] },
+                { id: botId, allow: [PermissionFlagsBits.SendMessages] }
+            ];
+            if (mode === 'elders' && elderRole) {
+                overwrites.push({ id: elderRole.id, allow: [PermissionFlagsBits.SendMessages] });
+            }
+            return overwrites;
+        };
+
+        // Find a category by name (fallback to legacy ID)
+        const findCategory = (def) => {
+            const byName = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === def.name);
+            if (byName) return byName;
+            if (def.legacyId) return guild.channels.cache.get(def.legacyId);
+            return null;
+        };
+
+        let createdCategories = 0;
+        let createdChannels = 0;
+        let panelsSent = 0;
+        const createdChannelIds = {}; // logical name → channel id (for system wiring)
+        const newlyCreatedChannels = new Set(); // names of General channels created this run
+
+        // Only re-point daily-logs to a channel if it was (re)created now or the
+        // current target is empty/stale — preserves manual daily-logs.json config.
+        const shouldRewireDailyLogs = (chanName, currentId) =>
+            newlyCreatedChannels.has(chanName) ||
+            !currentId ||
+            !guild.channels.cache.has(currentId);
+
+        // ── 1. Claim categories (members view-only, bot sends panels) ──
+        for (const catDef of CLAIM_CATEGORIES) {
+            let category = findCategory(catDef);
+            if (!category) {
+                try {
+                    category = await guild.channels.create({
+                        name: catDef.name,
+                        type: ChannelType.GuildCategory,
+                        permissionOverwrites: buildOverwrites('bot'),
+                        reason: '🏗️ /setup by super admin'
+                    });
+                    createdCategories++;
+                } catch (e) {
+                    console.error(`❌ [Setup] Failed to create category ${catDef.name}: ${e.message}`);
+                    continue;
+                }
+            }
+
+            for (const chanDef of catDef.channels) {
+                let channel = guild.channels.cache.find(c => c.parentId === category.id && c.name === chanDef.name && c.type === ChannelType.GuildText);
+                const isNew = !channel;
+                if (isNew) {
+                    try {
+                        channel = await guild.channels.create({
+                            name: chanDef.name,
+                            type: ChannelType.GuildText,
+                            parent: category.id,
+                            permissionOverwrites: buildOverwrites('bot'),
+                            reason: '🏗️ /setup by super admin'
+                        });
+                        createdChannels++;
+                    } catch (e) {
+                        console.error(`❌ [Setup] Failed to create channel ${catDef.name}/${chanDef.name}: ${e.message}`);
+                        continue;
+                    }
+                }
+
+                // Send panels only for freshly created channels (idempotent)
+                if (isNew) {
+                    for (const panelKey of chanDef.panels || []) {
+                        if (!claimDb[panelKey]) {
+                            console.warn(`⚠️ [Setup] Panel ${panelKey} not in claim DB, skipping.`);
+                            continue;
+                        }
+                        try {
+                            const sent = await channel.send({
+                                embeds: [renderEmbed(panelKey)],
+                                components: renderButtons(panelKey)
+                            });
+                            claimLastMessages[panelKey] = sent;
+                            if (!claimDb._panelMapping) claimDb._panelMapping = {};
+                            claimDb._panelMapping[panelKey] = { channelId: channel.id, messageId: sent.id };
+                            panelsSent++;
+                        } catch (e) {
+                            console.error(`❌ [Setup] Failed to send panel ${panelKey} in ${catDef.name}/${chanDef.name}: ${e.message}`);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── 2. General category with all general channels ──
+        let generalCategory = findCategory(GENERAL_CATEGORY);
+        if (!generalCategory) {
+            try {
+                generalCategory = await guild.channels.create({
+                    name: GENERAL_CATEGORY.name,
+                    type: ChannelType.GuildCategory,
+                    reason: '🏗️ /setup by super admin'
+                });
+                createdCategories++;
+            } catch (e) {
+                console.error(`❌ [Setup] Failed to create category ${GENERAL_CATEGORY.name}: ${e.message}`);
+            }
+        }
+
+        if (generalCategory) {
+            for (const chanDef of GENERAL_CATEGORY.channels) {
+                let channel = guild.channels.cache.find(c => c.parentId === generalCategory.id && c.name === chanDef.name && c.type === ChannelType.GuildText);
+                if (!channel) {
+                    try {
+                        channel = await guild.channels.create({
+                            name: chanDef.name,
+                            type: ChannelType.GuildText,
+                            parent: generalCategory.id,
+                            permissionOverwrites: buildOverwrites(chanDef.mode),
+                            reason: '🏗️ /setup by super admin'
+                        });
+                        createdChannels++;
+                        newlyCreatedChannels.add(chanDef.name);
+                    } catch (e) {
+                        console.error(`❌ [Setup] Failed to create channel ${chanDef.name}: ${e.message}`);
+                        continue;
+                    }
+                }
+                createdChannelIds[chanDef.name] = channel.id;
+            }
+        }
+
+        // ── 3. System wiring (registration panel, notification IDs, daily logs) ──
+        ensureConfig(db);
+
+        // Registration channel → send the welcome panel + persist ID
+        const regChId = createdChannelIds['registro'];
+        if (regChId) {
+            setRegistrationChannelId(regChId);
+            if (!db.config.channelIds) db.config.channelIds = {};
+            db.config.channelIds.registration = regChId;
+            try {
+                const regChannel = guild.channels.cache.get(regChId);
+                if (regChannel) {
+                    const welcomeRow = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('welcome_register_owner').setLabel('👑 Register as Owner').setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('welcome_register_pilot').setLabel('✈️ Register as Pilot').setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('welcome_remove_pilot').setLabel('🗑️ Remove Pilot').setStyle(ButtonStyle.Danger)
+                    );
+                    const panelMessage = await regChannel.send({ content: WELCOME_PANEL_MESSAGE, components: [welcomeRow] });
+                    db.config.panelChannelId = regChId;
+                    db.config.panelMessageId = panelMessage.id;
+                }
+            } catch (e) {
+                console.error(`❌ [Setup] Failed to send welcome panel in #registro: ${e.message}`);
+            }
+        }
+
+        if (createdChannelIds['domination']) {
+            setDominationChannelId(createdChannelIds['domination']);
+            if (!db.config.channelIds) db.config.channelIds = {};
+            db.config.channelIds.domination = createdChannelIds['domination'];
+        }
+        if (createdChannelIds['standby']) {
+            setStandbyChannelId(createdChannelIds['standby']);
+            if (!db.config.channelIds) db.config.channelIds = {};
+            db.config.channelIds.standby = createdChannelIds['standby'];
+        }
+
+        // Bot-managed alert channels → wire into daily-logs (only if newly created
+        // or the previous target is empty/stale, so manual configs are preserved)
+        let dailyLogsChanged = false;
+        if (createdChannelIds['reminder'] && shouldRewireDailyLogs('reminder', dailyLogs.bossSpawnChannelId)) {
+            dailyLogs.bossSpawnChannelId = createdChannelIds['reminder'];
+            dailyLogsChanged = true;
+        }
+        if (createdChannelIds['events'] && shouldRewireDailyLogs('events', dailyLogs.scheduledEventChannelId)) {
+            dailyLogs.scheduledEventChannelId = createdChannelIds['events'];
+            dailyLogsChanged = true;
+        }
+        if (createdChannelIds['events'] && shouldRewireDailyLogs('events', dailyLogs.configChannelId)) {
+            dailyLogs.configChannelId = createdChannelIds['events'];
+            dailyLogsChanged = true;
+        }
+        if (dailyLogsChanged) saveDailyLogs();
+
+        saveLocalStorage();      // ranking db (config.channelIds / panel refs)
+        saveClaimStorage();      // claim db (panel mapping for freshly created claim channels)
+
+        // ── 4. Summary ──
+        let summary = `🏗️ **SETUP COMPLETED!**\n\n📁 Categories created: **${createdCategories}**\n📢 Channels created: **${createdChannels}**\n📋 Panels sent: **${panelsSent}**\n\n✅ Existing channels/categories were kept (idempotent).`;
+        if (!elderRole) {
+            summary += `\n\n⚠️ **Elder role not found** (${ELDER_ROLE_ID}) — tower-rules/announcements/allied-list are view-only for now.`;
+        }
+        summary += `\n\nℹ️ On the next restart the bot rebuilds the claim channels with fresh panels.`;
+        summary += `\n👤 Executed by: ${interaction.user.tag}\n🕐 ${new Date().toLocaleString('en-US')}`;
+        try {
+            await interaction.followUp({ content: summary, flags: 64 }).catch(() => {});
+        } catch (e) {
+            console.error('❌ [Setup] Failed to send summary:', e);
+        }
+
+        logEvent(`🏗️ SUPER ADMIN ${interaction.user.tag} (${interaction.user.id}) SETUP — created ${createdCategories} categories, ${createdChannels} channels, ${panelsSent} panels`);
         return null;
     }
 

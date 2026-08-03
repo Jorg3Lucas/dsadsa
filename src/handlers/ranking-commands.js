@@ -1131,6 +1131,29 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         });
     }
 
+    // ── setup ──
+    if (commandName === 'setup') {
+        // High-risk command: only the super admin may use it
+        if (user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
+        }
+
+        confirmationCache[`${user.id}-setup`] = {
+            timestamp: Date.now()
+        };
+
+        return interaction.reply({
+            content: `🏗️ **⚠️ SERVER SETUP ⚠️**\n\nThis will **create** the full server structure if missing (existing channels/categories are kept):\n\n📁 **Claim categories** (members view-only, bot sends panels):\n   **7F, 8F, 9F, 10F, 11F, 12F, Summons** with their sp/ms channels\n\n📁 **General category**:\n   💬 **market, main-chat** — everyone can chat\n   🛡️ **tower-rules, announcements, allied-list** — elders only\n   🤖 **reminder, events** — bot-managed (alerts)\n   📋 **registro** — welcome/registration panel\n   📢 **domination, standby** — bot notification channels\n\n✅ Idempotent: only missing channels are created.\n\nClick **✅ YES, CREATE EVERYTHING** to proceed or **❌ Cancel**.`,
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-setup-yes').setLabel('✅ YES, CREATE EVERYTHING').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('confirm-setup-no').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
+            flags: 64
+        });
+    }
+
     return false;
 }
 

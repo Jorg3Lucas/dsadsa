@@ -72,15 +72,27 @@ export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠�
 // ==========================================
 // 📢 REGISTRATION CHANNEL (for /listunregistered DMs)
 // ==========================================
+// Dynamic — the /setup command updates these when it (re)creates the channels.
+// Defaults are kept as fallbacks until a /setup run persists new IDs.
 
-export const REGISTRATION_CHANNEL_ID = '1524296969521070120';
+export let REGISTRATION_CHANNEL_ID = '1524296969521070120';
+export let DOMINATION_CHANNEL_ID = '1481572061850767490';
+export let STANDBY_CHANNEL_ID = '1481572514399518780';
 
-// ==========================================
-// 📢 NOTIFICATION CHANNELS (for /notify command)
-// ==========================================
+export function setRegistrationChannelId(id) { REGISTRATION_CHANNEL_ID = id; }
+export function setDominationChannelId(id) { DOMINATION_CHANNEL_ID = id; }
+export function setStandbyChannelId(id) { STANDBY_CHANNEL_ID = id; }
 
-export const DOMINATION_CHANNEL_ID = '1481572061850767490';
-export const STANDBY_CHANNEL_ID = '1481572514399518780';
+/**
+ * Load persisted channel IDs from db.config (saved by /setup).
+ * Call this at boot after ensureConfig.
+ */
+export function loadChannelIdsFromConfig(config) {
+    if (!config?.channelIds) return;
+    if (config.channelIds.registration) setRegistrationChannelId(config.channelIds.registration);
+    if (config.channelIds.domination) setDominationChannelId(config.channelIds.domination);
+    if (config.channelIds.standby) setStandbyChannelId(config.channelIds.standby);
+}
 
 // ==========================================
 // 🛠️ CONFIG INITIALIZATION HELPER

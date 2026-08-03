@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig } from './ranking-constants.js';
+import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig, loadChannelIdsFromConfig } from './ranking-constants.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
@@ -249,6 +249,9 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
     if (db.config?.adminChannelId && !adminChannelId) {
         setAdminChannelId(db.config.adminChannelId);
     }
+
+    // Load persisted registration/domination/standby channel IDs (saved by /setup)
+    loadChannelIdsFromConfig(db.config);
 
     // Pre-registrations no longer expire by time — they are validated against the
     // EU11 ranking on every sync (not found in the ranking → removed immediately).

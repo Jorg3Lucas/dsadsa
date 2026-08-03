@@ -101,6 +101,11 @@ export async function registerMir4SlashCommands(guild) {
                 description: '💣 [Super Admin] Delete ALL channels and categories from the server (irreversible).',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'setup',
+                description: '🏗️ [Super Admin] Create the full server structure (claim categories + General channels).',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {
