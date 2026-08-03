@@ -62,6 +62,11 @@ export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // Super admin — only this user can use high-risk commands
 export const SUPER_ADMIN_USER_ID = '864108100880171009';
 
+// Channels that must NEVER be deleted by the /nuke command
+export const NUKE_PROTECTED_CHANNEL_IDS = [
+    '1432320163033645136'
+];
+
 // ==========================================
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================

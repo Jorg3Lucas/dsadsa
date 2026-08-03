@@ -1,11 +1,14 @@
 import {
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    ChannelType
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
+    SUPER_ADMIN_USER_ID,
+    NUKE_PROTECTED_CHANNEL_IDS,
     confirmationCache
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
@@ -179,6 +182,80 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             content: responseMsg,
             components: []
         }).catch(() => {});
+    }
+
+    // ── nuke: Delete ALL channels and categories (super admin only) ──
+    if (action === 'nuke') {
+        const guild = interaction.guild;
+
+        // Safety: re-check super admin before executing the nuke
+        if (interaction.user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.update({
+                content: '❌ **Access denied.** Only the super admin can confirm this action.',
+                components: []
+            }).catch(() => {});
+        }
+
+        // Acknowledge before channels start disappearing
+        await interaction.update({
+            content: '💣 **NUKE INITIATED** — deleting all channels and categories...',
+            components: []
+        }).catch(() => {});
+
+        // Delete regular channels first, then categories (avoids double-delete errors).
+        // Protected channels are never deleted, and neither are categories that
+        // contain a protected channel (Discord cascade-deletes a category's children).
+        const allChannels = [...guild.channels.cache.values()];
+        const isProtected = c => NUKE_PROTECTED_CHANNEL_IDS.includes(c.id);
+        const protectedChannels = allChannels.filter(isProtected);
+        const categoriesToKeep = allChannels.filter(c =>
+            c.type === ChannelType.GuildCategory &&
+            protectedChannels.some(p => p.parentId === c.id)
+        );
+
+        const deletable = allChannels.filter(c =>
+            !isProtected(c) && !categoriesToKeep.includes(c)
+        );
+        const categories = deletable.filter(c => c.type === ChannelType.GuildCategory);
+        const regular = deletable.filter(c => c.type !== ChannelType.GuildCategory);
+
+        let deleted = 0;
+        let deletedCategories = 0;
+        for (const ch of regular) {
+            await ch.delete('💣 Nuke by super admin').then(() => deleted++).catch(() => {});
+        }
+        for (const ch of categories) {
+            await ch.delete('💣 Nuke by super admin').then(() => { deleted++; deletedCategories++; }).catch(() => {});
+        }
+
+        // Clean up bot config references to now-deleted channels (avoids errors during daily sync)
+        if (db.config) {
+            if (db.config.panelChannelId) delete db.config.panelChannelId;
+            if (db.config.panelMessageId) delete db.config.panelMessageId;
+            saveLocalStorage();
+        }
+
+        // Create a default channel and post the operation summary
+        try {
+            const geral = await guild.channels.create({
+                name: 'geral',
+                reason: '💣 Post-nuke default channel'
+            });
+            let summary = `💣 **NUKE COMPLETED!**\n\n🗑️ **${deletedCategories}** categor(ies) deleted\n📢 **${deleted - deletedCategories}** channel(s) deleted`;
+            const kept = allChannels.length - deleted;
+            if (kept > 0) {
+                summary += `\n🛡️ **${kept}** channel(s)/categor(ies) kept (protected)`;
+            }
+            summary += `\n👤 Executed by: ${interaction.user.tag}\n🕐 ${new Date().toLocaleString('en-US')}`;
+            await geral.send(summary);
+        } catch (e) {
+            console.error('❌ Failed to create #geral after nuke:', e);
+        }
+
+        logEvent(`💣 SUPER ADMIN ${interaction.user.tag} (${interaction.user.id}) NUKE — deleted ${deleted} channels (${deletedCategories} categories), kept ${allChannels.length - deleted}`);
+
+        // Nothing left to update — all channels (including this one) are gone
+        return null;
     }
 
     // ── manualforce: Force-register a user as permanent (no ranking check) ──

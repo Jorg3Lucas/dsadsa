@@ -5,6 +5,8 @@ vi.mock('../src/core/ranking-constants.js', () => {
     const store = {};
     return {
         MEMBER_ROLE_ID: 'mock-member-role',
+        SUPER_ADMIN_USER_ID: '999999999999999999',
+        NUKE_PROTECTED_CHANNEL_IDS: ['1432320163033645136'],
         confirmationCache: store
     };
 });
@@ -353,6 +355,139 @@ describe('handleConfirmAction', () => {
         expect(db.users[TARGET_ID].nickname).toBe('PlayerOne');
         expect(targetMember.setNickname).toHaveBeenCalledWith('PlayerOne');
         expect(saveLocalStorage).toHaveBeenCalledOnce();
+    });
+
+    // ── nuke ──
+
+    it('nuke: denies when user is not the super admin', async () => {
+        interaction.customId = 'confirm-nuke-yes';
+        interaction.user.id = '111111111111111111'; // not super admin
+        getCache()[`${interaction.user.id}-nuke`] = { channelCount: 5, categoryCount: 2 };
+
+        await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
+        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('super admin')
+        }));
+        expect(getCache()[`${interaction.user.id}-nuke`]).toBeUndefined();
+    });
+
+    it('nuke: deletes all channels/categories and creates #geral with summary', async () => {
+        interaction.customId = 'confirm-nuke-yes';
+        getCache()[`${ADMIN_ID}-nuke`] = { channelCount: 2, categoryCount: 1 };
+        db.config = { panelChannelId: 'old-panel', panelMessageId: 'old-msg', alliedClans: {} };
+
+        const catChannel = { type: 4, delete: vi.fn().mockResolvedValue() };
+        const txtChannel = { type: 0, delete: vi.fn().mockResolvedValue() };
+        const voiceChannel = { type: 2, delete: vi.fn().mockResolvedValue() };
+        const geralChannel = { send: vi.fn().mockResolvedValue() };
+
+        interaction.guild.channels = {
+            cache: new Map([
+                ['cat1', catChannel],
+                ['txt1', txtChannel],
+                ['voice1', voiceChannel]
+            ]),
+            create: vi.fn().mockResolvedValue(geralChannel)
+        };
+
+        await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
+
+        // Acknowledged before deletion
+        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('NUKE INITIATED')
+        }));
+
+        // All channels deleted (regular first, then categories)
+        expect(txtChannel.delete).toHaveBeenCalledOnce();
+        expect(voiceChannel.delete).toHaveBeenCalledOnce();
+        expect(catChannel.delete).toHaveBeenCalledOnce();
+
+        // Stale panel config cleaned up
+        expect(db.config.panelChannelId).toBeUndefined();
+        expect(db.config.panelMessageId).toBeUndefined();
+        expect(saveLocalStorage).toHaveBeenCalled();
+
+        // #geral created and summary sent with breakdown
+        expect(interaction.guild.channels.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'geral' }));
+        expect(geralChannel.send).toHaveBeenCalledWith(expect.stringContaining('NUKE COMPLETED'));
+        expect(geralChannel.send).toHaveBeenCalledWith(expect.stringContaining('categor(ies) deleted'));
+        expect(geralChannel.send).toHaveBeenCalledWith(expect.stringContaining('channel(s) deleted'));
+
+        // Logged
+        expect(logEvent).toHaveBeenCalledWith(expect.stringContaining('NUKE'));
+    });
+
+    it('nuke: preserves protected channels and reports them in the summary', async () => {
+        interaction.customId = 'confirm-nuke-yes';
+        getCache()[`${ADMIN_ID}-nuke`] = { channelCount: 2, categoryCount: 0 };
+
+        const protectedChannel = { id: '1432320163033645136', type: 0, delete: vi.fn() };
+        const normalChannel = { id: '222222222222222222', type: 0, delete: vi.fn().mockResolvedValue() };
+        const geralChannel = { send: vi.fn().mockResolvedValue() };
+
+        interaction.guild.channels = {
+            cache: new Map([
+                ['protected', protectedChannel],
+                ['normal', normalChannel]
+            ]),
+            create: vi.fn().mockResolvedValue(geralChannel)
+        };
+
+        await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
+
+        // Protected channel NOT deleted, normal one deleted
+        expect(protectedChannel.delete).not.toHaveBeenCalled();
+        expect(normalChannel.delete).toHaveBeenCalledOnce();
+
+        // Summary mentions the kept channels
+        expect(geralChannel.send).toHaveBeenCalledWith(expect.stringContaining('kept (protected)'));
+        expect(logEvent).toHaveBeenCalledWith(expect.stringContaining('kept 1'));
+    });
+
+    it('nuke: does not delete a category containing a protected channel', async () => {
+        interaction.customId = 'confirm-nuke-yes';
+        getCache()[`${ADMIN_ID}-nuke`] = { channelCount: 2, categoryCount: 1 };
+
+        const protectedChannel = { id: '1432320163033645136', type: 0, parentId: 'cat1', delete: vi.fn() };
+        const siblingChannel = { id: '222222222222222222', type: 0, parentId: 'cat1', delete: vi.fn().mockResolvedValue() };
+        const catChannel = { id: 'cat1', type: 4, delete: vi.fn() };
+        const geralChannel = { send: vi.fn().mockResolvedValue() };
+
+        interaction.guild.channels = {
+            cache: new Map([
+                ['cat1', catChannel],
+                ['protected', protectedChannel],
+                ['sibling', siblingChannel]
+            ]),
+            create: vi.fn().mockResolvedValue(geralChannel)
+        };
+
+        await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
+
+        // Category kept because it contains the protected channel (cascade would delete it)
+        expect(catChannel.delete).not.toHaveBeenCalled();
+        expect(protectedChannel.delete).not.toHaveBeenCalled();
+        // Non-protected sibling inside the kept category is still deleted
+        expect(siblingChannel.delete).toHaveBeenCalledOnce();
+    });
+
+    it('nuke: creates #geral even if a channel delete fails', async () => {
+        interaction.customId = 'confirm-nuke-yes';
+        getCache()[`${ADMIN_ID}-nuke`] = { channelCount: 1, categoryCount: 0 };
+
+        const failingChannel = { type: 0, delete: vi.fn().mockRejectedValue(new Error('forbidden')) };
+        const geralChannel = { send: vi.fn().mockResolvedValue() };
+
+        interaction.guild.channels = {
+            cache: new Map([['txt1', failingChannel]]),
+            create: vi.fn().mockResolvedValue(geralChannel)
+        };
+
+        await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
+
+        expect(failingChannel.delete).toHaveBeenCalledOnce();
+        expect(interaction.guild.channels.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'geral' }));
+        expect(geralChannel.send).toHaveBeenCalledWith(expect.stringContaining('NUKE COMPLETED'));
     });
 
     // ── Unknown action ──

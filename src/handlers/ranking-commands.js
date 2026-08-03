@@ -5,7 +5,8 @@ import {
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
     ButtonStyle,
-    PermissionFlagsBits
+    PermissionFlagsBits,
+    ChannelType
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
@@ -18,6 +19,8 @@ import {
     APPROVER_ROLE_IDS,
     WELCOME_PANEL_MESSAGE,
     REGISTRATION_CHANNEL_ID,
+    SUPER_ADMIN_USER_ID,
+    NUKE_PROTECTED_CHANNEL_IDS,
     ensureConfig
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
@@ -914,6 +917,39 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         logEvent(`🔄 Admin ${interaction.user.tag} ran /refreshnames — ${updated} updated, ${skipped} skipped, ${failed} failed`);
         return interaction.editReply(report);
+    }
+
+    // ── nuke ──
+    if (commandName === 'nuke') {
+        // High-risk command: only the super admin may use it
+        if (user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
+        }
+
+        const categoryCount = guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).size;
+        const channelCount = guild.channels.cache.size - categoryCount;
+        const protectedChannels = guild.channels.cache.filter(c => NUKE_PROTECTED_CHANNEL_IDS.includes(c.id));
+
+        confirmationCache[`${user.id}-nuke`] = {
+            timestamp: Date.now(),
+            channelCount,
+            categoryCount
+        };
+
+        const protectedLine = protectedChannels.size > 0
+            ? `\n\n🛡️ **Protected (will NOT be deleted):** ${protectedChannels.map(c => `<#${c.id}>`).join(', ')}`
+            : '';
+
+        return interaction.reply({
+            content: `💣 **⚠️ DESTRUCTIVE ACTION WARNING ⚠️**\n\nThis will **PERMANENTLY DELETE** all channels and categories from this server:\n\n📁 Categories: **${categoryCount}**\n📢 Channels: **${channelCount}**${protectedLine}\n\n🔴 **THIS ACTION CANNOT BE UNDONE!** All messages, history and permissions will be lost.\n\nAfterwards, a **#geral** channel will be created with the operation summary.\n\nClick **💣 YES, NUKE EVERYTHING** to proceed or **❌ Cancel**.`,
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm-nuke-yes').setLabel('💣 YES, NUKE EVERYTHING').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('confirm-nuke-no').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ],
+            flags: 64
+        });
     }
 
     // ── scanrebuild ──
