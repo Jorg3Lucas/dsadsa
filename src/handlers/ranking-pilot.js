@@ -5,12 +5,12 @@ import {
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
-    MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
     pendingPilotApprovals,
     adminChannelId
 } from '../core/ranking-constants.js';
 import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
+import { removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
 // ✈️ PILOT REGISTRATION & REMOVAL HANDLERS
@@ -172,9 +172,7 @@ export async function handlePilotRemoveSelect(interaction, db, saveLocalStorage,
     interaction.guild.members.fetch(pilotToRemoveId)
         .then(async (pilotMember) => {
             if (pilotMember) {
-                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                }
+                await removeMemberRoles(pilotMember, db);
                 await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
             }
         }).catch(() => {});
@@ -210,9 +208,7 @@ export async function handleOwnerRemovePilotDm(interaction, db, saveLocalStorage
             const pilotMember = await guild.members.fetch(pilotUserId).catch(() => null);
             if (pilotMember) {
                 pilotTag = pilotMember.user.tag;
-                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                }
+                await removeMemberRoles(pilotMember, db);
                 await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
             }
         }

@@ -6,13 +6,13 @@
 
 import {
     SUPER_ADMIN_USER_ID,
-    MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
     SCAN_SERVER_ID
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname } from '../core/ranking-service.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
 // 🖱️ SCAN IMPORT HANDLER
@@ -78,12 +78,10 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                     totalResetOwners++;
                 }
 
-                // Remove from production server: reset nickname + remove role
+                // Remove from production server: reset nickname + remove roles
                 const prodMember = await prodGuild.members.fetch(memberId).catch(() => null);
                 if (prodMember) {
-                    if (prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                        await prodMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                    }
+                    await removeMemberRoles(prodMember, db);
                     await prodMember.setNickname(prodMember.user.username).catch(() => {});
                 }
 
@@ -175,9 +173,8 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
         const prodPilot = await prodGuild.members.fetch(pilotMemberId).catch(() => null);
         if (prodPilot) {
             await prodPilot.setNickname(buildPrefixedNickname(ownerNick, db, 'Pilot')).catch(() => {});
-            if (!prodPilot.roles.cache.has(MEMBER_ROLE_ID)) {
-                await prodPilot.roles.add(MEMBER_ROLE_ID).catch(() => {});
-            }
+            // Owner not in Discord yet — temp role until the link resolves
+            await assignTempRole(prodPilot, db, saveLocalStorage, logEvent);
             logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} registered as pilot — awaiting owner "${ownerNick}"`);
             return `✈️ registered as pilot of "${ownerNick}" (awaiting owner)`;
         } else {
@@ -235,9 +232,9 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
         const prodPilot = await prodGuild.members.fetch(pilotMemberId).catch(() => null);
         if (prodPilot) {
             await prodPilot.setNickname(buildPrefixedNickname(ownerNick, db, 'Pilot')).catch(() => {});
-            if (!prodPilot.roles.cache.has(MEMBER_ROLE_ID)) {
-                await prodPilot.roles.add(MEMBER_ROLE_ID).catch(() => {});
-            }
+            // Pilots inherit the owner's clan role (GoW Kids fallback)
+            const assigned = await assignClanRole(prodPilot, db, logEvent);
+            if (!assigned) await assignTempRole(prodPilot, db, saveLocalStorage, logEvent);
             logEvent(`📥 [ScanImport] ${pilotMember.user?.tag || pilotMemberId} linked as pilot of "${ownerNick}"`);
             return `✈️ linked as pilot of "${ownerNick}"`;
         } else {
@@ -395,9 +392,9 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
                 saveLocalStorage();
 
                 await prodMember.setNickname(buildPrefixedNickname(gameNick, db)).catch(() => {});
-                if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                }
+                // Registered owner — clan role if in an allied clan, else temp role
+                const assigned = await assignClanRole(prodMember, db, logEvent);
+                if (!assigned) await assignTempRole(prodMember, db, saveLocalStorage, logEvent);
 
                 ownerNickLowerToId[gameNick.toLowerCase()] = memberId;
 
@@ -574,9 +571,8 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
             };
 
             await prodMember.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-            if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-            }
+            // Pilots inherit the owner's clan role
+            await assignClanRole(prodMember, db, logEvent);
             delete db.preRegistrations[memberId];
             totalConverted++;
             if (results.length < 30) results.push(`✈️ **${preReg.nickname}** → CONVERTED as pilot of **${preReg.ownerNick}** (${lookup.serverName} — ${lookup.clanName})`);
@@ -590,9 +586,8 @@ export async function handleScanImportStatus(interaction, db, saveLocalStorage, 
             };
 
             await prodMember.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
-            if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-            }
+            // Converted in an allied clan — clan role is now the marker
+            await assignClanRole(prodMember, db, logEvent);
             delete db.preRegistrations[memberId];
             totalConverted++;
             if (results.length < 30) results.push(`✅ **${preReg.nickname}** → CONVERTED to permanent (${lookup.serverName} — ${lookup.clanName})`);

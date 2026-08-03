@@ -7,18 +7,18 @@ import {
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
-    MEMBER_ROLE_ID,
     SUPER_ADMIN_USER_ID,
     NUKE_PROTECTED_CHANNEL_IDS,
     confirmationCache,
     WELCOME_PANEL_MESSAGE,
     ensureConfig,
     setRegistrationChannelId,
-    setDominationChannelId,
-    setStandbyChannelId
+    setAdminChannelId,
+    APPROVER_ROLE_IDS
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID } from '../core/server-structure.js';
+import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
+import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, LEGACY_DELETED_CHANNELS, findTextChannel } from '../core/server-structure.js';
 import { renderEmbed, renderButtons } from './panel-render.js';
 import { saveDailyLogs } from '../core/daily-logs.js';
 import {
@@ -69,17 +69,15 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             for (const pId of userData.pilotIds) {
                 const pilotMember = await guild.members.fetch(pId).catch(() => null);
                 if (pilotMember) {
-                    if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                        await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                    }
+                    await removeMemberRoles(pilotMember, db);
                     await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
                 }
             }
         }
-        if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+        if (targetMember) {
+            await removeMemberRoles(targetMember, db);
+            await targetMember.setNickname(targetMember.user.username).catch(() => {});
         }
-        await targetMember.setNickname(targetMember.user.username).catch(() => {});
         delete db.users[cached.targetId];
         saveLocalStorage();
 
@@ -108,9 +106,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         if (pilotMember) {
-            if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-            }
+            await removeMemberRoles(pilotMember, db);
             await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
         }
 
@@ -139,12 +135,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
         if (pilotMember) {
             await pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {});
-        }
-
-        // Apply member role
-        if (pilotMember && !pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-            logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
+            // Pilots inherit the owner's clan role
+            await assignClanRole(pilotMember, db, logEvent);
         }
 
         logEvent(`Admin ${interaction.user.tag} manually linked pilot ${cached.pilotName} to ${cached.ownerName}`);
@@ -182,8 +174,12 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        // Clan role is now the member marker (GoW Kids as fallback for temp/unresolvable)
+        if (cached.needsTempApproval) {
+            await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
+        } else {
+            const assigned = await assignClanRole(targetMember, db, logEvent);
+            if (!assigned) await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
         }
 
         const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
@@ -307,6 +303,17 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         const buildOverwrites = (mode) => {
             // open → everyone can chat (default); no overwrites needed
             if (mode === 'open') return [];
+            // staff → only approver roles (+ admins/bot) can view and chat (approvals)
+            if (mode === 'staff') {
+                const overwrites = [
+                    { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+                    { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                ];
+                for (const rid of APPROVER_ROLE_IDS) {
+                    overwrites.push({ id: rid, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+                }
+                return overwrites;
+            }
             // elders/bot/system → everyone views, only elders/bot write
             const overwrites = [
                 { id: everyoneRole.id, deny: [PermissionFlagsBits.SendMessages] },
@@ -326,6 +333,13 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             return null;
         };
 
+        // Rename a channel to its pretty name if it was found under a legacy name
+        const renameToPretty = async (channel, chanDef) => {
+            if (channel && channel.name !== chanDef.name) {
+                await channel.setName(chanDef.name, '🏗️ /setup renamed channel').catch(() => {});
+            }
+        };
+
         let createdCategories = 0;
         let createdChannels = 0;
         let panelsSent = 0;
@@ -334,8 +348,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
         // Only re-point daily-logs to a channel if it was (re)created now or the
         // current target is empty/stale — preserves manual daily-logs.json config.
-        const shouldRewireDailyLogs = (chanName, currentId) =>
-            newlyCreatedChannels.has(chanName) ||
+        const shouldRewireDailyLogs = (chanKey, currentId) =>
+            newlyCreatedChannels.has(chanKey) ||
             !currentId ||
             !guild.channels.cache.has(currentId);
 
@@ -358,7 +372,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             }
 
             for (const chanDef of catDef.channels) {
-                let channel = guild.channels.cache.find(c => c.parentId === category.id && c.name === chanDef.name && c.type === ChannelType.GuildText);
+                let channel = findTextChannel(guild, category.id, chanDef);
                 const isNew = !channel;
                 if (isNew) {
                     try {
@@ -374,6 +388,9 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
                         console.error(`❌ [Setup] Failed to create channel ${catDef.name}/${chanDef.name}: ${e.message}`);
                         continue;
                     }
+                } else {
+                    // Found under a legacy name/key → rename to the pretty name
+                    await renameToPretty(channel, chanDef);
                 }
 
                 // Send panels only for freshly created channels (idempotent)
@@ -413,11 +430,13 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             } catch (e) {
                 console.error(`❌ [Setup] Failed to create category ${GENERAL_CATEGORY.name}: ${e.message}`);
             }
+        } else if (generalCategory.name !== GENERAL_CATEGORY.name) {
+            await generalCategory.setName(GENERAL_CATEGORY.name, '🏗️ /setup renamed category').catch(() => {});
         }
 
         if (generalCategory) {
             for (const chanDef of GENERAL_CATEGORY.channels) {
-                let channel = guild.channels.cache.find(c => c.parentId === generalCategory.id && c.name === chanDef.name && c.type === ChannelType.GuildText);
+                let channel = findTextChannel(guild, generalCategory.id, chanDef);
                 if (!channel) {
                     try {
                         channel = await guild.channels.create({
@@ -428,21 +447,52 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
                             reason: '🏗️ /setup by super admin'
                         });
                         createdChannels++;
-                        newlyCreatedChannels.add(chanDef.name);
+                        newlyCreatedChannels.add(chanDef.key);
                     } catch (e) {
                         console.error(`❌ [Setup] Failed to create channel ${chanDef.name}: ${e.message}`);
                         continue;
                     }
+                } else {
+                    // Found under a legacy name/key → rename to the pretty name
+                    await renameToPretty(channel, chanDef);
+                    // Re-sync permissions to the channel's configured mode (fixes stale perms)
+                    await channel.permissionOverwrites.set(buildOverwrites(chanDef.mode), '🏗️ /setup permission sync').catch(() => {});
                 }
-                createdChannelIds[chanDef.name] = channel.id;
+                createdChannelIds[chanDef.key] = channel.id;
+            }
+        }
+
+        // ── 2b. Remove channels from removed features (domination/standby) ──
+        for (const ch of [...guild.channels.cache.values()]) {
+            if (ch.type !== ChannelType.GuildText) continue;
+            if (LEGACY_DELETED_CHANNELS.includes(ch.name.toLowerCase())) {
+                await ch.delete('🗑️ /setup removed legacy channel').catch(() => {});
+                console.log(`🗑️ [Setup] Deleted legacy channel #${ch.name}`);
             }
         }
 
         // ── 3. System wiring (registration panel, notification IDs, daily logs) ──
         ensureConfig(db);
 
+        // ── 3a. Sync claim-channel permissions: view restricted to clan roles + GoW Kids ──
+        const claimRoleIds = [
+            ...Object.values(db.config?.clanRoles || {}),
+            ...(db.config?.tempRoleId ? [db.config.tempRoleId] : [])
+        ];
+        const claimOverwrites = buildClaimOverwrites(everyoneRole.id, botId, claimRoleIds);
+        for (const catDef of CLAIM_CATEGORIES) {
+            const category = findCategory(catDef);
+            if (!category) continue;
+            await category.permissionOverwrites.set(claimOverwrites, '🏗️ /setup claim access').catch(() => {});
+            for (const chanDef of catDef.channels) {
+                const channel = findTextChannel(guild, category.id, chanDef);
+                if (!channel) continue;
+                await channel.permissionOverwrites.set(claimOverwrites, '🏗️ /setup claim access').catch(() => {});
+            }
+        }
+
         // Registration channel → send the welcome panel + persist ID
-        const regChId = createdChannelIds['registro'];
+        const regChId = createdChannelIds['registration'];
         if (regChId) {
             setRegistrationChannelId(regChId);
             if (!db.config.channelIds) db.config.channelIds = {};
@@ -460,19 +510,17 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
                     db.config.panelMessageId = panelMessage.id;
                 }
             } catch (e) {
-                console.error(`❌ [Setup] Failed to send welcome panel in #registro: ${e.message}`);
+                console.error(`❌ [Setup] Failed to send welcome panel in #registration: ${e.message}`);
             }
         }
 
-        if (createdChannelIds['domination']) {
-            setDominationChannelId(createdChannelIds['domination']);
+        // Approvals channel (staff) → where the bot posts registration approval panels
+        const approvalsChId = createdChannelIds['approvals'];
+        if (approvalsChId) {
+            setAdminChannelId(approvalsChId);
             if (!db.config.channelIds) db.config.channelIds = {};
-            db.config.channelIds.domination = createdChannelIds['domination'];
-        }
-        if (createdChannelIds['standby']) {
-            setStandbyChannelId(createdChannelIds['standby']);
-            if (!db.config.channelIds) db.config.channelIds = {};
-            db.config.channelIds.standby = createdChannelIds['standby'];
+            db.config.channelIds.approvals = approvalsChId;
+            db.config.adminChannelId = approvalsChId;
         }
 
         // Bot-managed alert channels → wire into daily-logs (only if newly created
@@ -496,10 +544,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveClaimStorage();      // claim db (panel mapping for freshly created claim channels)
 
         // ── 4. Summary ──
-        let summary = `🏗️ **SETUP COMPLETED!**\n\n📁 Categories created: **${createdCategories}**\n📢 Channels created: **${createdChannels}**\n📋 Panels sent: **${panelsSent}**\n\n✅ Existing channels/categories were kept (idempotent).`;
+        let summary = `🏗️ **SETUP COMPLETED!**\n\n📁 Categories created: **${createdCategories}**\n📢 Channels created: **${createdChannels}**\n📋 Panels sent: **${panelsSent}**\n\n✅ Existing channels/categories were kept, renamed to the pretty names and permissions re-synced (idempotent).`;
         if (!elderRole) {
             summary += `\n\n⚠️ **Elder role not found** (${ELDER_ROLE_ID}) — tower-rules/announcements/allied-list are view-only for now.`;
         }
+        summary += `\n\n🔒 Claim channels restricted to clan roles + GoW Kids (run /syncroles to ensure the roles exist).`;
         summary += `\n\nℹ️ On the next restart the bot rebuilds the claim channels with fresh panels.`;
         summary += `\n👤 Executed by: ${interaction.user.tag}\n🕐 ${new Date().toLocaleString('en-US')}`;
         try {
@@ -538,8 +587,10 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         await targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {});
-        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        // manualforce = permanent — try the clan role, fall back to the temp role
+        const assigned = await assignClanRole(targetMember, db, logEvent);
+        if (!assigned) {
+            await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
         }
 
         logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)`);

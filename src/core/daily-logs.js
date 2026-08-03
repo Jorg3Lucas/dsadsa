@@ -6,6 +6,7 @@ import fs from "fs";
 import { sendFileWithEmbed } from "./discord-utils.js";
 import { noop, DISCORD_SERVER_ID } from "./config.js";
 import { logger } from "./logger.js";
+import { getGeneralChannelName } from "./server-structure.js";
 
 // ==========================================
 // 📡 ALERT CHANNEL RESOLVER
@@ -216,7 +217,7 @@ function buildReportText(queueData, dateStr, isForced) {
  * @returns {Promise<boolean>}
  */
 export async function dispatchDailyLogs(isForced = false) {
-    const channel = await resolveAlertChannel(dailyLogs.configChannelId, "events");
+    const channel = await resolveAlertChannel(dailyLogs.configChannelId, getGeneralChannelName("events"));
     if (!channel) return false;
 
     let queueData = dailyLogs.queue || [];

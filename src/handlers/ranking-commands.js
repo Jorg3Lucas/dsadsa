@@ -10,7 +10,6 @@ import {
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
-    MEMBER_ROLE_ID,
     confirmationCache,
     pendingRegistrations,
     pendingPilotApprovals,
@@ -27,7 +26,7 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
-import { syncClanRoles } from '../core/clan-roles.js';
+import { syncClanRoles, hasMemberRole } from '../core/clan-roles.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -457,7 +456,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const unregistered = [];
         for (const [memberId, member] of allMembers) {
             if (member.user.bot) continue;
-            if (!member.roles.cache.has(MEMBER_ROLE_ID)) continue;
+            if (!hasMemberRole(member, db)) continue;
             if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) continue;
             unregistered.push(member);
         }
@@ -487,7 +486,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             for (let i = 0; i < unregistered.length; i++) {
                 const member = unregistered[i];
                 try {
-                    await member.send(`👋 Hey **${member.displayName}**, you currently have the member role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀`);
+                    await member.send(`👋 Hey **${member.displayName}**, you currently have a role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀`);
                     sent++;
                     logEvent(`✅ DM sent to ${member.user.tag} (${member.id}) — ${sent}/${unregistered.length}`);
                 } catch (e) {
@@ -956,11 +955,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         // Build a map: nickname → memberId for owner lookups
         const nicknameToId = {};
 
-        // First pass: collect all members with member role
+        // First pass: collect all members with a clan role (or the GoW Kids temp role)
         const eligible = [];
         for (const [memberId, member] of allMembers) {
             if (member.user.bot) continue;
-            if (!member.roles.cache.has(MEMBER_ROLE_ID)) continue;
+            if (!hasMemberRole(member, db)) continue;
             eligible.push(member);
         }
 
@@ -1156,7 +1155,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         };
 
         return interaction.reply({
-            content: `🏗️ **⚠️ SERVER SETUP ⚠️**\n\nThis will **create** the full server structure if missing (existing channels/categories are kept):\n\n📁 **Claim categories** (members view-only, bot sends panels):\n   **7F, 8F, 9F, 10F, 11F, 12F, Summons** with their sp/ms channels\n\n📁 **General category**:\n   💬 **market, main-chat** — everyone can chat\n   🛡️ **tower-rules, announcements, allied-list** — elders only\n   🤖 **reminders, events** — bot-managed (alerts)\n   📋 **registro** — welcome/registration panel\n   📢 **domination, standby** — bot notification channels\n\n✅ Idempotent: only missing channels are created.\n\nClick **✅ YES, CREATE EVERYTHING** to proceed or **❌ Cancel**.`,
+            content: `🏗️ **⚠️ SERVER SETUP ⚠️**\n\nThis will **create** the full server structure if missing, **rename** existing channels to the pretty names and **re-sync permissions**:\n\n📁 **Claim categories** (view restricted to clan roles + GoW Kids, bot sends panels):\n   🗼 **7F, 8F, 9F, 10F, 11F, 12F** and 🌀 **Summons** with their SP/MS channels\n\n📁 **General category** (🏠):\n   🛒 **market**, 💬 **main-chat** — everyone can chat\n   📜 **tower-rules**, 📢 **announcements**, 🤝 **allied-list** — elders only\n   ⏰ **reminders**, 📅 **events** — bot-managed (alerts)\n   📝 **registration** — welcome/registration panel (public)\n   📨 **approvals** — registration approval panels (staff only)\n\n🗑️ The legacy **domination/standby** channels (removed feature) will be **deleted**.\n\n✅ Idempotent: only missing channels are created.\n\nClick **✅ YES, CREATE EVERYTHING** to proceed or **❌ Cancel**.`,
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('confirm-setup-yes').setLabel('✅ YES, CREATE EVERYTHING').setStyle(ButtonStyle.Success),

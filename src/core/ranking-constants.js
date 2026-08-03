@@ -20,6 +20,9 @@ export function setAdminChannelId(id) {
 
 export const DISCORD_SERVER_ID = '1432320162278670440';
 
+// ⚠️ LEGACY — the fixed member role was removed from the server. Clan roles
+// (db.config.clanRoles) + the GoW Kids temp role are now the member markers.
+// Kept only for historical reference / rollback.
 export const MEMBER_ROLE_ID = '1503933709756141620';
 
 // Roles that can approve/reject member registrations (in addition to Administrator)
@@ -67,7 +70,7 @@ export const NUKE_PROTECTED_CHANNEL_IDS = [
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================
 
-export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@864108100880171009>';
+export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive your **clan role** (and your in-game nickname). Temporary approvals receive the **GoW Kids** role until they join an allied clan.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@864108100880171009>';
 
 // ==========================================
 // 📢 REGISTRATION CHANNEL (for /listunregistered DMs)
@@ -76,12 +79,8 @@ export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠�
 // Defaults are kept as fallbacks until a /setup run persists new IDs.
 
 export let REGISTRATION_CHANNEL_ID = '1524296969521070120';
-export let DOMINATION_CHANNEL_ID = '1481572061850767490';
-export let STANDBY_CHANNEL_ID = '1481572514399518780';
 
 export function setRegistrationChannelId(id) { REGISTRATION_CHANNEL_ID = id; }
-export function setDominationChannelId(id) { DOMINATION_CHANNEL_ID = id; }
-export function setStandbyChannelId(id) { STANDBY_CHANNEL_ID = id; }
 
 /**
  * Load persisted channel IDs from db.config (saved by /setup).
@@ -90,8 +89,7 @@ export function setStandbyChannelId(id) { STANDBY_CHANNEL_ID = id; }
 export function loadChannelIdsFromConfig(config) {
     if (!config?.channelIds) return;
     if (config.channelIds.registration) setRegistrationChannelId(config.channelIds.registration);
-    if (config.channelIds.domination) setDominationChannelId(config.channelIds.domination);
-    if (config.channelIds.standby) setStandbyChannelId(config.channelIds.standby);
+    if (config.channelIds.approvals) setAdminChannelId(config.channelIds.approvals);
 }
 
 // ==========================================

@@ -43,7 +43,8 @@ import {
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
-import { DISCORD_SERVER_ID as RANKING_SERVER_ID, MEMBER_ROLE_ID, ensureConfig } from './core/ranking-constants.js';
+import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
+import { TEMP_ROLE_NAME } from './core/clan-roles.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
@@ -138,13 +139,17 @@ client.once('clientReady', async () => {
         if (guild) {
             await registerMir4SlashCommands(guild);
 
-            // Verify the member role exists — a wrong MEMBER_ROLE_ID silently
-            // breaks role management and /scanrebuild, so surface it at boot.
-            const memberRole = guild.roles.cache.get(MEMBER_ROLE_ID);
-            if (memberRole) {
-                console.log(`✅ [Ranking] Member role found: ${memberRole.name} (${MEMBER_ROLE_ID})`);
+            // Clan roles are now the member marker (the old fixed member role was
+            // removed from the server). Surface a warning if no clan/temp role
+            // exists yet so role management is not silently broken.
+            const clanRoleCount = Object.keys(rankingDb.config?.clanRoles || {}).length;
+            const tempRole = guild.roles.cache.find(r => r.name === TEMP_ROLE_NAME);
+            if (clanRoleCount > 0) {
+                console.log(`✅ [Ranking] ${clanRoleCount} clan role(s) configured.`);
+            } else if (tempRole) {
+                console.log(`✅ [Ranking] No clan roles yet — temp role "${TEMP_ROLE_NAME}" found (${tempRole.id}). Run /syncroles after adding allied clans.`);
             } else {
-                console.error(`❌ [Ranking] MEMBER_ROLE_ID (${MEMBER_ROLE_ID}) not found in guild ${RANKING_SERVER_ID} — check the role ID.`);
+                console.warn(`⚠️ [Ranking] No clan roles and no "${TEMP_ROLE_NAME}" temp role in guild ${RANKING_SERVER_ID} — /syncroles will create them.`);
             }
         } else {
             console.error('❌ Error: Invalid Server ID configuration.');

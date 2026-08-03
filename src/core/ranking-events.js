@@ -1,10 +1,11 @@
 import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig, loadChannelIdsFromConfig } from './ranking-constants.js';
+import { adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig, loadChannelIdsFromConfig } from './ranking-constants.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { buildPrefixedNickname } from './ranking-utils.js';
+import { assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
@@ -250,7 +251,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         setAdminChannelId(db.config.adminChannelId);
     }
 
-    // Load persisted registration/domination/standby channel IDs (saved by /setup)
+    // Load persisted channel IDs saved by /setup (registration channel)
     loadChannelIdsFromConfig(db.config);
 
     // Pre-registrations no longer expire by time — they are validated against the
@@ -316,9 +317,9 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             saveLocalStorage();
 
                             await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                            }
+                            // Pilots inherit the owner's clan role (GoW Kids fallback)
+                            const assigned = await assignClanRole(member, db, logEvent);
+                            if (!assigned) await assignTempRole(member, db, saveLocalStorage, logEvent);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
                         } else {
@@ -337,9 +338,8 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             saveLocalStorage();
 
                             await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                            }
+                            // Owner not in Discord yet — give the temp role until the link resolves
+                            await assignTempRole(member, db, saveLocalStorage, logEvent);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — registered as pilot awaiting owner "${preReg.ownerNick}"`);
                         }
@@ -354,9 +354,10 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         saveLocalStorage();
 
                         await member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
-                        if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                        }
+                        // Pre-registered owner — assign the clan role if found in an allied clan
+                        // (GoW Kids fallback when the lookup can't resolve it yet)
+                        const assigned = await assignClanRole(member, db, logEvent);
+                        if (!assigned) await assignTempRole(member, db, saveLocalStorage, logEvent);
 
                         logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                     }
@@ -381,7 +382,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         for (const pId of userData.pilotIds) {
                             const pilotMember = await member.guild.members.fetch(pId).catch(() => null);
                             if (pilotMember) {
-                                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                                await removeMemberRoles(pilotMember, db);
                                 await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
                                 logEvent(getMsg('ranking.logs.pilotCleaned', { tag: pilotMember.user.tag }));
                             }

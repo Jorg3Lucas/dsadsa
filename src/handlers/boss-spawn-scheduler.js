@@ -7,6 +7,7 @@ import { EmbedBuilder } from "discord.js";
 import { dailyLogs, bossSpawnAlertCache } from "../core/state.js";
 import { getLocalTime, redBossSchedules, leader3Schedules } from "../core/time-utils.js";
 import { resolveAlertChannel } from "../core/daily-logs.js";
+import { getGeneralChannelName } from "../core/server-structure.js";
 
 // ─── Boss schedule entries ───────────────────────────────
 // Each entry: { world, layer, map, boss, times }
@@ -152,7 +153,7 @@ function getUpcomingSpawnAlerts() {
 
 export async function sendBossSpawnAlerts() {
   // Uses the configured channel, or falls back to #reminders (created by /setup)
-  const channel = await resolveAlertChannel(dailyLogs.bossSpawnChannelId, "reminders");
+  const channel = await resolveAlertChannel(dailyLogs.bossSpawnChannelId, getGeneralChannelName("reminders"));
   if (!channel) return;
 
   const alerts = getUpcomingSpawnAlerts();
@@ -270,7 +271,7 @@ function getUpcomingScheduledAlerts() {
 
 export async function sendScheduledEventAlerts() {
   // Uses the configured channel, or falls back to #events (created by /setup)
-  const channel = await resolveAlertChannel(dailyLogs.scheduledEventChannelId, "events");
+  const channel = await resolveAlertChannel(dailyLogs.scheduledEventChannelId, getGeneralChannelName("events"));
   if (!channel) return;
 
   const alerts = getUpcomingScheduledAlerts();

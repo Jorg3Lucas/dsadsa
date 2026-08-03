@@ -247,27 +247,13 @@
                     "label": "📧 No Role",
                     "description": "Notify members with no roles via DM to register"
                 },
-                "optionDomination": {
-                    "label": "⚔️ Domination",
-                    "description": "Call all members to Domination"
-                },
-                "optionStandby": {
-                    "label": "⏳ Standby",
-                    "description": "Call all members to the Standby channel"
-                },
                 "confirmBtn": "✅ Yes, notify",
                 "cancelBtn": "❌ Cancel",
                 "noRoleConfirm": "⚠️ **Are you sure you want to DM ALL members with no roles?**\n\nThis may take a few minutes depending on the number of members.",
-                "dominationConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Domination?**\n\nThis may take a few minutes depending on the number of members.",
-                "standbyConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Standby?**\n\nThis may take a few minutes depending on the number of members.",
                 "sendingDms": "📧 **Sending DMs to {count} members...**\nPlease wait, this may take a few minutes.",
                 "cancelled": "❌ **Notification cancelled.**",
                 "noRoleDm": "👋 Hey **{displayName}**, you don't have any roles on the server yet!\n\nPlease go to <#{channelId}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nGet your roles and join the fun! 🚀",
-                "noRoleResult": "📧 **Notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
-                "dominationDm": "⚔️ **ATTENTION — DOMINATION!**\n\n{displayName}, all members must join the Domination channel to fight NOW!\n\n🔗 <#{channelId}>\n\nJoin and help the clan win! 💪",
-                "standbyDm": "⏳ **ATTENTION — STANDBY!**\n\n{displayName}, all members must join the Standby channel and await commands!\n\n🔗 <#{channelId}>\n\nGet ready for instructions! 🎯",
-                "dominationResult": "⚔️ **Domination notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
-                "standbyResult": "⏳ **Standby notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**"
+                "noRoleResult": "📧 **Notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**"
             },
             "removepilot": {
                 "noPilots": "❌ You don't have any active pilots on your account.",
@@ -318,8 +304,8 @@
                 "actionRemoveDesc": "Permanently delete this user's profile",
                 "actionPilot": "✈️ Remove pilot",
                 "actionPilotDesc": "Unlink a pilot from this user",
-                "actionClan": "🔁 Assign member role",
-                "actionClanDesc": "Assign the member role to this user",
+                "actionClan": "🔁 Assign clan role",
+                "actionClanDesc": "Assign this user's clan role (GoW Kids if not in an allied clan)",
                 "pilotSelectPlaceholder": "Select a pilot to remove...",
                 "noPilots": "❌ **{username}** has no registered pilots.",
                 "actionRemoveConfirm": "⚠️ Permanently remove **{username}**'s registration?",
@@ -327,8 +313,8 @@
                 "back": "🔙 Back"
             },
             "manualforce": {
-                "confirm": "⚠️ Force-register **{username}** as **{nickname}**? This sets nickname + member role immediately — no ranking check.",
-                "success": "✅ **{nickname}** has been force-registered as permanent! Nickname + member role applied."
+                "confirm": "⚠️ Force-register **{username}** as **{nickname}**? This sets nickname + clan role immediately — no ranking check.",
+                "success": "✅ **{nickname}** has been force-registered as permanent! Nickname + clan role applied."
             }
         },
         "logs": {

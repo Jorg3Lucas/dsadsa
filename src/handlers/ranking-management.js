@@ -10,12 +10,12 @@ import {
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
-    MEMBER_ROLE_ID,
     WORLD_IDS,
     confirmationCache,
     ensureConfig
 } from '../core/ranking-constants.js';
 import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
+import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
@@ -105,11 +105,13 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     if (actionType === 'clan') {
         const clanTarget = await interaction.guild.members.fetch(targetUserId).catch(() => null);
-        if (clanTarget && !clanTarget.roles.cache.has(MEMBER_ROLE_ID)) {
-            await clanTarget.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        if (clanTarget) {
+            // Clan role is the member marker — fall back to the temp role when unresolvable
+            const assigned = await assignClanRole(clanTarget, db, logEvent);
+            if (!assigned) await assignTempRole(clanTarget, db, saveLocalStorage, logEvent);
         }
         return interaction.update({
-            content: '✅ Member role assigned.',
+            content: '✅ Clan role assigned.',
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
@@ -225,9 +227,7 @@ export async function handleManagePilotRemove(interaction, db, saveLocalStorage,
 
     interaction.guild.members.fetch(pilotToRemoveId).then(async (pilotMember) => {
         if (pilotMember) {
-            if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-            }
+            await removeMemberRoles(pilotMember, db);
             await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
         }
     }).catch(() => {});

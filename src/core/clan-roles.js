@@ -1,19 +1,83 @@
 // ==========================================
 // 🤝 CLAN ROLE SYNCHRONIZATION
 // ==========================================
-// Creates one Discord role per allied clan, assigns it to registered members
-// based on their in-game clan (resolved via the ranking cache), removes orphan
-// roles for clans no longer allied, and restricts the claim channels
-// (7F-12F, Summons) to members holding a clan/member role.
+// Creates one Discord role per allied clan (with a distinct color and an emoji
+// prefix for visibility), assigns it to registered members based on their
+// in-game clan (resolved via the ranking cache), removes orphan roles for
+// clans no longer allied, and restricts the claim channels (7F-12F, Summons)
+// to members holding a clan role (or the temporary "GoW Kids" role).
+//
+// The fixed member role (MEMBER_ROLE_ID) was removed from the server — clan
+// roles are now the member marker. Temporary registrations (not yet in an
+// allied clan) receive the "GoW Kids" temp role instead.
 //
 // Run manually via /syncroles (super admin) and automatically at the end of
 // the daily synchronization (ranking-sync-engine).
 
-import { ChannelType, PermissionFlagsBits } from 'discord.js';
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, ensureConfig } from './ranking-constants.js';
-import { CLAIM_CATEGORIES } from './server-structure.js';
+import { ChannelType } from 'discord.js';
+import { DISCORD_SERVER_ID, ensureConfig } from './ranking-constants.js';
+import { CLAIM_CATEGORIES, buildClaimOverwrites, findTextChannel } from './server-structure.js';
 import { getLocalRankingCache, cleanNickname } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
+
+// ⏳ Temporary registration role (users not yet in an allied clan)
+export const TEMP_ROLE_NAME = 'GoW Kids';
+const TEMP_ROLE_COLOR = 0x95A5A6; // gray
+
+// Palette of distinct colors — one per clan, assigned deterministically
+const CLAN_COLORS = [
+    0xE74C3C, 0xE67E22, 0xF1C40F, 0x2ECC71, 0x1ABC9C, 0x3498DB,
+    0x9B59B6, 0xE84393, 0xFD79A8, 0x00CEC9, 0xFDCB6E, 0x6C5CE7,
+    0x0984E3, 0x00B894, 0xD63031, 0xE17055, 0x74B9FF, 0xA29BFE,
+    0x55EFC4, 0xFFEAA7
+];
+
+// Emojis used as the role-name prefix (visibility in the member list)
+const CLAN_EMOJIS = ['⚔️', '🛡️', '🔥', '⚡', '❄️', '🌊', '🌪️', '☠️', '💀', '👑', '🐉', '🦅', '🐺', '🦁', '🐍', '🦂', '🏹', '⚒️', '🎯', '⭐', '🌙', '🔱'];
+
+function hashString(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) {
+        h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    }
+    return h;
+}
+
+/**
+ * Deterministically assign { emoji, color } to each clan so every clan gets a
+ * distinct color (and emoji) while keeping the same style across re-syncs.
+ * @param {{name: string, clean: string}[]} clanNames
+ */
+function assignClanStyles(clanNames) {
+    const sorted = [...clanNames].sort((a, b) => a.clean.localeCompare(b.clean));
+    const usedColors = new Set();
+    const usedEmojis = new Set();
+    const styles = {};
+    for (const { name, clean } of sorted) {
+        const h = hashString(clean);
+        let ci = h % CLAN_COLORS.length;
+        while (usedColors.has(CLAN_COLORS[ci]) && usedColors.size < CLAN_COLORS.length) {
+            ci = (ci + 1) % CLAN_COLORS.length;
+        }
+        const color = CLAN_COLORS[ci];
+        usedColors.add(color);
+
+        let ei = h % CLAN_EMOJIS.length;
+        while (usedEmojis.has(CLAN_EMOJIS[ei]) && usedEmojis.size < CLAN_EMOJIS.length) {
+            ei = (ei + 1) % CLAN_EMOJIS.length;
+        }
+        const emoji = CLAN_EMOJIS[ei];
+        usedEmojis.add(emoji);
+
+        styles[clean] = { emoji, color, name };
+    }
+    return styles;
+}
+
+/** Strip a leading emoji prefix (and whitespace) from a role name. */
+function stripRoleEmoji(roleName) {
+    return roleName.replace(/^[\p{Extended_Pictographic}\u{FE0F}\u200D]+[ \u00A0]*/u, '').trim();
+}
 
 /**
  * Find a claim category by name (fallback to legacy ID).
@@ -29,34 +93,36 @@ function findCategory(guild, catDef) {
 
 /**
  * Apply restrictive permissions to a claim category and its channels:
- * @everyone cannot view (or send), the bot and every clan role (+ member role)
- * can view, only the bot can send (panels).
+ * @everyone cannot view (or send), the bot and every clan role (+ the temp
+ * role) can view, only the bot can send (panels).
  * @param {import('discord.js').Guild} guild
  * @param {string} botId
  * @param {string[]} clanRoleIds - IDs of the clan roles to grant view access
+ * @param {string|null} tempRoleId - ID of the GoW Kids temp role (nullable)
  */
-async function applyClaimPermissions(guild, botId, clanRoleIds) {
+async function applyClaimPermissions(guild, botId, clanRoleIds, tempRoleId) {
     const everyone = guild.roles.everyone;
-    const allowViewIds = [...new Set([botId, MEMBER_ROLE_ID, ...clanRoleIds])];
-    const overwrites = [
-        { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-        { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-        ...allowViewIds
-            .filter(id => id !== botId)
-            .map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel] }))
-    ];
+    const overwrites = buildClaimOverwrites(everyone.id, botId, [...clanRoleIds, ...(tempRoleId ? [tempRoleId] : [])]);
 
     for (const catDef of CLAIM_CATEGORIES) {
         const category = findCategory(guild, catDef);
         if (!category) continue;
+        // Keep the category name pretty too (old legacy-named categories get upgraded here)
+        if (category.name !== catDef.name) {
+            await category.setName(catDef.name, '🤝 /syncroles renamed category').catch(() => {});
+        }
         try {
             await category.permissionOverwrites.set(overwrites, '🤝 /syncroles clan access');
         } catch (e) {
             console.error(`❌ [Clan Roles] Failed to set category perms for ${catDef.name}: ${e.message}`);
         }
         for (const chanDef of catDef.channels) {
-            const channel = guild.channels.cache.find(c => c.parentId === category.id && c.name === chanDef.name && c.type === ChannelType.GuildText);
+            const channel = findTextChannel(guild, category.id, chanDef);
             if (!channel) continue;
+            // Keep names pretty too (old legacy-named channels get upgraded here)
+            if (channel.name !== chanDef.name) {
+                await channel.setName(chanDef.name, '🤝 /syncroles renamed channel').catch(() => {});
+            }
             try {
                 await channel.permissionOverwrites.set(overwrites, '🤝 /syncroles clan access');
             } catch (e) {
@@ -65,6 +131,121 @@ async function applyClaimPermissions(guild, botId, clanRoleIds) {
         }
     }
 }
+
+// ==========================================
+// 🛠️ SHARED HELPERS (used by registration flows)
+// ==========================================
+
+/** Build a map: cleanNickname(clan config name) → role ID. */
+function buildClanRoleCleanMap(db) {
+    const map = {};
+    for (const [name, roleId] of Object.entries(db.config?.clanRoles || {})) {
+        map[cleanNickname(name)] = roleId;
+    }
+    return map;
+}
+
+/**
+ * Find the owner ID of a pilot (the registered user whose pilotIds includes memberId).
+ */
+function findOwnerIdForPilot(memberId, db) {
+    for (const [uid, data] of Object.entries(db.users || {})) {
+        if (data.pilotIds && data.pilotIds.includes(memberId)) return uid;
+    }
+    return null;
+}
+
+/**
+ * Resolve the clan role ID for a member (pilots inherit their owner's clan).
+ * @returns {string|null}
+ */
+export function resolveMemberClanRoleId(memberId, db) {
+    const ownerId = findOwnerIdForPilot(memberId, db);
+    const targetId = ownerId || memberId;
+    const userData = db.users?.[targetId];
+    if (!userData?.nickname) return null;
+    const lookup = lookupNickname(userData.nickname, db);
+    if (!lookup.found || !lookup.inAlliedClan) return null;
+    return buildClanRoleCleanMap(db)[cleanNickname(lookup.clanName)] || null;
+}
+
+/**
+ * Assign the member's clan role if resolvable. Returns true when assigned.
+ */
+export async function assignClanRole(member, db, logEvent) {
+    const roleId = resolveMemberClanRoleId(member.id, db);
+    if (roleId && !member.roles.cache.has(roleId)) {
+        await member.roles.add(roleId).catch(() => {});
+        if (logEvent) logEvent(`🤝 [Clan Roles] Assigned clan role to ${member.user.username}`);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Ensure the "GoW Kids" temp role exists in the guild (creates it if missing)
+ * and returns it.
+ */
+export async function ensureTempRole(guild, db, saveLocalStorage) {
+    if (db.config?.tempRoleId) {
+        const existing = guild.roles.cache.get(db.config.tempRoleId);
+        if (existing) return existing;
+    }
+    let role = guild.roles.cache.find(r => r.name === TEMP_ROLE_NAME);
+    if (!role) {
+        role = await guild.roles.create({ name: TEMP_ROLE_NAME, color: TEMP_ROLE_COLOR, reason: '⏳ Temporary role (managed by bot)' }).catch(() => null);
+    }
+    if (role) {
+        if (!db.config) db.config = {};
+        db.config.tempRoleId = role.id;
+        if (saveLocalStorage) saveLocalStorage();
+    }
+    return role;
+}
+
+/**
+ * Assign the "GoW Kids" temp role to a member (creates the role if needed).
+ */
+export async function assignTempRole(member, db, saveLocalStorage, logEvent) {
+    const role = await ensureTempRole(member.guild, db, saveLocalStorage);
+    if (role && !member.roles.cache.has(role.id)) {
+        await member.roles.add(role.id).catch(() => {});
+        if (logEvent) logEvent(`⏳ [Temp Role] Assigned ${TEMP_ROLE_NAME} to ${member.user.username}`);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * True when the member holds any clan role or the GoW Kids temp role
+ * (i.e. is considered a "member" — replaces the old MEMBER_ROLE_ID check).
+ */
+export function hasMemberRole(member, db) {
+    if (!member?.roles) return false;
+    const ids = new Set();
+    for (const roleId of Object.values(db.config?.clanRoles || {})) ids.add(roleId);
+    if (db.config?.tempRoleId) ids.add(db.config.tempRoleId);
+    return member.roles.cache.some(r => ids.has(r.id));
+}
+
+/** Alias used by the sync engine for the same membership check. */
+export const hasAnyMemberRoles = hasMemberRole;
+
+/**
+ * Remove all clan roles and the temp role from a member.
+ */
+export async function removeMemberRoles(member, db) {
+    const ids = new Set();
+    for (const roleId of Object.values(db.config?.clanRoles || {})) ids.add(roleId);
+    if (db.config?.tempRoleId) ids.add(db.config.tempRoleId);
+    for (const id of ids) {
+        if (member.roles.cache.has(id)) await member.roles.remove(id).catch(() => {});
+    }
+}
+
+// ==========================================
+// 🔄 SYNC
+// ==========================================
 
 /**
  * Synchronize clan roles with the current allied clan config.
@@ -93,34 +274,54 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
         return msg;
     }
 
+    // Ensure the GoW Kids temp role exists (needed for temp registrations + claim access)
+    const tempRole = await ensureTempRole(guild, db, saveLocalStorage);
+    const tempRoleId = tempRole ? tempRole.id : null;
+
     // ── 1. Collect allied clans across all worlds ──
     const alliedClans = []; // { worldId, name }
     for (const [worldId, clans] of Object.entries(db.config?.alliedClans || {})) {
         for (const clanName of clans) alliedClans.push({ worldId, name: clanName });
     }
     const alliedClanKeys = new Set(alliedClans.map(c => cleanNickname(c.name)));
+    const styles = assignClanStyles(alliedClans.map(c => ({ name: c.name, clean: cleanNickname(c.name) })));
 
-    // ── 2. Ensure a role exists for every allied clan ──
+    // ── 2. Ensure a role exists for every allied clan (with color + emoji prefix) ──
     if (!db.config.clanRoles) db.config.clanRoles = {};
     const clanRoleIds = [];
     let rolesCreated = 0;
+    let rolesUpdated = 0;
     let rolesFailed = 0;
 
     for (const { name } of alliedClans) {
+        const clean = cleanNickname(name);
+        const style = styles[clean] || { emoji: '⚔️', color: CLAN_COLORS[0] };
+        const desiredName = `${style.emoji} ${name}`;
+
         let role = db.config.clanRoles[name] ? guild.roles.cache.get(db.config.clanRoles[name]) : null;
-        // Match an existing role by cleaned name too (handles casing/symbol diffs)
+        // Match an existing role by cleaned name too (handles casing/symbol diffs + emoji prefix)
         if (!role) {
-            role = guild.roles.cache.find(r => cleanNickname(r.name) === cleanNickname(name));
+            role = guild.roles.cache.find(r => cleanNickname(stripRoleEmoji(r.name)) === clean);
         }
         if (!role) {
             try {
-                role = await guild.roles.create({ name, reason: '🤝 Clan role (managed by /syncroles)' });
+                role = await guild.roles.create({ name: desiredName, color: style.color, reason: '🤝 Clan role (managed by /syncroles)' });
                 rolesCreated++;
-                logEvent(`🤝 [Clan Roles] Created role "${name}"`);
+                logEvent(`🤝 [Clan Roles] Created role "${desiredName}" (color ${style.color.toString(16)})`);
             } catch (e) {
                 rolesFailed++;
                 logEvent(`❌ [Clan Roles] Failed to create role "${name}": ${e.message}`);
                 continue;
+            }
+        } else {
+            // Keep the role in sync: add emoji prefix and ensure the color is right
+            if (role.name !== desiredName) {
+                await role.setName(desiredName).catch(() => {});
+                rolesUpdated++;
+            }
+            if (role.color !== style.color) {
+                await role.setColor(style.color).catch(() => {});
+                rolesUpdated++;
             }
         }
         db.config.clanRoles[name] = role.id;
@@ -130,15 +331,14 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
     // Index roles by CLEANED clan name so lookups match regardless of how the
     // admin typed the clan in config vs. the canonical name stored in the cache
     // (e.g. "GearsofWar" in config vs "GearsofWar シ" in the ranking cache).
-    const clanRoleByClean = {};
-    for (const [name, roleId] of Object.entries(db.config.clanRoles)) {
-        clanRoleByClean[cleanNickname(name)] = roleId;
-    }
+    const clanRoleByClean = buildClanRoleCleanMap(db);
 
     // ── 3. Resolve each registered user's clan (pilots inherit their owner's clan) ──
     const userIdClan = {}; // userId → clanName
+    const tempUserIds = new Set(); // registered users still in their temp window
     for (const [userId, data] of Object.entries(db.users || {})) {
         if (!data || !data.nickname) continue;
+        if (data.tempUntil) tempUserIds.add(userId);
         const lookup = lookupNickname(data.nickname, db, cache);
         if (!lookup.found || !lookup.inAlliedClan) continue;
         userIdClan[userId] = lookup.clanName;
@@ -152,6 +352,8 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
     const clanRoleIdSet = new Set(Object.values(db.config.clanRoles));
     let rolesAssigned = 0;
     let rolesRemoved = 0;
+    let tempsAssigned = 0;
+    let tempsUpgraded = 0;
     let membersProcessed = 0;
 
     if (members) {
@@ -173,6 +375,16 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
                 await member.roles.add(targetRoleId).catch(() => {});
                 rolesAssigned++;
             }
+            // Upgraded to a clan role → drop the GoW Kids temp role
+            if (targetRoleId && tempRoleId && member.roles.cache.has(tempRoleId)) {
+                await member.roles.remove(tempRoleId).catch(() => {});
+                tempsUpgraded++;
+            }
+            // Temp users (still in their temp window, no clan role yet) → GoW Kids
+            if (!targetRoleId && tempUserIds.has(memberId) && tempRoleId && !member.roles.cache.has(tempRoleId)) {
+                await member.roles.add(tempRoleId).catch(() => {});
+                tempsAssigned++;
+            }
         }
     }
 
@@ -190,19 +402,21 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
     }
 
     // ── 6. Restrict claim channels to role holders ──
-    await applyClaimPermissions(guild, client.user.id, clanRoleIds);
+    await applyClaimPermissions(guild, client.user.id, clanRoleIds, tempRoleId);
 
     saveLocalStorage();
 
     const report =
         `🤝 **Clan Roles Synced!**\n\n` +
         `🏰 Allied clans: **${alliedClans.length}**\n` +
-        `🆕 Roles created: **${rolesCreated}**\n` +
+        `🆕 Roles created: **${rolesCreated}** (with colors + emoji prefix)\n` +
+        `🔧 Roles updated: **${rolesUpdated}**\n` +
         `✅ Roles assigned: **${rolesAssigned}**\n` +
         `❌ Roles removed: **${rolesRemoved}**\n` +
         `🗑️ Orphans deleted: **${orphansDeleted}**\n` +
+        `⏳ GoW Kids assigned: **${tempsAssigned}** | upgraded to clan: **${tempsUpgraded}**\n` +
         `👥 Members processed: **${membersProcessed}**\n` +
-        `🔒 Claim channels now restricted to clan/member roles.`;
+        `🔒 Claim channels now restricted to clan roles (temp: ${TEMP_ROLE_NAME}).`;
 
     if (rolesFailed > 0) {
         report += `\n⚠️ **${rolesFailed}** role creation(s) failed (role limit reached?).`;

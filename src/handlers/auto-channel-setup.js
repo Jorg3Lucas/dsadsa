@@ -58,6 +58,10 @@ export async function setupAllChannels(client, guildId) {
             console.error(`❌ [Auto Setup] ${catDef.name} is not a category (type=${category.type}). Use a valid category ID.`);
             continue;
         }
+        // Rename the category to the pretty name if it was found via legacy ID
+        if (category.name !== catDef.name) {
+            await category.setName(catDef.name, "🏗️ [Auto Setup] renamed category").catch(() => {});
+        }
 
         // ── Delete all existing text channels in this category ──
         const existingChannels = guild.channels.cache.filter(
@@ -72,14 +76,16 @@ export async function setupAllChannels(client, guildId) {
             }
         }
 
-        // ── Create new channels ──
+        // ── Create new channels (inheriting the category's permission overwrites) ──
+        const categoryOverwrites = category.permissionOverwrites?.cache?.map(ow => ow) || [];
         for (const chanDef of catDef.channels) {
             let newChannel;
             try {
                 newChannel = await guild.channels.create({
                     name: chanDef.name,
                     type: 0, // GuildText
-                    parent: category.id
+                    parent: category.id,
+                    permissionOverwrites: categoryOverwrites
                 });
                 console.log(`✅ [Auto Setup] Created #${chanDef.name} in ${catDef.name}.`);
             } catch (err) {

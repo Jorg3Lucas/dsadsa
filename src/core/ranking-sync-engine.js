@@ -1,10 +1,10 @@
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, ensureConfig } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, ensureConfig } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { syncClanRoles } from './clan-roles.js';
+import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -64,7 +64,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (memberId !== registeredOwnerId && (!ownerData.pilotIds || !ownerData.pilotIds.includes(memberId))) {
                     logEvent(getMsg('ranking.logs.imposterDetected', { username: member.user.username, nickname: ownerData.nickname }));
                     await member.setNickname(member.user.username).catch(() => {});
-                    if (member.roles.cache.has(MEMBER_ROLE_ID)) await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                    await removeMemberRoles(member, db);
                     continue; 
                 }
             }
@@ -99,19 +99,23 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const member = members.get(memberId);
                     const displayName = userData.nickname || member?.user.username || memberId;
 
-                    if (member && member.roles.cache.has(MEMBER_ROLE_ID)) {
-                        await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                        removedRoleCount++;
-                        logEvent(`🧹 [Ranking Validation] ${member.user.tag} (${displayName}) not found in the EU11 ranking — removed member role (nickname kept)`);
+                    if (member) {
+                        const hadRole = hasAnyMemberRoles(member, db);
+                        await removeMemberRoles(member, db);
+                        if (hadRole) {
+                            removedRoleCount++;
+                            logEvent(`🧹 [Ranking Validation] ${member.user.tag} (${displayName}) not found in the EU11 ranking — removed roles (nickname kept)`);
+                        }
                     }
 
-                    // Also remove the role from any pilots linked to this owner (nickname kept)
+                    // Also remove the roles from any pilots linked to this owner (nickname kept)
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
                         for (const pId of userData.pilotIds) {
                             const pilotMember = members.get(pId);
-                            if (pilotMember && pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                                removedRoleCount++;
+                            if (pilotMember) {
+                                const hadRole = hasAnyMemberRoles(pilotMember, db);
+                                await removeMemberRoles(pilotMember, db);
+                                if (hadRole) removedRoleCount++;
                             }
                         }
                     }
@@ -175,22 +179,18 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         continue;
                     }
 
-                    // Remove role only — keep nickname
+                    // Remove roles only — keep nickname
                     const member = members.get(memberId);
                     if (member) {
-                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                        }
+                        await removeMemberRoles(member, db);
                     }
 
-                    // Also remove any pilots linked to this owner — just remove role, keep nickname
+                    // Also remove any pilots linked to this owner — just remove roles, keep nickname
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
                         for (const pId of userData.pilotIds) {
                             const pilotMember = members.get(pId);
                             if (pilotMember) {
-                                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                                }
+                                await removeMemberRoles(pilotMember, db);
                             }
                             delete db.users[pId];
                         }
@@ -259,9 +259,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${lookup.clanName}`);
                     }
 
-                    if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                        await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                    }
+                    await assignClanRole(prodMember, db, logEvent);
 
                     delete db.preRegistrations[memberId];
                     converted++;
@@ -297,38 +295,32 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 }
             }
 
-            const hasMemberRole = member.roles.cache.has(MEMBER_ROLE_ID);
+            const hasAnyRole = hasAnyMemberRoles(member, db);
 
-            // ── ROLE MANAGEMENT ──
+            // ── ROLE MANAGEMENT (clan roles are the member marker; GoW Kids = temp) ──
             if (isRegistered) {
                 if (ownerData?.manualPermanent) {
-                    // 👑 ManualForce user — always ensure role is present, never remove
-                    if (!hasMemberRole) {
-                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                        logEvent(`[Sync] Restored role for manualforce user ${member.user.username}`);
+                    // 👑 ManualForce user — always ensure access, never remove
+                    const assigned = await assignClanRole(member, db, logEvent);
+                    if (!assigned) {
+                        await assignTempRole(member, db, saveLocalStorage, logEvent);
                     }
                 } else if (ownerData?.tempUntil) {
-                    // ⏳ Temporary registration — keep role until expiry (handled in step 2.75)
-                    if (!hasMemberRole) {
-                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                        logEvent(`[Sync] Restored role for temp user ${member.user.username} (expires ${new Date(ownerData.tempUntil).toLocaleDateString()})`);
-                    }
+                    // ⏳ Temporary registration — keep the GoW Kids temp role until expiry (step 2.75)
+                    await assignTempRole(member, db, saveLocalStorage, logEvent);
                 } else if (inAlliedClan) {
-                    // ✅ In allied clan — ensure role is present
-                    if (!hasMemberRole) {
-                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
-                    }
+                    // ✅ In allied clan — ensure the clan role is present
+                    await assignClanRole(member, db, logEvent);
                 } else {
-                    // ❌ Not in allied clan — remove role (keep registration)
-                    if (hasMemberRole) {
-                        await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                        logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan (registration kept)`);
+                    // ❌ Not in allied clan — remove roles (keep registration)
+                    if (hasAnyRole) {
+                        await removeMemberRoles(member, db);
+                        logEvent(`[Sync] Removed roles from ${member.user.username} — not in allied clan (registration kept)`);
                     }
                 }
-            } else if (!isRegistered && hasMemberRole && rankingValidationEnabled) {
-                // Non-registered user — remove role if validation enabled
-                await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+            } else if (!isRegistered && hasAnyRole && rankingValidationEnabled) {
+                // Non-registered user — remove roles if validation enabled
+                await removeMemberRoles(member, db);
                 logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
             }
 

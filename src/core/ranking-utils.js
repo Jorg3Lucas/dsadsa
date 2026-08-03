@@ -1,19 +1,22 @@
 // ==========================================
 // 🛠️ SHARED UTILITIES
 // ==========================================
-import { MEMBER_ROLE_ID } from './ranking-constants.js';
 import { getMsg } from '../lang/lang.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
+import { assignClanRole, assignTempRole } from './clan-roles.js';
 
 /**
- * Assign the general member role to a verified player
+ * Assign the membership role to a verified player.
+ * The fixed member role was removed from the server — clan roles are now the
+ * member marker, with the GoW Kids role as fallback for temp/unresolved users.
  */
-export async function assignMemberRole(targetMember, logEvent) {
-    if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
+export async function assignMemberRole(targetMember, db, logEvent) {
+    const assigned = await assignClanRole(targetMember, db, logEvent);
+    if (!assigned) {
+        await assignTempRole(targetMember, db, null, logEvent);
     }
+    logEvent(getMsg('ranking.logs.roleAdded', { clan: assigned ? 'Clan' : 'GoW Kids', username: targetMember.user.username }));
 }
 
 /**

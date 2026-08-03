@@ -9,7 +9,6 @@ import {
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
-    MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
     pendingRegistrations,
     pendingPilotApprovals,
@@ -17,6 +16,7 @@ import {
     PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { assignClanRole, assignTempRole } from '../core/clan-roles.js';
 
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS
@@ -118,14 +118,21 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     saveLocalStorage();
 
     await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-    if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+    // Clan role is now the member marker — permanent approvals get their clan
+    // role, temporary approvals get the GoW Kids temp role. If the clan role
+    // can't be resolved right now (stale/empty cache), fall back to GoW Kids so
+    // the new member never ends up with no access.
+    if (isTempApproval) {
+        await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
+    } else {
+        const assigned = await assignClanRole(targetMember, db, logEvent);
+        if (!assigned) await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
     }
 
     const approvalLabel = isTempApproval ? '⏳ TEMPORARILY APPROVED (3 days)' : '✅ APPROVED';
     const dmMsg = isTempApproval
         ? '⏳ **Temporary registration approved!** You have 3 days to join an allied clan and appear in the ranking. After that, your role will be removed if you\'re not in an allied clan.'
-        : '✅ **Registration approved!** You received the member role.';
+        : '✅ **Registration approved!** You received your clan role.';
 
     logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${finalNickname}`);
 
@@ -231,11 +238,8 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
     saveLocalStorage();
 
     await pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {});
-    // Apply member role
-    if (!pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
-    }
+    // Pilots inherit the owner's clan role
+    await assignClanRole(pilotMember, db, logEvent);
 
     logEvent(`${interaction.user.tag} approved pilot ${pilotUserId} for ${pending.ownerNick}`);
 
@@ -302,10 +306,8 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
     saveLocalStorage();
 
     await pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {});
-    if (!pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
-    }
+    // Pilots inherit the owner's clan role
+    await assignClanRole(pilotMember, db, logEvent);
 
     logEvent(`✅ Admin ${interaction.user.tag} approved pilot ${pilotUserId} (${pending.pilotTag}) for owner ${pending.ownerNick}`);
 
