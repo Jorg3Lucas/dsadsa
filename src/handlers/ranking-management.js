@@ -239,32 +239,81 @@ export async function handleManagePilotRemove(interaction, db, saveLocalStorage,
     }).catch(() => {});
 }
 
+// ── Helper: Build paginated world selector view ──
+function buildWorldSelectorView(page = 0) {
+    const MAX_OPTIONS = 25;
+    const allWorlds = Object.entries(WORLD_IDS);
+    const totalPages = Math.ceil(allWorlds.length / MAX_OPTIONS);
+    const startIdx = page * MAX_OPTIONS;
+    const pageWorlds = allWorlds.slice(startIdx, startIdx + MAX_OPTIONS);
+
+    const worldOptions = pageWorlds.map(([id, name]) => ({
+        label: name,
+        description: `World ID ${id}`,
+        value: id
+    }));
+
+    let content = '🌍 **Allied Clans Configuration**\n\nSelect a server to view and manage its allied clans.\n\nMembers will only keep their role if they are in an allied clan of any configured server.';
+    if (totalPages > 1) {
+        content += `\n\n📄 Page ${page + 1}/${totalPages} (${allWorlds.length} total servers)`;
+    }
+
+    const components = [
+        new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('manage_allied_world')
+                .setPlaceholder('Select a server to manage allied clans...')
+                .addOptions(worldOptions)
+        )
+    ];
+
+    // Add pagination buttons if needed
+    if (totalPages > 1) {
+        const paginationButtons = [];
+        if (page > 0) {
+            paginationButtons.push(
+                new ButtonBuilder().setCustomId(`manage_allied_worldpage_${page - 1}`).setLabel('◀️ Prev').setStyle(ButtonStyle.Secondary)
+            );
+        }
+        if (page < totalPages - 1) {
+            paginationButtons.push(
+                new ButtonBuilder().setCustomId(`manage_allied_worldpage_${page + 1}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary)
+            );
+        }
+        if (paginationButtons.length > 0) {
+            components.push(new ActionRowBuilder().addComponents(...paginationButtons));
+        }
+    }
+
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('manage_allied_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
+    ));
+
+    return { content, components };
+}
+
 // ── Allied Clans: Show world selector ──
 export async function handleManageAllied(interaction, db, saveLocalStorage, logEvent) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    const worldOptions = Object.entries(WORLD_IDS).map(([id, name]) => ({
-        label: name,
-        description: `World ID ${id}`,
-        value: id
-    }));
+    const { content, components } = buildWorldSelectorView(0);
+    return interaction.update({ content, components }).catch(() => {});
+}
 
-    const worldMenu = new StringSelectMenuBuilder()
-        .setCustomId('manage_allied_world')
-        .setPlaceholder('Select a server to manage allied clans...')
-        .addOptions(worldOptions);
+// ── Allied Clans: World selector pagination ──
+export async function handleManageAlliedWorldPage(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
 
-    return interaction.update({
-        content: '🌍 **Allied Clans Configuration**\n\nSelect a server to view and manage its allied clans.\n\nMembers will only keep their role if they are in an allied clan of any configured server.',
-        components: [
-            new ActionRowBuilder().addComponents(worldMenu),
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('manage_allied_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
-            )
-        ]
-    }).catch(() => {});
+    // Parse customId: manage_allied_worldpage_{page}
+    const parts = interaction.customId.split('_');
+    const page = parseInt(parts[parts.length - 1], 10);
+
+    const { content, components } = buildWorldSelectorView(page);
+    return interaction.update({ content, components }).catch(() => {});
 }
 
 // ==========================================
