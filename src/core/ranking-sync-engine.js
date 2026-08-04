@@ -358,7 +358,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                                 logEvent(`⚠️ [DM] Failed to send role-removed notice to ${member.user.tag}: ${e.message}`);
                             }
                         }
-                    } else if (!getRoleNotifyFlag(db, memberId, 'noRoleReminderSent')) {
+                    } else if (false && !getRoleNotifyFlag(db, memberId, 'noRoleReminderSent')) {
+                        // DISABLED: No-role reminder DMs removed at user request
                         // Registered but already without role — remind once that they need an allied clan
                         setRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
                         try {
