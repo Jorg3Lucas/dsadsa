@@ -462,7 +462,12 @@ export async function handleManageAlliedAddModal(interaction, db, saveLocalStora
         return interaction.reply({ content: '❌ Permission denied.', flags: 64 }).catch(() => {});
     }
 
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Manage] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const clanName = interaction.fields.getTextInputValue('clan_name').trim();
     const worldId = interaction.fields.getTextInputValue('world_id').trim();
@@ -587,7 +592,12 @@ export async function handleAddClanSuggestion(interaction, db, saveLocalStorage,
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Manage] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const customId = interaction.customId;
     const cacheKey = `${interaction.user.id}-addclan`;

@@ -189,28 +189,24 @@ describe('handlePilotRegistrationModal', () => {
         );
     });
 
-    it('fuzzy matches owner when exact name fails', async () => {
+    it('fuzzy matches owner when exact name fails — shows select menu', async () => {
         interaction.fields.getTextInputValue.mockReturnValue('PlayrOne');
         db.users[OWNER_ID] = { nickname: OWNER_NICK, pilotIds: [] };
         db.users['444444444444444444'] = { nickname: 'OtherPlayer', pilotIds: [] };
 
-        const ownerMember = {
-            createDM: vi.fn().mockResolvedValue({
-                send: vi.fn().mockResolvedValue()
-            })
-        };
-        interaction.guild.members.fetch.mockResolvedValue(ownerMember);
-
         await handlePilotRegistrationModal(interaction, db, saveLocalStorage, logEvent);
 
-        expect(getPending()[PILOT_ID]).toBeDefined();
-        expect(getPending()[PILOT_ID].ownerId).toBe(OWNER_ID);
-        expect(logEvent).toHaveBeenCalledWith(
-            expect.stringContaining('fuzzy matched owner')
-        );
+        // When fuzzy candidates exist, the user is shown a select menu to pick the owner
+        // The pilot is NOT registered until the user selects an owner
         expect(interaction.editReply).toHaveBeenCalledWith(
-            expect.stringContaining('Corrected')
+            expect.objectContaining({
+                content: expect.stringContaining('similar registered owners'),
+                components: expect.any(Array)
+            })
         );
+
+        // No pending registration yet — waiting for user to select owner
+        expect(getPending()[PILOT_ID]).toBeUndefined();
     });
 });
 

@@ -81,7 +81,12 @@ export function handleWelcomeRegisterPilot(interaction) {
 
 // ── Welcome: Remove my registration (self-service) ──
 export async function handleWelcomeRemoveRegistration(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Welcome] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const userId = interaction.user.id;
     const userData = db.users[userId];
@@ -114,7 +119,12 @@ export async function handleWelcomeRemoveRegistration(interaction, db, saveLocal
 
 // ── Confirm: remove my own registration ──
 export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Welcome] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     if (interaction.customId === 'selfremove_no') {
         return interaction.editReply({ content: '❌ Cancelled.', components: [] });
@@ -168,7 +178,12 @@ export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage,
 
 // ── Welcome: Remove a pilot (self-service, owner removes their own pilot) ──
 export async function handleWelcomeRemovePilot(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Welcome] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const userData = db.users[interaction.user.id];
     const isActuallyRegistered = userData && (userData.registeredAt || userData.manual === true);

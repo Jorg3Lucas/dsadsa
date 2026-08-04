@@ -65,7 +65,12 @@ function findOwnerCandidates(ownerNick, db, limit = 3) {
 
 // ── Pilot Registration Modal ──
 export async function handlePilotRegistrationModal(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Pilot] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const ownerNick = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
     const pilotId = interaction.user.id;
@@ -107,7 +112,12 @@ export async function handlePilotRegistrationModal(interaction, db, saveLocalSto
 
 // ── Select Menu: user picks which registered owner is their pilot's owner ──
 export async function handleUserSelectPilotOwner(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Pilot] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const pilotId = interaction.customId.replace('user_select_pilot_owner_', '');
     const ownerId = interaction.values[0];
@@ -191,7 +201,12 @@ async function completePilotRegistration(interaction, db, saveLocalStorage, logE
 
 // ── Pilot Removal (user removing their own pilot) ──
 export async function handlePilotRemoveSelect(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Pilot] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const pilotToRemoveId = interaction.values[0];
     const userProfile = db.users[interaction.user.id];
@@ -223,7 +238,12 @@ export async function handlePilotRemoveSelect(interaction, db, saveLocalStorage,
 
 // ── Owner removes pilot via DM button (after admin approval) ──
 export async function handleOwnerRemovePilotDm(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Pilot] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const pilotUserId = interaction.customId.replace('owner_remove_pilot_', '');
     const ownerId = interaction.user.id;

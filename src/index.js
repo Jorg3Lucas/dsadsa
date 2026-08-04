@@ -154,181 +154,126 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // ==========================================
-// 🖱️ INTERACTION CREATE EVENT
+// 🖱️ INTERACTION ROUTER
 // ==========================================
+// Map-based router: exact match (O(1)) first, prefix match as fallback.
+// This replaces the old if/else chain for faster routing.
+
+
+// ── Slash commands ──
+const COMMAND_ROUTES = new Map([
+    ['notify', handleNotifyCommand],
+]);
+
+// ── Exact match routes ──
+const BUTTON_EXACT = new Map([
+    ['welcome_register_owner', handleWelcomeRegisterOwner],
+    ['welcome_register_pilot', handleWelcomeRegisterPilot],
+    ['welcome_remove_registration', handleWelcomeRemoveRegistration],
+    ['welcome_remove_pilot', handleWelcomeRemovePilot],
+    ['selfremove_yes', handleSelfRemoveConfirm],
+    ['selfremove_no', handleSelfRemoveConfirm],
+    ['restorebackup-confirm', handleRestoreBackupConfirm],
+    ['restorebackup-cancel', handleRestoreBackupCancel],
+    ['manage_allied', handleManageAllied],
+    ['manage_allied_region', handleManageAlliedRegion],
+    ['manage_allied_world', handleManageAlliedWorld],
+    ['manage_allied_remove', handleManageAlliedRemove],
+    ['manage_back', handleManageNav],
+    ['manage_allied_back', handleManageNav],
+]);
+
+const SELECT_EXACT = new Map([
+    ['notify_select_action', handleNotifySelect],
+    ['select_pilot_to_remove', handlePilotRemoveSelect],
+    ['restorebackup_select', handleRestoreBackupSelect],
+    ['manage_allied_region', handleManageAlliedRegion],
+    ['manage_allied_world', handleManageAlliedWorld],
+    ['manage_allied_remove', handleManageAlliedRemove],
+]);
+
+const MODAL_EXACT = new Map([
+    ['register_owner_modal', handleOwnerRegistrationModal],
+    ['register_pilot_modal', handlePilotRegistrationModal],
+    ['manage_allied_add_modal', handleManageAlliedAddModal],
+]);
+
+// ── Prefix match routes (order matters: longest prefix first) ──
+const BUTTON_PREFIX = [
+    ['admin_approve_pilot_', handleAdminApprovePilot],
+    ['owner_remove_pilot_', handleOwnerRemovePilotDm],
+    ['approve_owner_', handleApproveOwner],
+    ['approve_pilot_', handleApprovePilot],
+    ['manage_user_prev_', handleManageNav],
+    ['manage_user_next_', handleManageNav],
+    ['manage_allied_add_', handleManageAlliedAdd],
+    ['confirm-addclan-', handleAddClanSuggestion],
+    ['confirm-', handleConfirmAction],
+    ['notify_', handleNotifyButton],
+    ['manage_', handleMir4Interactions],  // fallback for manage_
+];
+
+const SELECT_PREFIX = [
+    ['user_select_pilot_owner_', handleUserSelectPilotOwner],
+    ['user_select_reg_nickname_', handleUserSelectRegistrationNickname],
+    ['select_manual_nickname_', handleSelectManualNickname],
+    ['manage_user_page_', handleManageUserPage],
+    ['manage_action_', handleManageAction],
+    ['manage_pilot_', handleManagePilotRemove],
+    ['manage_allied_page_', handleManageAlliedPage],
+];
+
+const MODAL_PREFIX = [
+    ['reject_owner_', handleRejectOwner],
+];
+
+// ── Route resolver ──
+function resolveHandler(customId, exactMap, prefixList) {
+    // Fast path: exact match
+    const exact = exactMap.get(customId);
+    if (exact) return exact;
+
+    // Slow path: prefix match
+    for (const [prefix, handler] of prefixList) {
+        if (customId.startsWith(prefix)) return handler;
+    }
+
+    return null;
+}
+
+// ── Main interaction handler ──
 client.on('interactionCreate', async (interaction) => {
     try {
-        // A. SLASH COMMANDS (/)
-        if (interaction.isCommand()) {
-            // Notify command
-            if (interaction.commandName === 'notify') {
-                return await handleNotifyCommand(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
+        const { customId } = interaction;
 
+        // A. SLASH COMMANDS
+        if (interaction.isCommand()) {
+            const handler = COMMAND_ROUTES.get(interaction.commandName);
+            if (handler) {
+                return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
             const result = await handleRankingCommand(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            // Fallback: if command wasn't handled by new module, try giant file (e.g. scanimport)
             if (result !== false) return;
             return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
         }
 
         // B. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
-            // Notify select menu
-            if (interaction.customId === 'notify_select_action') {
-                return await handleNotifySelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Pilot registration: user picks the correct owner from fuzzy candidates
-            if (interaction.customId.startsWith('user_select_pilot_owner_')) {
-                return await handleUserSelectPilotOwner(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Pilot removal (user removing their own pilot)
-            if (interaction.customId === 'select_pilot_to_remove') {
-                return await handlePilotRemoveSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Registration nickname selection (user choosing between typed vs suggestions)
-            if (interaction.customId.startsWith('user_select_reg_nickname_')) {
-                return await handleUserSelectRegistrationNickname(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Manualregister nickname selection
-            if (interaction.customId.startsWith('select_manual_nickname_')) {
-                return await handleSelectManualNickname(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Restore backup select menu
-            if (interaction.customId === 'restorebackup_select') {
-                return await handleRestoreBackupSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Manage menu routing
-            if (interaction.customId.startsWith('manage_user_page_')) {
-                return await handleManageUserPage(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId.startsWith('manage_action_')) {
-                return await handleManageAction(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId.startsWith('manage_pilot_')) {
-                return await handleManagePilotRemove(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'manage_allied_region') {
-                return await handleManageAlliedRegion(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'manage_allied_world') {
-                return await handleManageAlliedWorld(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId.startsWith('manage_allied_page_')) {
-                return await handleManageAlliedPage(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'manage_allied_remove') {
-                return await handleManageAlliedRemove(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
+            const handler = resolveHandler(customId, SELECT_EXACT, SELECT_PREFIX);
+            if (handler) return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
         }
 
         // C. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'register_owner_modal') {
-                return await handleOwnerRegistrationModal(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'register_pilot_modal') {
-                return await handlePilotRegistrationModal(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId.startsWith('reject_owner_')) {
-                return await handleRejectOwner(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'manage_allied_add_modal') {
-                return await handleManageAlliedAddModal(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            // Fallback for any other modal submits not caught above
-            return;
+            const handler = resolveHandler(customId, MODAL_EXACT, MODAL_PREFIX);
+            if (handler) return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            return; // unhandled modal — acknowledge silently
         }
 
         // D. BUTTON CLICKS
         if (interaction.isButton()) {
-            // Notify buttons
-            if (interaction.customId.startsWith('notify_')) {
-                return await handleNotifyButton(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Welcome buttons (register owner / pilot)
-            if (interaction.customId === 'welcome_register_owner') {
-                return handleWelcomeRegisterOwner(interaction);
-            }
-            if (interaction.customId === 'welcome_register_pilot') {
-                return handleWelcomeRegisterPilot(interaction);
-            }
-
-            // Welcome: self-service remove registration / pilot
-            if (interaction.customId === 'welcome_remove_registration') {
-                return await handleWelcomeRemoveRegistration(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'welcome_remove_pilot') {
-                return await handleWelcomeRemovePilot(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'selfremove_yes' || interaction.customId === 'selfremove_no') {
-                return await handleSelfRemoveConfirm(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Admin approval buttons (approve/reject owner registration)
-            if (interaction.customId.startsWith('approve_owner_')) {
-                return await handleApproveOwner(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Pilot approval buttons (owner approves/rejects via DM)
-            if (interaction.customId.startsWith('approve_pilot_')) {
-                return await handleApprovePilot(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Admin pilot approval buttons (admin approves/rejects from admin channel)
-            if (interaction.customId.startsWith('admin_approve_pilot_')) {
-                return await handleAdminApprovePilot(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Owner remove pilot button (from DM after admin approval)
-            if (interaction.customId.startsWith('owner_remove_pilot_')) {
-                return await handleOwnerRemovePilotDm(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Confirmation buttons (confirm-manualremove, confirm-manualregister, etc.)
-            if (interaction.customId.startsWith('confirm-')) {
-                return await handleConfirmAction(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Restore backup buttons
-            if (interaction.customId === 'restorebackup-confirm') {
-                return await handleRestoreBackupConfirm(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId === 'restorebackup-cancel') {
-                return await handleRestoreBackupCancel(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Manage navigation buttons (back, prev, next)
-            if (interaction.customId === 'manage_back' ||
-                interaction.customId === 'manage_allied_back' ||
-                interaction.customId.startsWith('manage_user_prev_') ||
-                interaction.customId.startsWith('manage_user_next_')) {
-                return await handleManageNav(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Manage: Allied clans buttons
-            if (interaction.customId === 'manage_allied') {
-                return await handleManageAllied(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId.startsWith('manage_allied_add_')) {
-                return await handleManageAlliedAdd(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Allied clans: suggestion buttons (add clan modal fuzzy flow)
-            if (interaction.customId.startsWith('confirm-addclan-')) {
-                return await handleAddClanSuggestion(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-
-            // Fallback: any remaining manage_ prefixed button
-            if (interaction.customId.startsWith('manage_')) {
-                return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
+            const handler = resolveHandler(customId, BUTTON_EXACT, BUTTON_PREFIX);
+            if (handler) return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
         }
 
     } catch (error) {

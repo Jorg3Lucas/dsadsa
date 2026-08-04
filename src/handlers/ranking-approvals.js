@@ -146,7 +146,12 @@ export async function handleRejectOwner(interaction, db, saveLocalStorage, logEv
         return interaction.reply({ content: '❌ You do not have permission to reject registrations.', flags: 64 });
     }
 
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Approvals] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const userId = interaction.customId.replace('reject_owner_', '');
     const reason = interaction.fields.getTextInputValue('reject_reason').trim();
@@ -186,7 +191,12 @@ export async function handleRejectOwner(interaction, db, saveLocalStorage, logEv
 
 // ── Owner DM Approval: Pilot Registration ──
 export async function handleApprovePilot(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Approvals] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const rest = interaction.customId.replace('approve_pilot_', '');
     const [pilotUserId, result] = rest.split('-');
@@ -248,7 +258,12 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
 // ── Admin Approval: Pilot Registration ──
 // When an admin approves a pilot, the owner gets a DM with info and a button to remove if not theirs.
 export async function handleAdminApprovePilot(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Approvals] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const rest = interaction.customId.replace('admin_approve_pilot_', '');
     const [pilotUserId, result] = rest.split('-');

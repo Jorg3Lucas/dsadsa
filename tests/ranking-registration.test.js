@@ -193,14 +193,18 @@ describe('handleOwnerRegistrationModal', () => {
 
         await handleOwnerRegistrationModal(interaction, db, saveLocalStorage, logEvent);
 
-        // Fuzzy note in the admin message
-        const sendArgs = adminChannel.send.mock.calls[0][0];
-        expect(sendArgs.content).toContain('Fuzzy suggestion');
-        expect(sendArgs.content).toContain('PlayrOne');
-        expect(sendArgs.content).toContain('PlayerOne');
+        // When suggestions exist, the user is shown a select menu to pick the exact name
+        // The admin channel is NOT called until the user selects a name
+        expect(interaction.editReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                content: expect.stringContaining('similar names'),
+                components: expect.any(Array)
+            })
+        );
 
-        // Should have 2 component rows: select menu + buttons
-        expect(sendArgs.components.length).toBe(2);
+        // Pending saved with awaitingSelection flag
+        expect(getPending()[USER_ID]).toBeDefined();
+        expect(getPending()[USER_ID].awaitingSelection).toBe(true);
     });
 
     it('shows allied clan status', async () => {

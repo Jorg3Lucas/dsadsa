@@ -26,7 +26,12 @@ export async function handleScanImport(interaction, db, saveLocalStorage, logEve
     if (user.id !== SUPER_ADMIN_USER_ID) {
         return interaction.reply({ content: `❌ Only <@${SUPER_ADMIN_USER_ID}> can use this command.`, flags: 64 });
     }
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Scan] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const prodGuild = interaction.guild;
     if (prodGuild.id !== DISCORD_SERVER_ID) {
@@ -509,7 +514,12 @@ let report = `📥 **Scan Import Complete**\n\n`;
 
 export async function handleScanImportStatus(interaction, db, saveLocalStorage, logEvent) {
     const { guild } = interaction;
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [ScanStatus] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     if (guild.id !== DISCORD_SERVER_ID) {
         return interaction.editReply('❌ This command must be run in the main production server.');

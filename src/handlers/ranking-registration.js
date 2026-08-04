@@ -16,7 +16,13 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 
 export async function handleOwnerRegistrationModal(interaction, db, saveLocalStorage, logEvent) {
     if (!db.users) db.users = {};
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        // Interaction expired (10062) or already acknowledged — can't respond
+        console.warn(`⚠️ [Registration] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const nickname = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
     const userId = interaction.user.id;
@@ -76,7 +82,12 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
 
 // ── User confirms the exact nickname from the fuzzy suggestions ──
 export async function handleUserSelectRegistrationNickname(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Registration] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const userId = interaction.customId.replace('user_select_reg_nickname_', '');
     const selectedNick = interaction.values[0];
