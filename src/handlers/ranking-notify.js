@@ -13,6 +13,7 @@ import {
     STANDBY_CHANNEL_ID,
     adminChannelId
 } from '../core/ranking-constants.js';
+import { deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // 📧 NOTIFY COMMAND HANDLERS
@@ -185,7 +186,7 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
 
     // ── Confirm: Notify no-role members via DM ──
     if (customId === 'notify_confirm_no_role') {
-        await interaction.deferUpdate();
+        if (!await deferUpdateSafe(interaction)) return;
         delete pendingNotifications[interaction.user.id];
 
         const allMembers = await interaction.guild.members.fetch().catch(() => null);
@@ -240,7 +241,7 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
 
     // ── Confirm: Domination notification via DM ──
     if (customId === 'notify_confirm_domination') {
-        await interaction.deferUpdate();
+        if (!await deferUpdateSafe(interaction)) return;
         delete pendingNotifications[interaction.user.id];
 
         // Collect all guild members with the member role
@@ -297,7 +298,7 @@ export async function handleNotifyButton(interaction, db, saveLocalStorage, logE
 
     // ── Confirm: Standby notification via DM ──
     if (customId === 'notify_confirm_standby') {
-        await interaction.deferUpdate();
+        if (!await deferUpdateSafe(interaction)) return;
         delete pendingNotifications[interaction.user.id];
 
         // Collect all guild members with the member role

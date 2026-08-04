@@ -29,6 +29,7 @@ import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
+import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -68,11 +69,14 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── removepilot ──
     if (commandName === 'removepilot') {
+        // Defer immediately: we fetch guild members below, which can exceed Discord's 3s reply window
+        if (!await deferReplySafe(interaction)) return;
+
         const userProfile = db.users[user.id];
         const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
 
         if (!isActuallyRegistered || !userProfile.pilotIds || userProfile.pilotIds.length === 0) {
-            return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), flags: 64 });
+            return interaction.editReply({ content: getMsg('ranking.responses.removepilot.noPilots') });
         }
 
         const menuOptions = [];
@@ -95,16 +99,15 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         const row = new ActionRowBuilder().addComponents(pilotMenu);
 
-        return interaction.reply({
+        return interaction.editReply({
             content: getMsg('ranking.responses.removepilot.menuContent'),
-            components: [row],
-            flags: 64
+            components: [row]
         });
     }
 
     // ── forcesync ──
     if (commandName === 'forcesync') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
         logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
         await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
 
@@ -115,6 +118,9 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── manualregister ──
     if (commandName === 'manualregister') {
+        // Defer immediately: the ranking-cache lookups below can take several seconds
+        if (!await deferReplySafe(interaction)) return;
+
         const targetMember = options.getMember('member');
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
@@ -147,7 +153,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 selectedNickname: nickname
             };
 
-            return interaction.reply({
+            return interaction.editReply({
                 content: getMsg('ranking.responses.manualregister.confirm', { nickname: lookup.nickname, clan: lookup.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}${hasSuggestions ? '\n\n📌 Use the **dropdown below** to select a different nickname before confirming.' : ''}`,
                 components: [
                     ...(nicknameRow ? [nicknameRow] : []),
@@ -155,8 +161,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                         new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                     )
-                ],
-                flags: 64
+                ]
             });
         }
 
@@ -173,7 +178,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 selectedNickname: nickname
             };
 
-            return interaction.reply({
+            return interaction.editReply({
                 content: `❌ **"${nickname}" not found in ranking.**\n\nHowever, there are similar nicknames available. Select one from the dropdown below and confirm to register as temporary (3 days).${hasSuggestions ? '\n\n📌 Use the **dropdown below** to select a different nickname before confirming.' : ''}`,
                 components: [
                     ...(nicknameRow ? [nicknameRow] : []),
@@ -181,8 +186,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                         new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                     )
-                ],
-                flags: 64
+                ]
             });
         }
 
@@ -196,15 +200,14 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             selectedNickname: nickname
         };
 
-        return interaction.reply({
+        return interaction.editReply({
             content: `❌ **"${nickname}" not found in ranking.** Register as temporary (3 days) anyway? The user will be converted to permanent once found in an allied clan during daily sync.`,
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                     new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                 )
-            ],
-            flags: 64
+            ]
         });
     }
 
@@ -284,7 +287,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── cleandb ──
     if (commandName === 'cleandb') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
         const seenNicknames = {};
         const duplicatesRemoved = [];
 
@@ -416,7 +419,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── sendpanel ──
     if (commandName === 'sendpanel') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: buildWelcomePanelComponents() });
 
@@ -431,7 +434,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── listunregistered ──
     if (commandName === 'listunregistered') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const doNotify = options.getBoolean('notify') || false;
 
@@ -513,7 +516,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── pending ──
     if (commandName === 'pending') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const ownerEntries = Object.entries(pendingRegistrations);
         const pilotEntries = Object.entries(pendingPilotApprovals);
@@ -734,7 +737,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── stats ──
     if (commandName === 'stats') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         // Count owners (registered users who are not pilots of someone else)
         const pilotIdSet = new Set();
@@ -854,7 +857,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
         }
 
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         try {
             const fs = await import('node:fs');
@@ -896,7 +899,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
         }
 
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const fs = await import('node:fs');
         const DB_RANKING_PATH = './database_ranking.json';
@@ -1042,7 +1045,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
         }
 
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const fs = await import('node:fs');
         const BACKUP_DIR = './backups';
@@ -1120,7 +1123,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── checkdb ──
     if (commandName === 'checkdb') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const fs = await import('node:fs');
         const DB_RANKING_PATH = './database_ranking.json';
@@ -1234,7 +1237,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── refreshnames ──
     if (commandName === 'refreshnames') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const allMembers = await guild.members.fetch().catch(() => null);
         if (!allMembers || allMembers.size === 0) {
@@ -1339,7 +1342,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── scanrebuild ──
     if (commandName === 'scanrebuild') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const allMembers = await guild.members.fetch().catch(() => null);
         if (!allMembers || allMembers.size === 0) {
@@ -1508,7 +1511,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
 // ── Select Menu: Admin chooses nickname for manualregister ──
 export async function handleSelectManualNickname(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const userId = interaction.customId.replace('select_manual_nickname_', '');
     const selectedNick = interaction.values[0];

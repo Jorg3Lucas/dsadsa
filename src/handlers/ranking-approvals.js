@@ -17,6 +17,7 @@ import {
     PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS
@@ -48,7 +49,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
             interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
         if (!canApprove) {
-            await interaction.deferUpdate();
+            if (!await deferUpdateSafe(interaction)) return;
             return interaction.followUp({ content: '❌ You do not have permission to reject registrations.', flags: 64 });
         }
 
@@ -69,7 +70,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         return interaction.showModal(modal);
     }
 
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
         interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));

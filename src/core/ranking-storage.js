@@ -101,6 +101,7 @@ function loadPendingBackup() {
 let databaseLoaded = false;
 let databaseLoadTime = null;
 let lastSaveTime = null;
+let currentRankingDb = null;
 let lastSaveUserCount = 0;
 let saveCount = 0;
 
@@ -144,15 +145,23 @@ export async function saveRankingStorage(rankingDb) {
     await acquireLock();
     
     try {
+        // Resolve the effective database: handlers/events/sync call save() with no args,
+        // so fall back to the last loaded database (which they mutate in place).
+        const effectiveDb = (rankingDb && typeof rankingDb === 'object') ? rankingDb : currentRankingDb;
+        if (!effectiveDb || typeof effectiveDb !== 'object') {
+            console.error('❌ [Storage] BLOCKED: No database reference available to save.');
+            return false;
+        }
+
         // SAFETY: Don't save if database hasn't been loaded yet and has no users
-        if (!databaseLoaded && !hasUsers(rankingDb)) {
+        if (!databaseLoaded && !hasUsers(effectiveDb)) {
             console.error('⚠️ [Storage] BLOCKED: Database not loaded and no users — refusing to save empty data!');
             console.error('💡 [Storage] This prevents accidental data loss. Load the database first.');
             return false;
         }
 
         // SAFETY: Don't save if we would decrease user count significantly (data loss detection)
-        const currentUserCount = Object.keys(rankingDb.users || {}).length;
+        const currentUserCount = Object.keys(effectiveDb.users || {}).length;
         if (databaseLoaded && lastSaveUserCount > 0 && currentUserCount < lastSaveUserCount * 0.5) {
             console.error(`⚠️ [Storage] DATA LOSS DETECTED! Users dropped from ${lastSaveUserCount} to ${currentUserCount}`);
             console.error('⚠️ [Storage] Refusing to save. Run /restorebackup to recover.');
@@ -167,7 +176,7 @@ export async function saveRankingStorage(rankingDb) {
         }
 
         // Prepare data to save
-        const dbToSave = { ...rankingDb };
+        const dbToSave = { ...effectiveDb };
         dbToSave._metadata = {
             savedAt: new Date().toISOString(),
             userCount: currentUserCount,
@@ -226,7 +235,12 @@ export async function saveRankingStorage(rankingDb) {
 // Synchronous wrapper for backward compatibility
 export function saveRankingStorageSync(rankingDb) {
     // For critical saves (shutdown), use sync version
-    if (!databaseLoaded && !hasUsers(rankingDb)) {
+    const effectiveDb = (rankingDb && typeof rankingDb === 'object') ? rankingDb : currentRankingDb;
+    if (!effectiveDb || typeof effectiveDb !== 'object') {
+        console.error('❌ [Storage] BLOCKED: No database reference available to save.');
+        return false;
+    }
+    if (!databaseLoaded && !hasUsers(effectiveDb)) {
         console.error('⚠️ [Storage] BLOCKED: Refusing to save empty data on shutdown!');
         return false;
     }
@@ -235,10 +249,10 @@ export function saveRankingStorageSync(rankingDb) {
         // Create backup
         try { runBackup(['./database_ranking.json']); } catch (e) {}
 
-        const dbToSave = { ...rankingDb };
+        const dbToSave = { ...effectiveDb };
         dbToSave._metadata = {
             savedAt: new Date().toISOString(),
-            userCount: Object.keys(rankingDb.users || {}).length,
+            userCount: Object.keys(effectiveDb.users || {}).length,
             version: '2.0'
         };
         dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
@@ -250,7 +264,7 @@ export function saveRankingStorageSync(rankingDb) {
         savePendingBackup();
         
         lastSaveTime = Date.now();
-        lastSaveUserCount = Object.keys(rankingDb.users || {}).length;
+        lastSaveUserCount = Object.keys(effectiveDb.users || {}).length;
         saveCount++;
         
         return true;
@@ -327,6 +341,8 @@ function findBestBackup() {
  */
 export function loadLocalStorageRanking() {
     const rankingDb = { users: {} };
+    // Track the loaded db so no-arg save() calls (handler/event pattern) can persist it
+    currentRankingDb = rankingDb;
     
     console.log('📂 [Storage] Loading database...');
     console.log(`📂 [Storage] Path: ${path.resolve(DB_RANKING_PATH)}`);

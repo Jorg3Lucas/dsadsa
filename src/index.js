@@ -37,6 +37,7 @@ import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, isDatabaseLoaded, hasUsers, getStorageStats } from './core/ranking-storage.js';
+import { isExpiredError } from './core/interaction-utils.js';
 
 const client = new Client({
     intents: [
@@ -53,6 +54,9 @@ const client = new Client({
 let rankingDb = {
     users: {}
 };
+
+// Handlers/events call save with no arguments — wrap so the current in-memory db is saved
+const saveRankingStorageWrapped = (db) => saveRankingStorage(db || rankingDb);
 
 // ==========================================
 // 🚀 STARTUP VALIDATION
@@ -93,12 +97,12 @@ client.once('clientReady', async () => {
         console.error('❌ Error: Invalid Server ID configuration.');
     }
 
-    initMir4BotEvents(client, rankingDb, (db) => saveRankingStorage(db || rankingDb), logRankingEvent);
+    initMir4BotEvents(client, rankingDb, saveRankingStorageWrapped, logRankingEvent);
 
     // Start sync after 15 seconds (give time for everything to initialize)
     setTimeout(async () => {
         console.log('🧪 [Startup] Checking if ranking needs sync...');
-        await runDailySynchronization(client, rankingDb, (db) => saveRankingStorage(db || rankingDb), logRankingEvent, false);
+        await runDailySynchronization(client, rankingDb, saveRankingStorageWrapped, logRankingEvent, false);
     }, 15000);
 
     // Start auto-backup every 30 minutes
@@ -250,38 +254,46 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.isCommand()) {
             const handler = COMMAND_ROUTES.get(interaction.commandName);
             if (handler) {
-                return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+                return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
             }
-            const result = await handleRankingCommand(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            const result = await handleRankingCommand(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
             if (result !== false) return;
-            return await handleMir4Interactions(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            return await handleMir4Interactions(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
         }
 
         // B. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
             const handler = resolveHandler(customId, SELECT_EXACT, SELECT_PREFIX);
-            if (handler) return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            if (handler) return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
         }
 
         // C. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
             const handler = resolveHandler(customId, MODAL_EXACT, MODAL_PREFIX);
-            if (handler) return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            if (handler) return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
             return; // unhandled modal — acknowledge silently
         }
 
         // D. BUTTON CLICKS
         if (interaction.isButton()) {
             const handler = resolveHandler(customId, BUTTON_EXACT, BUTTON_PREFIX);
-            if (handler) return await handler(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            if (handler) return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
         }
 
     } catch (error) {
+        // 10062 = interaction already expired / already handled — nothing to respond to, keep to one log line
+        if (isExpiredError(error)) {
+            const target = interaction.customId || interaction.commandName || 'unknown interaction';
+            console.warn(`⚠️ [Router] Interaction expired on "${target}" (${error.code || 10062}) — skipping`);
+            return;
+        }
         console.error('❌ Error caught in interaction router:', error);
         if (error.stack) console.error('📋 [Stack]:', error.stack);
         try {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: '❌ An unexpected error occurred. Please try again.', flags: 64 }).catch(() => {});
+            } else if (interaction.deferred && !interaction.replied) {
+                await interaction.editReply({ content: '❌ An unexpected error occurred. Please try again.' }).catch(() => {});
             }
         } catch (e) {
             // Silently fail
