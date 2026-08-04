@@ -34,7 +34,8 @@ TOKEN=your_discord_bot_token
 |----------|-------|-------------|
 | `DISCORD_SERVER_ID` | `1481566364631044119` | Your Discord server ID |
 | `MEMBER_ROLE_ID` | `1481568299966926879` | Role assigned to registered members |
-| `WORLD_IDS` | `{611,612,...}` | EU world IDs mapped to server names |
+| `WORLD_IDS` | `{611, 711, 511, 811, ...}` | All world IDs mapped to server names (EU, SA, NA, ASIA1, ASIA2, ASIA3, INMENA) |
+| `WORLD_GROUP_IDS` | `{611:3, 711:5, ...}` | World group ID per region (3=EU1, 5=SA1, 2=NA1, 1=ASIA1, 11=ASIA2, 21=ASIA3, 6=INMENA1) |
 
 ---
 

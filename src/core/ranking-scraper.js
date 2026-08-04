@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { saveRankingCache, getLocalRankingCache } from './ranking-cache.js';
-import { WORLD_IDS } from './ranking-constants.js';
+import { WORLD_IDS, WORLD_GROUP_IDS } from './ranking-constants.js';
 import { getMsg } from '../lang/lang.js';
 
 // ==========================================
@@ -9,8 +9,10 @@ import { getMsg } from '../lang/lang.js';
 // ==========================================
 
 /**
- * Fetch ranking data for all EU1 worlds.
+ * Fetch ranking data for all configured worlds across all regions.
  * Returns an object: { "611": { "PlayerName": "ClanName", ... }, "612": {...} }
+ *
+ * Worlds are grouped by region (worldgroupId) and scraped efficiently.
  */
 export async function fetchMir4RankingData(forceRefresh = false) {
     if (!forceRefresh) {
@@ -20,19 +22,20 @@ export async function fetchMir4RankingData(forceRefresh = false) {
 
     const result = {};
     const worldIds = Object.keys(WORLD_IDS);
-    const baseUrl = 'https://forum.mir4global.com/rank?ranktype=1&worldgroupid=3&classtype=&searchname=';
+    const baseUrl = 'https://forum.mir4global.com/rank?ranktype=1&classtype=&searchname=';
 
     for (let i = 0; i < worldIds.length; i++) {
         const worldId = worldIds[i];
         const serverName = WORLD_IDS[worldId];
-        console.log(`🌍 Fetching ranking for ${serverName} (worldid=${worldId})...`);
+        const worldgroupId = WORLD_GROUP_IDS[worldId] || 3; // default to EU if unknown
+        console.log(`🌍 Fetching ranking for ${serverName} (worldid=${worldId}, group=${worldgroupId})...`);
         const rankingMap = {};
 
         for (let page = 1; page <= 10; page++) {
             let success = false;
             for (let attempt = 1; attempt <= 3 && !success; attempt++) {
                 try {
-                    const { data } = await axios.get(`${baseUrl}&worldid=${worldId}&page=${page}`, {
+                    const { data } = await axios.get(`${baseUrl}&worldgroupid=${worldgroupId}&worldid=${worldId}&page=${page}`, {
                         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
                         timeout: 60000
                     });
