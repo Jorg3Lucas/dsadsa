@@ -13,7 +13,7 @@ import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRe
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
 import { handleConfirmAction, handleRestoreBackupSelect, handleRestoreBackupCancel, handleRestoreBackupConfirm } from './handlers/ranking-confirmations.js';
-import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
+import { handleRankingCommand, handleSelectManualNickname, handleSelectPendingNickname, handleSelectPendingPilotOwner } from './handlers/ranking-commands.js';
 import {
     handleNotifyCommand,
     handleNotifySelect,
@@ -221,6 +221,8 @@ const SELECT_PREFIX = [
     ['user_select_pilot_owner_', handleUserSelectPilotOwner],
     ['user_select_reg_nickname_', handleUserSelectRegistrationNickname],
     ['select_manual_nickname_', handleSelectManualNickname],
+    ['select_pending_nickname_', handleSelectPendingNickname],
+    ['select_pending_pilot_owner_', handleSelectPendingPilotOwner],
     ['manage_user_page_', handleManageUserPage],
     ['manage_action_', handleManageAction],
     ['manage_pilot_', handleManagePilotRemove],

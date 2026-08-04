@@ -19,9 +19,9 @@ import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 // ==========================================
 // Extracted from ranking-handlers.js
 
-// ── Fuzzy owner candidates (shared with modal + select flow) ──
+// ── Fuzzy owner candidates (shared with modal + select flow + /pending) ──
 // Returns up to `limit` registered owners sorted by similarity to the typed nickname.
-function findOwnerCandidates(ownerNick, db, limit = 3) {
+export function findOwnerCandidates(ownerNick, db, limit = 3) {
     const cleanedInput = cleanNickname(ownerNick);
     if (cleanedInput.length < 2) return [];
 
