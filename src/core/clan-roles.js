@@ -139,8 +139,15 @@ async function applyClaimPermissions(guild, botId, clanRoleIds, tempRoleId) {
 /**
  * Resolve the "member" role IDs (clan roles + GoW Kids temp role) from the
  * database, auto-discovering them on the server by name when the stored map is
- * empty or stale (e.g. roles created manually or the DB was reset).
+ * empty or stale (e.g. roles created manually or the DB was wiped).
  * Discovered IDs are persisted back into db.config by the caller.
+ *
+ * Candidate clan names come from TWO sources:
+ *   1. db.config.alliedClans — the configured allied list;
+ *   2. the ranking cache — every clan present in the synced ranking. This makes
+ *      the sync self-healing: if the DB config was lost but the clan roles still
+ *      exist on the server (created by a previous /syncroles), the bot finds
+ *      them and re-populates db.config.alliedClans + db.config.clanRoles.
  * @param {import('discord.js').Guild} guild
  * @param {object} db
  * @param {Function} [logEvent]
@@ -152,30 +159,58 @@ function resolveMemberRoleIds(guild, db, logEvent) {
         Object.values(db.config?.clanRoles || {}).filter(id => id && guild.roles.cache.has(id))
     );
 
-    // ── 2. Auto-discover clan roles by name from the allied-clan config ──
-    //    e.g. role "⚔️ ClanA" → clean "ClanA" matches db.config.alliedClans.
+    // ── 2. Build candidate clan names: allied config + ranking cache ──
     if (!db.config.clanRoles) db.config.clanRoles = {};
-    let discovered = 0;
-    for (const [worldId, clans] of Object.entries(db.config?.alliedClans || {})) {
+    if (!db.config.alliedClans) db.config.alliedClans = {};
+    const candidates = new Map(); // clean name → { worldId, clanName, fromCache }
+    for (const [worldId, clans] of Object.entries(db.config.alliedClans)) {
         for (const clanName of clans) {
             const clean = cleanNickname(clanName);
-            // Already mapped? Keep the mapped ID if it still exists.
-            if (db.config.clanRoles[clanName] && guild.roles.cache.has(db.config.clanRoles[clanName])) {
-                clanRoleIds.add(db.config.clanRoles[clanName]);
-                continue;
-            }
-            // Otherwise find the role on the server by cleaned name (emoji prefix tolerated)
-            const role = guild.roles.cache.find(r => cleanNickname(stripRoleEmoji(r.name)) === clean);
-            if (role) {
-                db.config.clanRoles[clanName] = role.id;
-                clanRoleIds.add(role.id);
-                discovered++;
-                if (logEvent) logEvent(`🔒 [Clan Perms] Discovered clan role "${role.name}" (${clanName}).`);
+            if (clean) candidates.set(clean, { worldId, clanName, fromCache: false });
+        }
+    }
+    const cache = getLocalRankingCache();
+    if (cache) {
+        for (const [worldId, players] of Object.entries(cache)) {
+            const worldClans = new Set(Object.values(players));
+            for (const clanName of worldClans) {
+                const clean = cleanNickname(clanName);
+                // Skip the "No Clan" marker and implausibly short names to avoid
+                // matching generic server roles by accident.
+                if (!clean || clean === 'noclan' || clean.length < 3) continue;
+                if (!candidates.has(clean)) candidates.set(clean, { worldId, clanName, fromCache: true });
             }
         }
     }
 
-    // ── 3. Temp role: from the DB, or discovered by name ("GoW Kids") ──
+    // ── 3. Discover roles by cleaned name (emoji prefix tolerated) ──
+    //    e.g. role "⚔️ ClanA" → clean "ClanA" matches a candidate clan name.
+    //    For cache-derived candidates (self-healing), only match roles that
+    //    actually carry an emoji prefix — the /syncroles naming convention — so
+    //    generic server roles ("sun", "Moderator", …) are never picked up.
+    let discovered = 0;
+    for (const [clean, { worldId, clanName, fromCache }] of candidates) {
+        // Already mapped? Keep the mapped ID if it still exists.
+        if (db.config.clanRoles[clanName] && guild.roles.cache.has(db.config.clanRoles[clanName])) {
+            clanRoleIds.add(db.config.clanRoles[clanName]);
+            continue;
+        }
+        const role = guild.roles.cache.find(r => {
+            const stripped = stripRoleEmoji(r.name);
+            return cleanNickname(stripped) === clean && (!fromCache || stripped !== r.name);
+        });
+        if (role) {
+            db.config.clanRoles[clanName] = role.id;
+            clanRoleIds.add(role.id);
+            discovered++;
+            // Self-heal the allied config so /syncroles can manage this clan too.
+            if (!Array.isArray(db.config.alliedClans[worldId])) db.config.alliedClans[worldId] = [];
+            if (!db.config.alliedClans[worldId].includes(clanName)) db.config.alliedClans[worldId].push(clanName);
+            if (logEvent) logEvent(`🔒 [Clan Perms] Discovered clan role "${role.name}" (${clanName}).`);
+        }
+    }
+
+    // ── 4. Temp role: from the DB, or discovered by name ("GoW Kids") ──
     let tempRoleId = db.config?.tempRoleId && guild.roles.cache.has(db.config.tempRoleId)
         ? db.config.tempRoleId
         : null;
