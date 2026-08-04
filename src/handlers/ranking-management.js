@@ -275,7 +275,8 @@ export async function handleManageAllied(interaction, db, saveLocalStorage, logE
  * Build the content string and component rows for a world's allied clans view.
  * Returns { content, components } ready to pass to interaction.update/editReply.
  */
-function buildAlliedWorldView(worldId, clans, worldName) {
+function buildAlliedWorldView(worldId, clans, worldName, page = 0) {
+    const MAX_OPTIONS = 25;
     let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
     if (clans.length === 0) {
         content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
@@ -284,11 +285,18 @@ function buildAlliedWorldView(worldId, clans, worldName) {
         clans.forEach((clan, i) => {
             content += `\n${i + 1}. **${clan}**`;
         });
+        const totalPages = Math.ceil(clans.length / MAX_OPTIONS);
+        if (totalPages > 1) {
+            content += `\n\n📄 Page ${page + 1}/${totalPages} (${clans.length} total clans)`;
+        }
     }
 
-    const removeOptions = clans.map((clan, i) => ({
-        label: `🗑️ ${clan}`,
-        value: `${worldId}_${i}`
+    // Paginate remove options to respect Discord's 25-option limit
+    const startIdx = page * MAX_OPTIONS;
+    const pageClans = clans.slice(startIdx, startIdx + MAX_OPTIONS);
+    const removeOptions = pageClans.map((clan, i) => ({
+        label: `🗑️ ${clan}`.substring(0, 100),
+        value: `${worldId}_${startIdx + i}`
     }));
 
     const components = [];
@@ -300,6 +308,26 @@ function buildAlliedWorldView(worldId, clans, worldName) {
                 .addOptions(removeOptions)
         ));
     }
+
+    // Add pagination buttons if needed
+    const totalPages = Math.ceil(clans.length / MAX_OPTIONS);
+    if (totalPages > 1) {
+        const paginationButtons = [];
+        if (page > 0) {
+            paginationButtons.push(
+                new ButtonBuilder().setCustomId(`manage_allied_page_${worldId}_${page - 1}`).setLabel('◀️ Prev').setStyle(ButtonStyle.Secondary)
+            );
+        }
+        if (page < totalPages - 1) {
+            paginationButtons.push(
+                new ButtonBuilder().setCustomId(`manage_allied_page_${worldId}_${page + 1}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary)
+            );
+        }
+        if (paginationButtons.length > 0) {
+            components.push(new ActionRowBuilder().addComponents(...paginationButtons));
+        }
+    }
+
     components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
@@ -320,7 +348,26 @@ export async function handleManageAlliedWorld(interaction, db, saveLocalStorage,
     ensureConfig(db);
     if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
 
-    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName);
+    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName, 0);
+    return interaction.update({ content, components }).catch(() => {});
+}
+
+// ── Allied Clans: Pagination for clans list ──
+export async function handleManageAlliedPage(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    // Parse customId: manage_allied_page_{worldId}_{page}
+    const parts = interaction.customId.split('_');
+    const worldId = parts[3];
+    const page = parseInt(parts[4], 10);
+    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+
+    ensureConfig(db);
+    if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+
+    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName, page);
     return interaction.update({ content, components }).catch(() => {});
 }
 
