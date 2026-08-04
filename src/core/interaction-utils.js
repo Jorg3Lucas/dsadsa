@@ -57,3 +57,21 @@ export async function deferUpdateSafe(interaction) {
         return false;
     }
 }
+
+/**
+ * Safely edit a (deferred) interaction response. Returns the message or null on
+ * failure — expired interactions (10062) are swallowed so long-running work such
+ * as bulk DM loops is never aborted by a stale interaction.
+ */
+export async function editReplySafe(interaction, payload) {
+    try {
+        return await interaction.editReply(payload);
+    } catch (e) {
+        if (isExpiredError(e)) {
+            console.warn(`⚠️ [Interaction] Skipping editReply on ${interaction.customId || interaction.commandName || 'interaction'} — already expired`);
+        } else {
+            console.warn(`⚠️ [Interaction] editReply failed: ${e.message}`);
+        }
+        return null;
+    }
+}

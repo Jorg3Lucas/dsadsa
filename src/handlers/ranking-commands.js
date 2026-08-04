@@ -29,7 +29,7 @@ import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
-import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
+import { deferReplySafe, deferUpdateSafe, editReplySafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -468,7 +468,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         if (doNotify) {
             report += `\n\n✉️ **Sending DMs to ${unregistered.length} members...**`;
-            await interaction.editReply(report);
+            await editReplySafe(interaction, report);
 
             let sent = 0;
             let failed = 0;
@@ -498,7 +498,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 }
             }
 
-            return interaction.editReply(`📋 **Unregistered Members — ${unregistered.length} total**\n\n✉️ DMs sent: **${sent}** ✅\n❌ Failed: **${failed}**`);
+            return editReplySafe(interaction, `📋 **Unregistered Members — ${unregistered.length} total**\n\n✉️ DMs sent: **${sent}** ✅\n❌ Failed: **${failed}**`);
         }
 
         logEvent(`📋 Admin ${interaction.user.tag} listed ${unregistered.length} unregistered member(s)`);

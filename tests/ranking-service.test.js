@@ -3,7 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../src/core/ranking-cache.js', () => ({
     findNicknameInCache: vi.fn(),
     findClosestNicknameInCache: vi.fn(),
-    getLocalRankingCache: vi.fn()
+    findTopNicknamesInCache: vi.fn(),
+    getLocalRankingCache: vi.fn(),
+    cleanNickname: vi.fn((name) => name)
 }));
 
 vi.mock('../src/core/ranking-constants.js', () => ({

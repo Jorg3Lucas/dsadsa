@@ -36,7 +36,7 @@ import {
 import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
 import { logRankingEvent } from './core/ranking-logger.js';
-import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, isDatabaseLoaded, hasUsers, getStorageStats } from './core/ranking-storage.js';
+import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, getStorageStats } from './core/ranking-storage.js';
 import { isExpiredError } from './core/interaction-utils.js';
 
 const client = new Client({
@@ -152,7 +152,7 @@ process.on('uncaughtException', (error) => {
     process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason) => {
     console.error('❌ Unhandled Rejection:', reason);
     logRankingEvent(`[ERROR] Unhandled rejection: ${reason}`);
 });
@@ -295,7 +295,7 @@ client.on('interactionCreate', async (interaction) => {
             } else if (interaction.deferred && !interaction.replied) {
                 await interaction.editReply({ content: '❌ An unexpected error occurred. Please try again.' }).catch(() => {});
             }
-        } catch (e) {
+        } catch {
             // Silently fail
         }
     }
