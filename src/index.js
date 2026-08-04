@@ -8,7 +8,7 @@ import { registerMir4SlashCommands } from './core/ranking-deploy.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
-import { handleOwnerRegistrationModal, handleSelectRegistrationNickname } from './handlers/ranking-registration.js';
+import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from './handlers/ranking-registration.js';
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
@@ -128,9 +128,9 @@ client.on('interactionCreate', async (interaction) => {
                 return await handlePilotRemoveSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
-            // Registration nickname selection (admin choosing between typed vs suggestions)
-            if (interaction.customId.startsWith('select_reg_nickname_')) {
-                return await handleSelectRegistrationNickname(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            // Registration nickname selection (user choosing between typed vs suggestions)
+            if (interaction.customId.startsWith('user_select_reg_nickname_')) {
+                return await handleUserSelectRegistrationNickname(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
             // Manualregister nickname selection
