@@ -1,106 +1,240 @@
 // ==========================================
-// 💾 AUTO-BACKUP SYSTEM
-// Automatic backups of all JSON database files
-// Runs every 6 hours + optionally before writes
-// Retains backups for 48 hours
+// 💾 AUTO-BACKUP SYSTEM — Enhanced Edition
+// ==========================================
+// Features:
+// - Backups every 30 minutes (was 6 hours)
+// - Pre-save backup (before every database write)
+// - Integrity verification on backup
+// - Backup rotation with configurable retention
+// - Maximum backup count limit
+// - Detailed logging
 // ==========================================
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-const BACKUP_DIR = path.resolve("./backups");
-const BACKUP_RETENTION_MS = 48 * 60 * 60 * 1000; // keep backups for 48 hours
+const BACKUP_DIR = path.resolve('./backups');
+const BACKUP_RETENTION_MS = 72 * 60 * 60 * 1000; // 72 hours (was 48)
+const MAX_BACKUPS = 50; // Maximum number of backups to keep
 
 // All JSON files that should be backed up
 const BACKUP_FILES = [
-  "./database_ranking.json",
-  "./ranking_cache.json"
+    './database_ranking.json'
 ];
 
 let backupInterval = null;
+let backupCount = 0;
 
-// ─── Ensure backup directory exists ─────────
+// ==========================================
+// 🛠️ HELPERS
+// ==========================================
 
+/**
+ * Ensure backup directory exists.
+ */
 function ensureBackupDir() {
-  if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  }
+    if (!fs.existsSync(BACKUP_DIR)) {
+        fs.mkdirSync(BACKUP_DIR, { recursive: true });
+        console.log('📁 [Backup] Created backup directory');
+    }
 }
 
-// ─── Sanitize filename ──────────────────────
-
+/**
+ * Sanitize filename.
+ */
 function safeFileName(filePath) {
-  return path.basename(filePath).replace(/\.json$/, "");
+    return path.basename(filePath).replace(/\.json$/, '');
 }
 
-// ─── Run a single backup cycle ───────────────
-
-export function runBackup(targetFiles) {
-  ensureBackupDir();
-
-  const filesToBackup = targetFiles && targetFiles.length > 0
-    ? targetFiles
-    : BACKUP_FILES;
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  let count = 0;
-
-  for (const filePath of filesToBackup) {
-    const resolvedPath = path.resolve(filePath);
-    if (!fs.existsSync(resolvedPath)) continue;
-
+/**
+ * Verify JSON file integrity.
+ */
+function verifyBackupIntegrity(filePath) {
     try {
-      const baseName = safeFileName(filePath);
-      const backupName = `${baseName}_${timestamp}.json`;
-      const backupPath = path.join(BACKUP_DIR, backupName);
-
-      fs.copyFileSync(resolvedPath, backupPath);
-      count++;
-
-      // Rotate old backups for this file
-      rotateBackups(baseName);
-    } catch (err) {
-      console.error(`❌ [Auto-Backup] Failed to backup ${filePath}:`, err.message);
+        const data = fs.readFileSync(filePath, 'utf8');
+        const parsed = JSON.parse(data);
+        
+        // Check if it has users
+        if (parsed.users && Object.keys(parsed.users).length > 0) {
+            return { valid: true, userCount: Object.keys(parsed.users).length };
+        }
+        
+        return { valid: false, reason: 'No users in backup' };
+    } catch (e) {
+        return { valid: false, reason: e.message };
     }
-  }
-
-  return count;
 }
 
-// ─── Rotate old backups (remove older than 48h) ───
+// ==========================================
+// 🔄 BACKUP FUNCTIONS
+// ==========================================
 
+/**
+ * Run a single backup cycle.
+ * @param {string[]} targetFiles - Specific files to backup (optional)
+ * @param {string} reason - Reason for backup (for logging)
+ * @returns {number} Number of files backed up
+ */
+export function runBackup(targetFiles, reason = 'scheduled') {
+    ensureBackupDir();
+
+    const filesToBackup = targetFiles && targetFiles.length > 0
+        ? targetFiles
+        : BACKUP_FILES;
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    let count = 0;
+
+    for (const filePath of filesToBackup) {
+        const resolvedPath = path.resolve(filePath);
+        if (!fs.existsSync(resolvedPath)) {
+            console.warn(`⚠️ [Backup] File not found: ${filePath}`);
+            continue;
+        }
+
+        try {
+            // Verify source file before backup
+            const sourceData = fs.readFileSync(resolvedPath, 'utf8');
+            JSON.parse(sourceData); // Verify valid JSON
+            
+            const baseName = safeFileName(filePath);
+            const backupName = `${baseName}_${timestamp}.json`;
+            const backupPath = path.join(BACKUP_DIR, backupName);
+
+            // Write backup
+            fs.writeFileSync(backupPath, sourceData, 'utf8');
+            
+            // Verify backup integrity
+            const integrity = verifyBackupIntegrity(backupPath);
+            if (integrity.valid) {
+                count++;
+                backupCount++;
+                console.log(`✅ [Backup] ${backupName} (${integrity.userCount} users) [${reason}]`);
+            } else {
+                // Remove invalid backup
+                fs.unlinkSync(backupPath);
+                console.error(`❌ [Backup] ${backupName} failed integrity check: ${integrity.reason}`);
+            }
+
+            // Rotate old backups
+            rotateBackups(baseName);
+        } catch (err) {
+            console.error(`❌ [Backup] Failed to backup ${filePath}:`, err.message);
+        }
+    }
+
+    return count;
+}
+
+/**
+ * Rotate old backups (remove older than retention period).
+ */
 function rotateBackups(baseName) {
-  try {
-    const cutoff = Date.now() - BACKUP_RETENTION_MS;
-    const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith(baseName + "_") && f.endsWith(".json"));
+    try {
+        const cutoff = Date.now() - BACKUP_RETENTION_MS;
+        const files = fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.startsWith(baseName + '_') && f.endsWith('.json'));
 
-    for (const file of files) {
-      const filePath = path.join(BACKUP_DIR, file);
-      const stat = fs.statSync(filePath);
-      if (stat.mtimeMs < cutoff) {
-        fs.unlinkSync(filePath);
-      }
+        let removed = 0;
+        
+        // First: remove by age
+        for (const file of files) {
+            const filePath = path.join(BACKUP_DIR, file);
+            const stat = fs.statSync(filePath);
+            if (stat.mtimeMs < cutoff) {
+                fs.unlinkSync(filePath);
+                removed++;
+            }
+        }
+
+        // Second: remove by count (keep only MAX_BACKUPS)
+        const remaining = fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.startsWith(baseName + '_') && f.endsWith('.json'))
+            .sort()
+            .reverse();
+        
+        if (remaining.length > MAX_BACKUPS) {
+            const toRemove = remaining.slice(MAX_BACKUPS);
+            for (const file of toRemove) {
+                fs.unlinkSync(path.join(BACKUP_DIR, file));
+                removed++;
+            }
+        }
+
+        if (removed > 0) {
+            console.log(`🗑️ [Backup] Rotated ${removed} old backup(s)`);
+        }
+    } catch (err) {
+        console.error('❌ [Backup] Rotation error:', err.message);
     }
-
-  } catch (err) {
-    console.error(`❌ [Auto-Backup] Rotation error for ${baseName}:`, err.message);
-  }
 }
 
-// ─── Start scheduled backups ─────────────────
+/**
+ * Start scheduled backups.
+ * @param {number} intervalMinutes - Backup interval in minutes (default: 30)
+ */
+export function startAutoBackup(intervalMinutes = 30) {
+    // Clear any existing interval
+    if (backupInterval) {
+        clearInterval(backupInterval);
+    }
 
-export function startAutoBackup(intervalHours = 6) {
-  // Clear any existing interval
-  if (backupInterval) {
-    clearInterval(backupInterval);
-  }
+    const intervalMs = intervalMinutes * 60 * 1000;
 
-  const intervalMs = intervalHours * 60 * 60 * 1000;
+    // Run first backup after 30 seconds (give bot time to load data)
+    setTimeout(() => {
+        console.log('⏰ [Backup] Running initial backup...');
+        runBackup(null, 'startup');
+    }, 30 * 1000);
 
-  // Run first backup after 1 minute (give bot time to initialize)
-  setTimeout(() => runBackup(), 60 * 1000);
+    // Schedule recurring backups
+    backupInterval = setInterval(() => {
+        runBackup(null, 'scheduled');
+    }, intervalMs);
 
-  // Schedule recurring backups
-  backupInterval = setInterval(() => runBackup(), intervalMs);
+    console.log(`⏰ [Backup] Auto-backup scheduled every ${intervalMinutes} minutes`);
+}
+
+/**
+ * Stop scheduled backups.
+ */
+export function stopAutoBackup() {
+    if (backupInterval) {
+        clearInterval(backupInterval);
+        backupInterval = null;
+        console.log('⏰ [Backup] Auto-backup stopped');
+    }
+}
+
+/**
+ * Get backup statistics.
+ */
+export function getBackupStats() {
+    ensureBackupDir();
+    
+    const files = fs.readdirSync(BACKUP_DIR)
+        .filter(f => f.startsWith('database_ranking_') && f.endsWith('.json'));
+    
+    let totalSize = 0;
+    let latestBackup = null;
+    let latestTime = 0;
+    
+    for (const file of files) {
+        const filePath = path.join(BACKUP_DIR, file);
+        const stat = fs.statSync(filePath);
+        totalSize += stat.size;
+        
+        if (stat.mtimeMs > latestTime) {
+            latestTime = stat.mtimeMs;
+            latestBackup = file;
+        }
+    }
+    
+    return {
+        count: files.length,
+        totalSizeMB: (totalSize / 1024 / 1024).toFixed(2),
+        latestBackup,
+        latestBackupTime: latestTime ? new Date(latestTime).toISOString() : null,
+        backupCount // backups made this session
+    };
 }

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
     ActionRowBuilder,
     ButtonBuilder,
@@ -18,6 +19,138 @@ import { buildPrefixedNickname } from '../core/ranking-utils.js';
 // ==========================================
 // Handles confirm-* button clicks from /manual* commands
 // Extracted from ranking-handlers.js
+
+// ── Restore Backup: Select menu handler ──
+export async function handleRestoreBackupSelect(interaction, db, saveLocalStorage, logEvent) {
+    const userId = interaction.user.id;
+
+    // Super admin only
+    if (userId !== SUPER_ADMIN_USER_ID) {
+        return interaction.update({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
+    }
+
+    const cacheKey = `${userId}-restorebackup`;
+    const cached = confirmationCache[cacheKey];
+
+    if (!cached) {
+        return interaction.update({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
+    }
+
+    const selectedFile = interaction.values[0];
+    const BACKUP_DIR = './backups';
+    const backupPath = `${BACKUP_DIR}/${selectedFile}`;
+
+    if (!fs.existsSync(backupPath)) {
+        return interaction.update({ content: '❌ Backup file not found.', components: [] }).catch(() => {});
+    }
+
+    // Show confirmation with details
+    const stats = fs.statSync(backupPath);
+    const sizeKB = (stats.size / 1024).toFixed(1);
+    const ageMs = Date.now() - stats.mtimeMs;
+    const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+
+    let data;
+    try {
+        data = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    } catch (e) {
+        return interaction.update({ content: `❌ Invalid backup file: ${e.message}`, components: [] }).catch(() => {});
+    }
+
+    const userCount = data.users ? Object.keys(data.users).length : 0;
+
+    // Store selected backup info
+    cached.selectedBackup = selectedFile;
+    cached.backupData = data;
+    cached.backupStats = { sizeKB, ageHours, userCount };
+    cached.timestamp = Date.now();
+
+    const confirmContent = `⚠️ **CONFIRM RESTORE**\n\n` +
+        `📦 **Backup:** ${selectedFile}\n` +
+        `📊 Size: ${sizeKB} KB\n` +
+        `🕐 Age: ${ageHours}h ago\n` +
+        `👥 Users in backup: **${userCount}**\n\n` +
+        `🔴 **This will OVERWRITE the current database!**\n` +
+        `A backup of the current state will be created first.`;
+
+    const components = [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('restorebackup-confirm').setLabel('✅ YES, RESTORE').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('restorebackup-cancel').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
+        )
+    ];
+
+    return interaction.update({ content: confirmContent, components }).catch(() => {});
+}
+
+// ── Restore Backup: Cancel handler ──
+export async function handleRestoreBackupCancel(interaction, db, saveLocalStorage, logEvent) {
+    const cacheKey = `${interaction.user.id}-restorebackup`;
+    delete confirmationCache[cacheKey];
+
+    return interaction.update({ content: '❌ **Restore cancelled.**', components: [] }).catch(() => {});
+}
+
+// ── Restore Backup: Confirm handler ──
+export async function handleRestoreBackupConfirm(interaction, db, saveLocalStorage, logEvent) {
+    const userId = interaction.user.id;
+
+    // Super admin only
+    if (userId !== SUPER_ADMIN_USER_ID) {
+        return interaction.update({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
+    }
+
+    const cacheKey = `${userId}-restorebackup`;
+    const cached = confirmationCache[cacheKey];
+
+    if (!cached || !cached.selectedBackup) {
+        return interaction.update({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
+    }
+
+    const DB_RANKING_PATH = './database_ranking.json';
+    const BACKUP_DIR = './backups';
+
+    await interaction.update({ content: '💾 **Restoring backup...**', components: [] }).catch(() => {});
+
+    try {
+        // 1. Create backup of current state
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const preRestoreBackup = `${BACKUP_DIR}/database_ranking_PRE_RESTORE_${timestamp}.json`;
+        if (fs.existsSync(DB_RANKING_PATH)) {
+            fs.copyFileSync(DB_RANKING_PATH, preRestoreBackup);
+            logEvent(`💾 Pre-restore backup created: ${preRestoreBackup}`);
+        }
+
+        // 2. Restore the selected backup
+        const backupPath = `${BACKUP_DIR}/${cached.selectedBackup}`;
+        fs.copyFileSync(backupPath, DB_RANKING_PATH);
+        logEvent(`✅ Backup restored: ${cached.selectedBackup}`);
+
+        // 3. Reload the in-memory database
+        const newData = JSON.parse(fs.readFileSync(DB_RANKING_PATH, 'utf8'));
+        Object.assign(db, newData);
+        if (!db.users) db.users = {};
+        saveLocalStorage();
+
+        const userCount = Object.keys(db.users).length;
+        logEvent(`🔄 Database reloaded — ${userCount} users in memory`);
+
+        // Clean up cache
+        delete confirmationCache[cacheKey];
+
+        const successMsg = `✅ **Backup Restored Successfully!**\n\n` +
+            `📦 Restored: ${cached.selectedBackup}\n` +
+            `👥 Users loaded: **${userCount}**\n` +
+            `💾 Pre-restore backup saved: ${preRestoreBackup.split('/').pop()}\n\n` +
+            `🔄 The in-memory database has been updated. Run /manage to verify.`;
+
+        return interaction.editReply({ content: successMsg }).catch(() => {});
+
+    } catch (e) {
+        logEvent(`❌ Backup restore failed: ${e.message}`);
+        return interaction.editReply({ content: `❌ **Restore failed:** ${e.message}` }).catch(() => {});
+    }
+}
 
 export async function handleConfirmAction(interaction, db, saveLocalStorage, logEvent) {
     const [_, action, result] = interaction.customId.split('-');

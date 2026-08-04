@@ -131,6 +131,26 @@ const commands = [
     description: '💣 [Super Admin] Delete ALL channels and categories from the server (irreversible).',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
+  {
+    name: 'checkdb',
+    description: '🔍 [Admin] Check database status, backups, and file health.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
+  {
+    name: 'restorebackup',
+    description: '💾 [Super Admin] List and restore database backups.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
+  {
+    name: 'checkintegrity',
+    description: '🔍 [Admin] Full database integrity check with repair options.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
+  {
+    name: 'backupnow',
+    description: '💾 [Admin] Force an immediate backup of the database.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

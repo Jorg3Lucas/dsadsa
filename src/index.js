@@ -12,7 +12,7 @@ import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } fr
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
-import { handleConfirmAction } from './handlers/ranking-confirmations.js';
+import { handleConfirmAction, handleRestoreBackupSelect, handleRestoreBackupCancel, handleRestoreBackupConfirm } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
 import {
     handleNotifyCommand,
@@ -33,10 +33,10 @@ import {
     handleManageNav,
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
-import { startAutoBackup } from './auto-backup.js';
+import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
 import { logRankingEvent } from './core/ranking-logger.js';
-import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
+import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, isDatabaseLoaded, hasUsers, getStorageStats } from './core/ranking-storage.js';
 
 const client = new Client({
     intents: [
@@ -55,12 +55,32 @@ let rankingDb = {
 };
 
 // ==========================================
+// 🚀 STARTUP VALIDATION
+// ==========================================
+
+console.log('========================================');
+console.log('🤖 MIR4 Ranking Bot Starting...');
+console.log('========================================');
+
+// ==========================================
 // 🚀 READY EVENT
 // ==========================================
 client.once('clientReady', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
+    // Load database with recovery
     rankingDb = loadLocalStorageRanking();
+    
+    // Log storage status
+    const storageStats = getStorageStats();
+    const backupStats = getBackupStats();
+    
+    console.log('\n📊 Startup Status:');
+    console.log(`   Database loaded: ${storageStats.databaseLoaded ? '✅' : '❌'}`);
+    console.log(`   Users in memory: ${Object.keys(rankingDb.users || {}).length}`);
+    console.log(`   Backups available: ${backupStats.count}`);
+    console.log('========================================\n');
+
     logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
 
     // Ensure db.config and alliedClans are initialized before any system runs
@@ -75,25 +95,63 @@ client.once('clientReady', async () => {
 
     initMir4BotEvents(client, rankingDb, (db) => saveRankingStorage(db || rankingDb), logRankingEvent);
 
+    // Start sync after 15 seconds (give time for everything to initialize)
     setTimeout(async () => {
         console.log('🧪 [Startup] Checking if ranking needs sync...');
         await runDailySynchronization(client, rankingDb, (db) => saveRankingStorage(db || rankingDb), logRankingEvent, false);
-    }, 10000);
+    }, 15000);
 
-    // Start auto-backup scheduler
-    startAutoBackup(6);
+    // Start auto-backup every 30 minutes
+    startAutoBackup(30);
 });
 
-// Graceful shutdown handlers (top-level, not inside ready callback)
+// ==========================================
+// 🛑 GRACEFUL SHUTDOWN
+// ==========================================
+
+let isShuttingDown = false;
+
 function handleShutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    
     console.log(`\n🛑 [${signal}] Shutting down gracefully...`);
-    saveRankingStorage(rankingDb);
     logRankingEvent(`[Ranking Bot] Shutting down (${signal})`);
+    
+    // Save with sync version for critical shutdown
+    const saved = saveRankingStorageSync(rankingDb);
+    if (saved) {
+        console.log('💾 Database saved successfully');
+    } else {
+        console.error('❌ Failed to save database on shutdown!');
+    }
+    
     process.exit(0);
 }
 
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    logRankingEvent(`[FATAL] Uncaught exception: ${error.message}`);
+    
+    // Try to save before crashing
+    try {
+        saveRankingStorageSync(rankingDb);
+        console.log('💾 Emergency save completed');
+    } catch (e) {
+        console.error('❌ Emergency save failed:', e.message);
+    }
+    
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection:', reason);
+    logRankingEvent(`[ERROR] Unhandled rejection: ${reason}`);
+});
 
 // ==========================================
 // 🖱️ INTERACTION CREATE EVENT
@@ -138,6 +196,11 @@ client.on('interactionCreate', async (interaction) => {
             // Manualregister nickname selection
             if (interaction.customId.startsWith('select_manual_nickname_')) {
                 return await handleSelectManualNickname(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Restore backup select menu
+            if (interaction.customId === 'restorebackup_select') {
+                return await handleRestoreBackupSelect(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
             // Manage menu routing
@@ -231,6 +294,14 @@ client.on('interactionCreate', async (interaction) => {
             // Confirmation buttons (confirm-manualremove, confirm-manualregister, etc.)
             if (interaction.customId.startsWith('confirm-')) {
                 return await handleConfirmAction(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+
+            // Restore backup buttons
+            if (interaction.customId === 'restorebackup-confirm') {
+                return await handleRestoreBackupConfirm(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'restorebackup-cancel') {
+                return await handleRestoreBackupCancel(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
 
             // Manage navigation buttons (back, prev, next)

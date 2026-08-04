@@ -847,6 +847,391 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         return interaction.editReply(report);
     }
 
+    // ── backupnow ──
+    if (commandName === 'backupnow') {
+        // Super admin only
+        if (user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
+        }
+
+        await interaction.deferReply({ flags: 64 });
+
+        try {
+            const fs = await import('node:fs');
+            const { runBackup, getBackupStats } = await import('../auto-backup.js');
+            const { getStorageStats } = await import('../core/ranking-storage.js');
+
+            // Run backup
+            const startTime = Date.now();
+            const backupCount = runBackup(['./database_ranking.json'], 'manual');
+            const elapsed = Date.now() - startTime;
+
+            // Get stats
+            const storageStats = getStorageStats();
+            const backupStats = getBackupStats();
+
+            let report = '💾 **Backup Completed!**\n\n';
+            report += `📦 Files backed up: **${backupCount}**\n`;
+            report += `⏱️ Time: **${elapsed}ms**\n`;
+            report += `📊 Database users: **${storageStats.lastSaveUserCount || 0}**\n`;
+            report += `📁 Total backups: **${backupStats.count}**\n`;
+            report += `💿 Total size: **${backupStats.totalSizeMB} MB**\n`;
+
+            if (backupStats.latestBackup) {
+                report += `🕐 Latest: **${backupStats.latestBackup}**\n`;
+            }
+
+            logEvent(`💾 ${user.tag} ran /backupnow — ${backupCount} file(s) backed up in ${elapsed}ms`);
+            return interaction.editReply(report);
+
+        } catch (e) {
+            return interaction.editReply(`❌ **Backup failed:** ${e.message}`);
+        }
+    }
+
+    // ── checkintegrity ──
+    if (commandName === 'checkintegrity') {
+        // Super admin only
+        if (user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
+        }
+
+        await interaction.deferReply({ flags: 64 });
+
+        const fs = await import('node:fs');
+        const DB_RANKING_PATH = './database_ranking.json';
+        const BACKUP_DIR = './backups';
+
+        let report = '🔍 **Database Integrity Check**\n\n━━━━━━━━━━━━━━━━━━━━━━\n';
+        let issues = [];
+        let fixes = [];
+
+        // 1. Check main database file
+        report += '📁 **Main Database**\n';
+        try {
+            if (!fs.existsSync(DB_RANKING_PATH)) {
+                report += '   ❌ File does not exist\n';
+                issues.push('Main database file missing');
+            } else {
+                const stats = fs.statSync(DB_RANKING_PATH);
+                const sizeKB = (stats.size / 1024).toFixed(1);
+                
+                if (stats.size === 0) {
+                    report += '   ❌ File is empty (0 bytes)\n';
+                    issues.push('Database file is empty');
+                } else {
+                    const data = fs.readFileSync(DB_RANKING_PATH, 'utf8');
+                    
+                    try {
+                        const parsed = JSON.parse(data);
+                        
+                        // Check structure
+                        if (!parsed.users || typeof parsed.users !== 'object') {
+                            report += '   ❌ Missing or invalid users object\n';
+                            issues.push('Users object missing/invalid');
+                        } else {
+                            const userCount = Object.keys(parsed.users).length;
+                            report += `   ✅ Valid JSON — ${userCount} users\n`;
+                            report += `   📊 Size: ${sizeKB} KB\n`;
+                            
+                            // Check for corrupted entries
+                            let corruptedUsers = 0;
+                            for (const [id, user] of Object.entries(parsed.users)) {
+                                if (!user || typeof user !== 'object') {
+                                    corruptedUsers++;
+                                } else if (!user.nickname && !user.tempUntil) {
+                                    corruptedUsers++;
+                                }
+                            }
+                            
+                            if (corruptedUsers > 0) {
+                                report += `   ⚠️ ${corruptedUsers} corrupted user entries\n`;
+                                issues.push(`${corruptedUsers} corrupted user entries`);
+                            } else {
+                                report += '   ✅ All user entries valid\n';
+                            }
+                            
+                            // Check metadata
+                            if (parsed._metadata) {
+                                report += `   📋 Last saved: ${parsed._metadata.savedAt || 'unknown'}\n`;
+                                report += `   📋 Version: ${parsed._metadata.version || '1.0'}\n`;
+                            }
+                        }
+                    } catch (e) {
+                        report += `   ❌ Invalid JSON: ${e.message}\n`;
+                        issues.push('Invalid JSON format');
+                    }
+                }
+            }
+        } catch (e) {
+            report += `   ❌ Error: ${e.message}\n`;
+            issues.push(`File error: ${e.message}`);
+        }
+
+        report += '\n━━━━━━━━━━━━━━━━━━━━━━\n';
+
+        // 2. Check backups
+        report += '💾 **Backups**\n';
+        try {
+            if (!fs.existsSync(BACKUP_DIR)) {
+                report += '   ⚠️ No backup directory\n';
+            } else {
+                const backups = fs.readdirSync(BACKUP_DIR)
+                    .filter(f => f.startsWith('database_ranking_') && f.endsWith('.json'));
+                
+                report += `   📁 Found: ${backups.length} backup(s)\n`;
+                
+                let validBackups = 0;
+                let corruptedBackups = 0;
+                let emptyBackups = 0;
+                
+                for (const backup of backups) {
+                    try {
+                        const backupData = JSON.parse(fs.readFileSync(`${BACKUP_DIR}/${backup}`, 'utf8'));
+                        if (backupData.users && Object.keys(backupData.users).length > 0) {
+                            validBackups++;
+                        } else {
+                            emptyBackups++;
+                        }
+                    } catch (e) {
+                        corruptedBackups++;
+                    }
+                }
+                
+                report += `   ✅ Valid: ${validBackups}\n`;
+                if (emptyBackups > 0) report += `   ⚠️ Empty: ${emptyBackups}\n`;
+                if (corruptedBackups > 0) {
+                    report += `   ❌ Corrupted: ${corruptedBackups}\n`;
+                    issues.push(`${corruptedBackups} corrupted backups`);
+                }
+            }
+        } catch (e) {
+            report += `   ❌ Error: ${e.message}\n`;
+        }
+
+        report += '\n━━━━━━━━━━━━━━━━━━━━━━\n';
+
+        // 3. Recommendations
+        report += '💡 **Recommendations**\n';
+        
+        if (issues.length === 0) {
+            report += '   ✅ No issues found! Database is healthy.\n';
+        } else {
+            for (const issue of issues) {
+                report += `   ⚠️ ${issue}\n`;
+            }
+            
+            // Auto-fix suggestions
+            if (issues.includes('Database file is empty') || issues.includes('Main database file missing')) {
+                report += '\n   💡 Run `/restorebackup` to restore from a backup.\n';
+            }
+            if (issues.includes('Invalid JSON format')) {
+                report += '   💡 The corrupted file has been saved as .corrupted for analysis.\n';
+                report += '   💡 Run `/restorebackup` to restore from a backup.\n';
+            }
+        }
+
+        logEvent(`🔍 ${user.tag} ran /checkintegrity — ${issues.length} issues found`);
+        return interaction.editReply(report);
+    }
+
+    // ── restorebackup ──
+    if (commandName === 'restorebackup') {
+        // Super admin only
+        if (user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
+        }
+
+        await interaction.deferReply({ flags: 64 });
+
+        const fs = await import('node:fs');
+        const BACKUP_DIR = './backups';
+        const DB_RANKING_PATH = './database_ranking.json';
+
+        try {
+            if (!fs.existsSync(BACKUP_DIR)) {
+                return interaction.editReply('❌ **No backup directory found.** No backups available to restore.');
+            }
+
+            const backupFiles = fs.readdirSync(BACKUP_DIR)
+                .filter(f => f.startsWith('database_ranking_') && f.endsWith('.json'))
+                .sort()
+                .reverse();
+
+            if (backupFiles.length === 0) {
+                return interaction.editReply('❌ **No database backups found** in ./backups/');
+            }
+
+            // Store in confirmation cache
+            confirmationCache[`${user.id}-restorebackup`] = {
+                backups: backupFiles,
+                timestamp: Date.now()
+            };
+
+            // Build backup list
+            let report = '💾 **Available Database Backups**\n\n';
+            report += `📁 Found: **${backupFiles.length}** backup(s)\n\n`;
+
+            const selectOptions = backupFiles.slice(0, 25).map((file, i) => {
+                const stats = fs.statSync(`${BACKUP_DIR}/${file}`);
+                const ageMs = Date.now() - stats.mtimeMs;
+                const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+                const ageDays = Math.floor(ageHours / 24);
+                const sizeKB = (stats.size / 1024).toFixed(1);
+
+                // Extract timestamp from filename
+                const timestamp = file.replace('database_ranking_', '').replace('.json', '');
+
+                let ageStr;
+                if (ageHours < 1) {
+                    ageStr = `${Math.floor(ageMs / (1000 * 60))}min ago`;
+                } else if (ageHours < 24) {
+                    ageStr = `${ageHours}h ago`;
+                } else {
+                    ageStr = `${ageDays}d ago`;
+                }
+
+                return {
+                    label: `Backup #${i + 1} (${ageStr})`,
+                    description: `${sizeKB} KB - ${timestamp.substring(0, 19)}`,
+                    value: file
+                };
+            });
+
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('restorebackup_select')
+                .setPlaceholder('Select a backup to restore...')
+                .addOptions(selectOptions);
+
+            const components = [
+                new ActionRowBuilder().addComponents(selectMenu),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('restorebackup-cancel').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ];
+
+            logEvent(`💾 ${user.tag} opened /restorebackup (${backupFiles.length} backups available)`);
+            return interaction.editReply({ content: report, components });
+
+        } catch (e) {
+            return interaction.editReply(`❌ **Error listing backups:** ${e.message}`);
+        }
+    }
+
+    // ── checkdb ──
+    if (commandName === 'checkdb') {
+        await interaction.deferReply({ flags: 64 });
+
+        const fs = await import('node:fs');
+        const DB_RANKING_PATH = './database_ranking.json';
+        const BACKUP_DIR = './backups';
+        const CACHE_PATH = './ranking_cache.json';
+
+        let report = '🔍 **Database Health Check**\n\n━━━━━━━━━━━━━━━━━━━━━━\n';
+
+        // 1. Check main database file
+        try {
+            if (fs.existsSync(DB_RANKING_PATH)) {
+                const stats = fs.statSync(DB_RANKING_PATH);
+                const ageMs = Date.now() - stats.mtimeMs;
+                const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+                const ageDays = Math.floor(ageHours / 24);
+                const sizeKB = (stats.size / 1024).toFixed(1);
+
+                const data = JSON.parse(fs.readFileSync(DB_RANKING_PATH, 'utf8'));
+                const userCount = data.users ? Object.keys(data.users).length : 0;
+                const withNickname = data.users ? Object.values(data.users).filter(u => u && u.nickname).length : 0;
+                const tempUsers = data.users ? Object.values(data.users).filter(u => u && u.tempUntil).length : 0;
+                const manualUsers = data.users ? Object.values(data.users).filter(u => u && u.manualPermanent).length : 0;
+
+                report += `📁 **Main Database (${DB_RANKING_PATH})**\n`;
+                report += `   ✅ File exists\n`;
+                report += `   📊 Size: **${sizeKB} KB**\n`;
+                report += `   🕐 Last modified: **${ageHours}h ago** (${ageDays}d)\n`;
+                report += `   👥 Users: **${userCount}** (${withNickname} with nickname)\n`;
+                report += `   ⏳ Temporary: **${tempUsers}**\n`;
+                report += `   👑 Manual permanent: **${manualUsers}**\n`;
+            } else {
+                report += `📁 **Main Database (${DB_RANKING_PATH})**\n`;
+                report += `   ❌ **FILE NOT FOUND!**\n`;
+                report += `   💡 The database file does not exist. Users need to register first.\n`;
+            }
+        } catch (e) {
+            report += `📁 **Main Database (${DB_RANKING_PATH})**\n`;
+            report += `   ❌ **ERROR:** ${e.message}\n`;
+        }
+
+        report += '\n━━━━━━━━━━━━━━━━━━━━━━\n';
+
+        // 2. Check ranking cache
+        try {
+            if (fs.existsSync(CACHE_PATH)) {
+                const stats = fs.statSync(CACHE_PATH);
+                const ageMs = Date.now() - stats.mtimeMs;
+                const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+                const sizeMB = (stats.size / 1024 / 1024).toFixed(1);
+
+                const data = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
+                const worldCount = data.ranking ? Object.keys(data.ranking).length : 0;
+                const playerCount = data.ranking ? Object.values(data.ranking).reduce((sum, w) => sum + (w ? Object.keys(w).length : 0), 0) : 0;
+
+                report += `📊 **Ranking Cache (${CACHE_PATH})**\n`;
+                report += `   ✅ File exists\n`;
+                report += `   📊 Size: **${sizeMB} MB**\n`;
+                report += `   🕐 Last sync: **${ageHours}h ago**\n`;
+                report += `   🌍 Worlds: **${worldCount}**\n`;
+                report += `   👤 Players: **${playerCount.toLocaleString()}**\n`;
+            } else {
+                report += `📊 **Ranking Cache (${CACHE_PATH})**\n`;
+                report += `   ⚠️ No cache file — run /forcesync to create\n`;
+            }
+        } catch (e) {
+            report += `📊 **Ranking Cache (${CACHE_PATH})**\n`;
+            report += `   ❌ **ERROR:** ${e.message}\n`;
+        }
+
+        report += '\n━━━━━━━━━━━━━━━━━━━━━━\n';
+
+        // 3. Check backups
+        try {
+            if (fs.existsSync(BACKUP_DIR)) {
+                const backupFiles = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.json'));
+                report += `💾 **Backups (${BACKUP_DIR}/)**\n`;
+                report += `   📁 Found: **${backupFiles.length}** backup(s)\n`;
+                if (backupFiles.length > 0) {
+                    // Sort by date and show latest
+                    backupFiles.sort().reverse();
+                    const latest = backupFiles[0];
+                    const latestStats = fs.statSync(`${BACKUP_DIR}/${latest}`);
+                    const latestAgeMs = Date.now() - latestStats.mtimeMs;
+                    const latestAgeHours = Math.floor(latestAgeMs / (1000 * 60 * 60));
+                    report += `   🕐 Latest: **${latest}** (${latestAgeHours}h ago)\n`;
+                    if (backupFiles.length > 1) {
+                        report += `   📋 Others: ${backupFiles.slice(1, 4).join(', ')}${backupFiles.length > 4 ? `... +${backupFiles.length - 4} more` : ''}\n`;
+                    }
+                }
+            } else {
+                report += `💾 **Backups (${BACKUP_DIR}/)**\n`;
+                report += `   ⚠️ No backup directory found\n`;
+            }
+        } catch (e) {
+            report += `💾 **Backups (${BACKUP_DIR}/)**\n`;
+            report += `   ❌ **ERROR:** ${e.message}\n`;
+        }
+
+        report += '\n━━━━━━━━━━━━━━━━━━━━━━\n';
+
+        // 4. In-memory status
+        const memUsers = db.users ? Object.keys(db.users).length : 0;
+        report += `🧠 **In-Memory Status**\n`;
+        report += `   👥 Loaded users: **${memUsers}**\n`;
+        report += `   ⏳ Pending registrations: **${Object.keys(pendingRegistrations).length}**\n`;
+        report += `   ✈️ Pending pilot approvals: **${Object.keys(pendingPilotApprovals).length}**\n`;
+
+        logEvent(`🔍 ${interaction.user.tag} ran /checkdb`);
+        return interaction.editReply(report);
+    }
+
     // ── refreshnames ──
     if (commandName === 'refreshnames') {
         await interaction.deferReply({ flags: 64 });

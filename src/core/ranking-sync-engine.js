@@ -97,9 +97,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
 
                             // Notify once when the role is removed by ranking validation
-                            if (!getRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt')) {
+                            if (false && !getRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt')) {
+                                // DISABLED: Ranking-validation DMs removed at user request
                                 setRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt');
-                                // Suppress the step-3 "no role" reminder — this DM already covers it
                                 setRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
                                 try {
                                     await sendRankingValidationDm(member, userData.nickname, db);
@@ -121,12 +121,11 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             if (pilotMember && pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
                                 await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
 
-                                if (!getRoleNotifyFlag(db, pId, 'rankingValidationNotifiedAt')) {
+                                if (false && !getRoleNotifyFlag(db, pId, 'rankingValidationNotifiedAt')) {
+                                    // DISABLED: Ranking-validation DMs removed at user request
                                     setRoleNotifyFlag(db, pId, 'rankingValidationNotifiedAt');
                                     setRoleNotifyFlag(db, pId, 'noRoleReminderSent');
                                     try {
-                                        // Prefer the pilot's registered nickname; fall back to their current
-                                        // Discord nickname (carries the in-game "Owner - Pilot" name)
                                         const pilotNick = db.users[pId]?.nickname || pilotMember.nickname || pilotMember.user.username;
                                         await sendRankingValidationDm(pilotMember, pilotNick, db);
                                         logEvent(`📧 [DM] Ranking-validation notice sent to ${pilotMember.user.tag} (${pilotNick})`);
@@ -349,7 +348,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan (registration kept)`);
 
                         // Notify once when the role is removed for not being in an allied clan
-                        if (!getRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt')) {
+                        if (false && !getRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt')) {
+                            // DISABLED: Role-removed DMs removed at user request
                             setRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt');
                             try {
                                 await sendRoleRemovedDm(member, ownerData, lookup, db);
