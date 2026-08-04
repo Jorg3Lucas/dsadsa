@@ -24,8 +24,8 @@ import {
     handleManageAction,
     handleManagePilotRemove,
     handleManageAllied,
+    handleManageAlliedRegion,
     handleManageAlliedWorld,
-    handleManageAlliedWorldPage,
     handleManageAlliedPage,
     handleManageAlliedAdd,
     handleManageAlliedAddModal,
@@ -150,11 +150,11 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId.startsWith('manage_pilot_')) {
                 return await handleManagePilotRemove(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
+            if (interaction.customId === 'manage_allied_region') {
+                return await handleManageAlliedRegion(interaction, rankingDb, saveRankingStorage, logRankingEvent);
+            }
             if (interaction.customId === 'manage_allied_world') {
                 return await handleManageAlliedWorld(interaction, rankingDb, saveRankingStorage, logRankingEvent);
-            }
-            if (interaction.customId.startsWith('manage_allied_worldpage_')) {
-                return await handleManageAlliedWorldPage(interaction, rankingDb, saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_allied_page_')) {
                 return await handleManageAlliedPage(interaction, rankingDb, saveRankingStorage, logRankingEvent);

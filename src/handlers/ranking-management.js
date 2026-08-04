@@ -12,6 +12,8 @@ import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
+    REGION_NAMES,
+    WORLDS_BY_REGION,
     confirmationCache,
     ensureConfig
 } from '../core/ranking-constants.js';
@@ -239,80 +241,77 @@ export async function handleManagePilotRemove(interaction, db, saveLocalStorage,
     }).catch(() => {});
 }
 
-// ── Helper: Build paginated world selector view ──
-function buildWorldSelectorView(page = 0) {
-    const MAX_OPTIONS = 25;
-    const allWorlds = Object.entries(WORLD_IDS);
-    const totalPages = Math.ceil(allWorlds.length / MAX_OPTIONS);
-    const startIdx = page * MAX_OPTIONS;
-    const pageWorlds = allWorlds.slice(startIdx, startIdx + MAX_OPTIONS);
-
-    const worldOptions = pageWorlds.map(([id, name]) => ({
+// ── Helper: Build region selector view ──
+function buildRegionSelectorView() {
+    const regionOptions = Object.entries(REGION_NAMES).map(([key, name]) => ({
         label: name,
-        description: `World ID ${id}`,
-        value: id
+        description: `${WORLDS_BY_REGION[key].length} servers available`,
+        value: key
     }));
 
-    let content = '🌍 **Allied Clans Configuration**\n\nSelect a server to view and manage its allied clans.\n\nMembers will only keep their role if they are in an allied clan of any configured server.';
-    if (totalPages > 1) {
-        content += `\n\n📄 Page ${page + 1}/${totalPages} (${allWorlds.length} total servers)`;
-    }
+    const content = '🌍 **Allied Clans Configuration**\n\n**Step 1:** Select a region to view its servers.\n\nMembers will only keep their role if they are in an allied clan of any configured server.';
+
+    const components = [
+        new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('manage_allied_region')
+                .setPlaceholder('Select a region...')
+                .addOptions(regionOptions)
+        ),
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('manage_allied_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
+        )
+    ];
+
+    return { content, components };
+}
+
+// ── Helper: Build world selector for a region ──
+function buildWorldSelectorView(regionKey) {
+    const regionName = REGION_NAMES[regionKey] || regionKey;
+    const worldIds = WORLDS_BY_REGION[regionKey] || [];
+
+    const worldOptions = worldIds.map(id => ({
+        label: WORLD_IDS[id] || `World ${id}`,
+        description: `World ID ${id}`,
+        value: String(id)
+    }));
+
+    const content = `🌍 **${regionName}**\n\n**Step 2:** Select a server to manage its allied clans.`;
 
     const components = [
         new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId('manage_allied_world')
-                .setPlaceholder('Select a server to manage allied clans...')
+                .setPlaceholder('Select a server...')
                 .addOptions(worldOptions)
+        ),
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Regions').setStyle(ButtonStyle.Secondary)
         )
     ];
-
-    // Add pagination buttons if needed
-    if (totalPages > 1) {
-        const paginationButtons = [];
-        if (page > 0) {
-            paginationButtons.push(
-                new ButtonBuilder().setCustomId(`manage_allied_worldpage_${page - 1}`).setLabel('◀️ Prev').setStyle(ButtonStyle.Secondary)
-            );
-        }
-        if (page < totalPages - 1) {
-            paginationButtons.push(
-                new ButtonBuilder().setCustomId(`manage_allied_worldpage_${page + 1}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary)
-            );
-        }
-        if (paginationButtons.length > 0) {
-            components.push(new ActionRowBuilder().addComponents(...paginationButtons));
-        }
-    }
-
-    components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('manage_allied_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
-    ));
 
     return { content, components };
 }
 
-// ── Allied Clans: Show world selector ──
+// ── Allied Clans: Show region selector ──
 export async function handleManageAllied(interaction, db, saveLocalStorage, logEvent) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    const { content, components } = buildWorldSelectorView(0);
+    const { content, components } = buildRegionSelectorView();
     return interaction.update({ content, components }).catch(() => {});
 }
 
-// ── Allied Clans: World selector pagination ──
-export async function handleManageAlliedWorldPage(interaction, db, saveLocalStorage, logEvent) {
+// ── Allied Clans: Region selected → show worlds ──
+export async function handleManageAlliedRegion(interaction, db, saveLocalStorage, logEvent) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    // Parse customId: manage_allied_worldpage_{page}
-    const parts = interaction.customId.split('_');
-    const page = parseInt(parts[parts.length - 1], 10);
-
-    const { content, components } = buildWorldSelectorView(page);
+    const regionKey = interaction.values[0];
+    const { content, components } = buildWorldSelectorView(regionKey);
     return interaction.update({ content, components }).catch(() => {});
 }
 

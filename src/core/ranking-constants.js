@@ -69,6 +69,28 @@ export const WORLD_GROUP_IDS = {
     252: 6, 253: 6,
 };
 
+// ── Region names for the world selector ──
+export const REGION_NAMES = {
+    eu: '🌍 EU (Europe)',
+    na: '🌎 NA (North America)',
+    sa: '🌎 SA (South America)',
+    asia1: '🌏 ASIA1',
+    asia2: '🌏 ASIA2',
+    asia3: '🌏 ASIA3',
+    inmena: '🌍 INMENA (India/Middle East/North Africa)'
+};
+
+// ── World IDs grouped by region ──
+export const WORLDS_BY_REGION = {
+    eu: [611, 612, 613, 614, 621, 622, 623, 624, 652, 653],
+    na: [511, 512, 513, 514, 521, 522, 523, 531, 532, 533, 552, 553],
+    sa: [711, 712, 713, 714, 721, 722, 723, 731, 732, 733, 752, 753],
+    asia1: [811, 812, 813, 814, 821, 822, 823, 824, 831, 832, 833, 834, 312, 313],
+    asia2: [851, 852, 853, 861, 862, 863, 871, 872, 873, 881, 882, 883, 322, 323],
+    asia3: [911, 912, 913, 914, 921, 922, 923, 924, 931, 932, 933, 934, 332, 333],
+    inmena: [221, 222, 223, 224, 225, 226, 227, 228, 252, 253]
+};
+
 // ── World names mapped by ID, across all regions ──
 export const WORLD_IDS = {
     // EU — Europe
