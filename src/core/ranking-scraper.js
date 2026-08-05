@@ -79,6 +79,7 @@ async function runWithConcurrency(tasks, concurrency) {
 async function fetchWorldRanking(worldId, worldgroupId) {
     const serverName = WORLD_IDS[worldId] || `World ${worldId}`;
     const rankingMap = {};
+    let failedPages = 0;
 
     for (let page = 1; page <= PAGES_PER_WORLD; page++) {
         let success = false;
@@ -112,13 +113,24 @@ async function fetchWorldRanking(worldId, worldgroupId) {
                     await sleep(DELAY_BETWEEN_RETRIES_MS);
                 } else {
                     console.error(`❌ Failed ${serverName} page ${page} after 3 attempts: ${err.message}`);
+                    failedPages++;
                 }
             }
         }
     }
 
     const playerCount = Object.keys(rankingMap).length;
-    console.log(`✅ ${serverName}: ${playerCount} players scraped.`);
+    if (failedPages > 0) {
+        // Incomplete data: players on the failed pages are missing from the cache,
+        // which can make registered members look "not found" and lose their role.
+        console.warn(`⚠️ ${serverName}: ${failedPages} page(s) FAILED after retries — ranking data INCOMPLETE (${playerCount} players scraped)`);
+    } else if (playerCount === 0) {
+        // No exceptions but nothing scraped — likely a site layout change or an
+        // empty table; also a silent-incompleteness signal worth surfacing.
+        console.warn(`⚠️ ${serverName}: 0 players scraped with no failures — check the site layout/parsing`);
+    } else {
+        console.log(`✅ ${serverName}: ${playerCount} players scraped.`);
+    }
     return { worldId, rankingMap };
 }
 

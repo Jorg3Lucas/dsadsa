@@ -48,18 +48,41 @@ function safeFileName(filePath) {
 
 /**
  * Verify JSON file integrity.
+ *
+ * Two backup schemas are supported:
+ *  - Database:  { users: { id: {...} }, config: {...} }
+ *  - Cache:     { updatedAt: "...", ranking: { worldId: { player: clan } } }
+ * The old check only understood the database schema, so every ranking_cache
+ * backup was written and then deleted as "invalid" (no `users` key).
  */
 function verifyBackupIntegrity(filePath) {
     try {
         const data = fs.readFileSync(filePath, 'utf8');
         const parsed = JSON.parse(data);
-        
-        // Check if it has users
+
+        // Database backup: valid if it has registered users
         if (parsed.users && Object.keys(parsed.users).length > 0) {
             return { valid: true, userCount: Object.keys(parsed.users).length };
         }
-        
-        return { valid: false, reason: 'No users in backup' };
+
+        // Ranking-cache backup: valid if it has at least one world with players
+        if (parsed.ranking && typeof parsed.ranking === 'object' && Object.keys(parsed.ranking).length > 0) {
+            let playerCount = 0;
+            for (const world of Object.values(parsed.ranking)) {
+                if (world && typeof world === 'object') {
+                    playerCount += Object.keys(world).length;
+                }
+            }
+            if (playerCount > 0) {
+                return {
+                    valid: true,
+                    userCount: playerCount,
+                    note: `${playerCount} players / ${Object.keys(parsed.ranking).length} worlds`
+                };
+            }
+        }
+
+        return { valid: false, reason: 'No users/ranking data in backup' };
     } catch (e) {
         return { valid: false, reason: e.message };
     }
@@ -109,7 +132,7 @@ export function runBackup(targetFiles, reason = 'scheduled') {
             if (integrity.valid) {
                 count++;
                 backupCount++;
-                console.log(`✅ [Backup] ${backupName} (${integrity.userCount} users) [${reason}]`);
+                console.log(`✅ [Backup] ${backupName} (${integrity.note || `${integrity.userCount} users`}) [${reason}]`);
             } else {
                 // Remove invalid backup
                 fs.unlinkSync(backupPath);
