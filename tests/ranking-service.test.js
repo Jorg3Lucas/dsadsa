@@ -4,15 +4,17 @@ vi.mock('../src/core/ranking-cache.js', () => ({
     findAllNicknameMatchesInCache: vi.fn(),
     findTopNicknamesInCache: vi.fn(),
     getLocalRankingCache: vi.fn(),
-    cleanNickname: vi.fn((name) => name)
+    cleanNickname: vi.fn((name) => name),
+    // Default: very far apart → fuzzy clan fallback rejects (no false positives).
+    levenshteinDistance: vi.fn(() => 99)
 }));
 
 vi.mock('../src/core/ranking-constants.js', () => ({
     WORLD_IDS: { 611: 'EU011', 612: 'EU012' }
 }));
 
-import { lookupNickname } from '../src/core/ranking-service.js';
-import { findAllNicknameMatchesInCache, findTopNicknamesInCache, getLocalRankingCache } from '../src/core/ranking-cache.js';
+import { lookupNickname, lookupTopNicknames, isAlliedClanName } from '../src/core/ranking-service.js';
+import { findAllNicknameMatchesInCache, findTopNicknamesInCache, getLocalRankingCache, levenshteinDistance } from '../src/core/ranking-cache.js';
 
 describe('lookupNickname', () => {
     const mockDb = {
@@ -26,7 +28,9 @@ describe('lookupNickname', () => {
         612: { PlayerTwo: 'RandomClan' }
     };
 
-    beforeEach(() => vi.clearAllMocks());
+    // resetAllMocks restores each mock's factory implementation (e.g.
+    // levenshteinDistance => 99), preventing mockReturnValue leaks between tests.
+    beforeEach(() => vi.resetAllMocks());
 
     it('returns found=false when no cache available', () => {
         getLocalRankingCache.mockReturnValue(null);
@@ -123,5 +127,47 @@ describe('lookupNickname', () => {
         const result = lookupNickname('PlayerOne', {}, mockCache);
         expect(result.found).toBe(true);
         expect(result.inAlliedClan).toBe(false);
+    });
+
+    it('treats decorated clan variants as allied (e.g. "GearsofWar战争" ≈ "GearsofWar")', () => {
+        // Dinizメ case: forum shows the clan with a CJK decoration, config has the
+        // exact forum spelling of the clan family. Tolerant comparison must accept it.
+        findAllNicknameMatchesInCache.mockReturnValue([{ worldId: '611', nickname: 'Dinizメ', clanName: 'GearsofWar战争' }]);
+        const dbWithVariant = { config: { alliedClans: { 611: ['GearsofWar シ'] } } };
+        levenshteinDistance.mockReturnValue(2); // dist('gearsofwarシ','gearsofwar战争') ~ 2/14 → 86%
+        const result = lookupNickname('Dinizメ', dbWithVariant, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.inAlliedClan).toBe(true);
+    });
+
+    it('does NOT treat genuinely different clans as allied', () => {
+        findAllNicknameMatchesInCache.mockReturnValue([{ worldId: '611', nickname: 'PlayerOne', clanName: 'HellRaisers' }]);
+        const result = lookupNickname('PlayerOne', mockDb, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.inAlliedClan).toBe(false);
+    });
+
+    it('rejects a clan that shares length but diverges at the start (shared-prefix guard)', () => {
+        findAllNicknameMatchesInCache.mockReturnValue([{ worldId: '611', nickname: 'PlayerOne', clanName: 'BattleCats' }]);
+        levenshteinDistance.mockReturnValue(2); // high similarity, but prefix differs
+        const result = lookupNickname('PlayerOne', { config: { alliedClans: { 611: ['CastleCats'] } } }, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.inAlliedClan).toBe(false);
+    });
+
+    it('isAlliedClanName: exact clean match wins without calling levenshteinDistance', () => {
+        expect(isAlliedClanName('ToxicFamily', ['ToxicFamily', 'GearsofWar'])).toBe(true);
+        expect(levenshteinDistance).not.toHaveBeenCalled();
+    });
+
+    it('lookupTopNicknames uses the same tolerant allied-clan check', () => {
+        findTopNicknamesInCache.mockReturnValue([
+            { worldId: '611', nickname: 'Dinizメ', clanName: 'GearsofWar战争', score: 1 },
+            { worldId: '612', nickname: 'Other', clanName: 'RandomClan', score: 0.7 }
+        ]);
+        levenshteinDistance.mockReturnValue(2);
+        const results = lookupTopNicknames('Dinizメ', { config: { alliedClans: { 611: ['GearsofWar シ'] } } }, mockCache, 5);
+        expect(results[0].inAlliedClan).toBe(true);
+        expect(results[1].inAlliedClan).toBe(false);
     });
 });

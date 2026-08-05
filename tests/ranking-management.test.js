@@ -153,7 +153,8 @@ vi.mock('../src/core/ranking-cache.js', () => ({
     findTopNicknamesInCache: vi.fn(() => []),
     findTopClanSuggestions: vi.fn().mockReturnValue([]),
     getLocalRankingCache: vi.fn().mockReturnValue(null),
-    cleanNickname: vi.fn((name) => name)
+    cleanNickname: vi.fn((name) => name),
+    levenshteinDistance: vi.fn(() => 99)
 }));
 
 import {

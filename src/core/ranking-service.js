@@ -9,12 +9,55 @@ import {
     findAllNicknameMatchesInCache,
     findTopNicknamesInCache,
     getLocalRankingCache,
-    cleanNickname
+    cleanNickname,
+    levenshteinDistance
 } from './ranking-cache.js';
 
+// Decoration tolerance for allied-clan comparison.
+const ALLIED_CLAN_SIMILARITY = 0.8; // Levenshtein similarity threshold
+const ALLIED_CLAN_MIN_LENGTH = 4;   // too-short names only match exactly
+const ALLIED_CLAN_PREFIX = 3;       // shared-prefix guard against different clans
+
+/**
+ * Decoration-tolerant fallback for clan-name comparison.
+ *
+ * MIR4 clan names are usually a base name + decoration (e.g. "GearsofWar シ",
+ * "GearsofWarツ", "GearsofWar战争", "ForWìn") and the forum spelling is
+ * authoritative. Special characters, katakana, CJK and accents are unavoidable,
+ * so after an exact (cleaned) comparison fails we accept a name that is VERY
+ * similar (≥ 80% Levenshtein similarity) AND shares its first characters —
+ * enough to treat "GearsofWar シ" and "GearsofWar战争" as the same clan family,
+ * but not enough to match genuinely different clans (e.g. "ToxicFamily" vs
+ * "HellRaisers" ~0% similarity).
+ */
+function isSimilarClan(a, b) {
+    // Very short names are too ambiguous for fuzzy matching — require exact only.
+    if (a.length < ALLIED_CLAN_MIN_LENGTH || b.length < ALLIED_CLAN_MIN_LENGTH) return false;
+    // A different clan that merely starts similarly (e.g. "ToxicFamilyX" vs
+    // "ToxicFamily") still passes here, but this blocks names that diverge early.
+    if (a.slice(0, ALLIED_CLAN_PREFIX) !== b.slice(0, ALLIED_CLAN_PREFIX)) return false;
+    const longer = a.length > b.length ? a : b;
+    const similarity = 1 - (levenshteinDistance(a, b) / longer.length);
+    return similarity >= ALLIED_CLAN_SIMILARITY;
+}
+
+/**
+ * Check whether a clan name (as shown in the game-forum ranking) is one of the
+ * configured allied clans of a world. Exact match first, then the
+ * decoration-tolerant fallback (see isSimilarClan).
+ */
+export function isAlliedClanName(clanName, worldAlliedClans) {
+    if (!worldAlliedClans || !clanName) return false;
+    const clanClean = cleanNickname(clanName);
+    return worldAlliedClans.some(c => {
+        const configClean = cleanNickname(c);
+        if (configClean === clanClean) return true;
+        return isSimilarClan(configClean, clanClean);
+    });
+}
+
 function checkAlliedClan(cacheHit, db) {
-    const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-    return !!(worldAlliedClans && worldAlliedClans.some(c => cleanNickname(c) === cleanNickname(cacheHit.clanName)));
+    return isAlliedClanName(cacheHit.clanName, db.config?.alliedClans?.[cacheHit.worldId]);
 }
 
 /**
@@ -88,8 +131,7 @@ export function lookupTopNicknames(nickname, db, cache, limit = 3) {
 
     return topMatches.map(match => {
         const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
-        const worldAlliedClans = db.config?.alliedClans?.[match.worldId];
-        const inAlliedClan = !!(worldAlliedClans && worldAlliedClans.some(c => cleanNickname(c) === cleanNickname(match.clanName)));
+        const inAlliedClan = isAlliedClanName(match.clanName, db.config?.alliedClans?.[match.worldId]);
         return {
             worldId: match.worldId,
             nickname: match.nickname,
