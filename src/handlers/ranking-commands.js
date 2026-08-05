@@ -21,6 +21,7 @@ import {
     REGISTRATION_CHANNEL_ID,
     SUPER_ADMIN_USER_ID,
     NUKE_PROTECTED_CHANNEL_IDS,
+    MAX_NICKNAME_SUGGESTIONS,
     ensureConfig
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
@@ -49,7 +50,7 @@ function buildManualNicknameSelect(userId, typedNick, topSuggestions, hasSuggest
             .setDefault(true),
         ...topSuggestions
             .filter(s => s.nickname.toLowerCase() !== typedNick.toLowerCase())
-            .slice(0, 2)
+            .slice(0, MAX_NICKNAME_SUGGESTIONS)
             .map(s => new StringSelectMenuOptionBuilder()
                 .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
                 .setValue(s.nickname)
@@ -75,7 +76,7 @@ function buildPendingNicknameSelect(userId, typedNick, topSuggestions, defaultNi
             .setDefault(!defaultNick || defaultNick === typedNick),
         ...topSuggestions
             .filter(s => s.nickname.toLowerCase() !== typedNick.toLowerCase())
-            .slice(0, 2)
+            .slice(0, MAX_NICKNAME_SUGGESTIONS)
             .map(s => new StringSelectMenuOptionBuilder()
                 .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
                 .setValue(s.nickname)
@@ -100,7 +101,7 @@ function buildPendingPilotOwnerSelect(pilotId, typedOwnerNick, candidates, curre
             .setValue('keep')
             .setDescription('Keep the owner as currently registered')
             .setDefault(!candidates.some(c => c.id === currentOwnerId)),
-        ...candidates.slice(0, 2).map(c => new StringSelectMenuOptionBuilder()
+        ...candidates.slice(0, MAX_NICKNAME_SUGGESTIONS).map(c => new StringSelectMenuOptionBuilder()
             .setLabel(`🔍 ${c.nickname.substring(0, 80)}`)
             .setValue(c.id)
             .setDescription(`Similarity ${Math.round(c.score * 100)}%`)
@@ -177,7 +178,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
         const lookup = lookupNickname(nickname, db);
-        const topSuggestions = lookupTopNicknames(nickname, db, null, 2);
+        const topSuggestions = lookupTopNicknames(nickname, db, null, MAX_NICKNAME_SUGGESTIONS);
         const hasSuggestions = topSuggestions.some(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
 
         if (lookup.found) {
@@ -612,7 +613,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                 // Offer a dropdown to correct the nickname when fuzzy suggestions exist
                 if (fuzzySelectRows.length < 5) {
-                    const topSuggestions = lookupTopNicknames(pending.nickname, db, rankingCache, 2);
+                    const topSuggestions = lookupTopNicknames(pending.nickname, db, rankingCache, MAX_NICKNAME_SUGGESTIONS);
                     const hasFuzzyOptions = topSuggestions.some(s => s.nickname.toLowerCase() !== pending.nickname.toLowerCase());
                     if (hasFuzzyOptions) {
                         fuzzySelectRows.push(buildPendingNicknameSelect(userId, pending.nickname, topSuggestions, pending.selectedNickname));
@@ -705,7 +706,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                     line += `   ✅ **Owner corrected:** "${pending.originalOwnerNick}" → "${pending.ownerNick}"\n`;
                 }
 
-                const ownerCandidates = !ownerMatch ? findOwnerCandidates(pending.ownerNick, db, 3) : [];
+                const ownerCandidates = !ownerMatch ? findOwnerCandidates(pending.ownerNick, db, MAX_NICKNAME_SUGGESTIONS) : [];
                 if (!ownerMatch && ownerCandidates.length > 0) {
                     line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${ownerCandidates[0].nickname}"\n`;
                 }

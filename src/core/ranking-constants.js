@@ -130,6 +130,16 @@ export const WORLD_IDS = {
 };
 
 // ==========================================
+// 🔍 NICKNAME SUGGESTIONS (fuzzy dropdowns)
+// ==========================================
+
+// How many fuzzy nickname suggestions to show when registering / correcting
+// a registration. Allied-clan candidates are ranked first (see
+// lookupTopNicknames), so a larger list means the correct character is
+// much less likely to be missed (e.g. "Dinizメ" allied vs "Diniz メ" elsewhere).
+export const MAX_NICKNAME_SUGGESTIONS = 6;
+
+// ==========================================
 // ⏳ PENDING REGISTRATION EXPIRY (24h)
 // ==========================================
 

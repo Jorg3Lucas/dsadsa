@@ -41,25 +41,50 @@ export function findNicknameInCache(nickname, cache) {
     }
     if (!cache) return null;
 
-    const cleaned = cleanNickname(nickname);
-
-    for (const [worldId, players] of Object.entries(cache)) {
-        const matchKey = Object.keys(players).find(k => cleanNickname(k) === cleaned);
-        if (matchKey) {
-            return {
-                worldId,
-                nickname: matchKey,
-                clanName: players[matchKey]
-            };
-        }
-    }
-    return null;
+    // First hit in cache order (same behavior as before) — same-world variants
+    // that clean to the same name are ambiguous here, so role decisions must use
+    // findAllNicknameMatchesInCache + the allied-clan preference instead.
+    const matches = findAllNicknameMatchesInCache(nickname, cache);
+    return matches.length > 0 ? matches[0] : null;
 }
 
-// Find ALL worlds where a nickname appears with an exact (cleaned) match.
-// MIR4 character names are unique per server, so the same name can exist on
-// several worlds — returning every hit lets callers prefer the right one
-// (e.g. a player in an allied clan) instead of blindly taking the first.
+// ── Cleaned-name index (performance) ──
+// The ranking cache can hold ~76k players across all worlds. Exact lookups scan
+// every entry, which is wasteful when the sync engine looks up hundreds of
+// registered users against the SAME cache object. This WeakMap memoizes a
+// cleaned-name index per cache object (built lazily, once), turning every
+// subsequent exact lookup into an O(1) map hit. A fresh cache object (new
+// scrape / new parse of the file) gets its own fresh index automatically.
+const cleanedNameIndex = new WeakMap();
+
+function getCleanedNameIndex(cache) {
+    let index = cleanedNameIndex.get(cache);
+    if (!index) {
+        index = new Map();
+        for (const [worldId, players] of Object.entries(cache)) {
+            for (const [nickname, clanName] of Object.entries(players)) {
+                const cleaned = cleanNickname(nickname);
+                if (!cleaned) continue; // skip degenerate keys (e.g. all-decoration names)
+                let list = index.get(cleaned);
+                if (!list) {
+                    list = [];
+                    index.set(cleaned, list);
+                }
+                list.push({ worldId, nickname, clanName });
+            }
+        }
+        cleanedNameIndex.set(cache, index);
+    }
+    return index;
+}
+
+// Find ALL ranking entries whose name matches (cleaned) the given nickname,
+// across every world AND every variant within a world. MIR4 names are unique
+// per server but the same name can exist on several worlds, and the forum can
+// hold variants that clean to the same key — e.g. "Dinizメ" and "Diniz メ"
+// (whitespace is stripped), where one is in an allied clan and the other is a
+// DIFFERENT player (even in the same world). Returning every hit lets callers
+// prefer the allied one instead of blindly taking the first.
 // Returns an array of { worldId, nickname, clanName }, in cache order.
 export function findAllNicknameMatchesInCache(nickname, cache) {
     if (!cache) {
@@ -68,19 +93,7 @@ export function findAllNicknameMatchesInCache(nickname, cache) {
     if (!cache) return [];
 
     const cleaned = cleanNickname(nickname);
-    const matches = [];
-
-    for (const [worldId, players] of Object.entries(cache)) {
-        const matchKey = Object.keys(players).find(k => cleanNickname(k) === cleaned);
-        if (matchKey) {
-            matches.push({
-                worldId,
-                nickname: matchKey,
-                clanName: players[matchKey]
-            });
-        }
-    }
-    return matches;
+    return getCleanedNameIndex(cache).get(cleaned) || [];
 }
 
 // ── Fuzzy nickname matching ──

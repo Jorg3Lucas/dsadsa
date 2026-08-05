@@ -4,7 +4,7 @@
 // Centralized service for looking up nicknames in the ranking cache
 // with automatic fuzzy matching and allied clan verification.
 
-import { WORLD_IDS } from './ranking-constants.js';
+import { WORLD_IDS, MAX_NICKNAME_SUGGESTIONS } from './ranking-constants.js';
 import {
     findAllNicknameMatchesInCache,
     findTopNicknamesInCache,
@@ -119,17 +119,26 @@ export function lookupNickname(nickname, db, cache) {
     return { found: false };
 }
 
-// ── Top N fuzzy matches ──
+// ── Top N fuzzy matches (for suggestion dropdowns) ──
 // Returns up to `limit` candidates, each with full info + score.
-export function lookupTopNicknames(nickname, db, cache, limit = 3) {
+// Allied-clan candidates are ranked FIRST (before raw similarity), because
+// the alliance's own characters are the most likely match for the typed name —
+// e.g. "Dinizメ" (allied) must float above "Diniz メ" (a different player,
+// gold-seller clan) even when the latter scores higher by string similarity.
+export function lookupTopNicknames(nickname, db, cache, limit = MAX_NICKNAME_SUGGESTIONS) {
     if (!cache) {
         cache = getLocalRankingCache();
     }
     if (!cache) return [];
 
-    const topMatches = findTopNicknamesInCache(nickname, cache, limit);
+    // Fetch a wider pool BEFORE ranking by allied status, so an allied candidate
+    // that scores slightly lower than non-allied homonyms is not sliced off first.
+    // findTopNicknamesInCache computes all candidates before slicing, so a larger
+    // pool costs nothing extra (only the slice differs).
+    const poolSize = Math.max(MAX_NICKNAME_SUGGESTIONS * 3, limit * 3);
+    const topMatches = findTopNicknamesInCache(nickname, cache, poolSize);
 
-    return topMatches.map(match => {
+    const enriched = topMatches.map(match => {
         const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
         const inAlliedClan = isAlliedClanName(match.clanName, db.config?.alliedClans?.[match.worldId]);
         return {
@@ -141,4 +150,8 @@ export function lookupTopNicknames(nickname, db, cache, limit = 3) {
             score: match.score
         };
     });
+
+    enriched.sort((a, b) => (b.inAlliedClan - a.inAlliedClan) || (b.score - a.score));
+
+    return enriched.slice(0, limit);
 }

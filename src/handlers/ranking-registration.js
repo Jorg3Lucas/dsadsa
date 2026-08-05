@@ -5,7 +5,7 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder
 } from 'discord.js';
-import { pendingRegistrations, adminChannelId } from '../core/ranking-constants.js';
+import { pendingRegistrations, adminChannelId, MAX_NICKNAME_SUGGESTIONS } from '../core/ranking-constants.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 
 // ==========================================
@@ -43,7 +43,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     }
 
     // ── Fuzzy suggestions: let the USER pick the exact name before approval ──
-    const topSuggestions = lookupTopNicknames(nickname, db, null, 3);
+    const topSuggestions = lookupTopNicknames(nickname, db, null, MAX_NICKNAME_SUGGESTIONS);
     const suggestions = topSuggestions.filter(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
 
     if (suggestions.length > 0) {
@@ -56,7 +56,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
                 .setValue(nickname)
                 .setDescription('Use the nickname exactly as typed')
                 .setDefault(true),
-            ...suggestions.slice(0, 3).map(s => new StringSelectMenuOptionBuilder()
+            ...suggestions.slice(0, MAX_NICKNAME_SUGGESTIONS).map(s => new StringSelectMenuOptionBuilder()
                 .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
                 .setValue(s.nickname)
                 .setDescription(s.inAlliedClan ? `✅ Allied clan - ${s.clanName}` : `❌ Not allied - ${s.clanName}`)

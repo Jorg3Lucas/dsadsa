@@ -10,7 +10,8 @@ vi.mock('../src/core/ranking-cache.js', () => ({
 }));
 
 vi.mock('../src/core/ranking-constants.js', () => ({
-    WORLD_IDS: { 611: 'EU011', 612: 'EU012' }
+    WORLD_IDS: { 611: 'EU011', 612: 'EU012' },
+    MAX_NICKNAME_SUGGESTIONS: 6
 }));
 
 import { lookupNickname, lookupTopNicknames, isAlliedClanName } from '../src/core/ranking-service.js';
@@ -169,5 +170,36 @@ describe('lookupNickname', () => {
         const results = lookupTopNicknames('Dinizメ', { config: { alliedClans: { 611: ['GearsofWar シ'] } } }, mockCache, 5);
         expect(results[0].inAlliedClan).toBe(true);
         expect(results[1].inAlliedClan).toBe(false);
+    });
+
+    it('ranks allied-clan candidates FIRST in suggestions, even with a lower score', () => {
+        // "Diniz メ" (gold-seller clan, non-allied) scores HIGHER by similarity, but
+        // the allied "Dinizメ" (GearsofWar战争) must float to the top of the dropdown.
+        findTopNicknamesInCache.mockReturnValue([
+            { worldId: '612', nickname: 'Diniz メ', clanName: 'sellgold888', score: 0.95 },
+            { worldId: '611', nickname: 'Dinizメ', clanName: 'GearsofWar战争', score: 0.85 }
+        ]);
+        levenshteinDistance.mockReturnValue(2);
+        const results = lookupTopNicknames('Dinizメ', { config: { alliedClans: { 611: ['GearsofWar シ'] } } }, mockCache, 5);
+        expect(results[0].nickname).toBe('Dinizメ');
+        expect(results[0].inAlliedClan).toBe(true);
+        expect(results[1].nickname).toBe('Diniz メ');
+        expect(results[1].inAlliedClan).toBe(false);
+    });
+
+    it('prefers the allied variant when cleaned-equal names exist in the SAME world (Dinizメ vs Diniz メ)', () => {
+        // Both entries clean to "dinizメ" in EU011: the member (GearsofWar战争) and a
+        // different player (sellgold888). The lookup must pick the allied one.
+        findAllNicknameMatchesInCache.mockReturnValue([
+            { worldId: '611', nickname: 'Diniz メ', clanName: 'sellgold888' },
+            { worldId: '611', nickname: 'Dinizメ', clanName: 'GearsofWar战争' }
+        ]);
+        levenshteinDistance.mockReturnValue(2);
+        const dbWithVariant = { config: { alliedClans: { 611: ['GearsofWar シ'] } } };
+        const result = lookupNickname('Dinizメ', dbWithVariant, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.worldId).toBe('611');
+        expect(result.nickname).toBe('Dinizメ');
+        expect(result.inAlliedClan).toBe(true);
     });
 });
