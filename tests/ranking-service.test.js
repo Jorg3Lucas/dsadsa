@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../src/core/ranking-cache.js', () => ({
-    findNicknameInCache: vi.fn(),
-    findClosestNicknameInCache: vi.fn(),
+    findAllNicknameMatchesInCache: vi.fn(),
     findTopNicknamesInCache: vi.fn(),
     getLocalRankingCache: vi.fn(),
     cleanNickname: vi.fn((name) => name)
@@ -13,7 +12,7 @@ vi.mock('../src/core/ranking-constants.js', () => ({
 }));
 
 import { lookupNickname } from '../src/core/ranking-service.js';
-import { findNicknameInCache, findClosestNicknameInCache, getLocalRankingCache } from '../src/core/ranking-cache.js';
+import { findAllNicknameMatchesInCache, findTopNicknamesInCache, getLocalRankingCache } from '../src/core/ranking-cache.js';
 
 describe('lookupNickname', () => {
     const mockDb = {
@@ -36,7 +35,7 @@ describe('lookupNickname', () => {
     });
 
     it('finds exact match and checks allied clan', () => {
-        findNicknameInCache.mockReturnValue({ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily' });
+        findAllNicknameMatchesInCache.mockReturnValue([{ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily' }]);
         const result = lookupNickname('PlayerOne', mockDb, mockCache);
         expect(result.found).toBe(true);
         expect(result.exactMatch).toBe(true);
@@ -46,39 +45,81 @@ describe('lookupNickname', () => {
     });
 
     it('detects non-allied clan', () => {
-        findNicknameInCache.mockReturnValue({ worldId: '612', nickname: 'PlayerTwo', clanName: 'RandomClan' });
+        findAllNicknameMatchesInCache.mockReturnValue([{ worldId: '612', nickname: 'PlayerTwo', clanName: 'RandomClan' }]);
         const result = lookupNickname('PlayerTwo', mockDb, mockCache);
         expect(result.found).toBe(true);
         expect(result.serverName).toBe('EU012');
         expect(result.inAlliedClan).toBe(false);
     });
 
+    it('prefers the allied-clan hit when the same name exists on multiple servers', () => {
+        // Same character name on NA022 (non-allied clan) AND EU011 (allied clan).
+        // Previously the first hit in cache order could win — e.g. resolving an EU
+        // member to the NA022 clone and wrongly reporting "not in allied clan".
+        findAllNicknameMatchesInCache.mockReturnValue([
+            { worldId: '612', nickname: 'PlayerOne', clanName: 'RandomClan' },
+            { worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily' }
+        ]);
+        const result = lookupNickname('PlayerOne', mockDb, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.exactMatch).toBe(true);
+        expect(result.worldId).toBe('611');
+        expect(result.serverName).toBe('EU011');
+        expect(result.inAlliedClan).toBe(true);
+    });
+
+    it('falls back to the first exact hit when no exact match is in an allied clan', () => {
+        findAllNicknameMatchesInCache.mockReturnValue([
+            { worldId: '612', nickname: 'PlayerOne', clanName: 'RandomClan' },
+            { worldId: '611', nickname: 'PlayerOne', clanName: 'OtherClan' }
+        ]);
+        const result = lookupNickname('PlayerOne', mockDb, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.worldId).toBe('612');
+        expect(result.inAlliedClan).toBe(false);
+    });
+
     it('returns fuzzy suggestion when exact fails and fuzzy succeeds', () => {
-        findNicknameInCache.mockReturnValue(null);
-        findClosestNicknameInCache.mockReturnValue({ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily', score: 0.85 });
+        findAllNicknameMatchesInCache.mockReturnValue([]);
+        findTopNicknamesInCache.mockReturnValue([{ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily', score: 0.85 }]);
         const result = lookupNickname('PlayrOne', mockDb, mockCache);
         expect(result.found).toBe(true);
         expect(result.exactMatch).toBe(false);
         expect(result.fuzzySuggestion).toBe('PlayerOne');
     });
 
+    it('prefers an allied-clan candidate among fuzzy matches even with a lower score', () => {
+        findAllNicknameMatchesInCache.mockReturnValue([]);
+        findTopNicknamesInCache.mockReturnValue([
+            { worldId: '612', nickname: 'PlayrTwo', clanName: 'RandomClan', score: 0.9 },
+            { worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily', score: 0.8 }
+        ]);
+        const result = lookupNickname('PlayrOne', mockDb, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.exactMatch).toBe(false);
+        expect(result.worldId).toBe('611');
+        expect(result.serverName).toBe('EU011');
+        expect(result.inAlliedClan).toBe(true);
+        expect(result.fuzzySuggestion).toBe('PlayerOne');
+    });
+
     it('returns not found when both exact and fuzzy fail', () => {
-        findNicknameInCache.mockReturnValue(null);
-        findClosestNicknameInCache.mockReturnValue(null);
+        findAllNicknameMatchesInCache.mockReturnValue([]);
+        findTopNicknamesInCache.mockReturnValue([]);
         const result = lookupNickname('UnknownPlayer', mockDb, mockCache);
         expect(result.found).toBe(false);
     });
 
-    it('passes pre-loaded cache to findNicknameInCache without calling getLocalRankingCache', () => {
-        findNicknameInCache.mockReturnValue(null);
-        findClosestNicknameInCache.mockReturnValue(null);
+    it('passes pre-loaded cache to findAllNicknameMatchesInCache without calling getLocalRankingCache', () => {
+        findAllNicknameMatchesInCache.mockReturnValue([]);
+        findTopNicknamesInCache.mockReturnValue([]);
         lookupNickname('Test', mockDb, mockCache);
-        expect(findNicknameInCache).toHaveBeenCalledWith('Test', mockCache);
+        expect(findAllNicknameMatchesInCache).toHaveBeenCalledWith('Test', mockCache);
         expect(getLocalRankingCache).not.toHaveBeenCalled();
     });
 
     it('handles db without config gracefully', () => {
-        findNicknameInCache.mockReturnValue({ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily' });
+        findAllNicknameMatchesInCache.mockReturnValue([{ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily' }]);
         const result = lookupNickname('PlayerOne', {}, mockCache);
         expect(result.found).toBe(true);
         expect(result.inAlliedClan).toBe(false);

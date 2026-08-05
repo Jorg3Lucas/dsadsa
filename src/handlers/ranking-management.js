@@ -17,7 +17,8 @@ import {
     confirmationCache,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
+import { findTopClanSuggestions, getLocalRankingCache } from '../core/ranking-cache.js';
+import { lookupNickname } from '../core/ranking-service.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
@@ -150,7 +151,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     // ── View Status ──
     if (actionType === 'status') {
-        const cacheHit = findNicknameInCache(userData.nickname);
+        const lookup = lookupNickname(userData.nickname, db);
 
         let statusLines = `📋 **User Status: ${userData.nickname}**\n\n`;
         statusLines += `🆔 **ID:** ${targetUserId}\n`;
@@ -166,13 +167,13 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
         statusLines += `✈️ **Pilots:** ${userData.pilotIds ? userData.pilotIds.length : 0}\n`;
 
-        if (cacheHit) {
-            const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
-            const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => cleanNickname(c) === cleanNickname(cacheHit.clanName));
-            statusLines += `\n🔍 **Ranking:** ✅ Found — ${serverName}\n`;
-            statusLines += `🏰 **Clan:** ${cacheHit.clanName}\n`;
-            statusLines += `${inAlliedClan ? '✅ **Allied Clan:** Yes' : '❌ **Allied Clan:** No'}\n`;
+        if (lookup.found) {
+            statusLines += `\n🔍 **Ranking:** ✅ Found — ${lookup.serverName}\n`;
+            statusLines += `🏰 **Clan:** ${lookup.clanName}\n`;
+            statusLines += `${lookup.inAlliedClan ? '✅ **Allied Clan:** Yes' : '❌ **Allied Clan:** No'}\n`;
+            if (!lookup.exactMatch && lookup.fuzzySuggestion) {
+                statusLines += `🔎 **Matched by similarity:** "${userData.nickname}" ≈ "${lookup.fuzzySuggestion}" — not an exact ranking match\n`;
+            }
         } else {
             statusLines += `\n🔍 **Ranking:** ❌ Not found\n`;
         }

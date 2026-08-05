@@ -29,6 +29,7 @@ vi.mock('../src/core/ranking-cache.js', () => ({
         return matrix[b.length][a.length];
     }),
     findNicknameInCache: vi.fn(() => null),
+    findAllNicknameMatchesInCache: vi.fn(() => []),
     findClosestNicknameInCache: vi.fn(() => null),
     findTopNicknamesInCache: vi.fn(() => [])
 }));

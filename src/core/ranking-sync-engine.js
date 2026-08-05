@@ -343,7 +343,22 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     // ❌ Not in allied clan — remove role (keep registration)
                     // Only run when the ranking cache is available: if the cache is
                     // missing/unavailable, skip role changes (fail-safe, keep roles).
-                    if (hasMemberRole) {
+                    //
+                    // Safety: a fuzzy-only match must never remove the role. A fuzzy
+                    // match can be a DIFFERENT player with a similar name on another
+                    // server (e.g. an EU member resolved to someone on NA022 in a
+                    // non-allied clan), so it is not evidence that this member left
+                    // the allied clans. Only an exact match in a non-allied clan — or
+                    // no match at all — justifies stripping the role.
+                    const fuzzyOnlyMatch = !!(lookup && lookup.found && lookup.exactMatch === false);
+                    if (fuzzyOnlyMatch) {
+                        // Fuzzy-only match — keep the role and let admins know why.
+                        // The match may be a DIFFERENT player with a similar name,
+                        // so it is not evidence this member left the allied clans.
+                        if (hasMemberRole) {
+                            logEvent(`[Sync] Kept role for ${member.user.username} — ranking match is fuzzy only (${lookup.serverName}/${lookup.clanName}), skipping removal`);
+                        }
+                    } else if (hasMemberRole) {
                         await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                         logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan (registration kept)`);
 

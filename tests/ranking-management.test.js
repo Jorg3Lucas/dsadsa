@@ -149,6 +149,8 @@ vi.mock('../src/core/ranking-constants.js', () => ({
 // Mock cache module
 vi.mock('../src/core/ranking-cache.js', () => ({
     findNicknameInCache: vi.fn(),
+    findAllNicknameMatchesInCache: vi.fn(() => []),
+    findTopNicknamesInCache: vi.fn(() => []),
     findTopClanSuggestions: vi.fn().mockReturnValue([]),
     getLocalRankingCache: vi.fn().mockReturnValue(null),
     cleanNickname: vi.fn((name) => name)

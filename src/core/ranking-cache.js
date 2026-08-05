@@ -56,6 +56,33 @@ export function findNicknameInCache(nickname, cache) {
     return null;
 }
 
+// Find ALL worlds where a nickname appears with an exact (cleaned) match.
+// MIR4 character names are unique per server, so the same name can exist on
+// several worlds — returning every hit lets callers prefer the right one
+// (e.g. a player in an allied clan) instead of blindly taking the first.
+// Returns an array of { worldId, nickname, clanName }, in cache order.
+export function findAllNicknameMatchesInCache(nickname, cache) {
+    if (!cache) {
+        cache = getLocalRankingCache();
+    }
+    if (!cache) return [];
+
+    const cleaned = cleanNickname(nickname);
+    const matches = [];
+
+    for (const [worldId, players] of Object.entries(cache)) {
+        const matchKey = Object.keys(players).find(k => cleanNickname(k) === cleaned);
+        if (matchKey) {
+            matches.push({
+                worldId,
+                nickname: matchKey,
+                clanName: players[matchKey]
+            });
+        }
+    }
+    return matches;
+}
+
 // ── Fuzzy nickname matching ──
 // Strips common formatting characters and finds the closest match in the ranking cache
 // Uses Levenshtein distance normalized by string length (threshold: >= 0.6 similarity)
