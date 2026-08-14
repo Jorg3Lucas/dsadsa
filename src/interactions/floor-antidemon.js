@@ -10,7 +10,6 @@ import {
 import { getMsg } from "../core/lang.js";
 import { db, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
     hasActiveClaim,
@@ -118,7 +117,6 @@ export async function handleAntiCancel(interaction, uid, uName, targetObj, panel
             if (targetObj[rm].ownerId === uid) {
                 anyAction = true;
                 const currentLoggedName = targetObj[rm].ownerName || uName;
-                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(targetObj[rm].ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - Room ${rm.toUpperCase()}`,
                     reason: isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel")
@@ -132,7 +130,6 @@ export async function handleAntiCancel(interaction, uid, uName, targetObj, panel
             if (targetObj[rm].nextId === uid) {
                 anyAction = true;
                 const currentLoggedName = targetObj[rm].nextName || uName;
-                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                 notifyUserDM(targetObj[rm].nextId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - Room ${rm.toUpperCase()} (Queue)`,
                     reason: isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel")

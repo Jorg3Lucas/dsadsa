@@ -6,7 +6,6 @@
 import { getMsg } from "../core/lang.js";
 import { db, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     hasActiveClaim,
     hasActiveQueue,
@@ -73,7 +72,6 @@ export async function handleAntiNextSide(interaction, uid, uName) {
 
     if (joinedRooms.length > 0) {
         const roomsLabel = joinedRooms.join(" + ");
-        pushToDailyLogs("QUEUE_JOIN", uName, `${targetFloor.title} - Room ${roomsLabel}`, getMsg("render.joinedAsNext"));
         notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - Room ${roomsLabel}` }));
         saveLocalStorage();
         await refreshVisualPanel(pKey);

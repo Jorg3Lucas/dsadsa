@@ -6,7 +6,6 @@
 import { getMsg } from "../core/lang.js";
 import { saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     applyFiveMinCooldown,
     getEventGroupKeys
@@ -31,7 +30,6 @@ export async function handleEventGroupCancel(interaction, uid, uName, targetObj,
             if (evData.ownerId === uid) {
                 anyAction = true;
                 const currentLoggedName = evData.ownerName || uName;
-                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${evData.name}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${evData.name}`,
                     reason: isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel")
@@ -74,7 +72,6 @@ export async function handleEventGroupCancel(interaction, uid, uName, targetObj,
             if (evData.nextId === uid) {
                 anyAction = true;
                 const currentLoggedName = evData.nextName || uName;
-                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${evData.name} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                 notifyUserDM(evData.nextId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${evData.name} (Queue)`,
                     reason: isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel")

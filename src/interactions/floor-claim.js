@@ -6,7 +6,6 @@
 import { getMsg } from "../core/lang.js";
 import { saveLocalStorage, isEarlyClaimUser } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
     hasActiveClaim,
@@ -36,7 +35,6 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
     }
 
     if (isOwner) {
-        pushToDailyLogs("CANCEL", targetObj.ownerName, targetObj.title, getMsg("logs.voluntaryLeave"));
         notifyUserDM(uid, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.voluntaryLeave") }));
         freeFloorAndActivateNextGracePeriod(targetObj);
         if (!isMod) applyFiveMinCooldown(uid);
@@ -45,7 +43,6 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
     }
 
     if (isMod && targetObj.ownerId) {
-        pushToDailyLogs("CANCEL", targetObj.ownerName, targetObj.title, getMsg("logs.staffCancel"));
         notifyUserDM(targetObj.ownerId, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.staffCancel") }));
         freeFloorAndActivateNextGracePeriod(targetObj);
         await refreshVisualPanel(panelKey);
@@ -53,7 +50,6 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
     }
 
     if (inQueue) {
-        pushToDailyLogs("CANCEL", uName, targetObj.title, getMsg("logs.queueLeave"));
         notifyUserDM(uid, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.queueLeave") }));
         removeUserFromQueue(targetObj, uid);
         saveLocalStorage();
@@ -132,7 +128,6 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
     targetObj.timeWindow = windowStr;
     targetObj._claimTimestamp = now.getTime();
 
-    pushToDailyLogs("CLAIM_START", uName, targetObj.title, `${getMsg("render.windowPrefix")}: ${targetObj.timeWindow}`);
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: targetObj.title, window: windowStr }));
 
     saveLocalStorage();
@@ -189,7 +184,6 @@ export async function handleGeneralClaim(interaction, uid, uName, targetObj, pan
     targetObj.timeWindow = windowStr;
     targetObj._claimTimestamp = start.getTime();
 
-    pushToDailyLogs("CLAIM_START", uName, targetObj.title, `${getMsg("render.windowPrefix")}: ${targetObj.timeWindow}`);
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: targetObj.title, window: windowStr }));
 
     if (targetObj.next && targetObj.next.userId === uid) {
@@ -250,7 +244,6 @@ export async function handleGeneralNext(interaction, uid, uName, targetObj, pane
         targetObj.next = node;
     }
 
-    pushToDailyLogs("QUEUE_JOIN", uName, targetObj.title, getMsg("render.joinedNextLine"));
     notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: targetObj.title }));
 
     saveLocalStorage();

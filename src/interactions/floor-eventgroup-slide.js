@@ -8,7 +8,6 @@ import { ActionRowBuilder as t, StringSelectMenuBuilder as i } from "discord.js"
 import { getMsg, getArray } from "../core/lang.js";
 import { db, saveLocalStorage, isEarlyClaimUser } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
     hasActiveClaim,
@@ -53,7 +52,6 @@ export async function handleEGSlide(interaction, uid, uName) {
         evData.ownerId = uid;
         evData.ownerName = uName;
         evData._claimTimestamp = now.getTime();
-        pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, "Claimed Red Boss");
         notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: "Until boss is killed" }));
         saveLocalStorage();
         await refreshVisualPanel(pKey);
@@ -121,7 +119,6 @@ export async function handleEGSlide(interaction, uid, uName) {
         evData.ownerName = uName;
         evData.timeWindow = windowStr;
         evData._claimTimestamp = now.getTime();
-        pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
         notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
         saveLocalStorage();
         await refreshVisualPanel(pKey);

@@ -7,7 +7,6 @@
 import { getMsg } from "../core/lang.js";
 import { db, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
     hasActiveClaim,
@@ -71,7 +70,6 @@ export async function handleEGTicket(interaction, uid, uName) {
     evData.time = `${getFormattedTime12h(startTime)}\nto  ${getFormattedTime12h(endTime)}`;
     evData.timeWindow = rangeStr;
 
-    pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `Total Ticket: ${calcMinutes} min until ${getFormattedTime12h(endTime)}`);
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} (${evData.name})`, window: rangeStr }));
 
     egSummonCache.delete(uid);

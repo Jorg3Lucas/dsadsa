@@ -1,7 +1,6 @@
 import { isRoomOpen, parseStringToDate, getFormattedTime12h, calculateNextOpening } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { notifyUserDM } from "./panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import { getEventGroupKeys } from "./claim-core.js";
 import { STATUS_AVAILABLE, STATUS_KILLED } from "../core/constants.js";
 import { noop } from "../core/config.js";
@@ -47,7 +46,6 @@ export async function handleEventGroup(current, key, now) {
                 const fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
                 const insidePreWindow = now >= fiveMinBefore && now < nextOpen;
                 if (!insidePreWindow && ("" !== evData.timeWindow || evData.ownerId)) {
-                    if (evData.ownerName) pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.autoClose"));
                     await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
                         title: `${current.title} - ${evData.name}`,
                         reason: getMsg("logs.autoClose")
@@ -62,7 +60,6 @@ export async function handleEventGroup(current, key, now) {
         if (evData.type === "fixed" && evData.timeWindow && evData.ownerId) {
             const limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
             if (limitTime && now >= limitTime) {
-                if (evData.ownerName) pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
                 await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${current.title} - ${evData.name}`,
                     reason: getMsg("logs.timeout")
@@ -76,7 +73,6 @@ export async function handleEventGroup(current, key, now) {
         if (evData.type === "summon" && evData.timeWindow && evData.ownerId) {
             const limitTime = parseStringToDate(evData.timeWindow.split(" ~ ")[1]);
             if (limitTime && now >= limitTime) {
-                if (evData.ownerName) pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.timeout"));
                 await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${current.title} - ${evData.name}`,
                     reason: getMsg("logs.timeout")
@@ -113,7 +109,6 @@ export async function handleEventGroup(current, key, now) {
                     roomKey: evData.name,
                     title: current.title
                 })).catch(noop);
-                if (evData.nextName) pushToDailyLogs("CLAIM_END", evData.nextName, `${current.title} - ${evData.name}`, getMsg("logs.absenceQueue"));
                 evData.nextId = null;
                 evData.nextName = null;
                 evData.endLimit = null;

@@ -1,13 +1,12 @@
 // ==========================================
 // 👑 ADMIN INTERACTION HANDLERS
-// admin-reset-menu, admin-kick-menu, confirm-resetlogs,
+// admin-reset-menu, admin-kick-menu,
 // reserve-select-event, reserve-select-floors, reserve-select-hours
 // ==========================================
 
 import { getMsg } from "../core/lang.js";
-import { db, dailyLogs, saveLocalStorage } from "../core/state.js";
+import { db, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, resetPanelData, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs, saveDailyLogs } from "../core/daily-logs.js";
 import { getFormattedTime12h } from "../core/time-utils.js";
 import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom } from "../handlers/claim-core.js";
 
@@ -25,7 +24,6 @@ export function canHandleAdminInteraction(interaction) {
     const cid = interaction.customId;
     return cid === "admin-reset-menu" ||
         cid === "admin-kick-menu" ||
-        (interaction.isButton() && cid.startsWith("confirm-resetlogs-")) ||
         canHandleReserveInteraction(interaction);
 }
 
@@ -39,10 +37,6 @@ export async function handleAdminInteraction(interaction, uid) {
 
     if (interaction.isStringSelectMenu() && cid === "admin-kick-menu") {
         return handleAdminKickMenu(interaction, uid);
-    }
-
-    if (interaction.isButton() && cid.startsWith("confirm-resetlogs-")) {
-        return handleConfirmResetLogs(interaction);
     }
 
     // Reserve flow → admin-reserve.js
@@ -118,8 +112,6 @@ async function handleAdminKickMenu(interaction, _uid) {
             // event_group kick: roomType is the sub-event key (e.g. "red", "goblin")
             const evData = targetFloor[roomType];
             if (evData && evData.ownerId) {
-                const finalUserLabel = evData.ownerName || getMsg("render.memberLabel");
-                pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - ${evData.name}`, getMsg("logs.adminRemove"));
                 notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetFloor.title} - ${evData.name}`,
                     reason: getMsg("logs.adminRemove")
@@ -158,8 +150,6 @@ async function handleAdminKickMenu(interaction, _uid) {
                 }).catch(noop);
             }
         } else if ("floor" === roomType) {
-            const finalUserLabel = targetFloor.ownerName || getMsg("render.memberLabel");
-            pushToDailyLogs("CANCEL", finalUserLabel, targetFloor.title, getMsg("logs.adminRemove"));
             notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                 title: targetFloor.title,
                 reason: getMsg("logs.adminRemove")
@@ -177,9 +167,7 @@ async function handleAdminKickMenu(interaction, _uid) {
         const freedLabels = [];
         for (const rm of roomsToFree) {
             if (targetFloor[rm]) {
-                const finalUserLabel = targetFloor[rm].ownerName || getMsg("render.memberLabel");
                 freedLabels.push(rm.toUpperCase());
-                pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - Room ${rm.toUpperCase()}`, getMsg("logs.adminRemove"));
                 notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetFloor.title} - Room ${rm.toUpperCase()}`,
                     reason: getMsg("logs.adminRemove")
@@ -201,32 +189,4 @@ async function handleAdminKickMenu(interaction, _uid) {
     }).catch(noop);
 }
 
-// ==========================================
-// 🔄 CONFIRM RESET LOGS
-// ==========================================
 
-async function handleConfirmResetLogs(interaction) {
-    if (!interaction.member.permissions.has("ManageMessages")) {
-        return await interaction.update({
-            content: getMsg("system.permissionDeniedAdminDropped"),
-            components: [],
-            flags: 64
-        }).catch(noop);
-    }
-
-    const action = interaction.customId.replace("confirm-resetlogs-", "");
-    if ("yes" === action) {
-        const oldCount = (dailyLogs.queue || []).length;
-        dailyLogs.queue = [];
-        saveDailyLogs();
-        await interaction.update({
-            content: getMsg("system.resetLogsSuccess", { count: oldCount }),
-            components: []
-        }).catch(noop);
-    } else {
-        await interaction.update({
-            content: getMsg("system.resetLogsCancel"),
-            components: []
-        }).catch(noop);
-    }
-}

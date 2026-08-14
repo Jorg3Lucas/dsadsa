@@ -2,7 +2,6 @@ import { getLocalTime, parseStringToDate, usesScheduleRespawn, redBossSchedules,
 import { sendBossSpawnAlerts, sendScheduledEventAlerts, resetScheduledEventAlertCache } from "./boss-spawn-scheduler.js";
 import { getMsg, reloadLanguage } from "../core/lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "../core/state.js";
-import { dispatchDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys } from "./claim-core.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX } from "../core/constants.js";
@@ -26,10 +25,9 @@ export function startTickInterval() {
             const now = getLocalTime();
         reloadLanguage();
 
-        // Daily logs dispatch at 18:00 Berlin time
+        // Daily alert cache reset at 18:00 Berlin time
         if (18 === now.getHours() && 0 === now.getMinutes() && !alertCache._dailyDispatched) {
             alertCache._dailyDispatched = true;
-            await dispatchDailyLogs(false);
             alertCache.warning5mAfter = {};
             alertCache.spawnAlerted = {};
             Object.keys(bossSpawnAlertCache).forEach(k => delete bossSpawnAlertCache[k]);

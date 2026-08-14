@@ -1,14 +1,14 @@
 # 🤖 MIR4 Claim Bot
 
-Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** — floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and daily claim reports.
+Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** — floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and boss/event alerts.
 
-> The bot is **claim-only**: registration, ranking sync, salary polls, tickets, and temp-voice were removed.
+> The bot is **claim-only**: registration, ranking sync, salary polls, tickets, and temp-voice were removed. It registers **no slash commands** — all claiming is done via buttons on the panels.
 
 ---
 
 ## 📋 Overview
 
-On every boot, the bot **deletes and recreates all floor channels** and deploys fresh claim panels (see [Auto Channel Setup](#-auto-channel-setup)). All claiming is done via **buttons on the panels** — no slash commands needed.
+The bot does **not** create or delete channels. You create the floor channels manually on your server and post the panels into each one with a simple `!` command (see [Panel Commands](#-panel-commands)). On every boot, the bot **re-posts the panels into the channels where they were last posted** (replacing the old messages with fresh ones). All claiming is done via **buttons on the panels** — no slash commands needed.
 
 ---
 
@@ -62,17 +62,14 @@ Claim confirmations, boss respawn reminders, and warnings are sent via **DM**. E
 ## 👑 Admin Tools
 
 ### 🔄 Reset Panel
-**`admin-reset-menu`** select menu — reset one panel (or **all**) to defaults.
+Opened with **`!reset`** — reset one panel (or **all**) to defaults.
 
 ### 👢 Kick User
-**`admin-kick-menu`** select menu — remove a user from any claim (floor, room, or event) and open the spot for the next in queue.
+Opened with **`!kick`** — remove a user from any claim (floor, room, or event) and open the spot for the next in queue.
 
-### 📤 Reset Logs
-**`confirm-resetlogs-yes/no`** — clear the accumulated daily log queue.
-
-### 📅 Reserve Fury / Frenzy (admin-reserve flow)
-Multi-step interactive flow:
-1. Select **event** (Fury / Frenzy / Both)
+### 📅 Reserve Fury / Frenzy
+Opened with **`!reserve @user`** — multi-step interactive flow:
+1. Select **event** (Fury / Frenzy)
 2. Select **floors** (MS11 / MS12 / Both)
 3. Select **hours** (All or specific slots)
 4. **Confirm** — panels refresh with the reservation locked in
@@ -90,6 +87,34 @@ Text commands (require **Manage Messages**):
 
 ---
 
+## 📜 Text Commands (`!`)
+
+All text commands require **Manage Messages**. The bot never deletes/creates channels — it only posts panels and menus in the channel where the command is typed.
+
+### 🗺️ Panel Commands
+Post the panels of a floor into the current channel, replacing any previously posted ones for that floor in that channel:
+
+| Command | Panels posted |
+|---------|---------------|
+| `!ms7` … `!ms10` | Magic Square normal + Antidemon |
+| `!ms11` … `!ms12` | MS Leaders + Events + Antidemon + Goblin |
+| `!sp7` … `!sp10` | Secret Peak |
+| `!sp11` | Secret Peak + Goblin |
+| `!sp12` | Secret Peak + Random Event + Goblin |
+| `!summons` (or `!summon`) | Summon locations |
+
+### 👑 Admin Commands
+
+| Command | Description |
+|---------|-------------|
+| `!reset` | Open the panel reset menu (single panel or **all**) |
+| `!reset <key>` | Reset one panel directly (e.g. `!reset 10squarenormal`) |
+| `!reset all` | Reset all panels to defaults |
+| `!kick` | Open the kick menu — remove a user from any claim and open the spot for the next in queue |
+| `!reserve @user` | Start the Fury/Frenzy reservation flow for that user |
+
+---
+
 ## ⏰ Automatic Schedules
 
 | Time (Server/Berlin) | Action |
@@ -97,25 +122,18 @@ Text commands (require **Manage Messages**):
 | **Every 15s** | Panel tick — countdowns, cooldowns, auto-respawn, timeouts, force refresh |
 | **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |
 | **10 min before events** | 🚨 Scheduled event alerts with @everyone (Red Boss, Leader 3, Purgatory, weekly events, etc.) |
-| **18:00 daily** | 📤 Daily claim report dispatched (as `.txt` file + summary embed) |
 
 ---
 
-## 🏗️ Auto Channel Setup
+## 🏗️ Channel & Panel Deployment
 
-On boot, `auto-channel-setup.js` **deletes all text channels** in the configured categories and recreates them:
+The bot never creates or deletes channels. Deployment is fully manual:
 
-```
-7F:  🔸┃sp7  🔹┃ms7
-8F:  🔸┃sp8  🔹┃ms8
-9F:  🔸┃sp9  🔹┃ms9
-10F: 🔸┃sp10 🔹┃ms10
-11F: 🔸┃sp11 🔹┃ms11
-12F: 🔸┃sp12 🔹┃ms12
-Summons: 🌀┃summons
-```
+1. **Create the channels** you want on your server (e.g. `🔹 MS-10F`, `🔸 SP-10F`, `🌀 Summons`)
+2. In each channel, type the matching command (e.g. `!ms10` in the MS-10 channel) — the bot posts the panels there
+3. On every **restart**, the bot automatically re-posts the panels into the channels where they were last posted (old messages are replaced by fresh ones)
 
-Each channel gets its panel embeds + buttons posted automatically.
+The channel/panel mapping lives in **`src/core/server-structure.js`** (`CLAIM_CATEGORIES`).
 
 ---
 
@@ -124,7 +142,7 @@ Each channel gets its panel embeds + buttons posted automatically.
 | File | Contents |
 |------|----------|
 | `database.json` | Panel state, claims, owners, queues (gitignored) |
-| `daily-logs.json` | Accumulated claim log queue + configured channel IDs |
+| `daily-logs.json` | Alert channel IDs: `bossSpawnChannelId` (boss alerts), `scheduledEventChannelId` (event alerts) |
 | `punishments.json` | Temporary claim cooldowns after kick/leave |
 | `early-claim-users.json` | Users allowed to claim early |
 | `dm-optout.json` | Users who disabled DMs |
@@ -143,14 +161,13 @@ TOKEN=your-bot-token
 
 ### 2. Configuration
 - **`src/core/config.js`** — `DISCORD_SERVER_ID` (the guild the bot operates on)
-- **`src/handlers/auto-channel-setup.js`** — category IDs + channel/panel definitions
-- **Daily logs / boss alerts / event alerts** — configured **manually in `daily-logs.json`**: set `configChannelId` (daily claim report), `bossSpawnChannelId` (boss spawn alerts), and `scheduledEventChannelId` (event alerts) to the target channel IDs before boot
+- **`src/core/server-structure.js`** — `CLAIM_CATEGORIES` (category/channel/panel definitions)
+- **Boss / event alerts** — set `bossSpawnChannelId` and `scheduledEventChannelId` in `daily-logs.json` to target channel IDs. If unset, the bot falls back to channels named `⏰ reminders` / `📅 events` in the guild.
 
 ### 3. Permissions
 | Permission | Required For |
 |-----------|-------------|
-| **Manage Messages** | `!earlyclaim`, reset/kick/reset-logs admin actions |
-| **Manage Channels** | Auto channel setup (delete/recreate channels on boot) |
+| **Manage Messages** | All `!` commands: panels (`!ms`/`!sp`/`!summons`), `!earlyclaim`, `!reset`, `!kick`, `!reserve` |
 
 ### 4. Run
 ```
@@ -164,16 +181,17 @@ npm start
 
 ```
 src/
-├── index.js                        # Entry point — boots claim, auto-setup, tick
+├── index.js                        # Entry point — boots claim system + text commands, tick
 ├── core/
 │   ├── config.js                   # DISCORD_SERVER_ID, token helpers
 │   ├── constants.js                # Status strings, embed colors
-│   ├── state.js                    # Module-level state (db, logs, punishments, early claim, DM opt-out)
+│   ├── state.js                    # Module-level state (db, punishments, early claim, DM opt-out)
 │   ├── lang.js / lang.json         # Localization (all UI text)
 │   ├── time-utils.js               # Time helpers, boss schedules
 │   ├── logger.js                   # Structured logger + global error handlers
-│   ├── daily-logs.js               # Claim report builder + dispatch
-│   └── discord-utils.js            # Shared Discord send helpers
+│   ├── daily-logs.js               # Alert channel resolver + config persistence
+│   ├── discord-utils.js            # Shared Discord send helpers
+│   └── server-structure.js         # Claim category/channel definitions + alert channel names
 ├── handlers/
 │   ├── bot.js                      # Claim system initialization + router export
 │   ├── claim-handlers.js           # Unified interaction router
@@ -181,12 +199,13 @@ src/
 │   ├── panel-render.js             # Embed + button rendering
 │   ├── render-embed*.js            # Panel embed builders
 │   ├── render-buttons.js           # Panel button builders
-│   ├── panel-tick.js               # 15s tick (cooldowns, respawn, alerts, dispatch)
+│   ├── panel-tick.js               # 15s tick (cooldowns, respawn, alerts)
 │   ├── tick-*.js                   # Per-panel-type tick logic
 │   ├── panel-utils.js              # Panel refresh helpers + DM notifications
 │   ├── panel-dm.js                 # DM message handling
 │   ├── panel-migrations.js         # Data migrations
-│   ├── auto-channel-setup.js       # Channel recreation + panel deployment on boot
+│   ├── panel-commands.js           # !ms / !sp / !summons — post panels into the channel
+│   ├── admin-commands.js           # !reset / !kick / !reserve — open admin menus
 │   ├── boss-spawn-scheduler.js     # Boss + scheduled event alerts
 │   └── early-claim.js              # !earlyclaim admin commands
 └── interactions/
@@ -195,7 +214,7 @@ src/
     ├── antidemon-interactions*.js  # Antidemon rooms (slide, ticket, queue, password)
     ├── summon-interactions.js      # Summon handlers
     ├── floor-summon.js             # Summon claim flow
-    ├── admin-interactions.js       # Admin reset/kick/reset-logs
+    ├── admin-interactions.js       # Admin reset/kick
     └── admin-reserve.js            # Fury/Frenzy reservation flow
 ```
 
@@ -205,15 +224,15 @@ src/
 
 After any changes, verify:
 
-- [ ] Boot → all floor channels recreated + panels deployed (auto-setup)
+- [ ] Boot → panels re-posted in their last-known channels (old replaced by new)
 - [ ] **Floor claim** — claim, leave, queue promotion, grace period
 - [ ] **Boss killed** → cooldown → auto-respawn → DM reminder
 - [ ] **Antidemon rooms** — left/mid/right, combo rooms, password modal
 - [ ] **Antidemon queue** — slide / ticket / queue join
 - [ ] **Fury/Frenzy fixed events** — claim inside window, reservation blocks
+- [ ] **Panel commands** — `!ms10` / `!sp10` / `!summons` post the right panels in the channel, replace old ones on re-run
 - [ ] **Early claim** — `!earlyclaim add/remove/list` + claiming 5 min early
-- [ ] **Admin** — reset panel (single + all), kick user, reset logs
+- [ ] **Admin** — `!reset` (menu + direct), `!kick`, `!reserve @user`
 - [ ] **Reserve flow** — reserve Fury/Frenzy slots, panel refresh
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
-- [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts

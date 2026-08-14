@@ -11,7 +11,6 @@ import {
 import { getMsg } from "../core/lang.js";
 import { saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import { getFormattedTime12h, getLocalTime } from "../core/time-utils.js";
 import { STATUS_KILLED, STATUS_KILLED_PREFIX } from "../core/constants.js";
 import { noop } from "../core/config.js";
@@ -72,7 +71,6 @@ export async function handleDeathMark(interaction, uid, uName, targetObj, panelK
 
     targetObj[specificProp].status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     targetObj[specificProp]._lastKilledAt = nowTs;
-    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr}`);
     saveLocalStorage();
     await refreshVisualPanel(panelKey);
     return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(noop);
@@ -95,7 +93,6 @@ export async function handleDeathConfirm(interaction, uid, uName, targetObj, pan
 
     targetObj[specificProp].status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     targetObj[specificProp]._lastKilledAt = nowTs;
-    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr} (updated)`);
     saveLocalStorage();
     await refreshVisualPanel(panelKey);
     return await interaction.update({
@@ -153,7 +150,6 @@ export async function handleEGDeathMark(interaction, uid, uName, targetObj, pane
 
     evData.status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     evData._lastKilledAt = nowTs;
-    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${evData.name}`, `Killed at ${currTimeStr}`);
     saveLocalStorage();
     await refreshVisualPanel(panelKey);
     return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(noop);
@@ -173,7 +169,6 @@ export async function handleEGDeathConfirm(interaction, uid, uName, targetObj, p
 
     evData.status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     evData._lastKilledAt = nowTs;
-    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${evData.name}`, `Killed at ${currTimeStr} (updated)`);
     saveLocalStorage();
     await refreshVisualPanel(panelKey);
     return await interaction.update({

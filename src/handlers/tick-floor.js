@@ -1,7 +1,6 @@
 import { parseStringToDate, getFormattedTime12h } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { notifyUserDM } from "./panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import { freeFloorAndActivateNextGracePeriod } from "./claim-core.js";
 import { noop } from "../core/config.js";
 
@@ -23,7 +22,6 @@ export async function handleFloor(current, now) {
             await notifyUserDM(current.ownerId, getMsg("rooms.floorExpiredDM", {
                 title: current.title
             })).catch(noop);
-            if (current.ownerName) pushToDailyLogs("CLAIM_END", current.ownerName, current.title, getMsg("logs.timeout"));
             freeFloorAndActivateNextGracePeriod(current);
             updateNeeded = true;
         }
@@ -36,7 +34,6 @@ export async function handleFloor(current, now) {
             await notifyUserDM(current.next.userId, getMsg("rooms.floorAbsenceDM", {
                 title: current.title
             })).catch(noop);
-            if (current.next.userName) pushToDailyLogs("CLAIM_END", current.next.userName, current.title, getMsg("logs.absenceQueue"));
             const nextInLine = current.next.nextQueue;
             if (nextInLine) {
                 current.next = nextInLine;

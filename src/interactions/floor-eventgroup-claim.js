@@ -7,7 +7,6 @@ import { StringSelectMenuBuilder as i, ActionRowBuilder as t } from "discord.js"
 import { getMsg } from "../core/lang.js";
 import { db, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
     hasActiveClaim,
@@ -135,7 +134,6 @@ export async function handleEGNextSide(interaction, uid, uName) {
     evData.formattedTimeNext = getFormattedTime12h(baseTime);
     evData.endLimit = null;
 
-    pushToDailyLogs("QUEUE_JOIN", uName, `${targetFloor.title} - ${evData.name}`, getMsg("render.joinedAsNext"));
     notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - ${evData.name}` }));
 
     saveLocalStorage();

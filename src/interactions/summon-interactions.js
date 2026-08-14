@@ -6,7 +6,6 @@
 import { getMsg, getArray } from "../core/lang.js";
 import { db, summonSelectionCache, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     hasActiveClaim,
     hasActiveQueue,
@@ -177,7 +176,6 @@ async function handleSummonTicket(interaction, uid, uName) {
     targetFloor[selectedLoc].time = `${getFormattedTime12h(startTime)}\nto  ${getFormattedTime12h(endTime)}`;
     targetFloor[selectedLoc].timeWindow = rangeStr;
 
-    pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${targetFloor[selectedLoc].name}`, `Total Ticket: ${calcMinutes} min until ${getFormattedTime12h(endTime)}`);
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} (${targetFloor[selectedLoc].name})`, window: rangeStr }));
 
     delete summonSelectionCache[uid];
@@ -233,7 +231,6 @@ async function handleSummonNextSide(interaction, uid, uName) {
     targetFloor[selectedLoc].formattedTimeNext = getFormattedTime12h(baseTime);
     targetFloor[selectedLoc].endLimit = null;
 
-    pushToDailyLogs("QUEUE_JOIN", uName, `${targetFloor.title} - ${targetFloor[selectedLoc].name}`, getMsg("render.joinedAsNext"));
     notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - ${targetFloor[selectedLoc].name}` }));
 
     saveLocalStorage();

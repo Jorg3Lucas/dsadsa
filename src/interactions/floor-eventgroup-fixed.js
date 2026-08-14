@@ -7,7 +7,6 @@
 import { getMsg } from "../core/lang.js";
 import { db, saveLocalStorage, isEarlyClaimUser } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
-import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
     hasActiveClaim,
@@ -124,7 +123,6 @@ export async function handleEGFixClaim(interaction, uid, uName) {
     evData.timeWindow = windowStr;
     evData._claimTimestamp = now.getTime();
 
-    pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
 
     saveLocalStorage();
