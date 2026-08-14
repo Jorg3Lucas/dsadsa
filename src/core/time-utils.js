@@ -13,7 +13,7 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 
 export function getLocalTime() {
     const timeStr = (new Date).toLocaleString("en-US", {
-        timeZone: "Europe/Berlin"
+        timeZone: "Etc/GMT+4" // NA fixed UTC-4 — never changes (no DST)
     });
     return new Date(timeStr);
 }

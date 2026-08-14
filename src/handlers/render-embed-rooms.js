@@ -106,7 +106,7 @@ export function renderDefaultPanel(embed, current, now) {
         if (current.next) {
             desc += current.next.endLimit
                 ? `\`\`\`md\n⏭️ ${current.next.userName} — ${getEndLimitCountdown(current.next.endLimit)}\n\`\`\`\n`
-                : `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "Berlin" })}\n\`\`\`\n`;
+                : `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "NA" })}\n\`\`\`\n`;
         }
     } else if (current.next && current.next.endLimit) {
         desc += `\`\`\`md\n⏭️ ${current.next.userName} — ${getEndLimitCountdown(current.next.endLimit)}\n\`\`\`\n`;
@@ -123,7 +123,7 @@ export function renderDefaultPanel(embed, current, now) {
                 : `\`\`\`yaml\n🔴 ${getMsg("rooms.eventEnded")}\n\`\`\`\n`;
         }
     } else if (current.next) {
-        desc += `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "Berlin" })}\n\`\`\`\n`;
+        desc += `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "NA" })}\n\`\`\`\n`;
     } else {
         desc += `\`\`\`yaml\n${STATUS_AVAILABLE}\n\`\`\`\n`;
     }

@@ -1,5 +1,5 @@
 {
-  "name": "mir4-claim-bot",
+  "name": "ranking_mir4",
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {

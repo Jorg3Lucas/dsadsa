@@ -13,7 +13,7 @@ const earlyClaimUsersPath = s.resolve("./early-claim-users.json");
 export const defaultFloors = ["7", "8", "9", "10"];
 
 export let punishments = {};
-export let dailyLogs = { configChannelId: null, bossSpawnChannelId: null, scheduledEventChannelId: null };
+export let dailyLogs = { bossSpawnChannelId: null, scheduledEventChannelId: null };
 export const alertCache = { warning5mAfter: {}, spawnAlerted: {} };
 export const antiDemonSelectionCache = {};
 export const summonSelectionCache = {};

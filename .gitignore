@@ -14,6 +14,12 @@ punishments.json
 early-claim-users.json
 dm-optout.json
 
+# Ranking / registration system data
+database_ranking.json
+ranking_cache.json
+ranking_logs.txt
+backups/
+
 # OS files
 .DS_Store
 Thumbs.db

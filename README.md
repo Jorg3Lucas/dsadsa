@@ -1,14 +1,49 @@
-# 🤖 MIR4 Claim Bot
+# 🤖 MIR4 Bot — Claim + Ranking
 
-Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** — floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and boss/event alerts.
+Discord bot for MIR4 clans combining two systems:
+- **🎮 Claim system** — Magic Square / Secret Peak claim rotations: floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and boss/event alerts
+- **👑 Ranking / Registration system** — member registration (owners + pilots), approvals, official-ranking sync, clan roles, management and notify panels
 
-> The bot is **claim-only**: registration, ranking sync, salary polls, tickets, and temp-voice were removed. It registers **no slash commands** — all claiming is done via buttons on the panels.
+> Salary polls, support tickets, and temp-voice were removed.
 
 ---
 
 ## 📋 Overview
 
-The bot does **not** create or delete channels. You create the floor channels manually on your server and post the panels into each one with a simple `!` command (see [Panel Commands](#-panel-commands)). On every boot, the bot **re-posts the panels into the channels where they were last posted** (replacing the old messages with fresh ones). All claiming is done via **buttons on the panels** — no slash commands needed.
+The bot does **not** create or delete claim channels automatically. You create the floor channels manually on your server and post the panels into each one with a simple `!` command (see [Panel Commands](#-panel-commands)). On every boot, the bot **re-posts the panels into the channels where they were last posted** (replacing the old messages with fresh ones). Claiming is done via **buttons on the panels**; registration/ranking is done via **slash commands**.
+
+---
+
+## 👑 Ranking / Registration System
+
+### 📝 Registration
+- **Welcome panel** — members click **Register as Owner** (main account) or **Register as Pilot** (play for someone else)
+- **Approvals** — admins approve/reject registrations; temporary registrations expire if not validated in the official ranking
+- **Pilots** — each owner can link up to **4 pilots**; pilots get the owner's nickname/role
+
+### 🔄 Ranking Sync
+- Daily automatic synchronization with the **official MIR4 ranking portal** (NA42)
+- Nickname + clan role validation — members not found in an allied clan lose their role
+- Clan roles are auto-discovered and applied to claim channels (view-only permissions)
+
+### ⚡ Slash Commands (registered automatically at boot)
+
+| Command | Description |
+|---------|-------------|
+| `/removepilot` | Remove a pilot from your account |
+| `/forcesync` | [Admin] Force an immediate ranking sync |
+| `/manualregister` / `/manualforce` | [Admin] Register a member manually |
+| `/manualpilot` / `/manualremovepilot` | [Admin] Link / unlink a pilot manually |
+| `/manualremove` | [Admin] Completely remove a registration |
+| `/cleandb` | [Admin] Remove duplicate nickname entries |
+| `/manage` | Bot management panel (users, pilots, allied clans) |
+| `/sendpanel` | [Admin] Send the registration panel to this channel |
+| `/pending` | [Admin] List pending registration requests |
+| `/notify` | [Admin] DM members with no roles to register |
+| `/elderguide`, `/stats` | Guides and bot statistics |
+
+### 🤝 Clan Roles & Channel Permissions
+One role per allied clan is **created automatically during the daily sync**. Members registered in an allied clan receive their clan role, and the claim channels are restricted to clan-role holders (+ GoW Kids temp role). Claim-channel permissions are re-applied at every boot from the roles stored in the DB.
 
 ---
 
@@ -112,12 +147,14 @@ Post the panels of a floor into the current channel, replacing any previously po
 | `!reset all` | Reset all panels to defaults |
 | `!kick` | Open the kick menu — remove a user from any claim and open the spot for the next in queue |
 | `!reserve @user` | Start the Fury/Frenzy reservation flow for that user |
+| `!reminders` | Set this channel as the **boss alert** channel (or `!reminders #channel`) |
+| `!events` | Set this channel as the **event alert** channel (or `!events #channel`) |
 
 ---
 
 ## ⏰ Automatic Schedules
 
-| Time (Server/Berlin) | Action |
+| Time (Server/NA — fixed UTC-4, never changes) | Action |
 |----------------------|--------|
 | **Every 15s** | Panel tick — countdowns, cooldowns, auto-respawn, timeouts, force refresh |
 | **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |
@@ -146,6 +183,10 @@ The channel/panel mapping lives in **`src/core/server-structure.js`** (`CLAIM_CA
 | `punishments.json` | Temporary claim cooldowns after kick/leave |
 | `early-claim-users.json` | Users allowed to claim early |
 | `dm-optout.json` | Users who disabled DMs |
+| `database_ranking.json` | Ranking DB — registrations, pilots, clan roles, allied clans (gitignored) |
+| `ranking_cache.json` | Synced ranking cache (gitignored) |
+| `ranking_logs.txt` | Ranking event log (gitignored) |
+| `backups/` | Automatic backups of the ranking files (gitignored) |
 
 All are gitignored.
 
@@ -162,12 +203,14 @@ TOKEN=your-bot-token
 ### 2. Configuration
 - **`src/core/config.js`** — `DISCORD_SERVER_ID` (the guild the bot operates on)
 - **`src/core/server-structure.js`** — `CLAIM_CATEGORIES` (category/channel/panel definitions)
-- **Boss / event alerts** — set `bossSpawnChannelId` and `scheduledEventChannelId` in `daily-logs.json` to target channel IDs. If unset, the bot falls back to channels named `⏰ reminders` / `📅 events` in the guild.
+- **Boss / event alerts** — run **`!reminders`** in the channel that should receive boss spawn alerts and **`!events`** in the channel that should receive scheduled event alerts (both require Manage Messages). This writes `bossSpawnChannelId` / `scheduledEventChannelId` to `daily-logs.json`. Alternatively, edit those IDs manually, or just create channels named `⏰ reminders` / `📅 events` — the bot falls back to them by name.
+- **Ranking sync** — configured in `src/core/ranking-constants.js` (sync worlds) and `database_ranking.json` (allied clans, clan roles, channel IDs)
 
 ### 3. Permissions
 | Permission | Required For |
 |-----------|-------------|
 | **Manage Messages** | All `!` commands: panels (`!ms`/`!sp`/`!summons`), `!earlyclaim`, `!reset`, `!kick`, `!reserve` |
+| **Administrator** | Ranking slash commands (`/forcesync`, `/manage`, `/sendpanel`, etc.) |
 
 ### 4. Run
 ```
@@ -181,7 +224,9 @@ npm start
 
 ```
 src/
-├── index.js                        # Entry point — boots claim system + text commands, tick
+├── index.js                        # Entry point — boots claim + ranking systems, text commands, tick
+├── auto-backup.js                  # Automatic backups of ranking data files
+├── deploy-commands.cjs             # Manual slash-command deployment script
 ├── core/
 │   ├── config.js                   # DISCORD_SERVER_ID, token helpers
 │   ├── constants.js                # Status strings, embed colors
@@ -191,10 +236,13 @@ src/
 │   ├── logger.js                   # Structured logger + global error handlers
 │   ├── daily-logs.js               # Alert channel resolver + config persistence
 │   ├── discord-utils.js            # Shared Discord send helpers
-│   └── server-structure.js         # Claim category/channel definitions + alert channel names
+│   ├── server-structure.js         # Claim category/channel definitions + alert channel names
+│   ├── clan-roles.js               # Clan role discovery + claim-channel permissions
+│   └── ranking-*.js                # Ranking system: cache, constants, deploy, events, handlers,
+│                                   #   logger, scraper, service, storage, sync-engine, utils
 ├── handlers/
 │   ├── bot.js                      # Claim system initialization + router export
-│   ├── claim-handlers.js           # Unified interaction router
+│   ├── claim-handlers.js           # Unified interaction router (claim first, then ranking)
 │   ├── claim-core*.js              # Claim logic (utils, rooms, options, actions)
 │   ├── panel-render.js             # Embed + button rendering
 │   ├── render-embed*.js            # Panel embed builders
@@ -207,7 +255,9 @@ src/
 │   ├── panel-commands.js           # !ms / !sp / !summons — post panels into the channel
 │   ├── admin-commands.js           # !reset / !kick / !reserve — open admin menus
 │   ├── boss-spawn-scheduler.js     # Boss + scheduled event alerts
-│   └── early-claim.js              # !earlyclaim admin commands
+│   ├── early-claim.js              # !earlyclaim admin commands
+│   └── ranking-*.js                # Registration, approvals, commands, confirmations, management,
+│                                   #   notify, pilot, welcome
 └── interactions/
     ├── floor-interactions.js       # Floor/peak buttons (claim, cancel, next)
     ├── floor-*.js                  # Floor-specific handlers
@@ -224,7 +274,10 @@ src/
 
 After any changes, verify:
 
-- [ ] Boot → panels re-posted in their last-known channels (old replaced by new)
+- [ ] Boot → both systems start; slash commands registered; panels re-posted in their last-known channels
+- [ ] **Ranking registration** — welcome panel, owner/pilot registration, approvals
+- [ ] **Ranking sync** — `/forcesync`, clan roles created from allied clans, claim-channel permissions applied
+- [ ] **Ranking manage** — `/manage`, `/notify`, `/pending`
 - [ ] **Floor claim** — claim, leave, queue promotion, grace period
 - [ ] **Boss killed** → cooldown → auto-respawn → DM reminder
 - [ ] **Antidemon rooms** — left/mid/right, combo rooms, password modal

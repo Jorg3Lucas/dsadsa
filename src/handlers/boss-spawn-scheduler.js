@@ -1,6 +1,6 @@
 // ==========================================
 // 🦁 BOSS SPAWN SCHEDULER
-// Server Time (Europe/Berlin) based spawn alerts
+// Server Time (fixed UTC-4 / NA) based spawn alerts
 // ==========================================
 
 import { EmbedBuilder } from "discord.js";
@@ -152,7 +152,7 @@ function getUpcomingSpawnAlerts() {
 // ─── Send notification ───────────────────────────────────
 
 export async function sendBossSpawnAlerts() {
-  // Uses the configured channel, or falls back to #reminders (created by /setup)
+  // Uses the configured channel ID, or falls back to a text channel named ⏰ reminders
   const channel = await resolveAlertChannel(dailyLogs.bossSpawnChannelId, getGeneralChannelName("reminders"));
   if (!channel) return;
 
@@ -270,7 +270,7 @@ function getUpcomingScheduledAlerts() {
 }
 
 export async function sendScheduledEventAlerts() {
-  // Uses the configured channel, or falls back to #events (created by /setup)
+  // Uses the configured channel ID, or falls back to a text channel named 📅 events
   const channel = await resolveAlertChannel(dailyLogs.scheduledEventChannelId, getGeneralChannelName("events"));
   if (!channel) return;
 

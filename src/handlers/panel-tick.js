@@ -25,7 +25,7 @@ export function startTickInterval() {
             const now = getLocalTime();
         reloadLanguage();
 
-        // Daily alert cache reset at 18:00 Berlin time
+        // Daily alert cache reset at 18:00 NA time
         if (18 === now.getHours() && 0 === now.getMinutes() && !alertCache._dailyDispatched) {
             alertCache._dailyDispatched = true;
             alertCache.warning5mAfter = {};
