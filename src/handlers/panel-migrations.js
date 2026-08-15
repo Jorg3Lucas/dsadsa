@@ -107,132 +107,39 @@ export function migratePlantOreCooldown() {
     }
 }
 
-// ── Convert SP11/SP12 from old event_group format to peak format ──
-/** Convert SP11/SP12 from event_group format to unified peak format. */
-export function migrateSPLegacyToUnified() {
-    let migrated = 0;
-
-    [ { oldKey: "11", newKey: "11peak" }, { oldKey: "12", newKey: "12peak" } ].forEach(({ oldKey, newKey }) => {
-        const oldPanel = db[oldKey];
-        const newPanel = db[newKey];
-        if (!oldPanel || oldPanel.type === "peak") return;
-        if (!newPanel || newPanel.type !== "peak") return;
-        let changed = false;
-        const oldRed = oldPanel.red;
-        const newRed = newPanel.red;
-        if (oldRed && newRed) {
-            if (oldRed.status && oldRed.status.startsWith(STATUS_KILLED)) {
-                newRed.status = oldRed.status;
-                if (oldRed._lastKilledAt) newRed._lastKilledAt = oldRed._lastKilledAt;
-                if (oldRed._freeSince) newRed._freeSince = oldRed._freeSince;
-                if (oldRed._lastKilledTimeStr) newRed._lastKilledTimeStr = oldRed._lastKilledTimeStr;
-                changed = true;
-            }
-        }
-        if (changed) { migrated++; logEvent(`Migrated Red Boss data from ${oldKey} → ${newKey}.`); }
-        delete db[oldKey];
-        delete lastMessages[oldKey];
-        if (db._panelMapping) delete db._panelMapping[oldKey];
-        logEvent(`Removed old event_group panel ${oldKey} from DB.`);
-    });
-
-    ["11peak", "12peak"].forEach(key => {
-        if (db[key] && db[key].type === "peak") {
-            const p = db[key];
-            if (p.plant) delete p.plant;
-            if (p.ore) delete p.ore;
-        }
-    });
-
-    if (migrated > 0) { saveLocalStorage(); logEvent(`SP peak migration complete: ${migrated} panel(s) converted.`); }
-}
-
-// ── Ensure MS11/MS12 panels exist with correct structure ──
-/** Ensure MS11/MS12 panels (leaders, events, antidemon) exist with correct structure. */
-export function migrateMS1112() {
-    let migrated = 0;
-
-    for (const floor of ["11", "12"]) {
-        const key = `${floor}squareleaders`;
-        if (!db[key]) {
-            db[key] = { type: "normal", title: `Magic Square ${floor}F - Leaders`, timeWindow: "", next: null, ownerId: null, ownerName: null, boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" }, boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" }, boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" } };
-            migrated++;
-            logEvent(`Created missing MS${floor} leaders panel.`);
-        }
-    }
-
-    for (const floor of ["11", "12"]) {
-        const key = `${floor}squareevents`;
-        if (!db[key]) {
-            db[key] = { type: "event_group", title: `Magic Square ${floor}F - Events`, fury: { name: "🔴 Fury", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [0, 3, 6, 9, 12, 15, 18, 21], scheduleMinutes: 30 }, frenzy: { name: "🟣 Frenzy", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [2, 5, 8, 11, 14, 17, 20, 23], scheduleMinutes: 0 } };
-            migrated++;
-            logEvent(`Created missing MS${floor} events panel.`);
-        }
-    }
-
-    // Antidemon panels (9-room format for MS11/MS12)
-    for (const floor of ["11", "12"]) {
-        const key = `${floor}squareantidemon`;
-        const existing = db[key];
-        if (!existing) {
-            const rooms = {};
-            const versions = ["1-1", "1-2", "1-3"];
-            const sides = [{ k: "l", n: "LEFT" }, { k: "m", n: "MID" }, { k: "r", n: "RIGHT" }];
-            versions.forEach(ver => { sides.forEach(side => { const rk = `v${ver.replace("1-", "")}${side.k}`; rooms[rk] = { name: `${ver} ${side.n}`, status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" }; }); });
-            db[key] = { type: "antidemon", title: `Antidemon ${floor}F`, ...rooms };
-            migrated++;
-            logEvent(`Created missing MS${floor} antidemon panel (9 rooms).`);
-        } else if (existing.left && typeof existing.left === "object" && existing.left.name) {
-            const oldRooms = { left: existing.left, mid: existing.mid, right: existing.right };
-            const rooms = {};
-            const versions = ["1-1", "1-2", "1-3"];
-            const sides = [{ k: "l", n: "LEFT" }, { k: "m", n: "MID" }, { k: "r", n: "RIGHT" }];
-            versions.forEach((ver, vi) => {
-                sides.forEach(side => {
-                    const rk = `v${ver.replace("1-", "")}${side.k}`;
-                    const name = `${ver} ${side.n}`;
-                    if (vi === 0) {
-                        const oldRoom = oldRooms[side.k === "l" ? "left" : side.k === "m" ? "mid" : "right"];
-                        if (oldRoom && oldRoom.ownerId) { rooms[rk] = { name, status: oldRoom.status || STATUS_AVAILABLE, ownerId: oldRoom.ownerId, ownerName: oldRoom.ownerName, time: oldRoom.time || "", timeWindow: oldRoom.timeWindow || "", nextId: oldRoom.nextId || null, nextName: oldRoom.nextName || null, formattedTimeNext: oldRoom.formattedTimeNext || "", endLimit: oldRoom.endLimit || null, password: oldRoom.password || "" }; return; }
-                    }
-                    rooms[rk] = { name, status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null, password: "" };
-                });
-            });
-            db[key] = { type: "antidemon", title: existing.title || `Antidemon ${floor}F`, ...rooms };
-            migrated++;
-            logEvent(`Migrated MS${floor} antidemon from 3-room to 9-room format, preserving claims.`);
-        }
-    }
-
-    // Backfill type/schedules on existing events panels
-    for (const floor of ["11", "12"]) {
-        const key = `${floor}squareevents`;
-        const panel = db[key];
-        if (panel && panel.type === "event_group") {
-            let changed = false;
-            for (const ev of ["fury", "frenzy"]) {
-                const sub = panel[ev];
-                if (sub) {
-                    if (!sub.type) { sub.type = "fixed"; changed = true; }
-                    if (!sub.schedules) { sub.schedules = ev === "fury" ? [0, 3, 6, 9, 12, 15, 18, 21] : [2, 5, 8, 11, 14, 17, 20, 23]; changed = true; }
-                    if (sub.scheduleMinutes === undefined) { sub.scheduleMinutes = ev === "fury" ? 30 : 0; changed = true; }
-                    if (sub.ownerId && !sub.ownerName && sub.status === STATUS_AVAILABLE) { sub.ownerId = null; changed = true; }
-                    if (sub.ownerId === "") { sub.ownerId = null; changed = true; }
-                }
-            }
-            if (changed) { migrated++; logEvent(`Backfilled type/schedules on ${key} sub-events.`); }
+// ── Purge MS11/MS12/SP11/SP12 panels (floors 11/12 are no longer used) ──
+/** Remove all floor 11/12 panels (SP11/SP12 peak+goblin, MS11/MS12 leaders/events/antidemon, SP12 random event) plus their message mappings, so they are never re-posted. */
+export function removeMS1112Panels() {
+    const keys = [
+        "11", "12", // legacy SP event_group panels
+        "11peak", "12peak",
+        "11goblin", "12goblin",
+        "11msgoblin", "12msgoblin",
+        "11squareleaders", "12squareleaders",
+        "11squareevents", "12squareevents",
+        "11squareantidemon", "12squareantidemon",
+        "12randomevent"
+    ];
+    let removed = 0;
+    for (const key of keys) {
+        if (db[key]) {
+            delete db[key];
+            delete lastMessages[key];
+            if (db._panelMapping) delete db._panelMapping[key];
+            removed++;
+            logEvent(`Removed unused MS11/12/SP11/SP12 panel ${key} from DB.`);
         }
     }
 
     // Clean up old ms11 from combined summon panel
-    if (db.summon && db.summon.ms11) { delete db.summon.ms11; migrated++; logEvent("Removed ms11 from combined summon panel."); }
+    if (db.summon && db.summon.ms11) { delete db.summon.ms11; removed++; logEvent("Removed ms11 from combined summon panel."); }
     if (db.summon && db.summon.type === "fixed") {
         db.summon = { type: "summon", title: "🌀 Summon Locations", sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }, sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }, sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-        migrated++;
+        removed++;
         logEvent("Fixed db.summon: was wrongly set as Random Event, restored to Summon panel.");
     }
 
-    if (migrated > 0) { saveLocalStorage(); logEvent(`MS11/MS12 migration complete: ${migrated} panel(s) created/updated.`); }
+    if (removed > 0) { saveLocalStorage(); logEvent(`MS11/12 removal complete: ${removed} entry/entries cleaned.`); }
 }
 
 // ── Convert MS9/MS10 antidemon from 3-panel to single 6-room format ──

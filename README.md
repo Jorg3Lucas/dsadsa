@@ -17,9 +17,13 @@ The bot does **not** create or delete claim channels automatically. You create t
 ## 👑 Ranking / Registration System
 
 ### 📝 Registration
-- **Welcome panel** — members click **Register as Owner** (main account) or **Register as Pilot** (play for someone else)
+- **Welcome panel** — members click **Register as Owner** (main account), **Register as Pilot** (play for someone else), **Remove My Registration** (self-service cancel) or **Remove Pilot**
+- **Fuzzy matching** — when the typed name is close to known ranking names, the **user confirms their exact character name** before the request is sent (and pilots pick the correct owner when there are similar candidates)
 - **Approvals** — admins approve/reject registrations; temporary registrations expire if not validated in the official ranking
 - **Pilots** — each owner can link up to **4 pilots**; pilots get the owner's nickname/role
+
+### 📧 Role Status DMs
+When a member's role is removed by the sync (account not found in the NA42 ranking, or left the allied clans), the bot **DMs them explaining why and how to get it back**. Registered members without a role also get a one-time reminder. DMs are sent only once per state change.
 
 ### 🔄 Ranking Sync
 - Daily automatic synchronization with the **official MIR4 ranking portal** (NA42)
@@ -43,7 +47,7 @@ The bot does **not** create or delete claim channels automatically. You create t
 | `/elderguide`, `/stats` | Guides and bot statistics |
 
 ### 🤝 Clan Roles & Channel Permissions
-One role per allied clan is **created automatically during the daily sync**. Members registered in an allied clan receive their clan role, and the claim channels are restricted to clan-role holders (+ GoW Kids temp role). Claim-channel permissions are re-applied at every boot from the roles stored in the DB.
+One role per allied clan is **created automatically during the daily sync**. Members registered in an allied clan receive their clan role, and the claim channels are restricted to clan-role holders. Members not yet in an allied clan have **no member role** until they validate. Claim-channel permissions are re-applied at every boot from the roles stored in the DB.
 
 ---
 
@@ -54,15 +58,12 @@ One role per allied clan is **created automatically during the daily sync**. Mem
 | Floor | Panels |
 |-------|--------|
 | **MS7–MS10** | Normal floor + Antidemon |
-| **MS11–MS12** | Leaders, Events, Antidemon, Goblin |
 
 ### 🏔️ Secret Peak (SP)
 
 | Floor | Panels |
 |-------|--------|
 | **SP7–SP10** | Regular Secret Peak |
-| **SP11** | Secret Peak + Goblin |
-| **SP12** | Secret Peak + Random Event + Goblin |
 
 ### 🌀 Summons
 
@@ -102,15 +103,6 @@ Opened with **`!reset`** — reset one panel (or **all**) to defaults.
 ### 👢 Kick User
 Opened with **`!kick`** — remove a user from any claim (floor, room, or event) and open the spot for the next in queue.
 
-### 📅 Reserve Fury / Frenzy
-Opened with **`!reserve @user`** — multi-step interactive flow:
-1. Select **event** (Fury / Frenzy)
-2. Select **floors** (MS11 / MS12 / Both)
-3. Select **hours** (All or specific slots)
-4. **Confirm** — panels refresh with the reservation locked in
-
-Reserved slots are blocked for other users until the reservation passes.
-
 ### 👑 Early Claim (`!earlyclaim`)
 Text commands (require **Manage Messages**):
 
@@ -132,10 +124,7 @@ Post the panels of a floor into the current channel, replacing any previously po
 | Command | Panels posted |
 |---------|---------------|
 | `!ms7` … `!ms10` | Magic Square normal + Antidemon |
-| `!ms11` … `!ms12` | MS Leaders + Events + Antidemon + Goblin |
 | `!sp7` … `!sp10` | Secret Peak |
-| `!sp11` | Secret Peak + Goblin |
-| `!sp12` | Secret Peak + Random Event + Goblin |
 | `!summons` (or `!summon`) | Summon locations |
 
 ### 👑 Admin Commands
@@ -146,9 +135,10 @@ Post the panels of a floor into the current channel, replacing any previously po
 | `!reset <key>` | Reset one panel directly (e.g. `!reset 10squarenormal`) |
 | `!reset all` | Reset all panels to defaults |
 | `!kick` | Open the kick menu — remove a user from any claim and open the spot for the next in queue |
-| `!reserve @user` | Start the Fury/Frenzy reservation flow for that user |
 | `!reminders` | Set this channel as the **boss alert** channel (or `!reminders #channel`) |
 | `!events` | Set this channel as the **event alert** channel (or `!events #channel`) |
+| `!setlogs` | Set this channel as the **claim report** channel (or `!setlogs #channel`) |
+| `!logs` | Manually send the accumulated claim report to the report channel |
 
 ---
 
@@ -157,8 +147,9 @@ Post the panels of a floor into the current channel, replacing any previously po
 | Time (Server/NA — fixed UTC-4, never changes) | Action |
 |----------------------|--------|
 | **Every 15s** | Panel tick — countdowns, cooldowns, auto-respawn, timeouts, force refresh |
+| **18:00** | 📜 Daily claim report (claims, ends, cancels, queues, death marks) sent as a file to the report channel |
 | **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |
-| **10 min before events** | 🚨 Scheduled event alerts with @everyone (Red Boss, Leader 3, Purgatory, weekly events, etc.) |
+| **10 min before events** | 🚨 Scheduled event alerts with @everyone (World Boss, Labyrinth, Purgatory) |
 
 ---
 
@@ -201,15 +192,16 @@ TOKEN=your-bot-token
 ```
 
 ### 2. Configuration
-- **`src/core/config.js`** — `DISCORD_SERVER_ID` (the guild the bot operates on)
+- **`.env`** — `DISCORD_SERVER_ID` (the guild the bot operates on). The bot reads this **only from the `.env`** — no hardcoded fallback; if it's missing the boot logs an "Invalid Server ID" error and the bot won't find the guild.
 - **`src/core/server-structure.js`** — `CLAIM_CATEGORIES` (category/channel/panel definitions)
 - **Boss / event alerts** — run **`!reminders`** in the channel that should receive boss spawn alerts and **`!events`** in the channel that should receive scheduled event alerts (both require Manage Messages). This writes `bossSpawnChannelId` / `scheduledEventChannelId` to `daily-logs.json`. Alternatively, edit those IDs manually, or just create channels named `⏰ reminders` / `📅 events` — the bot falls back to them by name.
+- **Claim report** — run **`!setlogs`** in the channel that should receive the daily claim report (18:00) and **`!logs`** to send it manually. This writes `configChannelId` to `daily-logs.json`.
 - **Ranking sync** — configured in `src/core/ranking-constants.js` (sync worlds) and `database_ranking.json` (allied clans, clan roles, channel IDs)
 
 ### 3. Permissions
 | Permission | Required For |
 |-----------|-------------|
-| **Manage Messages** | All `!` commands: panels (`!ms`/`!sp`/`!summons`), `!earlyclaim`, `!reset`, `!kick`, `!reserve` |
+| **Manage Messages** | All `!` commands: panels (`!ms`/`!sp`/`!summons`), `!earlyclaim`, `!reset`, `!kick`, `!setlogs`, `!logs` |
 | **Administrator** | Ranking slash commands (`/forcesync`, `/manage`, `/sendpanel`, etc.) |
 
 ### 4. Run
@@ -253,7 +245,7 @@ src/
 │   ├── panel-dm.js                 # DM message handling
 │   ├── panel-migrations.js         # Data migrations
 │   ├── panel-commands.js           # !ms / !sp / !summons — post panels into the channel
-│   ├── admin-commands.js           # !reset / !kick / !reserve — open admin menus
+│   ├── admin-commands.js           # !reset / !kick — open admin menus
 │   ├── boss-spawn-scheduler.js     # Boss + scheduled event alerts
 │   ├── early-claim.js              # !earlyclaim admin commands
 │   └── ranking-*.js                # Registration, approvals, commands, confirmations, management,
@@ -264,8 +256,7 @@ src/
     ├── antidemon-interactions*.js  # Antidemon rooms (slide, ticket, queue, password)
     ├── summon-interactions.js      # Summon handlers
     ├── floor-summon.js             # Summon claim flow
-    ├── admin-interactions.js       # Admin reset/kick
-    └── admin-reserve.js            # Fury/Frenzy reservation flow
+    └── admin-interactions.js       # Admin reset/kick
 ```
 
 ---
@@ -282,10 +273,8 @@ After any changes, verify:
 - [ ] **Boss killed** → cooldown → auto-respawn → DM reminder
 - [ ] **Antidemon rooms** — left/mid/right, combo rooms, password modal
 - [ ] **Antidemon queue** — slide / ticket / queue join
-- [ ] **Fury/Frenzy fixed events** — claim inside window, reservation blocks
 - [ ] **Panel commands** — `!ms10` / `!sp10` / `!summons` post the right panels in the channel, replace old ones on re-run
 - [ ] **Early claim** — `!earlyclaim add/remove/list` + claiming 5 min early
-- [ ] **Admin** — `!reset` (menu + direct), `!kick`, `!reserve @user`
-- [ ] **Reserve flow** — reserve Fury/Frenzy slots, panel refresh
+- [ ] **Admin** — `!reset` (menu + direct), `!kick`
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts

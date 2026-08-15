@@ -5,6 +5,7 @@
 
 import { getMsg } from "../core/lang.js";
 import { db, antiDemonSelectionCache, saveLocalStorage } from "../core/state.js";
+import { pushToDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import { getFormattedTime12h } from "../core/time-utils.js";
 import { STATUS_CLAIMED } from "../core/constants.js";
@@ -174,6 +175,7 @@ async function applyClaimFromCache(uid, pKey, password) {
     }
 
     const configLabel = (roomConfig || "").toUpperCase();
+    pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - Config: ${configLabel}${password ? " 🔑" : ""}`, `Total Ticket: ${calcMinutes} min until ${getFormattedTime12h(endTime)}`);
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", {
         title: `${targetFloor.title} (${configLabel})${password ? ` 🔑 ${password}` : ""}`,
         window: rangeStr

@@ -1,10 +1,10 @@
-import { DISCORD_SERVER_ID, ensureConfig } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, ensureConfig, WORLD_IDS } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
+import { syncClanRoles, assignClanRole, removeMemberRoles, hasAnyMemberRoles } from './clan-roles.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -92,8 +92,11 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const nickname = userData.nickname.trim().normalize('NFC');
                     const lookup = lookupNickname(nickname, db, rankingCache);
 
-                    // ✅ Found in the NA42 ranking — keep everything
-                    if (lookup.found) continue;
+                    // ✅ Found in the NA42 ranking — keep everything, allow future notifications
+                    if (lookup.found) {
+                        deleteRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt');
+                        continue;
+                    }
 
                     // ❌ Not found in the NA42 ranking — remove the role, keep the name
                     const member = members.get(memberId);
@@ -105,6 +108,19 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         if (hadRole) {
                             removedRoleCount++;
                             logEvent(`🧹 [Ranking Validation] ${member.user.tag} (${displayName}) not found in the NA42 ranking — removed roles (nickname kept)`);
+
+                            // Notify once when the role is removed by ranking validation
+                            if (!getRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt')) {
+                                setRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt');
+                                // Suppress the step-3 "no role" reminder — this DM already covers it
+                                setRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
+                                try {
+                                    await sendRankingValidationDm(member, userData.nickname, db);
+                                    logEvent(`📧 [DM] Ranking-validation notice sent to ${member.user.tag} (${userData.nickname})`);
+                                } catch (e) {
+                                    logEvent(`⚠️ [DM] Failed to send ranking-validation notice to ${member.user.tag}: ${e.message}`);
+                                }
+                            }
                         }
                     }
 
@@ -115,7 +131,23 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             if (pilotMember) {
                                 const hadRole = hasAnyMemberRoles(pilotMember, db);
                                 await removeMemberRoles(pilotMember, db);
-                                if (hadRole) removedRoleCount++;
+                                if (hadRole) {
+                                    removedRoleCount++;
+
+                                    if (!getRoleNotifyFlag(db, pId, 'rankingValidationNotifiedAt')) {
+                                        setRoleNotifyFlag(db, pId, 'rankingValidationNotifiedAt');
+                                        setRoleNotifyFlag(db, pId, 'noRoleReminderSent');
+                                        try {
+                                            // Prefer the pilot's registered nickname; fall back to their current
+                                            // Discord nickname (carries the in-game "Owner - Pilot" name)
+                                            const pilotNick = db.users[pId]?.nickname || pilotMember.nickname || pilotMember.user.username;
+                                            await sendRankingValidationDm(pilotMember, pilotNick, db);
+                                            logEvent(`📧 [DM] Ranking-validation notice sent to ${pilotMember.user.tag} (${pilotNick})`);
+                                        } catch (e) {
+                                            logEvent(`⚠️ [DM] Failed to send ranking-validation notice to ${pilotMember.user.tag}: ${e.message}`);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -162,7 +194,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         const guildMember = members.get(memberId);
                         if (guildMember) {
                             try {
-                                await guildMember.user.send('⏳ **Reminder:** Your temporary registration expires in less than 24 hours.\n\nMake sure you are in an **allied clan** that appears in the EU ranking to keep your role permanently!\n\nIf you need more time, contact an administrator.');
+                                await guildMember.user.send('⏳ **Reminder:** Your temporary registration expires in less than 24 hours.\n\nMake sure you are in an **allied clan** that appears in the NA42 ranking to keep your role permanently!\n\nIf you need more time, contact an administrator.');
                                 userData.tempNotified24h = true;
                                 saveLocalStorage();
                                 logEvent(`📧 [Temp Reminder] ${memberId} (${userData.nickname}) sent 24h expiry reminder (${hoursLeft.toFixed(1)}h remaining)`);
@@ -287,9 +319,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             // ── If registered, check allied clan status ──
             let inAlliedClan = false;
+            let lookup = null;
 
             if (isRegistered && ownerData && ownerData.nickname && syncCache) {
-                const lookup = lookupNickname(ownerData.nickname, db, syncCache);
+                lookup = lookupNickname(ownerData.nickname, db, syncCache);
                 if (lookup.found) {
                     inAlliedClan = lookup.inAlliedClan;
                 }
@@ -297,25 +330,47 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             const hasAnyRole = hasAnyMemberRoles(member, db);
 
-            // ── ROLE MANAGEMENT (clan roles are the member marker; GoW Kids = temp) ──
+            // ── ROLE MANAGEMENT (clan roles are the only member marker) ──
             if (isRegistered) {
                 if (ownerData?.manualPermanent) {
                     // 👑 ManualForce user — always ensure access, never remove
-                    const assigned = await assignClanRole(member, db, logEvent);
-                    if (!assigned) {
-                        await assignTempRole(member, db, saveLocalStorage, logEvent);
-                    }
+                    await assignClanRole(member, db, logEvent);
                 } else if (ownerData?.tempUntil) {
-                    // ⏳ Temporary registration — keep the GoW Kids temp role until expiry (step 2.75)
-                    await assignTempRole(member, db, saveLocalStorage, logEvent);
+                    // ⏳ Temporary registration — no member role until validated in an allied clan (step 2.75)
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure the clan role is present
                     await assignClanRole(member, db, logEvent);
-                } else {
+                    // Role restored — allow future notifications
+                    deleteRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt');
+                    deleteRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
+                    deleteRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt');
+                } else if (syncCache) {
                     // ❌ Not in allied clan — remove roles (keep registration)
+                    // Only run when the ranking cache is available: if the cache is
+                    // missing/unavailable, skip role changes (fail-safe, keep roles).
                     if (hasAnyRole) {
                         await removeMemberRoles(member, db);
                         logEvent(`[Sync] Removed roles from ${member.user.username} — not in allied clan (registration kept)`);
+
+                        // Notify once when the role is removed for not being in an allied clan
+                        if (!getRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt')) {
+                            setRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt');
+                            try {
+                                await sendRoleRemovedDm(member, ownerData, lookup, db);
+                                logEvent(`📧 [DM] Role-removed notice sent to ${member.user.tag} (${ownerData.nickname})`);
+                            } catch (e) {
+                                logEvent(`⚠️ [DM] Failed to send role-removed notice to ${member.user.tag}: ${e.message}`);
+                            }
+                        }
+                    } else if (!getRoleNotifyFlag(db, memberId, 'noRoleReminderSent')) {
+                        // Registered but already without role — remind once that they need an allied clan
+                        setRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
+                        try {
+                            await sendNoRoleReminderDm(member, ownerData, lookup, db);
+                            logEvent(`📧 [DM] No-role reminder sent to ${member.user.tag} (${ownerData.nickname})`);
+                        } catch (e) {
+                            logEvent(`⚠️ [DM] Failed to send no-role reminder to ${member.user.tag}: ${e.message}`);
+                        }
                     }
                 }
             } else if (!isRegistered && hasAnyRole && rankingValidationEnabled) {
@@ -358,4 +413,99 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
     } catch (error) { 
         logEvent(getMsg('ranking.logs.syncError', { error: error.message }));
     }
+}
+
+// ==========================================
+// 📧 ROLE STATUS DM HELPERS
+// ==========================================
+
+/**
+ * Per-member notification flags (db.roleNotify[memberId][flag])
+ * Kept per-member so owners and their pilots never share the same flag
+ * (a pilot being processed first must not suppress the owner's DM).
+ */
+function getRoleNotifyFlag(db, memberId, flag) {
+    if (!db.roleNotify) db.roleNotify = {};
+    if (!db.roleNotify[memberId]) return false;
+    return !!db.roleNotify[memberId][flag];
+}
+
+function setRoleNotifyFlag(db, memberId, flag) {
+    if (!db.roleNotify) db.roleNotify = {};
+    if (!db.roleNotify[memberId]) db.roleNotify[memberId] = {};
+    db.roleNotify[memberId][flag] = Date.now();
+}
+
+function deleteRoleNotifyFlag(db, memberId, flag) {
+    if (!db.roleNotify || !db.roleNotify[memberId]) return;
+    delete db.roleNotify[memberId][flag];
+}
+
+/**
+ * Build a readable list of all allied clans across configured worlds.
+ */
+function formatAlliedClansList(db) {
+    const allied = db.config?.alliedClans || {};
+    const lines = [];
+    for (const [worldId, clans] of Object.entries(allied)) {
+        if (!clans || clans.length === 0) continue;
+        const serverName = WORLD_IDS[worldId] || `World ${worldId}`;
+        lines.push(`**${serverName}:** ${clans.map(c => `\`${c}\``).join(', ')}`);
+    }
+    return lines.length > 0 ? lines.join('\n') : '*(none configured)*';
+}
+
+/**
+ * DM the member when their role is removed by ranking validation (step 2.5):
+ * the nickname was not found in the NA42 game-forum ranking. Explains that
+ * the role is restored automatically once the account appears in the forum
+ * ranking inside an allied clan.
+ */
+async function sendRankingValidationDm(member, nickname, db) {
+    const alliedList = formatAlliedClansList(db);
+    await member.send(
+        `⚠️ **Member role removed**\n\n` +
+        `Your account **${nickname}** was not found in the **game forum ranking**, so the member role was removed.\n\n` +
+        `To keep Discord access during the **server reset**, your account needs to appear in the forum ranking inside one of the **main allied clans**:\n\n` +
+        `${alliedList}\n\n` +
+        `📌 As soon as your account shows up again in the ranking inside an allied clan, your role will be **restored automatically** on the next sync.`
+    );
+}
+
+/**
+ * DM the member when their role is removed because they left the allied clans.
+ * Explains the current clan, that they must be in an allied clan for server-reset
+ * access, that info is based on the game forum ranking, and that the role is
+ * restored automatically once they return to an allied clan.
+ */
+async function sendRoleRemovedDm(member, userData, lookup, db) {
+    const clanLine = lookup && lookup.found
+        ? `🏰 **Current clan:** ${lookup.clanName} (${lookup.serverName})`
+        : '❌ **Not found in the game forum ranking.**';
+    const alliedList = formatAlliedClansList(db);
+    await member.send(
+        `⚠️ **Member role removed**\n\n` +
+        `Your account **${userData.nickname}** lost the member role because you **left the allied clans**.\n\n` +
+        `${clanLine}\n\n` +
+        `To keep Discord access during the **server reset**, you need to be in one of the **main allied clans**:\n\n` +
+        `${alliedList}\n\n` +
+        `📌 This info is based on the **game forum ranking**. As soon as your account returns to an allied clan, your role will be **restored automatically** on the next sync.`
+    );
+}
+
+/**
+ * DM a registered member who currently has no member role,
+ * explaining they need to be in an allied clan in the game forum.
+ */
+async function sendNoRoleReminderDm(member, userData, lookup, db) {
+    const alliedList = formatAlliedClansList(db);
+    const clanLine = lookup && lookup.found
+        ? `\n🏰 **Current clan:** ${lookup.clanName} (${lookup.serverName})\n`
+        : '\n';
+    await member.send(
+        `ℹ️ **Active registration — role pending**\n\n` +
+        `Your account **${userData.nickname}** is registered, but you still **don't have the member role**.${clanLine}` +
+        `To get your role back, you need to be in an **allied clan** in the game forum. When your account appears there, the role will be **restored automatically**.\n\n` +
+        `🏰 **Allied clans:**\n${alliedList}`
+    );
 }

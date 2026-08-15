@@ -26,7 +26,7 @@ try {
 }
 
 const TOKEN = process.env.TOKEN || process.env.DISCORD_TOKEN;
-const GUILD_ID = process.env.DISCORD_SERVER_ID || '1432320162278670440';
+const GUILD_ID = process.env.DISCORD_SERVER_ID;
 const CLIENT_ID = process.env.CLIENT_ID;
 
 if (!TOKEN) {
@@ -39,6 +39,12 @@ if (!TOKEN) {
 
 if (!CLIENT_ID) {
   console.error('❌ No CLIENT_ID found. Set it in .env or pass it inline.');
+  process.exit(1);
+}
+
+if (!GUILD_ID) {
+  console.error('❌ No DISCORD_SERVER_ID found. Set it in .env:');
+  console.error('   DISCORD_SERVER_ID=your_guild_id');
   process.exit(1);
 }
 

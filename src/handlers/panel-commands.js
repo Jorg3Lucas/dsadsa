@@ -12,6 +12,7 @@ import { getMsg } from '../core/lang.js';
 import { db, lastMessages, saveLocalStorage } from '../core/state.js';
 import { renderEmbed, renderButtons } from './panel-render.js';
 import { CLAIM_CATEGORIES } from '../core/server-structure.js';
+import { clearChannelCompletely } from '../core/channel-cleanup.js';
 
 // Build lookup: channel key (ms7, sp10, summons...) -> panel keys to post
 const CHANNEL_PANELS = {};
@@ -24,7 +25,7 @@ for (const cat of CLAIM_CATEGORIES) {
 /** Resolve the channel key from a command name (e.g. "ms10" -> "ms10", "summons" -> "summons"). @param {string} command @returns {string|null} */
 function resolveChannelKey(command) {
     if (command === 'summons' || command === 'summon') return 'summons';
-    const m = command.match(/^(ms|sp)(7|8|9|10|11|12)$/);
+    const m = command.match(/^(ms|sp)(7|8|9|10)$/);
     if (m) return `${m[1]}${m[2]}`;
     return null;
 }
@@ -51,18 +52,19 @@ export function initPanelCommands(client) {
 
         if (!db._panelMapping) db._panelMapping = {};
 
-        // ── Replace old panels previously posted in this channel ──
-        for (const panelKey of panelKeys) {
-            const mapping = db._panelMapping[panelKey];
-            if (mapping && mapping.channelId === message.channel.id && mapping.messageId) {
-                try {
-                    const oldMsg = await message.channel.messages.fetch(mapping.messageId).catch(() => null);
-                    if (oldMsg) await oldMsg.delete().catch(() => {});
-                } catch (e) {
-                    // Ignore — panel may already be gone
+        // ── Clear the channel completely if it already held claim panels, then re-post ──
+        const hadPanelsHere = panelKeys.some(key => {
+            const mapping = db._panelMapping[key];
+            return mapping && mapping.channelId === message.channel.id;
+        });
+        if (hadPanelsHere) {
+            for (const panelKey of panelKeys) {
+                const mapping = db._panelMapping[panelKey];
+                if (mapping && mapping.channelId === message.channel.id) {
+                    delete lastMessages[panelKey];
                 }
-                delete lastMessages[panelKey];
             }
+            await clearChannelCompletely(message.channel);
         }
 
         // ── Post fresh panels and register them for the tick refresh ──

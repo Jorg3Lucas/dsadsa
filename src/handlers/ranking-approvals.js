@@ -16,7 +16,7 @@ import {
     PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { assignClanRole, assignTempRole } from '../core/clan-roles.js';
+import { assignClanRole } from '../core/clan-roles.js';
 
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS
@@ -118,16 +118,9 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     saveLocalStorage();
 
     await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-    // Clan role is now the member marker — permanent approvals get their clan
-    // role, temporary approvals get the GoW Kids temp role. If the clan role
-    // can't be resolved right now (stale/empty cache), fall back to GoW Kids so
-    // the new member never ends up with no access.
-    if (isTempApproval) {
-        await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
-    } else {
-        const assigned = await assignClanRole(targetMember, db, logEvent);
-        if (!assigned) await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
-    }
+    // Clan role is the only member marker — temporary approvals get no role
+    // until they validate in an allied clan.
+    await assignClanRole(targetMember, db, logEvent);
 
     const approvalLabel = isTempApproval ? '⏳ TEMPORARILY APPROVED (3 days)' : '✅ APPROVED';
     const dmMsg = isTempApproval

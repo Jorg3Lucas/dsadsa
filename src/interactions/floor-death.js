@@ -10,6 +10,7 @@ import {
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
 import { saveLocalStorage } from "../core/state.js";
+import { pushToDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel } from "../handlers/panel-utils.js";
 import { getFormattedTime12h, getLocalTime } from "../core/time-utils.js";
 import { STATUS_KILLED, STATUS_KILLED_PREFIX } from "../core/constants.js";
@@ -71,6 +72,7 @@ export async function handleDeathMark(interaction, uid, uName, targetObj, panelK
 
     targetObj[specificProp].status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     targetObj[specificProp]._lastKilledAt = nowTs;
+    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr}`);
     saveLocalStorage();
     await refreshVisualPanel(panelKey);
     return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(noop);
@@ -93,6 +95,7 @@ export async function handleDeathConfirm(interaction, uid, uName, targetObj, pan
 
     targetObj[specificProp].status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
     targetObj[specificProp]._lastKilledAt = nowTs;
+    pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr} (updated)`);
     saveLocalStorage();
     await refreshVisualPanel(panelKey);
     return await interaction.update({
@@ -118,73 +121,5 @@ export async function handleDeathCancel(interaction, uid, uName, targetObj, pane
         content: getMsg("rooms.deathUpdateCancelled"),
         components: [],
         flags: 64
-    }).catch(noop);
-}
-
-// ==========================================
-// 💀 EVENT GROUP DEATH MARK
-// ==========================================
-
-/** Mark a schedule-type event (Red Boss in event_group) as killed. If already marked, shows confirmation prompt. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @param {string} specificProp @returns {Promise<void>} */
-export async function handleEGDeathMark(interaction, uid, uName, targetObj, panelKey, specificProp) {
-    const evData = targetObj[specificProp];
-    if (!evData) {return await interaction.reply({ content: getMsg("rooms.noActiveClaimsFeedback"), flags: 64 }).catch(noop);}
-
-    const currTimeStr = getFormattedTime12h(getLocalTime());
-    const nowTs = getLocalTime().getTime();
-
-    if (evData.status && evData.status.startsWith(STATUS_KILLED)) {
-        const oldTimeStr = evData.status.replace(STATUS_KILLED_PREFIX, "").trim();
-        await interaction.reply({
-            content: getMsg("rooms.deathUpdateConfirm", { oldTime: oldTimeStr, newTime: currTimeStr }),
-            components: [
-                new t().addComponents(
-                    new n().setCustomId(`egdeathconfirm-${panelKey}-${specificProp}`).setLabel("✅ Update").setStyle(a.Success),
-                    new n().setCustomId(`egdeathcancel-${panelKey}-${specificProp}`).setLabel("❌ Cancel").setStyle(a.Secondary)
-                )
-            ],
-            flags: 64
-        }).catch(noop);
-        return;
-    }
-
-    evData.status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
-    evData._lastKilledAt = nowTs;
-    saveLocalStorage();
-    await refreshVisualPanel(panelKey);
-    return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(noop);
-}
-
-// ==========================================
-// ✅ EVENT GROUP DEATH CONFIRM
-// ==========================================
-
-/** Confirm and update an existing event group death mark time. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @param {string} specificProp @returns {Promise<boolean>} */
-export async function handleEGDeathConfirm(interaction, uid, uName, targetObj, panelKey, specificProp) {
-    const evData = targetObj[specificProp];
-    if (!evData) {return await interaction.update({ content: getMsg("rooms.noActiveClaimsFeedback"), components: [], flags: 64 }).catch(noop);}
-
-    const currTimeStr = getFormattedTime12h(getLocalTime());
-    const nowTs = getLocalTime().getTime();
-
-    evData.status = `${STATUS_KILLED_PREFIX}${currTimeStr}`;
-    evData._lastKilledAt = nowTs;
-    saveLocalStorage();
-    await refreshVisualPanel(panelKey);
-    return await interaction.update({
-        content: getMsg("rooms.deathUpdateConfirmed", { newTime: currTimeStr }),
-        components: [], flags: 64
-    }).catch(noop);
-}
-
-// ==========================================
-// ❌ EVENT GROUP DEATH CANCEL
-// ==========================================
-
-/** Cancel an existing event group death mark update request. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @param {string} specificProp @returns {Promise<boolean>} */
-export async function handleEGDeathCancel(interaction, _uid, _uName, _targetObj, _panelKey, _specificProp) {
-    return await interaction.update({
-        content: getMsg("rooms.deathUpdateCancelled"),
-        components: [], flags: 64
     }).catch(noop);
 }

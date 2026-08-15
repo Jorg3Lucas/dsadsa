@@ -13,7 +13,7 @@ const earlyClaimUsersPath = s.resolve("./early-claim-users.json");
 export const defaultFloors = ["7", "8", "9", "10"];
 
 export let punishments = {};
-export let dailyLogs = { bossSpawnChannelId: null, scheduledEventChannelId: null };
+export let dailyLogs = { configChannelId: null, queue: [], bossSpawnChannelId: null, scheduledEventChannelId: null };
 export const alertCache = { warning5mAfter: {}, spawnAlerted: {} };
 export const antiDemonSelectionCache = {};
 export const summonSelectionCache = {};
@@ -43,7 +43,12 @@ export function initState(opts) {
 function loadDailyLogsFromDisk() {
     try {
         if (o.existsSync(dailyLogsPath)) {
-            dailyLogs = JSON.parse(o.readFileSync(dailyLogsPath, "utf8"));
+            const parsed = JSON.parse(o.readFileSync(dailyLogsPath, "utf8"));
+            dailyLogs = parsed;
+            // Migration: ensure the claim report queue fields exist
+            // (older daily-logs.json files predate the report system)
+            if (!Array.isArray(dailyLogs.queue)) dailyLogs.queue = [];
+            if (!('configChannelId' in dailyLogs)) dailyLogs.configChannelId = null;
         }
     } catch (l) {
         logger.error('State', 'Error loading daily-logs.json', l);

@@ -52,22 +52,6 @@ export const CLAIM_CATEGORIES = [
         ]
     },
     {
-        name: '🗼 11F',
-        legacyId: '1511063558224613396',
-        channels: [
-            { name: '🔸 SP-11F', key: 'sp11', legacyName: '🔸┃sp11', panels: ['11peak', '11goblin'] },
-            { name: '🔹 MS-11F', key: 'ms11', legacyName: '🔹┃ms11', panels: ['11squareleaders', '11squareevents', '11squareantidemon', '11msgoblin'] }
-        ]
-    },
-    {
-        name: '🗼 12F',
-        legacyId: '1511063661458751708',
-        channels: [
-            { name: '🔸 SP-12F', key: 'sp12', legacyName: '🔸┃sp12', panels: ['12peak', '12randomevent', '12goblin'] },
-            { name: '🔹 MS-12F', key: 'ms12', legacyName: '🔹┃ms12', panels: ['12squareleaders', '12squareevents', '12squareantidemon', '12msgoblin'] }
-        ]
-    },
-    {
         name: '🌀 Summons',
         legacyId: '1512360620127817898',
         channels: [
@@ -78,7 +62,7 @@ export const CLAIM_CATEGORIES = [
 
 // ── General category — one category with every general channel ──
 // mode:
-//   member      → members-only: only registered members (clan roles + GoW Kids)
+//   member      → members-only: only registered members (clan roles)
 //                 can view and chat (market, main-chat)
 //   member-view → members-only view: members see the posts, only the bot sends
 //                 (reminders, events)
@@ -151,12 +135,12 @@ export function findTextChannel(guild, categoryId, chanDef) {
 /**
  * Alias of buildMemberViewOverwrites used by the claim channels (7F-12F, Summons):
  * @everyone cannot view (or send), the bot and the given roles can VIEW ONLY,
- * only the bot can send (panels). Members holding a clan role (or GoW Kids)
- * can read the panels and click the buttons, but are explicitly denied sending
- * text messages — including in threads — so the channels stay clean.
+ * only the bot can send (panels). Members holding a clan role can read the
+ * panels and click the buttons, but are explicitly denied sending text
+ * messages — including in threads — so the channels stay clean.
  * @param {string} everyoneId
  * @param {string} botId
- * @param {string[]} allowViewIds - role IDs allowed to view (clan roles, GoW Kids temp role)
+ * @param {string[]} allowViewIds - role IDs allowed to view (clan roles)
  */
 export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
     return buildMemberViewOverwrites(everyoneId, botId, allowViewIds);
@@ -164,8 +148,8 @@ export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
 
 /**
  * Build permission overwrites for members-view channels (reminders, events and
- * claim channels): @everyone is locked out, the given member roles (clan roles
- * + GoW Kids) can VIEW only, only the bot (and any extra writer roles) can send
+ * claim channels): @everyone is locked out, the given member roles (clan roles)
+ * can VIEW only, only the bot (and any extra writer roles) can send
  * (panels/alerts).
  * @param {string} everyoneId
  * @param {string} botId
@@ -196,8 +180,7 @@ export function buildMemberViewOverwrites(everyoneId, botId, allowViewIds, extra
 /**
  * Build permission overwrites for the elders channels (tower-rules,
  * announcements, allied-list): @everyone is locked out, member roles (clan
- * roles + GoW Kids) can VIEW only, the elder role (and the bot) can view AND
- * write.
+ * roles) can VIEW only, the elder role (and the bot) can view AND write.
  * @param {string} everyoneId
  * @param {string} botId
  * @param {string[]} memberViewIds - member role IDs allowed to view
@@ -210,7 +193,7 @@ export function buildEldersOverwrites(everyoneId, botId, memberViewIds, elderId)
 /**
  * Build permission overwrites for general member channels (market, main-chat):
  * @everyone is locked out, while the bot and the given member roles (clan
- * roles + GoW Kids) can view AND send — registered members chat freely.
+ * roles) can view AND send — registered members chat freely.
  * @param {string} everyoneId
  * @param {string} botId
  * @param {string[]} allowIds - member role IDs allowed to view and chat

@@ -3,7 +3,7 @@ import {
     confirmationCache
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
+import { assignClanRole, removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS
@@ -151,13 +151,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-        // Clan role is now the member marker (GoW Kids as fallback for temp/unresolvable)
-        if (cached.needsTempApproval) {
-            await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
-        } else {
-            const assigned = await assignClanRole(targetMember, db, logEvent);
-            if (!assigned) await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
-        }
+        // Clan role is the only member marker — temp approvals get no role until validated
+        await assignClanRole(targetMember, db, logEvent);
 
         const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
         logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${finalNickname} in ${cached.clan}${tempLabel}`);
@@ -198,11 +193,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         await targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {});
-        // manualforce = permanent — try the clan role, fall back to the temp role
-        const assigned = await assignClanRole(targetMember, db, logEvent);
-        if (!assigned) {
-            await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
-        }
+        // manualforce = permanent — assign the clan role if resolvable
+        await assignClanRole(targetMember, db, logEvent);
 
         logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)`);
 

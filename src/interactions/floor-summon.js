@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
 import { saveLocalStorage } from "../core/state.js";
+import { pushToDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import {
     checkPunishment,
@@ -110,6 +111,7 @@ export async function handleSummonCancel(interaction, uid, uName, targetObj, pan
             if (targetObj[loc].ownerId === uid) {
                 anyAction = true;
                 const currentLoggedName = targetObj[loc].ownerName || uName;
+                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${targetObj[loc].name}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(targetObj[loc].ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${targetObj[loc].name}`,
                     reason: isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel")
@@ -123,6 +125,7 @@ export async function handleSummonCancel(interaction, uid, uName, targetObj, pan
             if (targetObj[loc].nextId === uid) {
                 anyAction = true;
                 const currentLoggedName = targetObj[loc].nextName || uName;
+                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${targetObj[loc].name} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                 notifyUserDM(targetObj[loc].nextId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - ${targetObj[loc].name} (Queue)`,
                     reason: isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel")

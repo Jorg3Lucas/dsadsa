@@ -2,6 +2,10 @@
 // 🔧 CONSTANTS
 // ==========================================
 
+import { DISCORD_SERVER_ID } from './config.js';
+
+export { DISCORD_SERVER_ID };
+
 export const confirmationCache = {};
 
 // Pending owner registrations awaiting admin approval
@@ -18,10 +22,8 @@ export function setAdminChannelId(id) {
     adminChannelId = id;
 }
 
-export const DISCORD_SERVER_ID = '1432320162278670440';
-
 // ⚠️ LEGACY — the fixed member role was removed from the server. Clan roles
-// (db.config.clanRoles) + the GoW Kids temp role are now the member markers.
+// (db.config.clanRoles) are now the only member markers.
 // Kept only for historical reference / rollback.
 export const MEMBER_ROLE_ID = '1503933709756141620';
 
@@ -63,7 +65,7 @@ export const SUPER_ADMIN_USER_ID = '1496662868802928811';
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================
 
-export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive your **clan role** (and your in-game nickname). Temporary approvals receive the **GoW Kids** role until they join an allied clan.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@1496662868802928811>';
+export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\n🗑️ **Remove My Registration** — Cancel your own registration.\n✈️ **Remove Pilot** — Remove a pilot linked to your account.\n\nAfter approval by an administrator, you will receive your **clan role** (and your in-game nickname) once your account is found in an allied clan.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@1496662868802928811>';
 
 // ==========================================
 // 📢 REGISTRATION CHANNEL (for /listunregistered DMs)

@@ -1,33 +1,29 @@
 // ==========================================
 // 👑 ADMIN INTERACTION HANDLERS
-// admin-reset-menu, admin-kick-menu,
-// reserve-select-event, reserve-select-floors, reserve-select-hours
+// admin-reset-menu, admin-kick-menu
 // ==========================================
 
 import { getMsg } from "../core/lang.js";
 import { db, saveLocalStorage } from "../core/state.js";
+import { pushToDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, resetPanelData, notifyUserDM } from "../handlers/panel-utils.js";
 import { getFormattedTime12h } from "../core/time-utils.js";
 import { freeFloorAndActivateNextGracePeriod, freeAntidemonRoom } from "../handlers/claim-core.js";
 
 import { noop } from "../core/config.js";
-import { canHandleReserveInteraction, handleReserveInteraction, reserveFlowCache } from "./admin-reserve.js";
-
-export { reserveFlowCache };
 
 // ==========================================
 // 🎯 MAIN DISPATCH
 // ==========================================
 
-/** Check if an interaction customId matches admin/reserve handlers. @param {import('discord.js').Interaction} interaction @returns {boolean} */
+/** Check if an interaction customId matches admin handlers. @param {import('discord.js').Interaction} interaction @returns {boolean} */
 export function canHandleAdminInteraction(interaction) {
     const cid = interaction.customId;
     return cid === "admin-reset-menu" ||
-        cid === "admin-kick-menu" ||
-        canHandleReserveInteraction(interaction);
+        cid === "admin-kick-menu";
 }
 
-/** Route an admin interaction to the appropriate handler (reset, kick, logs, or reserve flow). @param {import('discord.js').Interaction} interaction @param {string} uid @returns {Promise<boolean>} */
+/** Route an admin interaction to the appropriate handler (reset, kick, logs). @param {import('discord.js').Interaction} interaction @param {string} uid @returns {Promise<boolean>} */
 export async function handleAdminInteraction(interaction, uid) {
     const cid = interaction.customId;
 
@@ -37,11 +33,6 @@ export async function handleAdminInteraction(interaction, uid) {
 
     if (interaction.isStringSelectMenu() && cid === "admin-kick-menu") {
         return handleAdminKickMenu(interaction, uid);
-    }
-
-    // Reserve flow → admin-reserve.js
-    if (canHandleReserveInteraction(interaction)) {
-        return handleReserveInteraction(interaction);
     }
 
     return false;
@@ -108,48 +99,9 @@ async function handleAdminKickMenu(interaction, _uid) {
     const targetFloor = db[pKey];
 
     if (targetFloor) {
-        if ("event_group" === targetFloor.type) {
-            // event_group kick: roomType is the sub-event key (e.g. "red", "goblin")
-            const evData = targetFloor[roomType];
-            if (evData && evData.ownerId) {
-                notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
-                    title: `${targetFloor.title} - ${evData.name}`,
-                    reason: getMsg("logs.adminRemove")
-                }));
-                
-                // Reset based on event type
-                if (evData.type === "summon") {
-                    evData.ownerId = null;
-                    evData.ownerName = null;
-                    evData.time = "";
-                    evData.timeWindow = "";
-                    if (evData.nextId) {
-                        const nid = evData.nextId, nname = evData.nextName;
-                        evData.nextId = null;
-                        evData.nextName = null;
-                        evData.formattedTimeNext = "";
-                        evData.ownerId = nid;
-                        evData.ownerName = nname;
-                        const grace = new Date(Date.now() + 3e5);
-                        evData.timeWindow = `${getFormattedTime12h(new Date())} ~ ${getFormattedTime12h(grace)}`;
-                        evData.status = "🟢 Open";
-                    }
-                } else {
-                    // schedule/fixed: just clear
-                    evData.ownerId = null;
-                    evData.ownerName = null;
-                    evData.timeWindow = "";
-                    if (evData._claimTimestamp) delete evData._claimTimestamp;
-                }
-                
-                saveLocalStorage();
-                await refreshVisualPanel(pKey);
-                return await interaction.update({
-                    content: getMsg("system.kickSuccess"),
-                    components: []
-                }).catch(noop);
-            }
-        } else if ("floor" === roomType) {
+        if ("floor" === roomType) {
+            const finalUserLabel = targetFloor.ownerName || getMsg("render.memberLabel");
+            pushToDailyLogs("CANCEL", finalUserLabel, targetFloor.title, getMsg("logs.adminRemove"));
             notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                 title: targetFloor.title,
                 reason: getMsg("logs.adminRemove")
@@ -167,7 +119,9 @@ async function handleAdminKickMenu(interaction, _uid) {
         const freedLabels = [];
         for (const rm of roomsToFree) {
             if (targetFloor[rm]) {
+                const finalUserLabel = targetFloor[rm].ownerName || getMsg("render.memberLabel");
                 freedLabels.push(rm.toUpperCase());
+                pushToDailyLogs("CANCEL", finalUserLabel, `${targetFloor.title} - Room ${rm.toUpperCase()}`, getMsg("logs.adminRemove"));
                 notifyUserDM(targetUid, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetFloor.title} - Room ${rm.toUpperCase()}`,
                     reason: getMsg("logs.adminRemove")

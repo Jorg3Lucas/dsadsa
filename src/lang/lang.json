@@ -126,41 +126,36 @@
         "countdownUntil": "until"
     },
     "logs": {
+        "title": "📜 DAILY CLAIM REPORT • {date}",
+        "noActivity": "No activity recorded today.",
         "autoClose": "Event window closed automatically.",
         "timeout": "Ticket duration expired.",
+        "absenceQueue": "Queue lost due to inactivity.",
         "adminRemove": "Removed by Staff.",
         "staffCancel": "Cancelled by Staff.",
         "staffQueueCancel": "Queue cancelled by Staff.",
         "userCancel": "Claim cancelled.",
         "userQueueCancel": "Queue abandoned.",
         "voluntaryLeave": "Floor released.",
-        "queueLeave": "Left the queue."
+        "queueLeave": "Left the queue.",
+        "dispatchSuccess": "✅ Report sent successfully.",
+        "dispatchError": "❌ Failed to send report.",
+        "setupSuccess": "✅ Report channel configured.",
+        "setupError": "❌ Insufficient permissions to configure report channels.",
+        "modRequired": "❌ Only Staff members can send reports manually.",
+        "noChannel": "❌ No report channel configured. Use `!setlogs` first."
     },
     "reserve": {
         "success": "✅ **{event}** has been reserved for **{userName}**. No one else can claim it until reopened.",
         "openSuccess": "✅ **{event}** is now open for everyone to claim.",
         "notReserved": "ℹ️ **{event}** is not currently reserved for anyone.",
-        "noEvent": "❌ Could not find **{event}** in any panel.",
         "reservedNotice": "🔒 Reserved for {userName}",
         "blockedOther": "🔒 **{event}** is currently reserved for **{userName}**. Only they can claim it.",
         "blockedSlot": "🔒 **{event}** at this hour is reserved for **{userName}**. Only they can claim it.",
         "usageFury": "Usage: `!furyreserve @user` or `!furyopen`",
         "usageFrenzy": "Usage: `!frenzyreserve @user` or `!frenzyopen`",
         "userNotFound": "❌ Please mention a valid user. {usage}",
-        "permissionDenied": "🛡️ Only Staff members can reserve events.",
-        "interactive": {
-            "noUser": "❌ Please mention the target user. Example: `!reserve @user`",
-            "selectEvent": "🔒 **Select the event to reserve:**",
-            "selectFloors": "🏛️ **Select the floor(s):**",
-            "selectHours": "⏰ **Select the time slot(s):**\n\nCurrently reserving **{event}** in **{floors}** for **{userName}**.",
-            "confirm": "✅ **Confirm reservation?**\n\n**Event:** {event}\n**Floors:** {floors}\n**Hours:** {hours}\n**User:** {userName}\n\nClick ✅ Confirm to apply, or ❌ Cancel to abort.",
-            "applied": "✅ **Reservation applied!**\n\n**{event}** in **{floors}** at **{hours}** reserved for **{userName}**.",
-            "cancelled": "❌ Reservation cancelled.",
-            "btnConfirm": "✅ Confirm",
-            "btnCancel": "❌ Cancel",
-            "optAll": "All Hours",
-            "hourFormat": "{hour}:{minute} - {nextHour}:{nextMinute}"
-        }
+        "permissionDenied": "🛡️ Only Staff members can reserve events."
     },
     "ranking": {
         "commands": {
@@ -293,7 +288,7 @@
                 "actionPilot": "✈️ Remove pilot",
                 "actionPilotDesc": "Unlink a pilot from this user",
                 "actionClan": "🔁 Assign clan role",
-                "actionClanDesc": "Assign this user's clan role (GoW Kids if not in an allied clan)",
+                "actionClanDesc": "Assign this user's clan role (only if in an allied clan)",
                 "pilotSelectPlaceholder": "Select a pilot to remove...",
                 "noPilots": "❌ **{username}** has no registered pilots.",
                 "actionRemoveConfirm": "⚠️ Permanently remove **{username}**'s registration?",

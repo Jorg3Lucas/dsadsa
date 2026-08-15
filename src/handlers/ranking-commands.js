@@ -23,6 +23,7 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { hasMemberRole } from '../core/clan-roles.js';
+import { buildWelcomePanelComponents } from './ranking-welcome.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -412,22 +413,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     if (commandName === 'sendpanel') {
         await interaction.deferReply({ flags: 64 });
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('welcome_register_owner')
-                .setLabel('👑 Register as Owner')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('welcome_register_pilot')
-                .setLabel('✈️ Register as Pilot')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('welcome_remove_pilot')
-                .setLabel('🗑️ Remove Pilot')
-                .setStyle(ButtonStyle.Danger)
-        );
-
-        const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });
+        const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: buildWelcomePanelComponents() });
 
         ensureConfig(db);
         db.config.panelChannelId = interaction.channelId;

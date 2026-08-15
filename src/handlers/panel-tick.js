@@ -1,5 +1,6 @@
 import { getLocalTime, parseStringToDate, usesScheduleRespawn, redBossSchedules, leader3Schedules } from "../core/time-utils.js";
 import { sendBossSpawnAlerts, sendScheduledEventAlerts, resetScheduledEventAlertCache } from "./boss-spawn-scheduler.js";
+import { dispatchDailyLogs } from "../core/daily-logs.js";
 import { getMsg, reloadLanguage } from "../core/lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
@@ -10,7 +11,6 @@ import { noop } from "../core/config.js";
 // Sub-module handlers
 import { handlePeakNormal } from "./tick-peak-normal.js";
 import { handleFixed } from "./tick-fixed.js";
-import { handleEventGroup } from "./tick-event-group.js";
 import { handleAntidemonSummon } from "./tick-antidemon-summon.js";
 import { handleFloor } from "./tick-floor.js";
 
@@ -25,9 +25,10 @@ export function startTickInterval() {
             const now = getLocalTime();
         reloadLanguage();
 
-        // Daily alert cache reset at 18:00 NA time
+        // Daily claim report dispatch + alert cache reset at 18:00 NA time
         if (18 === now.getHours() && 0 === now.getMinutes() && !alertCache._dailyDispatched) {
             alertCache._dailyDispatched = true;
+            await dispatchDailyLogs(false);
             alertCache.warning5mAfter = {};
             alertCache.spawnAlerted = {};
             Object.keys(bossSpawnAlertCache).forEach(k => delete bossSpawnAlertCache[k]);
@@ -70,11 +71,6 @@ export function startTickInterval() {
                 updateNeeded = true;
             }
 
-            // Event group handlers (schedule/fixed/summon)
-            if (await handleEventGroup(current, key, now)) {
-                panelUpdate = true;
-                updateNeeded = true;
-            }
 
             // Antidemon / Summon timeout + absence (freeAntidemonRoom called inside tick-antidemon-summon.js)
             if (await handleAntidemonSummon(current, key, now)) {
@@ -89,7 +85,7 @@ export function startTickInterval() {
             }
 
             // Normal boss cooldown (non-event-group, non-antidemon, non-fixed panels)
-            if ("event_group" !== current.type && "antidemon" !== current.type && "fixed" !== current.type) {
+            if ("antidemon" !== current.type && "fixed" !== current.type) {
                 for (const prop in current) {
                     if (["title", "timeWindow", "next", "ownerId", "ownerName", "type", "schedules", "_claimTimestamp"].includes(prop)) continue;
 
@@ -147,9 +143,7 @@ export function startTickInterval() {
 
             // Force refresh for countdown timers
             if (!panelUpdate) {
-                if ("event_group" === current.type) {
-                    panelUpdate = true;
-                } else if ("antidemon" === current.type || "summon" === current.type) {
+                if ("antidemon" === current.type || "summon" === current.type) {
                     const roomList = "summon" === current.type ? getSummonRoomKeys(key) : getAntidemonRoomKeys(key);
                     for (const room of roomList) {
                         const rData = current[room];

@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
 import { db, saveLocalStorage } from "../core/state.js";
+import { pushToDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import {
     checkPunishment,
@@ -29,7 +30,7 @@ import { noop } from "../core/config.js";
 // 👹 ANTIDEMON CLAIM (via select menu)
 // ==========================================
 
-/** Show antidemon room selection menu for claiming. Shows version picker for MS11/12 (2-level menu). @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
+/** Show antidemon room selection menu for claiming. For expanded panels (9/10) shows a version picker first (2-level menu). @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
@@ -46,12 +47,12 @@ export async function handleAntiClaim(interaction, uid, uName, targetObj, panelK
     const roomKeys = getAntidemonRoomKeys(panelKey);
     if (roomKeys.length > 3) {
         const versionOpts = [];
-        const versions = ["v1", "v2", "v3"];
+        const versions = ["v1", "v2"];
         versions.forEach(v => {
             const roomsInVer = roomKeys.filter(rk => rk.startsWith(v));
             const anyFree = roomsInVer.some(rk => targetObj[rk] && !targetObj[rk].ownerId);
             if (anyFree) {
-                const verName = v === "v1" ? "1-1" : v === "v2" ? "1-2" : "1-3";
+                const verName = v.replace("v", "").split("").join("-");
                 versionOpts.push({ label: `🏛️ Version ${verName}`, value: v, emoji: "🏛️" });
             }
         });
@@ -117,6 +118,7 @@ export async function handleAntiCancel(interaction, uid, uName, targetObj, panel
             if (targetObj[rm].ownerId === uid) {
                 anyAction = true;
                 const currentLoggedName = targetObj[rm].ownerName || uName;
+                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(targetObj[rm].ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - Room ${rm.toUpperCase()}`,
                     reason: isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel")
@@ -130,6 +132,7 @@ export async function handleAntiCancel(interaction, uid, uName, targetObj, panel
             if (targetObj[rm].nextId === uid) {
                 anyAction = true;
                 const currentLoggedName = targetObj[rm].nextName || uName;
+                pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - Room ${rm.toUpperCase()} (Next Queue)`, isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel"));
                 notifyUserDM(targetObj[rm].nextId, getMsg("rooms.dmRemovedNotice", {
                     title: `${targetObj.title} - Room ${rm.toUpperCase()} (Queue)`,
                     reason: isMod ? getMsg("logs.staffQueueCancel") : getMsg("logs.userQueueCancel")
@@ -155,10 +158,10 @@ export async function handleAntiCancel(interaction, uid, uName, targetObj, panel
 }
 
 // ==========================================
-// 🏛️ ANTIDEMON VERSION SLIDE (2-level menu for MS11/12)
+// 🏛️ ANTIDEMON VERSION SLIDE (2-level menu for expanded panels)
 // ==========================================
 
-/** Handle version selection (1-1, 1-2, 1-3) for MS11/12 antidemon, then show room options for the chosen version. @param {import('discord.js').StringSelectMenuInteraction} interaction @param {string} uid @param {string} uName @returns {Promise<boolean>} */
+/** Handle version selection (1-1, 1-2) for expanded antidemon panels, then show room options for the chosen version. @param {import('discord.js').StringSelectMenuInteraction} interaction @param {string} uid @param {string} uName @returns {Promise<boolean>} */
 export async function handleAntiVersionSlide(interaction, uid, _uName) {
     const pKey = interaction.customId.replace("antiversion-", ""),
         targetFloor = db[pKey],

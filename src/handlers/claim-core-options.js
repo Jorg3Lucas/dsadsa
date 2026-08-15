@@ -38,7 +38,7 @@ export function buildAntiClaimOptions(targetObj, uid, panelKey) {
             }
         }
     } else {
-        // Rooms 11-12 (9 rooms): individual + same-version combos
+        // Rooms 9-10 (6 rooms): individual + same-version combos
         const available = roomKeys.filter(rm => {
             if (hasPriority(rm)) return true;
             return targetObj[rm] && targetObj[rm].status !== STATUS_CLAIMED && !targetObj[rm].nextId;
@@ -55,7 +55,7 @@ export function buildAntiClaimOptions(targetObj, uid, panelKey) {
         });
         
         // Add same-version combos (mid+left, mid+right per version)
-        const versions = ["v1", "v2", "v3"];
+        const versions = ["v1", "v2"];
         for (const ver of versions) {
             const l = `${ver}l`, m = `${ver}m`, r = `${ver}r`;
             // Priority combos
@@ -102,8 +102,8 @@ export function buildAntiQueueOptions(targetObj, panelKey) {
             opts.push({ label: "🔵➡️ MID + RIGHT", description: getMsg("rooms.antidemonQueueMidRight"), value: "mid-right", emoji: "🔵" });
         }
     } else {
-        // Rooms 11-12: individual + same-version combo queue options
-        const versions = ["v1", "v2", "v3"];
+        // Rooms 9-10: individual + same-version combo queue options
+        const versions = ["v1", "v2"];
         for (const ver of versions) {
             const l = `${ver}l`, m = `${ver}m`, r = `${ver}r`;
             

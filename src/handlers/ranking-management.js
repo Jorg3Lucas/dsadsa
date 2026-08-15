@@ -15,7 +15,7 @@ import {
     ensureConfig
 } from '../core/ranking-constants.js';
 import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
-import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
+import { assignClanRole, removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
@@ -106,9 +106,8 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
     if (actionType === 'clan') {
         const clanTarget = await interaction.guild.members.fetch(targetUserId).catch(() => null);
         if (clanTarget) {
-            // Clan role is the member marker — fall back to the temp role when unresolvable
-            const assigned = await assignClanRole(clanTarget, db, logEvent);
-            if (!assigned) await assignTempRole(clanTarget, db, saveLocalStorage, logEvent);
+            // Clan role is the only member marker
+            await assignClanRole(clanTarget, db, logEvent);
         }
         return interaction.update({
             content: '✅ Clan role assigned.',

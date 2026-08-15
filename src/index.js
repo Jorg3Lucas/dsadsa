@@ -22,10 +22,10 @@ import { registerMir4SlashCommands } from './core/ranking-deploy.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
-import { handleOwnerRegistrationModal, handleSelectRegistrationNickname } from './handlers/ranking-registration.js';
-import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
+import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from './handlers/ranking-registration.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
-import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm } from './handlers/ranking-pilot.js';
+import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
 import {
@@ -47,7 +47,7 @@ import {
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
 import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
-import { TEMP_ROLE_NAME, applyClaimChannelPermissions } from './core/clan-roles.js';
+import { applyClaimChannelPermissions } from './core/clan-roles.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
@@ -142,17 +142,14 @@ client.once('clientReady', async () => {
         if (guild) {
             await registerMir4SlashCommands(guild);
 
-            // Clan roles are now the member marker (the old fixed member role was
-            // removed from the server). Surface a warning if no clan/temp role
-            // exists yet so role management is not silently broken.
+            // Clan roles are the member marker (the old fixed member role was
+            // removed from the server). Surface a warning if no clan role exists
+            // yet so role management is not silently broken.
             const clanRoleCount = Object.keys(rankingDb.config?.clanRoles || {}).length;
-            const tempRole = guild.roles.cache.find(r => r.name === TEMP_ROLE_NAME);
             if (clanRoleCount > 0) {
                 console.log(`✅ [Ranking] ${clanRoleCount} clan role(s) configured.`);
-            } else if (tempRole) {
-                console.log(`✅ [Ranking] No clan roles yet — temp role "${TEMP_ROLE_NAME}" found (${tempRole.id}). Clan roles are created automatically during the daily sync once allied clans are added.`);
             } else {
-                console.warn(`⚠️ [Ranking] No clan roles and no "${TEMP_ROLE_NAME}" temp role in guild ${RANKING_SERVER_ID} — roles are created automatically during the daily sync.`);
+                console.warn(`⚠️ [Ranking] No clan roles configured in guild ${RANKING_SERVER_ID} — roles are created automatically during the daily sync once allied clans are added.`);
             }
         } else {
             console.error('❌ Error: Invalid Server ID configuration.');
@@ -178,12 +175,12 @@ client.once('clientReady', async () => {
     initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, false);
 
     // Aplica as permissões dos canais de claim a partir dos cargos de clã salvos
-    // no banco (db.config.clanRoles + tempRoleId) — reaplica a restrição de acesso
-    // a cada boot (o bot não recria canais).
+    // no banco (db.config.clanRoles) — reaplica a restrição de acesso a cada
+    // boot (o bot não recria canais).
     try {
         const result = await applyClaimChannelPermissions(client, rankingDb, logRankingEvent, (db) => saveRankingStorage(db || rankingDb));
         if (!result.applied && result.reason === 'no-roles') {
-            console.log('ℹ️ [Ranking] No clan/temp roles found in the DB or on the server — claim channels stay open until roles are created (daily sync creates them from allied clans).');
+            console.log('ℹ️ [Ranking] No clan roles found in the DB or on the server — claim channels stay open until roles are created (daily sync creates them from allied clans).');
         } else if (result.discovered > 0) {
             console.log(`🔒 [Ranking] Discovered ${result.discovered} clan role(s) by name — permissions applied and saved.`);
         }
@@ -191,7 +188,7 @@ client.once('clientReady', async () => {
         logger.error('ClanPerms', 'Failed to apply claim-channel permissions at boot', err);
     }
 
-    // Comandos de texto: painéis (!ms, !sp, !summons), admin (!reset, !kick, !reserve,
+    // Comandos de texto: painéis (!ms, !sp, !summons), admin (!reset, !kick,
     // !earlyclaim) e canais de alerta (!reminders, !events)
     initPanelCommands(client);
     initAdminCommands(client);
@@ -248,8 +245,11 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId === 'select_pilot_to_remove') {
                 return await handlePilotRemoveSelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
-            if (interaction.customId.startsWith('select_reg_nickname_')) {
-                return await handleSelectRegistrationNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            if (interaction.customId.startsWith('user_select_reg_nickname_')) {
+                return await handleUserSelectRegistrationNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('user_select_pilot_owner_')) {
+                return await handleUserSelectPilotOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId.startsWith('select_manual_nickname_')) {
                 return await handleSelectManualNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
@@ -300,8 +300,14 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId === 'welcome_register_pilot') {
                 return handleWelcomeRegisterPilot(interaction);
             }
+            if (interaction.customId === 'welcome_remove_registration') {
+                return await handleWelcomeRemoveRegistration(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
             if (interaction.customId === 'welcome_remove_pilot') {
                 return await handleWelcomeRemovePilot(interaction, getRankingDb());
+            }
+            if (interaction.customId === 'selfremove_yes' || interaction.customId === 'selfremove_no') {
+                return await handleSelfRemoveConfirm(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId.startsWith('approve_owner_')) {
                 return await handleApproveOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);

@@ -2,7 +2,6 @@
 // 👑 ADMIN TEXT COMMANDS
 // !reset [key|all] — open reset menu / reset a panel directly
 // !kick           — open kick menu (remove a user from a claim)
-// !reserve @user  — start the Fury/Frenzy reservation flow
 // ==========================================
 
 import {
@@ -13,8 +12,7 @@ import {
 import { getMsg } from '../core/lang.js';
 import { db } from '../core/state.js';
 import { refreshVisualPanel, resetPanelData } from './panel-utils.js';
-import { getAntidemonRoomKeys, getSummonRoomKeys, getEventGroupKeys } from './claim-core.js';
-import { reserveFlowCache } from '../interactions/admin-reserve.js';
+import { getAntidemonRoomKeys, getSummonRoomKeys } from './claim-core.js';
 
 // Strip emojis from titles for select menu labels
 function stripEmojis(str) {
@@ -36,18 +34,7 @@ function buildKickOptions() {
         if (!current || key.startsWith('_')) continue;
         const cleanedTitle = stripEmojis(current.title);
 
-        if (current.type === 'event_group') {
-            for (const ev of getEventGroupKeys(current)) {
-                const evData = current[ev];
-                if (evData && evData.ownerId) {
-                    options.push({
-                        label: `${cleanedTitle} - ${evData.name}`.slice(0, 100),
-                        description: `${getMsg('system.kickCurrentLabel')} ${evData.ownerName}`,
-                        value: `kick-${key}-${ev}-${evData.ownerId}`
-                    });
-                }
-            }
-        } else if (current.type === 'antidemon') {
+        if (current.type === 'antidemon') {
             for (const room of getAntidemonRoomKeys(key)) {
                 const rData = current[room];
                 if (rData && rData.ownerId) {
@@ -124,43 +111,10 @@ async function handleResetDirect(msg, resetKey) {
 }
 
 // ==========================================
-// 🔒 !RESERVE — start the reservation flow
-// ==========================================
-
-async function handleReserve(msg) {
-    const targetUser = msg.mentions.users.first();
-    if (!targetUser) {
-        return msg.reply(getMsg('reserve.interactive.noUser')).catch(() => {});
-    }
-
-    const uid = msg.author.id;
-    reserveFlowCache[uid] = {
-        targetUserId: targetUser.id,
-        targetUserName: targetUser.username,
-        step: 'event'
-    };
-
-    await msg.reply({
-        content: getMsg('reserve.interactive.selectEvent'),
-        components: [new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId('reserve-select-event')
-                .setPlaceholder('Choose event...')
-                .addOptions([
-                    { label: 'Fury', value: 'fury', emoji: '🔴' },
-                    { label: 'Frenzy', value: 'frenzy', emoji: '🟣' }
-                ])
-        )]
-    }).catch(() => {});
-
-    try { await msg.delete(); } catch (e) {}
-}
-
-// ==========================================
 // 🎯 MAIN DISPATCH
 // ==========================================
 
-/** Registers the !reset / !kick / !reserve text command listener. @param {import('discord.js').Client} client */
+/** Registers the !reset / !kick text command listener. @param {import('discord.js').Client} client */
 export function initAdminCommands(client) {
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content.startsWith('!')) return;
@@ -168,7 +122,7 @@ export function initAdminCommands(client) {
         const args = message.content.slice(1).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
-        if (!['reset', 'kick', 'reserve'].includes(command)) return;
+        if (!['reset', 'kick'].includes(command)) return;
 
         if (!hasManageMessages(message)) {
             return message.reply(getMsg('system.permissionDeniedManageMessages')).catch(() => {});
@@ -214,11 +168,6 @@ export function initAdminCommands(client) {
             }).catch(() => {});
             try { await message.delete(); } catch (e) {}
             return;
-        }
-
-        // ── !reserve @user ──
-        if (command === 'reserve') {
-            return handleReserve(message);
         }
     });
 }

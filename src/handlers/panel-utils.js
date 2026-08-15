@@ -1,8 +1,8 @@
 import { db, client, saveLocalStorage, logEvent, lastMessages } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
-import { noop } from "../core/config.js";
 import { STATUS_AVAILABLE } from "../core/constants.js";
 import { logger } from "../core/logger.js";
+import { clearChannelCompletely } from "../core/channel-cleanup.js";
 
 // Re-export from sub-modules
 export { refreshVisualPanel, notifyUserDM } from "./panel-dm.js";
@@ -10,8 +10,7 @@ export {
     migrateNamesCleanEmojis,
     migrateBossCooldowns,
     migratePlantOreCooldown,
-    migrateSPLegacyToUnified,
-    migrateMS1112,
+    removeMS1112Panels,
     migrateAntidemon9e10,
     migrateLastKilledAt
 } from "./panel-migrations.js";
@@ -24,28 +23,24 @@ export {
  * Build a default panel structure for the given panel key.
  * This is the single source of truth for ALL panel definitions.
  * Used both for initial creation (initClaimSystem) and reset (resetPanelData).
- * @param {string} key - Panel key (e.g. "7peak", "11squareevents", "summon")
+ * @param {string} key - Panel key (e.g. "7peak", "7squarenormal", "summon")
  * @returns {object|null} Default panel object, or null if the key is unrecognized
  */
 /** Build default panel structure for a given key. Single source of truth for ALL panel definitions. @param {string} key - Panel key @returns {object|null} Default panel object or null if unrecognized */
 export function buildPanelDefaults(key) {
-    // ── Peak panels: 7peak-10peak (has plant/ore), 11peak-12peak (no plant/ore, red has schedules) ──
+    // ── Peak panels (7peak-10peak, with plant/ore) ──
     const peakMatch = key.match(/^(\d+)peak$/);
     if (peakMatch) {
         const floor = peakMatch[1];
-        const hasPlantOre = floor !== "11" && floor !== "12";
-        const sp11or12 = floor === "11" || floor === "12";
         return {
             type: "peak",
             title: `Secret Peak ${floor}F`,
             timeWindow: "", next: null, ownerId: null, ownerName: null,
             left: { name: "⬅️ Left", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-            red: { name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "", ...(sp11or12 ? { schedules: [1, 7, 13, 19] } : {}) },
+            red: { name: "🟥 Red", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" },
             right: { name: "➡️ Right", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-            ...(hasPlantOre ? {
-                plant: { name: "🌱 Plant", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-                ore: { name: "⛏️ Ore", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" }
-            } : {})
+            plant: { name: "🌱 Plant", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
+            ore: { name: "⛏️ Ore", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" }
         };
     }
 
@@ -78,11 +73,10 @@ export function buildPanelDefaults(key) {
             formattedTimeNext: "", endLimit: null, password: ""
         });
 
-        // Floors 9-12 use expanded format
-        if (["9", "10", "11", "12"].includes(floor)) {
+        // Floors 9-10 use expanded format (versions 1-1, 1-2)
+        if (["9", "10"].includes(floor)) {
             const rooms = {};
-            const is9or10 = floor === "9" || floor === "10";
-            const versions = is9or10 ? ["1-1", "1-2"] : ["1-1", "1-2", "1-3"];
+            const versions = ["1-1", "1-2"];
             const sides = [
                 { k: "l", n: "LEFT" },
                 { k: "m", n: "MID" },
@@ -103,78 +97,6 @@ export function buildPanelDefaults(key) {
             left: makeRoom("LEFT ROOM"),
             mid: makeRoom("MID ROOM"),
             right: makeRoom("RIGHT ROOM")
-        };
-    }
-
-    // ── MS11/12 Leaders (11squareleaders, 12squareleaders) ──
-    const leadersMatch = key.match(/^(11|12)squareleaders$/);
-    if (leadersMatch) {
-        const num = leadersMatch[1];
-        return {
-            type: "normal",
-            title: `Magic Square ${num}F - Leaders`,
-            timeWindow: "", next: null, ownerId: null, ownerName: null,
-            boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
-            boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-            boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" }
-        };
-    }
-
-    // ── MS11/12 Events (11squareevents, 12squareevents) ──
-    const eventsMatch = key.match(/^(11|12)squareevents$/);
-    if (eventsMatch) {
-        const num = eventsMatch[1];
-        return {
-            type: "event_group",
-            title: `Magic Square ${num}F - Events`,
-            fury: {
-                name: "🔴 Fury", type: "fixed",
-                status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                timeWindow: "", _claimTimestamp: null,
-                reservedFor: null, reservedByName: null, reservations: null,
-                schedules: [0, 3, 6, 9, 12, 15, 18, 21],
-                scheduleMinutes: 30
-            },
-            frenzy: {
-                name: "🟣 Frenzy", type: "fixed",
-                status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                timeWindow: "", _claimTimestamp: null,
-                reservedFor: null, reservedByName: null, reservations: null,
-                schedules: [2, 5, 8, 11, 14, 17, 20, 23],
-                scheduleMinutes: 0
-            }
-        };
-    }
-
-    // ── SP12 Random Event ──
-    if (key === "12randomevent") {
-        return {
-            type: "fixed",
-            title: "🎲 Random Event (SP12)",
-            status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-            timeWindow: "", _claimTimestamp: null,
-            schedules: [3, 9, 15, 21],
-            scheduleMinutes: 0
-        };
-    }
-
-    // ── Goblin panels (summon type, single room) ──
-    const goblinMap = {
-        "11goblin": { roomKey: "sp11", label: "⭐ SP 11F Goblin" },
-        "12goblin": { roomKey: "sp12", label: "⭐ SP 12F Goblin" },
-        "11msgoblin": { roomKey: "ms11", label: "👹 MS 11 Goblin" },
-        "12msgoblin": { roomKey: "ms12", label: "👹 MS 12 Goblin" }
-    };
-    if (goblinMap[key]) {
-        const { roomKey, label } = goblinMap[key];
-        return {
-            type: "summon",
-            title: label,
-            [roomKey]: {
-                name: label, status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-                time: "", timeWindow: "", nextId: null, nextName: null,
-                formattedTimeNext: "", endLimit: null
-            }
         };
     }
 
@@ -222,37 +144,55 @@ export function resetPanelData(key) {
 // 🔄 AUTO-RECOVERY ON BOOT
 // ==========================================
 
-/** Re-send all panels with fresh embeds on bot startup, recovering from stale message references. */
+/**
+ * Re-send all panels with fresh embeds on bot startup, recovering from stale
+ * message references. Before posting, each channel that previously held panels
+ * is COMPLETELY cleared (all messages deleted), so no stale panels, duplicates
+ * or leftover chatter remain.
+ */
 export async function processAutoRecoveryOnBoot() {
     logEvent("Starting automatic panel recovery and chat cleanup...");
     if (!db._panelMapping) db._panelMapping = {};
+
+    // ── 1. Collect every channel that currently holds panels ──
+    const channelIds = new Set();
     for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
         const mapping = db._panelMapping[key];
-        if (mapping && mapping.channelId && mapping.messageId) {try {
-            const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
-            if (!channel) continue;
-            try {
-                const msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
-                if (msg) await msg.delete().catch(noop);
-            } catch (i) {
-        // Silently ignored — non-critical operation
+        if (mapping && mapping.channelId) channelIds.add(mapping.channelId);
     }
-            const newMsg = await channel.send({
-                embeds: [renderEmbed(key)],
-                components: renderButtons(key)
-            }).catch(() => null);
-            if (newMsg) {
-                lastMessages[key] = newMsg;
-                db._panelMapping[key] = {
-                    channelId: channel.id,
-                    messageId: newMsg.id
-                };
+
+    // ── 2. Completely clear each of those channels before re-posting ──
+    for (const channelId of channelIds) {
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel) continue;
+        await clearChannelCompletely(channel, logEvent);
+    }
+
+    // ── 3. Post fresh panels and register them for the tick refresh ──
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        const mapping = db._panelMapping[key];
+        if (mapping && mapping.channelId && mapping.messageId) {
+            try {
+                const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+                if (!channel) continue;
+                const newMsg = await channel.send({
+                    embeds: [renderEmbed(key)],
+                    components: renderButtons(key)
+                }).catch(() => null);
+                if (newMsg) {
+                    lastMessages[key] = newMsg;
+                    db._panelMapping[key] = {
+                        channelId: channel.id,
+                        messageId: newMsg.id
+                    };
+                }
+            } catch (s) {
+                logger.error('Panel', `Failed to restore panel ${key}`, s);
+                logEvent(`Failed to restore panel ${key}: ${s.message}`);
             }
-        } catch (s) {
-            logger.error('Panel', `Failed to restore panel ${key}`, s);
-            logEvent(`Failed to restore panel ${key}: ${s.message}`);
-        }}
+        }
     }
     saveLocalStorage();
 }

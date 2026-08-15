@@ -1,5 +1,6 @@
 import { parseStringToDate } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
+import { pushToDailyLogs } from "../core/daily-logs.js";
 import { notifyUserDM } from "./panel-utils.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys, freeAntidemonRoom } from "./claim-core.js";
 import { STATUS_CLAIMED } from "../core/constants.js";
@@ -24,6 +25,7 @@ export async function handleAntidemonSummon(current, key, now) {
         if (STATUS_CLAIMED === rData.status && rData.timeWindow) {
             const limitTime = parseStringToDate(rData.timeWindow.split(" ~ ")[1]);
             if (limitTime && now >= limitTime) {
+                if (rData.ownerName) pushToDailyLogs("CLAIM_END", rData.ownerName, `${current.title} - Room ${room.toUpperCase()}`, getMsg("logs.timeout"));
                 await notifyUserDM(rData.ownerId, getMsg("rooms.dmRemovedNotice", {
                     title: `${current.title} - Room ${room.toUpperCase()}`,
                     reason: getMsg("logs.timeout")
@@ -45,6 +47,7 @@ export async function handleAntidemonSummon(current, key, now) {
                     roomKey: displayName,
                     title: current.title
                 })).catch(noop);
+                if (rData.nextName) pushToDailyLogs("CLAIM_END", rData.nextName, `${current.title} - ${displayName}`, getMsg("logs.absenceQueue"));
                 rData.nextId = null;
                 rData.nextName = null;
                 rData.endLimit = null;

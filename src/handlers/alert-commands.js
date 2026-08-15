@@ -2,6 +2,8 @@
 // 📡 ALERT CHANNEL TEXT COMMANDS
 // !reminders — set the boss-spawn alert channel to the current channel
 // !events    — set the scheduled-event alert channel to the current channel
+// !setlogs   — set the claim report channel to the current channel
+// !logs      — manually dispatch the accumulated claim report
 // Usage in any channel: "!reminders" (or "!reminders #channel" to target another)
 // Persists to daily-logs.json via saveDailyLogs().
 // ==========================================
@@ -9,7 +11,7 @@
 import { PermissionFlagsBits } from 'discord.js';
 import { getMsg } from '../core/lang.js';
 import { dailyLogs } from '../core/state.js';
-import { saveDailyLogs } from '../core/daily-logs.js';
+import { saveDailyLogs, dispatchDailyLogs } from '../core/daily-logs.js';
 
 function hasManageMessages(msg) {
     return msg.member && msg.member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -38,7 +40,7 @@ export function initAlertCommands(client) {
         const args = message.content.slice(1).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
-        if (!['reminders', 'events'].includes(command)) return;
+        if (!['reminders', 'events', 'setlogs', 'logs'].includes(command)) return;
 
         if (!hasManageMessages(message)) {
             return message.reply(getMsg('system.permissionDeniedManageMessages')).catch(() => {});
@@ -52,6 +54,20 @@ export function initAlertCommands(client) {
         // ── !events — scheduled event alerts ──
         if (command === 'events') {
             return setAlertChannel(message, 'scheduledEventChannelId', '🚨 Event alert channel');
+        }
+
+        // ── !setlogs — claim report channel ──
+        if (command === 'setlogs') {
+            return setAlertChannel(message, 'configChannelId', '📜 Claim report channel');
+        }
+
+        // ── !logs — manual dispatch of the accumulated claim report ──
+        if (command === 'logs') {
+            if (!dailyLogs.configChannelId) {
+                return message.reply(getMsg('logs.noChannel')).catch(() => {});
+            }
+            const ok = await dispatchDailyLogs(true);
+            return message.reply(getMsg(ok ? 'logs.dispatchSuccess' : 'logs.dispatchError')).catch(() => {});
         }
     });
 }

@@ -1,5 +1,7 @@
 import {
     ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
@@ -7,11 +9,39 @@ import {
     StringSelectMenuOptionBuilder
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
+import { removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
 // 👋 WELCOME BUTTON HANDLERS
 // ==========================================
 // Extracted from ranking-handlers.js
+
+// ── Shared panel component builder (used by /sendpanel + restoreWelcomePanel) ──
+export function buildWelcomePanelComponents() {
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('welcome_register_owner')
+            .setLabel('👑 Register as Owner')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('welcome_register_pilot')
+            .setLabel('✈️ Register as Pilot')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('welcome_remove_registration')
+            .setLabel('🗑️ Remove My Registration')
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('welcome_remove_pilot')
+            .setLabel('✈️ Remove Pilot')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return [row1, row2];
+}
 
 // ── Welcome: Register as Owner ──
 export function handleWelcomeRegisterOwner(interaction) {
@@ -49,6 +79,89 @@ export function handleWelcomeRegisterPilot(interaction) {
 
     modal.addComponents(new ActionRowBuilder().addComponents(ownerNickInput));
     return interaction.showModal(modal);
+}
+
+// ── Welcome: Remove my registration (self-service) ──
+export async function handleWelcomeRemoveRegistration(interaction, db, saveLocalStorage, logEvent) {
+    await interaction.deferReply({ flags: 64 });
+
+    const userId = interaction.user.id;
+    const userData = db.users[userId];
+
+    const isActuallyRegistered = userData && (userData.registeredAt || userData.manual === true);
+    if (!isActuallyRegistered) {
+        return interaction.editReply('❌ You are not registered. Use **👑 Register as Owner** first.');
+    }
+
+    const isPilot = Object.entries(db.users).some(([, d]) => d.pilotIds && d.pilotIds.includes(userId));
+    const pilotCount = userData.pilotIds ? userData.pilotIds.length : 0;
+
+    let warning = '';
+    if (pilotCount > 0) {
+        warning = `\n\n⚠️ You have **${pilotCount} pilot(s)** linked to your account — they will lose their member roles too.`;
+    } else if (isPilot) {
+        warning = '\n\n⚠️ You are registered as a **pilot** of another owner.';
+    }
+
+    return interaction.editReply({
+        content: `🗑️ **Remove your registration?**\n\nYou are registered as **${userData.nickname}**.${warning}\n\nThis will **remove your member roles**, **reset your nickname** and **delete your registration**. This cannot be undone.`,
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('selfremove_yes').setLabel('✅ Yes, remove').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('selfremove_no').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
+            )
+        ]
+    });
+}
+
+// ── Confirm: remove my own registration ──
+export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage, logEvent) {
+    await interaction.deferUpdate();
+
+    if (interaction.customId === 'selfremove_no') {
+        return interaction.editReply({ content: '❌ Cancelled.', components: [] });
+    }
+
+    const userId = interaction.user.id;
+    const userData = db.users[userId];
+    if (!userData) {
+        return interaction.editReply({ content: '❌ You are not registered.', components: [] });
+    }
+
+    const guild = interaction.guild;
+
+    // If the user is a pilot of someone, unlink them from that owner
+    for (const [ownerId, ownerData] of Object.entries(db.users)) {
+        if (ownerData.pilotIds && ownerData.pilotIds.includes(userId)) {
+            ownerData.pilotIds = ownerData.pilotIds.filter(id => id !== userId);
+        }
+    }
+
+    // If the user is an owner with pilots, unlink + strip roles/nicknames
+    if (userData.pilotIds && userData.pilotIds.length > 0) {
+        for (const pId of userData.pilotIds) {
+            const pilotMember = await guild.members.fetch(pId).catch(() => null);
+            if (pilotMember) {
+                await removeMemberRoles(pilotMember, db);
+                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+            }
+        }
+    }
+
+    const selfMember = await guild.members.fetch(userId).catch(() => null);
+    if (selfMember) {
+        await removeMemberRoles(selfMember, db);
+        await selfMember.setNickname(selfMember.user.username).catch(() => {});
+    }
+
+    delete db.users[userId];
+    saveLocalStorage();
+
+    logEvent(`🗑️ ${interaction.user.tag} removed their own registration (${userData.nickname}) via welcome panel`);
+    return interaction.editReply({
+        content: `✅ **Registration removed.**\n\nYour member roles were removed and your nickname was reset.\n\nYou can register again anytime with **👑 Register as Owner**.`,
+        components: []
+    });
 }
 
 // ── Welcome: Remove Pilot ──

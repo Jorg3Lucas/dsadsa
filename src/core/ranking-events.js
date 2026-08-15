@@ -5,7 +5,9 @@ import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { buildPrefixedNickname } from './ranking-utils.js';
-import { assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
+import { assignClanRole, removeMemberRoles } from './clan-roles.js';
+import { buildWelcomePanelComponents } from '../handlers/ranking-welcome.js';
+import { clearChannelCompletely } from './channel-cleanup.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
@@ -37,7 +39,7 @@ async function handleTextCommands(message, db, saveLocalStorage) {
         ensureConfig(db);
         db.config.rankingValidationEnabled = true;
         saveLocalStorage();
-        return message.reply('✅ **Ranking validation ENABLED!** Members not found in any EU ranking will lose their role on next sync.');
+        return message.reply('✅ **Ranking validation ENABLED!** Members not found in the NA42 ranking will lose their role on next sync.');
     }
 
     if (command === 'disablevalidation') {
@@ -89,6 +91,17 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
 
         for (const [userId, pending] of pendingEntries) {
             if (!pending.nickname) continue;
+
+            // Registrations still awaiting the user's fuzzy-nickname selection:
+            // clean up expired ones, otherwise skip (no admin panel sent yet)
+            if (pending.awaitingSelection) {
+                const timeSinceSelection = Date.now() - (pending.timestamp || 0);
+                if (timeSinceSelection > PENDING_MAX_AGE_MS) {
+                    delete pendingRegistrations[userId];
+                    expiredCount++;
+                }
+                continue;
+            }
 
             // Check if this registration has expired (>24h) while the bot was offline
             const timeSinceSubmission = Date.now() - (pending.timestamp || 0);
@@ -217,23 +230,11 @@ async function restoreWelcomePanel(client, db, saveLocalStorage, logEvent) {
             }
         }
 
-        // Re-send the panel
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('welcome_register_owner')
-                .setLabel('👑 Register as Owner')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('welcome_register_pilot')
-                .setLabel('✈️ Register as Pilot')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('welcome_remove_pilot')
-                .setLabel('🗑️ Remove Pilot')
-                .setStyle(ButtonStyle.Danger)
-        );
+        // Completely clear the channel before re-sending the panel
+        await clearChannelCompletely(panelChannel, logEvent);
 
-        const newMsg = await panelChannel.send({ content: WELCOME_PANEL_MESSAGE, components: [row] });
+        // Re-send the panel
+        const newMsg = await panelChannel.send({ content: WELCOME_PANEL_MESSAGE, components: buildWelcomePanelComponents() });
         db.config.panelMessageId = newMsg.id;
         saveLocalStorage();
         logEvent('🔄 [Panel Restore] Welcome panel was missing — re-sent and saved new message ID');
@@ -317,9 +318,8 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             saveLocalStorage();
 
                             await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            // Pilots inherit the owner's clan role (GoW Kids fallback)
-                            const assigned = await assignClanRole(member, db, logEvent);
-                            if (!assigned) await assignTempRole(member, db, saveLocalStorage, logEvent);
+                            // Pilots inherit the owner's clan role
+                            await assignClanRole(member, db, logEvent);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
                         } else {
@@ -338,8 +338,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             saveLocalStorage();
 
                             await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            // Owner not in Discord yet — give the temp role until the link resolves
-                            await assignTempRole(member, db, saveLocalStorage, logEvent);
+                            // Owner not in Discord yet — no member role until the link resolves
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — registered as pilot awaiting owner "${preReg.ownerNick}"`);
                         }
@@ -355,9 +354,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
 
                         await member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
                         // Pre-registered owner — assign the clan role if found in an allied clan
-                        // (GoW Kids fallback when the lookup can't resolve it yet)
-                        const assigned = await assignClanRole(member, db, logEvent);
-                        if (!assigned) await assignTempRole(member, db, saveLocalStorage, logEvent);
+                        await assignClanRole(member, db, logEvent);
 
                         logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                     }
