@@ -13,6 +13,7 @@ import {
 import { initPanelCommands } from './handlers/panel-commands.js';
 import { initAdminCommands } from './handlers/admin-commands.js';
 import { initEarlyClaimCommands } from './handlers/early-claim.js';
+import { initNoPenaltyCommands } from './handlers/no-penalty.js';
 import { initAlertCommands } from './handlers/alert-commands.js';
 import { noop, getBotToken, DISCORD_SERVER_ID } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
@@ -189,10 +190,11 @@ client.once('clientReady', async () => {
     }
 
     // Comandos de texto: painéis (!ms, !sp, !summons), admin (!reset, !kick,
-    // !earlyclaim) e canais de alerta (!reminders, !events)
+    // !earlyclaim, !nopenalty) e canais de alerta (!reminders, !events)
     initPanelCommands(client);
     initAdminCommands(client);
     initEarlyClaimCommands(client);
+    initNoPenaltyCommands(client);
     initAlertCommands(client);
 });
 

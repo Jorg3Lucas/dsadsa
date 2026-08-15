@@ -4,7 +4,7 @@
 // ==========================================
 
 import { getMsg } from "../core/lang.js";
-import { saveLocalStorage, isEarlyClaimUser } from "../core/state.js";
+import { saveLocalStorage, isEarlyClaimUser, isNoPenaltyUser } from "../core/state.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import {
@@ -39,9 +39,12 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
         pushToDailyLogs("CANCEL", targetObj.ownerName, targetObj.title, getMsg("logs.voluntaryLeave"));
         notifyUserDM(uid, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.voluntaryLeave") }));
         freeFloorAndActivateNextGracePeriod(targetObj);
-        if (!isMod) applyFiveMinCooldown(uid);
+        if (!isMod && !isNoPenaltyUser(uid)) applyFiveMinCooldown(uid);
         await refreshVisualPanel(panelKey);
-        return await interaction.reply({ content: getMsg("cooldowns.canceledClaimFeedback"), flags: 64 }).catch(noop);
+        return await interaction.reply({
+            content: isNoPenaltyUser(uid) ? getMsg("cooldowns.canceledNoPenaltyFeedback") : getMsg("cooldowns.canceledClaimFeedback"),
+            flags: 64
+        }).catch(noop);
     }
 
     if (isMod && targetObj.ownerId) {

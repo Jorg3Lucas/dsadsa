@@ -8,7 +8,7 @@ import {
     StringSelectMenuBuilder as i
 } from "discord.js";
 import { getMsg } from "../core/lang.js";
-import { saveLocalStorage } from "../core/state.js";
+import { saveLocalStorage, isNoPenaltyUser } from "../core/state.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import {
@@ -105,11 +105,13 @@ export async function handleSummonCancel(interaction, uid, uName, targetObj, pan
 
     if (isOwner || isInQueue || isMod) {
         let penalized = false;
+        let ownerCancelled = false;
         let anyAction = false;
 
         summonProps.forEach(loc => {
             if (targetObj[loc].ownerId === uid) {
                 anyAction = true;
+                ownerCancelled = true;
                 const currentLoggedName = targetObj[loc].ownerName || uName;
                 pushToDailyLogs("CANCEL", currentLoggedName, `${targetObj.title} - ${targetObj[loc].name}`, isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel"));
                 notifyUserDM(targetObj[loc].ownerId, getMsg("rooms.dmRemovedNotice", {
@@ -117,7 +119,7 @@ export async function handleSummonCancel(interaction, uid, uName, targetObj, pan
                     reason: isMod ? getMsg("logs.staffCancel") : getMsg("logs.userCancel")
                 }));
                 freeAntidemonRoom(targetObj, loc);
-                if (!isMod && !penalized) {
+                if (!isMod && !isNoPenaltyUser(uid) && !penalized) {
                     applyFiveMinCooldown(uid);
                     penalized = true;
                 }
@@ -142,7 +144,11 @@ export async function handleSummonCancel(interaction, uid, uName, targetObj, pan
         await refreshVisualPanel(panelKey);
         return await interaction.reply({
             content: anyAction
-                ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))
+                ? (penalized
+                    ? getMsg("cooldowns.canceledClaimFeedback")
+                    : (ownerCancelled && isNoPenaltyUser(uid)
+                        ? getMsg("cooldowns.canceledNoPenaltyFeedback")
+                        : getMsg("rooms.actionsCanceledFeedback")))
                 : getMsg("rooms.noActiveClaimsFeedback"),
             flags: 64
         }).catch(noop);

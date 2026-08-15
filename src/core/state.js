@@ -10,6 +10,7 @@ const punishmentsPath = s.resolve("./punishments.json");
 export const dailyLogsPath = s.resolve("./daily-logs.json");
 const dmOptOutPath = s.resolve("./dm-optout.json");
 const earlyClaimUsersPath = s.resolve("./early-claim-users.json");
+const noPenaltyUsersPath = s.resolve("./no-penalty-users.json");
 export const defaultFloors = ["7", "8", "9", "10"];
 
 export let punishments = {};
@@ -22,12 +23,20 @@ export const bossSpawnAlertCache = {};
 // ── Early Claim Users (set of user IDs allowed to claim Fury/Frenzy 5 minutes early) ──
 export let earlyClaimUsers = new Set();
 
+// ── No-Penalty Users (set of user IDs exempt from the 5-min cancel cooldown) ──
+export let noPenaltyUsers = new Set();
+
 // ── DM Opt-Out (Set of user IDs that opted out of DMs) ──
 export let dmOptOut = new Set();
 
 /** Check if a user is allowed to claim fixed events (Fury/Frenzy) early (5 min pre-window). @param {string} uid @returns {boolean} */
 export function isEarlyClaimUser(uid) {
     return earlyClaimUsers.has(uid);
+}
+
+/** Check if a user is exempt from the 5-min cancel cooldown. @param {string} uid @returns {boolean} */
+export function isNoPenaltyUser(uid) {
+    return noPenaltyUsers.has(uid);
 }
 
 export let client, db, saveLocalStorage, logEvent, lastMessages;
@@ -106,6 +115,39 @@ export function removeEarlyClaimUser(uid) {
     saveEarlyClaimUsersToDisk();
 }
 
+// ── No-Penalty Users Persistence ─────────────────────────
+
+function loadNoPenaltyUsersFromDisk() {
+    try {
+        if (o.existsSync(noPenaltyUsersPath)) {
+            const data = JSON.parse(o.readFileSync(noPenaltyUsersPath, "utf8"));
+            if (Array.isArray(data)) {
+                noPenaltyUsers = new Set(data);
+            }
+        }
+    } catch (err) {
+        logger.error('State', 'Error loading no-penalty-users.json', err);
+    }
+}
+
+export function saveNoPenaltyUsersToDisk() {
+    try {
+        o.writeFileSync(noPenaltyUsersPath, JSON.stringify([...noPenaltyUsers], null, 2));
+    } catch (err) {
+        logger.error('State', 'Error saving no-penalty-users.json', err);
+    }
+}
+
+export function addNoPenaltyUser(uid) {
+    noPenaltyUsers.add(uid);
+    saveNoPenaltyUsersToDisk();
+}
+
+export function removeNoPenaltyUser(uid) {
+    noPenaltyUsers.delete(uid);
+    saveNoPenaltyUsersToDisk();
+}
+
 // ── DM Opt-Out Persistence ────────────────────────────────
 
 function loadDmOptOutFromDisk() {
@@ -136,3 +178,4 @@ export function saveDmOptOutToDisk() {
 loadDailyLogsFromDisk();
 loadEarlyClaimUsersFromDisk();
 loadDmOptOutFromDisk();
+loadNoPenaltyUsersFromDisk();

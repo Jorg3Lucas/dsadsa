@@ -12,6 +12,7 @@ database.json
 daily-logs.json
 punishments.json
 early-claim-users.json
+no-penalty-users.json
 dm-optout.json
 
 # Ranking / registration system data

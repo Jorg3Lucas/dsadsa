@@ -26,6 +26,7 @@
     "cooldowns": {
         "activeTimeout": "⏳ Cooldown active. Please wait **{minutes}m {seconds}s** before your next action.",
         "canceledClaimFeedback": "❌ Claim cancelled. A **5-minute** cooldown has been applied.",
+        "canceledNoPenaltyFeedback": "❌ Claim cancelled. No cooldown applied.",
         "floorReservedNotice": "❌ This floor is temporarily reserved for **{userName}**{timeRemaining}. Please wait for the grace period to expire.",
         "timeRemaining": " (Approximately **{minutes} min** remaining)"
     },
