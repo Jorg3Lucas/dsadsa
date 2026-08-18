@@ -1,15 +1,154 @@
+import fs from 'node:fs';
+import {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
+} from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
+    MEMBER_ROLE_ID,
+    SUPER_ADMIN_USER_ID,
     confirmationCache
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { assignClanRole, removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS
 // ==========================================
 // Handles confirm-* button clicks from /manual* commands
 // Extracted from ranking-handlers.js
+
+// ── Restore Backup: Select menu handler ──
+export async function handleRestoreBackupSelect(interaction, db, saveLocalStorage, logEvent) {
+    const userId = interaction.user.id;
+
+    // Super admin only
+    if (userId !== SUPER_ADMIN_USER_ID) {
+        return interaction.update({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
+    }
+
+    const cacheKey = `${userId}-restorebackup`;
+    const cached = confirmationCache[cacheKey];
+
+    if (!cached) {
+        return interaction.update({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
+    }
+
+    const selectedFile = interaction.values[0];
+    const BACKUP_DIR = './backups';
+    const backupPath = `${BACKUP_DIR}/${selectedFile}`;
+
+    if (!fs.existsSync(backupPath)) {
+        return interaction.update({ content: '❌ Backup file not found.', components: [] }).catch(() => {});
+    }
+
+    // Show confirmation with details
+    const stats = fs.statSync(backupPath);
+    const sizeKB = (stats.size / 1024).toFixed(1);
+    const ageMs = Date.now() - stats.mtimeMs;
+    const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+
+    let data;
+    try {
+        data = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    } catch (e) {
+        return interaction.update({ content: `❌ Invalid backup file: ${e.message}`, components: [] }).catch(() => {});
+    }
+
+    const userCount = data.users ? Object.keys(data.users).length : 0;
+
+    // Store selected backup info
+    cached.selectedBackup = selectedFile;
+    cached.backupData = data;
+    cached.backupStats = { sizeKB, ageHours, userCount };
+    cached.timestamp = Date.now();
+
+    const confirmContent = `⚠️ **CONFIRM RESTORE**\n\n` +
+        `📦 **Backup:** ${selectedFile}\n` +
+        `📊 Size: ${sizeKB} KB\n` +
+        `🕐 Age: ${ageHours}h ago\n` +
+        `👥 Users in backup: **${userCount}**\n\n` +
+        `🔴 **This will OVERWRITE the current database!**\n` +
+        `A backup of the current state will be created first.`;
+
+    const components = [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('restorebackup-confirm').setLabel('✅ YES, RESTORE').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('restorebackup-cancel').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
+        )
+    ];
+
+    return interaction.update({ content: confirmContent, components }).catch(() => {});
+}
+
+// ── Restore Backup: Cancel handler ──
+export async function handleRestoreBackupCancel(interaction, db, saveLocalStorage, logEvent) {
+    const cacheKey = `${interaction.user.id}-restorebackup`;
+    delete confirmationCache[cacheKey];
+
+    return interaction.update({ content: '❌ **Restore cancelled.**', components: [] }).catch(() => {});
+}
+
+// ── Restore Backup: Confirm handler ──
+export async function handleRestoreBackupConfirm(interaction, db, saveLocalStorage, logEvent) {
+    const userId = interaction.user.id;
+
+    // Super admin only
+    if (userId !== SUPER_ADMIN_USER_ID) {
+        return interaction.update({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
+    }
+
+    const cacheKey = `${userId}-restorebackup`;
+    const cached = confirmationCache[cacheKey];
+
+    if (!cached || !cached.selectedBackup) {
+        return interaction.update({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
+    }
+
+    const DB_RANKING_PATH = './database_ranking.json';
+    const BACKUP_DIR = './backups';
+
+    await interaction.update({ content: '💾 **Restoring backup...**', components: [] }).catch(() => {});
+
+    try {
+        // 1. Create backup of current state
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const preRestoreBackup = `${BACKUP_DIR}/database_ranking_PRE_RESTORE_${timestamp}.json`;
+        if (fs.existsSync(DB_RANKING_PATH)) {
+            fs.copyFileSync(DB_RANKING_PATH, preRestoreBackup);
+            logEvent(`💾 Pre-restore backup created: ${preRestoreBackup}`);
+        }
+
+        // 2. Restore the selected backup
+        const backupPath = `${BACKUP_DIR}/${cached.selectedBackup}`;
+        fs.copyFileSync(backupPath, DB_RANKING_PATH);
+        logEvent(`✅ Backup restored: ${cached.selectedBackup}`);
+
+        // 3. Reload the in-memory database
+        const newData = JSON.parse(fs.readFileSync(DB_RANKING_PATH, 'utf8'));
+        Object.assign(db, newData);
+        if (!db.users) db.users = {};
+        saveLocalStorage();
+
+        const userCount = Object.keys(db.users).length;
+        logEvent(`🔄 Database reloaded — ${userCount} users in memory`);
+
+        // Clean up cache
+        delete confirmationCache[cacheKey];
+
+        const successMsg = `✅ **Backup Restored Successfully!**\n\n` +
+            `📦 Restored: ${cached.selectedBackup}\n` +
+            `👥 Users loaded: **${userCount}**\n` +
+            `💾 Pre-restore backup saved: ${preRestoreBackup.split('/').pop()}\n\n` +
+            `🔄 The in-memory database has been updated. Run /manage to verify.`;
+
+        return interaction.editReply({ content: successMsg }).catch(() => {});
+
+    } catch (e) {
+        logEvent(`❌ Backup restore failed: ${e.message}`);
+        return interaction.editReply({ content: `❌ **Restore failed:** ${e.message}` }).catch(() => {});
+    }
+}
 
 export async function handleConfirmAction(interaction, db, saveLocalStorage, logEvent) {
     const [_, action, result] = interaction.customId.split('-');
@@ -42,19 +181,23 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
 
         const userData = db.users[cached.targetId];
-        if (userData.pilotIds && userData.pilotIds.length > 0) {
-            for (const pId of userData.pilotIds) {
-                const pilotMember = await guild.members.fetch(pId).catch(() => null);
-                if (pilotMember) {
-                    await removeMemberRoles(pilotMember, db);
-                    await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
-                }
+        // Fetch + clean up the target AND every linked pilot concurrently —
+        // each member's role removal + nickname reset are independent calls.
+        const pilotCleanups = (userData.pilotIds || []).map(async (pId) => {
+            const pilotMember = await guild.members.fetch(pId).catch(() => null);
+            if (!pilotMember) return;
+            if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
             }
-        }
-        if (targetMember) {
-            await removeMemberRoles(targetMember, db);
+            await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+        });
+        const targetCleanup = (async () => {
+            if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                await targetMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+            }
             await targetMember.setNickname(targetMember.user.username).catch(() => {});
-        }
+        })();
+        await Promise.all([...pilotCleanups, targetCleanup]);
         delete db.users[cached.targetId];
         saveLocalStorage();
 
@@ -68,8 +211,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
     // ── manualremovepilot: Remove a specific pilot from an owner ──
     if (action === 'manualremovepilot') {
         const guild = interaction.guild;
-        const ownerMember = await guild.members.fetch(cached.ownerId).catch(() => null);
-        const pilotMember = await guild.members.fetch(cached.pilotId).catch(() => null);
+        // Fetch owner + pilot concurrently (independent member lookups).
+        const [ownerMember, pilotMember] = await Promise.all([
+            guild.members.fetch(cached.ownerId).catch(() => null),
+            guild.members.fetch(cached.pilotId).catch(() => null)
+        ]);
 
         if (!ownerMember || !db.users[cached.ownerId]) {
             return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
@@ -83,8 +229,12 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         if (pilotMember) {
-            await removeMemberRoles(pilotMember, db);
-            await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+            await Promise.all([
+                pilotMember.roles.cache.has(MEMBER_ROLE_ID)
+                    ? pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {})
+                    : Promise.resolve(),
+                pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+            ]);
         }
 
         logEvent(`Admin ${interaction.user.tag} removed pilot ${cached.pilotName} from ${cached.ownerName}`);
@@ -97,8 +247,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
     // ── manualpilot: Link a pilot to an owner ──
     if (action === 'manualpilot') {
         const guild = interaction.guild;
-        const ownerMember = await guild.members.fetch(cached.ownerId).catch(() => null);
-        const pilotMember = await guild.members.fetch(cached.pilotId).catch(() => null);
+        // Fetch owner + pilot concurrently (independent member lookups).
+        const [ownerMember, pilotMember] = await Promise.all([
+            guild.members.fetch(cached.ownerId).catch(() => null),
+            guild.members.fetch(cached.pilotId).catch(() => null)
+        ]);
 
         if (!ownerMember || !db.users[cached.ownerId]) {
             return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
@@ -110,10 +263,20 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
         saveLocalStorage();
 
+        // Nickname + role are independent — run them concurrently. Capture the role
+        // state BEFORE the add: discord.js updates roles.cache when roles.add resolves,
+        // so re-checking after Promise.all would wrongly suppress the log below.
         if (pilotMember) {
-            await pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {});
-            // Pilots inherit the owner's clan role
-            await assignClanRole(pilotMember, db, logEvent);
+            const hadMemberRole = pilotMember.roles.cache.has(MEMBER_ROLE_ID);
+            await Promise.all([
+                pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {}),
+                !hadMemberRole
+                    ? pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                    : Promise.resolve()
+            ]);
+            if (!hadMemberRole) {
+                logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
+            }
         }
 
         logEvent(`Admin ${interaction.user.tag} manually linked pilot ${cached.pilotName} to ${cached.ownerName}`);
@@ -150,9 +313,13 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
         saveLocalStorage();
 
-        await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-        // Clan role is the only member marker — temp approvals get no role until validated
-        await assignClanRole(targetMember, db, logEvent);
+        // Nickname + role are independent — run them concurrently.
+        await Promise.all([
+            targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {}),
+            !targetMember.roles.cache.has(MEMBER_ROLE_ID)
+                ? targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                : Promise.resolve()
+        ]);
 
         const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
         logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${finalNickname} in ${cached.clan}${tempLabel}`);
@@ -192,9 +359,13 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
         saveLocalStorage();
 
-        await targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {});
-        // manualforce = permanent — assign the clan role if resolvable
-        await assignClanRole(targetMember, db, logEvent);
+        // Nickname + role are independent — run them concurrently.
+        await Promise.all([
+            targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {}),
+            !targetMember.roles.cache.has(MEMBER_ROLE_ID)
+                ? targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                : Promise.resolve()
+        ]);
 
         logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)`);
 

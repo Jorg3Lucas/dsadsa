@@ -5,7 +5,7 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder
 } from 'discord.js';
-import { pendingRegistrations, adminChannelId } from '../core/ranking-constants.js';
+import { pendingRegistrations, adminChannelId, MAX_NICKNAME_SUGGESTIONS } from '../core/ranking-constants.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 
 // ==========================================
@@ -16,7 +16,13 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 
 export async function handleOwnerRegistrationModal(interaction, db, saveLocalStorage, logEvent) {
     if (!db.users) db.users = {};
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        // Interaction expired (10062) or already acknowledged — can't respond
+        console.warn(`⚠️ [Registration] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const nickname = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
     const userId = interaction.user.id;
@@ -25,7 +31,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     if (db.users[userId] && (db.users[userId].registeredAt || db.users[userId].manual === true)) {
         const existingNick = db.users[userId].nickname;
         logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but already registered as "${existingNick}" — rejected`);
-        return interaction.editReply(`❌ **You are already registered!**\nYour account is already registered as **${existingNick}**.\\n\\nIf you need to update your nickname, contact an administrator.\\nYou cannot register a second account.`);
+        return interaction.editReply(`❌ **You are already registered!**\nYour account is already registered as **${existingNick}**.\n\nIf you need to update your nickname, contact an administrator.\nYou cannot register a second account.`);
     }
 
     const existingNickname = Object.entries(db.users).find(([id, data]) =>
@@ -37,7 +43,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     }
 
     // ── Fuzzy suggestions: let the USER pick the exact name before approval ──
-    const topSuggestions = lookupTopNicknames(nickname, db, null, 3);
+    const topSuggestions = lookupTopNicknames(nickname, db, null, MAX_NICKNAME_SUGGESTIONS);
     const suggestions = topSuggestions.filter(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
 
     if (suggestions.length > 0) {
@@ -50,7 +56,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
                 .setValue(nickname)
                 .setDescription('Use the nickname exactly as typed')
                 .setDefault(true),
-            ...suggestions.slice(0, 3).map(s => new StringSelectMenuOptionBuilder()
+            ...suggestions.slice(0, MAX_NICKNAME_SUGGESTIONS).map(s => new StringSelectMenuOptionBuilder()
                 .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
                 .setValue(s.nickname)
                 .setDescription(s.inAlliedClan ? `✅ Allied clan - ${s.clanName}` : `❌ Not allied - ${s.clanName}`)
@@ -66,7 +72,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
 
         logEvent(`🔍 ${interaction.user.tag} submitted registration "${nickname}" — ${suggestions.length} fuzzy suggestion(s) shown for user to confirm`);
         return interaction.editReply({
-            content: `🔍 **We found similar names in the ranking.**\\n\\nSelect your **EXACT** character name below to improve accuracy. If none matches, choose **📝 As typed** and an admin will review it.`,
+            content: `🔍 **We found similar names in the ranking.**\n\nSelect your **EXACT** character name below to improve accuracy. If none matches, choose **📝 As typed** and an admin will review it.`,
             components: [row]
         });
     }
@@ -76,7 +82,12 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
 
 // ── User confirms the exact nickname from the fuzzy suggestions ──
 export async function handleUserSelectRegistrationNickname(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Registration] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const userId = interaction.customId.replace('user_select_reg_nickname_', '');
     const selectedNick = interaction.values[0];
@@ -158,7 +169,7 @@ async function submitOwnerRegistration(interaction, db, saveLocalStorage, logEve
         channelId: adminChannel.id,
         messageId: adminMsg.id
     };
-    saveLocalStorage(); // Persist pending registration to survive bot restarts
+    saveLocalStorage();
 
     logEvent(`👑 ${interaction.user.tag} submitted owner registration for "${nickname}" — awaiting admin approval`);
     return interaction.editReply('✅ **Registration sent for approval!** An administrator will review it shortly.');

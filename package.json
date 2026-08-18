@@ -4,7 +4,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +18,8 @@
     "discord.js": "^14.26.4",
     "dotenv": "^17.4.2",
     "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

@@ -90,11 +90,6 @@ const commands = [
     ]
   },
   {
-    name: 'cleandb',
-    description: '👑 [Admin] Remove all duplicate nickname entries from the database.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
     name: 'manage',
     description: '🛠️ Bot Management Panel'
   },
@@ -124,12 +119,21 @@ const commands = [
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
   {
-    name: 'elderguide',
-    description: '📋 Guide: how to approve/reject owner registrations'
-  },
-  {
     name: 'notify',
     description: '📧 [Admin] Send notifications to server members',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
+  {
+    name: 'grace',
+    description: '⏳ [Admin] Show remaining 72h grace time for members outside allied clans.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    options: [
+      { type: 6, name: 'member', description: 'Check a specific member (optional).', required: false }
+    ]
+  },
+  {
+    name: 'restorebackup',
+    description: '💾 [Super Admin] List and restore database backups.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
 ];

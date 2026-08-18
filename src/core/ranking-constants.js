@@ -22,9 +22,6 @@ export function setAdminChannelId(id) {
     adminChannelId = id;
 }
 
-// ⚠️ LEGACY — the fixed member role was removed from the server. Clan roles
-// (db.config.clanRoles) are now the only member markers.
-// Kept only for historical reference / rollback.
 export const MEMBER_ROLE_ID = '1503933709756141620';
 
 // Roles that can approve/reject member registrations (in addition to Administrator)
@@ -35,13 +32,26 @@ export const APPROVER_ROLE_IDS = [
     '1481568065081573467'
 ];
 
-// 🌍 WORLDS TO SYNC — only NA42 (world 553)
-// The scraper, lookups, allied-clan management and server display
-// all derive from this map, so restricting it here limits the whole
-// sync pipeline to the NA42 world only.
-export const WORLD_IDS = {
-    553: "NA42"
+// ── World group ID for the single configured server (NA42) ──
+// worldgroupId: 2=NA1 (used in the ranking URL)
+export const WORLD_GROUP_IDS = {
+    553: 2,
 };
+
+// ── Single-server mode: only NA42 (world 553) is synced/operated ──
+export const WORLD_IDS = {
+    553: "NA42",
+};
+
+// ==========================================
+// 🔍 NICKNAME SUGGESTIONS (fuzzy dropdowns)
+// ==========================================
+
+// How many fuzzy nickname suggestions to show when registering / correcting
+// a registration. Allied-clan candidates are ranked first (see
+// lookupTopNicknames), so a larger list means the correct character is
+// much less likely to be missed (e.g. "Dinizメ" allied vs "Diniz メ" elsewhere).
+export const MAX_NICKNAME_SUGGESTIONS = 6;
 
 // ==========================================
 // ⏳ PENDING REGISTRATION EXPIRY (24h)
@@ -50,28 +60,40 @@ export const WORLD_IDS = {
 export const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ==========================================
-// 📥 SCAN SOURCE SERVER
+// ⏳ OUT-OF-ALLIED-CLAN GRACE PERIOD (72h)
 // ==========================================
-// The only Discord server this bot operates on (claim server).
-// Pre-registrations (scan servers) were harvested from here.
-// Pre-registrations no longer expire by time — they are validated against the
-// NA42 ranking on every sync. Not found in the ranking → removed immediately.
-// (PRE_REGISTER_MAX_AGE_MS removed)
 
-// Bot owner / super admin
+// How long a member keeps their role after being detected outside an allied
+// clan (or missing from the ranking) during the daily sync. Mir4 players often
+// leave the clan temporarily — or get moved to non-registered clans for events —
+// and can't rejoin until the weekly server reset, so an immediate role strip is
+// too aggressive. The countdown is tracked per person
+// (db.roleNotify[memberId].outOfAlliedSince) and resets the moment the member
+// is found back in an allied clan.
+export const OUT_OF_ALLIED_GRACE_MS = 72 * 60 * 60 * 1000; // 72 hours
+
+// ==========================================
+// 📥 ORIGIN SERVERS FOR SCAN IMPORT
+// ==========================================
+
+export const ORIGIN_SERVER_ID = '1301149441171914785';
+export const SECONDARY_SERVER_ID = '1432320162278670440';
+
+// Pre-registration validity (7 days)
+export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Super admin — only this user can use high-risk commands
 export const SUPER_ADMIN_USER_ID = '1496662868802928811';
 
 // ==========================================
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================
 
-export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\n🗑️ **Remove My Registration** — Cancel your own registration.\n✈️ **Remove Pilot** — Remove a pilot linked to your account.\n\nAfter approval by an administrator, you will receive your **clan role** (and your in-game nickname) once your account is found in an allied clan.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@1496662868802928811>';
+export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\n🗑️ **Remove My Registration** — Cancel your own registration.\n✈️ **Remove Pilot** — Remove a pilot linked to your account.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@1496662868802928811>';
 
 // ==========================================
-// 📢 REGISTRATION CHANNEL (for /listunregistered DMs)
+// 📢 REGISTRATION CHANNEL
 // ==========================================
-// Dynamic — the /setup command updates these when it (re)creates the channels.
-// Defaults are kept as fallbacks until a /setup run persists new IDs.
 
 export let REGISTRATION_CHANNEL_ID = '1524296969521070120';
 
@@ -88,6 +110,13 @@ export function loadChannelIdsFromConfig(config) {
 }
 
 // ==========================================
+// 📢 NOTIFICATION CHANNELS (for /notify command)
+// ==========================================
+
+export const DOMINATION_CHANNEL_ID = '1481572061850767490';
+export const STANDBY_CHANNEL_ID = '1481572514399518780';
+
+// ==========================================
 // 🛠️ CONFIG INITIALIZATION HELPER
 // ==========================================
 
@@ -99,5 +128,3 @@ export function ensureConfig(db) {
     if (!db.config) db.config = {};
     if (!db.config.alliedClans) db.config.alliedClans = {};
 }
-
-

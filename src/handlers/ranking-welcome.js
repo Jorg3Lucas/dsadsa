@@ -3,13 +3,11 @@ import {
     ButtonBuilder,
     ButtonStyle,
     ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
     StringSelectMenuBuilder,
-    StringSelectMenuOptionBuilder
+    TextInputBuilder,
+    TextInputStyle
 } from 'discord.js';
-import { getMsg } from '../lang/lang.js';
-import { removeMemberRoles } from '../core/clan-roles.js';
+import { MEMBER_ROLE_ID } from '../core/ranking-constants.js';
 
 // ==========================================
 // 👋 WELCOME BUTTON HANDLERS
@@ -83,7 +81,12 @@ export function handleWelcomeRegisterPilot(interaction) {
 
 // ── Welcome: Remove my registration (self-service) ──
 export async function handleWelcomeRemoveRegistration(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Welcome] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const userId = interaction.user.id;
     const userData = db.users[userId];
@@ -98,13 +101,13 @@ export async function handleWelcomeRemoveRegistration(interaction, db, saveLocal
 
     let warning = '';
     if (pilotCount > 0) {
-        warning = `\n\n⚠️ You have **${pilotCount} pilot(s)** linked to your account — they will lose their member roles too.`;
+        warning = `\n\n⚠️ You have **${pilotCount} pilot(s)** linked to your account — they will lose their member role too.`;
     } else if (isPilot) {
         warning = '\n\n⚠️ You are registered as a **pilot** of another owner.';
     }
 
     return interaction.editReply({
-        content: `🗑️ **Remove your registration?**\n\nYou are registered as **${userData.nickname}**.${warning}\n\nThis will **remove your member roles**, **reset your nickname** and **delete your registration**. This cannot be undone.`,
+        content: `🗑️ **Remove your registration?**\n\nYou are registered as **${userData.nickname}**.${warning}\n\nThis will **remove your member role**, **reset your nickname** and **delete your registration**. This cannot be undone.`,
         components: [
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('selfremove_yes').setLabel('✅ Yes, remove').setStyle(ButtonStyle.Danger),
@@ -116,7 +119,12 @@ export async function handleWelcomeRemoveRegistration(interaction, db, saveLocal
 
 // ── Confirm: remove my own registration ──
 export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Welcome] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     if (interaction.customId === 'selfremove_no') {
         return interaction.editReply({ content: '❌ Cancelled.', components: [] });
@@ -137,69 +145,70 @@ export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage,
         }
     }
 
-    // If the user is an owner with pilots, unlink + strip roles/nicknames
-    if (userData.pilotIds && userData.pilotIds.length > 0) {
-        for (const pId of userData.pilotIds) {
-            const pilotMember = await guild.members.fetch(pId).catch(() => null);
-            if (pilotMember) {
-                await removeMemberRoles(pilotMember, db);
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
-            }
+    // Fetch + clean up every linked pilot AND the user concurrently — each
+    // member's role removal + nickname reset are independent Discord calls.
+    const pilotCleanups = (userData.pilotIds || []).map(async (pId) => {
+        const pilotMember = await guild.members.fetch(pId).catch(() => null);
+        if (!pilotMember) return;
+        if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
         }
-    }
-
-    const selfMember = await guild.members.fetch(userId).catch(() => null);
-    if (selfMember) {
-        await removeMemberRoles(selfMember, db);
+        await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+    });
+    const selfCleanup = (async () => {
+        const selfMember = await guild.members.fetch(userId).catch(() => null);
+        if (!selfMember) return;
+        if (selfMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await selfMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+        }
         await selfMember.setNickname(selfMember.user.username).catch(() => {});
-    }
+    })();
+    await Promise.all([...pilotCleanups, selfCleanup]);
 
     delete db.users[userId];
     saveLocalStorage();
 
     logEvent(`🗑️ ${interaction.user.tag} removed their own registration (${userData.nickname}) via welcome panel`);
     return interaction.editReply({
-        content: `✅ **Registration removed.**\n\nYour member roles were removed and your nickname was reset.\n\nYou can register again anytime with **👑 Register as Owner**.`,
+        content: `✅ **Registration removed.**\n\nYour member role was removed and your nickname was reset.\n\nYou can register again anytime with **👑 Register as Owner**.`,
         components: []
     });
 }
 
-// ── Welcome: Remove Pilot ──
-// Shows the same pilot-removal select menu as /removepilot so the
-// existing handlePilotRemoveSelect (customId 'select_pilot_to_remove')
-// handles the actual removal, role cleanup, and nickname reset.
-export async function handleWelcomeRemovePilot(interaction, db) {
-    const userProfile = db.users[interaction.user.id];
-    const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
-
-    if (!isActuallyRegistered || !userProfile.pilotIds || userProfile.pilotIds.length === 0) {
-        return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), flags: 64 });
+// ── Welcome: Remove a pilot (self-service, owner removes their own pilot) ──
+export async function handleWelcomeRemovePilot(interaction, db, saveLocalStorage, logEvent) {
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Welcome] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
     }
 
-    const menuOptions = [];
-    for (const pilotId of userProfile.pilotIds) {
+    const userData = db.users[interaction.user.id];
+    const isActuallyRegistered = userData && (userData.registeredAt || userData.manual === true);
+
+    if (!isActuallyRegistered || !userData.pilotIds || userData.pilotIds.length === 0) {
+        return interaction.editReply('❌ You have no pilots linked to your account.');
+    }
+
+    // Fetch all pilots concurrently to build the menu (independent lookups).
+    const menuOptions = await Promise.all(userData.pilotIds.map(async (pilotId) => {
         const memberObj = await interaction.guild.members.fetch(pilotId).catch(() => null);
-        const pilotTag = memberObj ? memberObj.user.tag : `Disconnected User (${pilotId})`;
-        const pilotNick = memberObj ? (memberObj.nickname || memberObj.user.username) : 'Unknown';
-
-        menuOptions.push(
-            new StringSelectMenuOptionBuilder()
-                .setLabel(pilotTag.substring(0, 100))
-                .setDescription(`${pilotNick} - ${getMsg('ranking.responses.removepilot.optionDescription')}`)
-                .setValue(pilotId)
-        );
-    }
+        const pilotTag = memberObj ? memberObj.user.tag : `Unknown (${pilotId})`;
+        return {
+            label: pilotTag.substring(0, 100),
+            description: 'Click to remove this pilot',
+            value: pilotId
+        };
+    }));
 
     const pilotMenu = new StringSelectMenuBuilder()
         .setCustomId('select_pilot_to_remove')
-        .setPlaceholder(getMsg('ranking.responses.removepilot.menuPlaceholder'))
+        .setPlaceholder('Select a pilot to remove...')
         .addOptions(menuOptions);
 
-    const row = new ActionRowBuilder().addComponents(pilotMenu);
-
-    return interaction.reply({
-        content: getMsg('ranking.responses.removepilot.menuContent'),
-        components: [row],
-        flags: 64
+    return interaction.editReply({
+        content: '✈️ **Select a pilot to remove:**',
+        components: [new ActionRowBuilder().addComponents(pilotMenu)]
     });
 }

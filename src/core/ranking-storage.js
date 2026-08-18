@@ -1,99 +1,520 @@
 // ==========================================
-// 💾 RANKING STORAGE
+// 💾 RANKING STORAGE — Enterprise Edition
+// ==========================================
+// Features:
+// - Atomic writes (write to temp, then rename)
+// - Corruption detection and auto-recovery
+// - Write locks to prevent race conditions
+// - Backup before every save
+// - Integrity verification on load
+// - Detailed logging for debugging
 // ==========================================
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { runBackup } from '../auto-backup.js';
-import { pendingRegistrations, pendingPilotApprovals, WORLD_IDS } from './ranking-constants.js';
+import { pendingRegistrations, pendingPilotApprovals } from './ranking-constants.js';
 
 const DB_RANKING_PATH = './database_ranking.json';
+const DB_TEMP_PATH = './database_ranking.tmp';
+const PENDING_PATH = './pending_registrations.json';
+const BACKUP_DIR = './backups';
 
-export function saveRankingStorage(rankingDb) {
+// ==========================================
+// 🔒 SAVE COALESCING (debounce) + WRITE CHAIN
+// ==========================================
+// Rapid successive save() calls (the sync engine calls save inside loops) used
+// to trigger a full JSON serialize + backup + double file write EVERY time,
+// which blocks the event loop and stalls Discord interactions. Now:
+//  - Debounce: saves within a short window are coalesced into ONE write.
+//  - Pre-save backups are throttled (max once per minute) — the scheduled
+//    auto-backup still covers periodic safety copies.
+//  - Writes are serialized through a promise chain (no 10ms polling lock).
+let debounceTimer = null;
+let queuedDb = null;
+let pendingResolvers = [];
+let saveChain = Promise.resolve();
+let saveInProgress = false;
+let lastBackupTime = 0;
+// Last serialized pending state — savePendingBackup skips the write when the
+// pending data is byte-identical (it runs on EVERY save, but pending entries
+// change rarely, so an unchanged state should not hit the disk).
+let lastPendingBackupJson = null;
+
+const SAVE_DEBOUNCE_MS = 30;
+const BACKUP_THROTTLE_MS = 60 * 1000; // max 1 pre-save backup per minute// ==========================================
+// 💾 PENDING REGISTRATIONS BACKUP
+// ==========================================
+
+/**
+ * Save pending registrations to separate file (backup).
+ */
+function savePendingBackup() {
     try {
-        try { runBackup(['./database_ranking.json']); } catch (e) {
-            console.error('\u26a0\ufe0f [Save] Backup failed (non-fatal):', e.message);
-        }
+        // Snapshot only the pending data (NOT the savedAt — it changes every call
+        // and would defeat the change detection). JSON.stringify serializes
+        // synchronously, so the deep clone the old code did was unnecessary.
+        const snapshot = JSON.stringify({
+            pendingRegistrations,
+            pendingPilotApprovals
+        });
+        if (snapshot === lastPendingBackupJson) return; // nothing changed — skip disk write
 
-        const dbToSave = { ...rankingDb };
-        dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
-        dbToSave._pendingPilotApprovals = JSON.parse(JSON.stringify(pendingPilotApprovals));
-        fs.writeFileSync(DB_RANKING_PATH, JSON.stringify(dbToSave, null, 2), 'utf8');
-
-        const pendCount = Object.keys(dbToSave._pendingRegistrations).length;
-        const pilotCount = Object.keys(dbToSave._pendingPilotApprovals).length;
-        if (pendCount > 0 || pilotCount > 0) {
-            console.log(`\ud83d\udcbe [Save] Saved ${pendCount} pending + ${pilotCount} pilot approvals`);
-        }
-    } catch (error) {
-        console.error('\u274c Error saving ranking database:', error);
-        if (error.stack) console.error('\ud83d\udccb [Stack]:', error.stack);
+        const pendingData = {
+            pendingRegistrations,
+            pendingPilotApprovals,
+            savedAt: new Date().toISOString()
+        };
+        fs.writeFileSync(PENDING_PATH, JSON.stringify(pendingData), 'utf8');
+        // Update AFTER the write succeeded so a failed write is retried on the
+        // next save instead of being recorded as already-backed-up.
+        lastPendingBackupJson = snapshot;
+    } catch (e) {
+        console.error('⚠️ [Storage] Failed to save pending backup:', e.message);
     }
 }
 
-export function loadLocalStorageRanking() {
-    const rankingDb = { users: {} };
-
+/**
+ * Load pending registrations from backup file.
+ */
+function loadPendingBackup() {
     try {
-        if (fs.existsSync(DB_RANKING_PATH)) {
-            const data = fs.readFileSync(DB_RANKING_PATH, 'utf8');
-            const parsed = JSON.parse(data);
-            Object.assign(rankingDb, parsed);
-            if (!rankingDb.users) rankingDb.users = {};
-
-            if (rankingDb._pendingRegistrations) {
-                Object.assign(pendingRegistrations, rankingDb._pendingRegistrations);
-                delete rankingDb._pendingRegistrations;
+        if (fs.existsSync(PENDING_PATH)) {
+            const data = JSON.parse(fs.readFileSync(PENDING_PATH, 'utf8'));
+            if (data.pendingRegistrations) {
+                Object.assign(pendingRegistrations, data.pendingRegistrations);
+                console.log(`📋 [Storage] Restored ${Object.keys(data.pendingRegistrations).length} pending registrations from backup`);
             }
-            if (rankingDb._pendingPilotApprovals) {
-                Object.assign(pendingPilotApprovals, rankingDb._pendingPilotApprovals);
-                delete rankingDb._pendingPilotApprovals;
+            if (data.pendingPilotApprovals) {
+                Object.assign(pendingPilotApprovals, data.pendingPilotApprovals);
+                console.log(`📋 [Storage] Restored ${Object.keys(data.pendingPilotApprovals).length} pending pilot approvals from backup`);
             }
-
-            // Migration: prune allied clans configured for worlds outside the sync
-            // scope (NA42 only). Leftover entries from other deployments
-            // are dead data — they are never consulted since lookups only return
-            // worlds present in WORLD_IDS.
-            let prunedWorlds = 0;
-            if (rankingDb.config?.alliedClans) {
-                for (const worldId of Object.keys(rankingDb.config.alliedClans)) {
-                    if (!WORLD_IDS[worldId]) {
-                        delete rankingDb.config.alliedClans[worldId];
-                        prunedWorlds++;
-                    }
-                }
-                if (prunedWorlds > 0) {
-                    saveRankingStorage(rankingDb);
-                    console.log(`\ud83e\uddf9 Pruned allied clans for ${prunedWorlds} world(s) outside sync scope (NA42 only)`);
-                }
-            }
-
-            // Migration: pre-registrations no longer expire by time (7-day expiry
-            // removed). Strip stale expiresAt fields from the current database —
-            // validity is now enforced only by the NA42 ranking sync, which removes
-            // pre-regs not found in the ranking immediately.
-            let prunedPreRegs = 0;
-            if (rankingDb.preRegistrations) {
-                for (const preReg of Object.values(rankingDb.preRegistrations)) {
-                    if (preReg.expiresAt) {
-                        delete preReg.expiresAt;
-                        prunedPreRegs++;
-                    }
-                }
-                if (prunedPreRegs > 0) {
-                    saveRankingStorage(rankingDb);
-                    console.log(`\ud83e\uddf9 Pruned expiresAt from ${prunedPreRegs} pre-registration(s) — time-based expiry removed`);
-                }
-            }
-
-            console.log('\u2705 Ranking database loaded successfully.');
-            console.log(`\ud83d\udccb Restored ${Object.keys(pendingRegistrations).length} pending registration(s), ${Object.keys(pendingPilotApprovals).length} pending pilot approval(s)`);
-        } else {
-            saveRankingStorage(rankingDb);
-            console.log('\ud83d\udcdd New database_ranking.json file created.');
+            return true;
         }
-    } catch (error) {
-        console.error('\u274c Error loading ranking database:', error);
+    } catch (e) {
+        console.error('⚠️ [Storage] Failed to load pending backup:', e.message);
+    }
+    return false;
+}
+
+// ==========================================
+// 📊 STATE TRACKING
+// ==========================================
+let databaseLoaded = false;
+let databaseLoadTime = null;
+let lastSaveTime = null;
+let currentRankingDb = null;
+let lastSaveUserCount = 0;
+let saveCount = 0;
+
+/**
+ * Get storage statistics for monitoring.
+ */
+export function getStorageStats() {
+    return {
+        databaseLoaded,
+        databaseLoadTime: databaseLoadTime ? new Date(databaseLoadTime).toISOString() : null,
+        lastSaveTime: lastSaveTime ? new Date(lastSaveTime).toISOString() : null,
+        lastSaveUserCount,
+        saveCount,
+        writeLockActive: saveInProgress
+    };
+}
+
+/**
+ * Check if the database was successfully loaded from disk.
+ */
+export function isDatabaseLoaded() {
+    return databaseLoaded;
+}
+
+/**
+ * Check if we have real user data in memory.
+ */
+export function hasUsers(db) {
+    return db && db.users && Object.keys(db.users).length > 0;
+}
+
+// ==========================================
+// 💾 SAVE FUNCTION (with atomic write)
+// ==========================================
+
+/**
+ * Resolve the effective database: handlers/events/sync call save() with no args,
+ * so fall back to the last loaded database (which they mutate in place).
+ */
+function resolveEffectiveDb(rankingDb) {
+    return (rankingDb && typeof rankingDb === 'object') ? rankingDb : currentRankingDb;
+}
+
+/**
+ * Core synchronous write. Shared by the async (debounced) and sync (shutdown)
+ * save paths. Returns true on success, false on any failure/safety block.
+ */
+function writeRankingStorage(effectiveDb) {
+    if (!effectiveDb || typeof effectiveDb !== 'object') {
+        console.error('❌ [Storage] BLOCKED: No database reference available to save.');
+        return false;
     }
 
+    // SAFETY: Don't save if database hasn't been loaded yet and has no users
+    if (!databaseLoaded && !hasUsers(effectiveDb)) {
+        console.error('⚠️ [Storage] BLOCKED: Database not loaded and no users — refusing to save empty data!');
+        console.error('💡 [Storage] This prevents accidental data loss. Load the database first.');
+        return false;
+    }
+
+    // SAFETY: Don't save if we would decrease user count significantly (data loss detection)
+    const currentUserCount = Object.keys(effectiveDb.users || {}).length;
+    if (databaseLoaded && lastSaveUserCount > 0 && currentUserCount < lastSaveUserCount * 0.5) {
+        console.error(`⚠️ [Storage] DATA LOSS DETECTED! Users dropped from ${lastSaveUserCount} to ${currentUserCount}`);
+        console.error('⚠️ [Storage] Refusing to save. Run /restorebackup to recover.');
+        return false;
+    }
+
+    // Create backup before save (throttled — max once per minute)
+    if (Date.now() - lastBackupTime >= BACKUP_THROTTLE_MS) {
+        try {
+            runBackup(['./database_ranking.json']);
+            lastBackupTime = Date.now();
+        } catch (e) {
+            console.error('⚠️ [Storage] Pre-save backup failed (non-fatal):', e.message);
+        }
+    }
+
+    try {
+        // Prepare data to save
+        const dbToSave = { ...effectiveDb };
+        dbToSave._metadata = {
+            savedAt: new Date().toISOString(),
+            userCount: currentUserCount,
+            version: '2.0'
+        };
+        // Reference directly — JSON.stringify snapshots synchronously below,
+        // so no deep clone is needed (avoids the O(n) clone on every save).
+        dbToSave._pendingRegistrations = pendingRegistrations;
+        dbToSave._pendingPilotApprovals = pendingPilotApprovals;
+
+        // Compact JSON (no pretty-print): the database holds hundreds of users,
+        // and pretty-printing roughly doubles the file size, slowing the write
+        // above and every later load/backup.
+        const jsonStr = JSON.stringify(dbToSave);
+
+        // Verify JSON is valid before writing
+        try {
+            JSON.parse(jsonStr);
+        } catch (e) {
+            console.error('❌ [Storage] CRITICAL: Generated invalid JSON!', e.message);
+            return false;
+        }
+
+        // Atomic write: write to temp file, then rename
+        try {
+            fs.writeFileSync(DB_TEMP_PATH, jsonStr, 'utf8');
+            fs.renameSync(DB_TEMP_PATH, DB_RANKING_PATH);
+        } catch (e) {
+            // Fallback: direct write if rename fails
+            console.error('⚠️ [Storage] Atomic write failed, falling back to direct write:', e.message);
+            try {
+                fs.writeFileSync(DB_RANKING_PATH, jsonStr, 'utf8');
+            } catch (e2) {
+                console.error('❌ [Storage] CRITICAL: Direct write also failed!', e2.message);
+                return false;
+            }
+        }
+
+        // Update stats
+        lastSaveTime = Date.now();
+        lastSaveUserCount = currentUserCount;
+        saveCount++;
+
+        // Also save pending to separate backup file
+        savePendingBackup();
+
+        const pendCount = Object.keys(dbToSave._pendingRegistrations).length;
+        const pilotCount = Object.keys(dbToSave._pendingPilotApprovals).length;
+        console.log(`💾 [Storage] Saved: ${currentUserCount} users, ${pendCount} pending, ${pilotCount} pilots (save #${saveCount})`);
+
+        return true;
+    } catch (error) {
+        console.error('❌ [Storage] Unexpected error during save:', error);
+        if (error.stack) console.error('📋 [Stack]:', error.stack);
+        return false;
+    }
+}
+
+/**
+ * Save ranking database to disk with atomic write + debounce.
+ * Rapid successive calls are coalesced into a single write (30ms window),
+ * and the returned promise resolves once the coalesced write actually lands.
+ */
+export function saveRankingStorage(rankingDb) {
+    const effectiveDb = resolveEffectiveDb(rankingDb);
+    if (!effectiveDb || typeof effectiveDb !== 'object') {
+        console.error('❌ [Storage] BLOCKED: No database reference available to save.');
+        return Promise.resolve(false);
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    queuedDb = effectiveDb;
+
+    // Every caller within the debounce window resolves when the single
+    // coalesced write lands — no caller's promise is ever left dangling.
+    return new Promise((resolve) => {
+        pendingResolvers.push(resolve);
+        debounceTimer = setTimeout(() => {
+            debounceTimer = null;
+            const dbToWrite = queuedDb;
+            queuedDb = null;
+            const resolvers = pendingResolvers;
+            pendingResolvers = [];
+            saveChain = saveChain
+                .then(() => {
+                    saveInProgress = true;
+                    const ok = writeRankingStorage(dbToWrite);
+                    saveInProgress = false;
+                    return ok;
+                })
+                .catch((err) => {
+                    console.error('❌ [Storage] Unexpected error in save chain:', err);
+                    return false;
+                })
+                .then((ok) => {
+                    for (const r of resolvers) r(ok);
+                });
+        }, SAVE_DEBOUNCE_MS);
+    });
+}
+
+// Synchronous wrapper for backward compatibility (critical shutdown saves)
+export function saveRankingStorageSync(rankingDb) {
+    const effectiveDb = resolveEffectiveDb(rankingDb);
+    if (!effectiveDb || typeof effectiveDb !== 'object') {
+        console.error('❌ [Storage] BLOCKED: No database reference available to save.');
+        return false;
+    }
+    return writeRankingStorage(effectiveDb);
+}
+
+// ==========================================
+// 📖 LOAD FUNCTION (with integrity check)
+// ==========================================
+
+/**
+ * Verify database integrity.
+ */
+function verifyIntegrity(data) {
+    const issues = [];
+    
+    if (!data || typeof data !== 'object') {
+        issues.push('Data is not an object');
+        return { valid: false, issues };
+    }
+    
+    if (!data.users || typeof data.users !== 'object') {
+        issues.push('Missing or invalid users object');
+    }
+    
+    // Check for corrupted user entries
+    if (data.users) {
+        for (const [id, user] of Object.entries(data.users)) {
+            if (!user || typeof user !== 'object') {
+                issues.push(`User ${id} is not an object`);
+            } else if (!user.nickname && !user.tempUntil) {
+                issues.push(`User ${id} has no nickname or tempUntil`);
+            }
+        }
+    }
+    
+    return { valid: issues.length === 0, issues };
+}
+
+/**
+ * Find the most recent valid backup.
+ */
+function findBestBackup() {
+    if (!fs.existsSync(BACKUP_DIR)) return null;
+    
+    const backups = fs.readdirSync(BACKUP_DIR)
+        .filter(f => f.startsWith('database_ranking_') && f.endsWith('.json'))
+        .sort()
+        .reverse();
+    
+    for (const backup of backups) {
+        try {
+            const backupPath = path.join(BACKUP_DIR, backup);
+            const data = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+            
+            // Skip backups that are also empty
+            if (data.users && Object.keys(data.users).length > 0) {
+                console.log(`📦 Found valid backup: ${backup} (${Object.keys(data.users).length} users)`);
+                return { file: backup, data };
+            }
+        } catch (e) {
+            console.warn(`⚠️ Backup ${backup} is corrupted, skipping...`);
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Load ranking database from disk with integrity checks and auto-recovery.
+ */
+export function loadLocalStorageRanking() {
+    const rankingDb = { users: {} };
+    // Track the loaded db so no-arg save() calls (handler/event pattern) can persist it
+    currentRankingDb = rankingDb;
+    
+    console.log('📂 [Storage] Loading database...');
+    console.log(`📂 [Storage] Path: ${path.resolve(DB_RANKING_PATH)}`);
+
+    try {
+        // Check if file exists
+        if (!fs.existsSync(DB_RANKING_PATH)) {
+            console.log('📝 [Storage] No database file found.');
+            
+            // Try to recover from backup
+            const backup = findBestBackup();
+            if (backup) {
+                console.log(`🔄 [Storage] Recovering from backup: ${backup.file}`);
+                Object.assign(rankingDb, backup.data);
+                if (!rankingDb.users) rankingDb.users = {};
+                
+                // Save recovered data
+                fs.writeFileSync(DB_RANKING_PATH, JSON.stringify(rankingDb, null, 2), 'utf8');
+                console.log(`✅ [Storage] Recovered ${Object.keys(rankingDb.users).length} users from backup`);
+                
+                databaseLoaded = true;
+                databaseLoadTime = Date.now();
+                return rankingDb;
+            }
+            
+            console.log('⚠️ [Storage] No backups found. Starting with empty database.');
+            console.log('💡 [Storage] Users will need to register again.');
+            return rankingDb;
+        }
+
+        // Read file
+        const data = fs.readFileSync(DB_RANKING_PATH, 'utf8');
+        
+        // Check for empty file
+        if (!data || data.trim().length === 0) {
+            console.error('❌ [Storage] Database file is empty!');
+            return handleEmptyDatabase(rankingDb);
+        }
+        
+        // Parse JSON
+        let parsed;
+        try {
+            parsed = JSON.parse(data);
+        } catch (e) {
+            console.error(`❌ [Storage] JSON parse error: ${e.message}`);
+            return handleCorruptedDatabase(rankingDb, data);
+        }
+        
+        // Verify integrity
+        const integrity = verifyIntegrity(parsed);
+        if (!integrity.valid) {
+            console.error('❌ [Storage] Integrity check failed:', integrity.issues);
+            return handleCorruptedDatabase(rankingDb, data);
+        }
+        
+        // Check if users exist
+        if (!parsed.users || Object.keys(parsed.users).length === 0) {
+            console.warn('⚠️ [Storage] Database has no users!');
+            return handleEmptyDatabase(rankingDb);
+        }
+        
+        // Normal load
+        Object.assign(rankingDb, parsed);
+        if (!rankingDb.users) rankingDb.users = {};
+
+        // Restore pending data
+        if (rankingDb._pendingRegistrations) {
+            Object.assign(pendingRegistrations, rankingDb._pendingRegistrations);
+            delete rankingDb._pendingRegistrations;
+        }
+        if (rankingDb._pendingPilotApprovals) {
+            Object.assign(pendingPilotApprovals, rankingDb._pendingPilotApprovals);
+            delete rankingDb._pendingPilotApprovals;
+        }
+
+        databaseLoaded = true;
+        databaseLoadTime = Date.now();
+        lastSaveUserCount = Object.keys(rankingDb.users).length;
+        
+        // Also try to restore pending from backup if not in main file
+        if (Object.keys(pendingRegistrations).length === 0 && Object.keys(pendingPilotApprovals).length === 0) {
+            loadPendingBackup();
+        }
+        
+        console.log('✅ [Storage] Database loaded successfully.');
+        console.log(`📊 [Storage] Users: ${Object.keys(rankingDb.users).length}`);
+        console.log(`📊 [Storage] Pending: ${Object.keys(pendingRegistrations).length} registrations, ${Object.keys(pendingPilotApprovals).length} pilots`);
+        
+        return rankingDb;
+        
+    } catch (error) {
+        console.error('❌ [Storage] Critical error during load:', error);
+        return rankingDb;
+    }
+}
+
+/**
+ * Handle empty database file.
+ */
+function handleEmptyDatabase(rankingDb) {
+    console.log('🔍 [Storage] Attempting auto-recovery from backup...');
+    
+    const backup = findBestBackup();
+    if (backup) {
+        console.log(`🔄 [Storage] Recovering from backup: ${backup.file}`);
+        Object.assign(rankingDb, backup.data);
+        if (!rankingDb.users) rankingDb.users = {};
+        
+        // Save recovered data
+        fs.writeFileSync(DB_RANKING_PATH, JSON.stringify(rankingDb, null, 2), 'utf8');
+        console.log(`✅ [Storage] Recovered ${Object.keys(rankingDb.users).length} users from backup`);
+        
+        databaseLoaded = true;
+        databaseLoadTime = Date.now();
+        return rankingDb;
+    }
+    
+    console.error('❌ [Storage] No usable backup found!');
+    console.error('💡 [Storage] Run /restorebackup to recover data.');
+    return rankingDb;
+}
+
+/**
+ * Handle corrupted database file.
+ */
+function handleCorruptedDatabase(rankingDb, corruptedData) {
+    console.log('🔧 [Storage] Attempting auto-recovery from corruption...');
+    
+    // Save corrupted file with .corrupted extension
+    try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        fs.writeFileSync(`./database_ranking_CORRUPTED_${timestamp}.json`, corruptedData);
+        console.log(`💾 [Storage] Saved corrupted file for analysis`);
+    } catch (e) {}
+    
+    const backup = findBestBackup();
+    if (backup) {
+        console.log(`🔄 [Storage] Recovering from backup: ${backup.file}`);
+        Object.assign(rankingDb, backup.data);
+        if (!rankingDb.users) rankingDb.users = {};
+        
+        // Save recovered data
+        fs.writeFileSync(DB_RANKING_PATH, JSON.stringify(rankingDb, null, 2), 'utf8');
+        console.log(`✅ [Storage] Recovered ${Object.keys(rankingDb.users).length} users from backup`);
+        
+        databaseLoaded = true;
+        databaseLoadTime = Date.now();
+        return rankingDb;
+    }
+    
+    console.error('❌ [Storage] No usable backup found!');
     return rankingDb;
 }

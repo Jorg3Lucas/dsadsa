@@ -20,6 +20,7 @@ import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
 // ═══ RANKING / REGISTRATION SYSTEM ═══
 import { registerMir4SlashCommands } from './core/ranking-deploy.js';
+import { destroyRankingScraperAgents } from './core/ranking-scraper.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
@@ -27,8 +28,8 @@ import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } fr
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
-import { handleConfirmAction } from './handlers/ranking-confirmations.js';
-import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
+import { handleConfirmAction, handleRestoreBackupSelect, handleRestoreBackupCancel, handleRestoreBackupConfirm } from './handlers/ranking-confirmations.js';
+import { handleRankingCommand, handleSelectManualNickname, handleSelectPendingNickname, handleSelectPendingPilotOwner } from './handlers/ranking-commands.js';
 import {
     handleNotifyCommand,
     handleNotifySelect,
@@ -39,18 +40,19 @@ import {
     handleManageAction,
     handleManagePilotRemove,
     handleManageAllied,
-    handleManageAlliedWorld,
+    handleManageAlliedPage,
     handleManageAlliedAdd,
     handleManageAlliedAddModal,
     handleManageAlliedRemove,
     handleManageNav,
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
-import { startAutoBackup } from './auto-backup.js';
+import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
-import { applyClaimChannelPermissions } from './core/clan-roles.js';
 import { logRankingEvent } from './core/ranking-logger.js';
-import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
+import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, getStorageStats } from './core/ranking-storage.js';
+import { getLocalRankingCache } from './core/ranking-cache.js';
+import { isExpiredError } from './core/interaction-utils.js';
 
 // Both systems operate on the claim guild — DISCORD_SERVER_ID comes from
 // config.js (hardcoded to the claim guild). RANKING_SERVER_ID in
@@ -139,24 +141,33 @@ client.once('clientReady', async () => {
         // Ensure db.config and alliedClans are initialized before any system runs
         ensureConfig(rankingDb);
 
+        // Log storage status
+        const storageStats = getStorageStats();
+        const backupStats = getBackupStats();
+        console.log('\n📊 Startup Status:');
+        console.log(`   Database loaded: ${storageStats.databaseLoaded ? '✅' : '❌'}`);
+        console.log(`   Users in memory: ${Object.keys(rankingDb.users || {}).length}`);
+        console.log(`   Backups available: ${backupStats.count}`);
+        console.log('========================================\n');
+
         const guild = client.guilds.cache.get(RANKING_SERVER_ID);
         if (guild) {
             await registerMir4SlashCommands(guild);
-
-            // Clan roles are the member marker (the old fixed member role was
-            // removed from the server). Surface a warning if no clan role exists
-            // yet so role management is not silently broken.
-            const clanRoleCount = Object.keys(rankingDb.config?.clanRoles || {}).length;
-            if (clanRoleCount > 0) {
-                console.log(`✅ [Ranking] ${clanRoleCount} clan role(s) configured.`);
-            } else {
-                console.warn(`⚠️ [Ranking] No clan roles configured in guild ${RANKING_SERVER_ID} — roles are created automatically during the daily sync once allied clans are added.`);
-            }
         } else {
             console.error('❌ Error: Invalid Server ID configuration.');
         }
 
         initMir4BotEvents(client, rankingDb, (db) => saveRankingStorage(db || rankingDb), logRankingEvent);
+
+        // Pre-warm the ranking cache into memory during idle startup so no
+        // command or sync ever pays the parse cost again (the in-memory
+        // reference is reused via the mtime-based cache).
+        setTimeout(() => {
+            const cache = getLocalRankingCache();
+            if (cache && Object.keys(cache).length > 0) {
+                console.log(`⚡ [Startup] Ranking cache pre-warmed (${Object.keys(cache).length} worlds)`);
+            }
+        }, 1000);
 
         setTimeout(async () => {
             console.log('🧪 [Startup] Checking if ranking needs sync...');
@@ -164,7 +175,7 @@ client.once('clientReady', async () => {
         }, 10000);
 
         // Start auto-backup scheduler (ranking files)
-        startAutoBackup(6);
+        startAutoBackup(30);
     } catch (err) {
         logger.error('RankingBoot', 'Failed to initialize ranking system', err);
     }
@@ -174,20 +185,6 @@ client.once('clientReady', async () => {
     // são re-enviados nos mesmos canais (os antigos são substituídos por novos).
     // O tick é iniciado internamente pelo initClaimSystem.
     initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, false);
-
-    // Aplica as permissões dos canais de claim a partir dos cargos de clã salvos
-    // no banco (db.config.clanRoles) — reaplica a restrição de acesso a cada
-    // boot (o bot não recria canais).
-    try {
-        const result = await applyClaimChannelPermissions(client, rankingDb, logRankingEvent, (db) => saveRankingStorage(db || rankingDb));
-        if (!result.applied && result.reason === 'no-roles') {
-            console.log('ℹ️ [Ranking] No clan roles found in the DB or on the server — claim channels stay open until roles are created (daily sync creates them from allied clans).');
-        } else if (result.discovered > 0) {
-            console.log(`🔒 [Ranking] Discovered ${result.discovered} clan role(s) by name — permissions applied and saved.`);
-        }
-    } catch (err) {
-        logger.error('ClanPerms', 'Failed to apply claim-channel permissions at boot', err);
-    }
 
     // Comandos de texto: painéis (!ms, !sp, !summons), admin (!reset, !kick,
     // !earlyclaim, !nopenalty) e canais de alerta (!reminders, !events)
@@ -204,9 +201,12 @@ client.once('clientReady', async () => {
 function handleShutdown(signal) {
     console.log(`\n🛑 [${signal}] Shutting down gracefully...`);
     if (rankingDbLoaded) {
-        try { saveRankingStorage(rankingDb); } catch (e) { /* ignore */ }
+        try { saveRankingStorageSync(rankingDb); } catch (e) { /* ignore */ }
     }
     logRankingEvent(`[Ranking Bot] Shutting down (${signal})`);
+    // Release keep-alive sockets held by the ranking scraper so the process
+    // exits cleanly without lingering idle connections.
+    destroyRankingScraperAgents();
     process.exit(0);
 }
 
@@ -247,6 +247,9 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId === 'select_pilot_to_remove') {
                 return await handlePilotRemoveSelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
+            if (interaction.customId === 'restorebackup_select') {
+                return await handleRestoreBackupSelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
             if (interaction.customId.startsWith('user_select_reg_nickname_')) {
                 return await handleUserSelectRegistrationNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
@@ -255,6 +258,12 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (interaction.customId.startsWith('select_manual_nickname_')) {
                 return await handleSelectManualNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('select_pending_nickname_')) {
+                return await handleSelectPendingNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('select_pending_pilot_owner_')) {
+                return await handleSelectPendingPilotOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_user_page_')) {
                 return await handleManageUserPage(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
@@ -265,8 +274,8 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId.startsWith('manage_pilot_')) {
                 return await handleManagePilotRemove(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
-            if (interaction.customId === 'manage_allied_world') {
-                return await handleManageAlliedWorld(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            if (interaction.customId.startsWith('manage_allied_page_')) {
+                return await handleManageAlliedPage(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId === 'manage_allied_remove') {
                 return await handleManageAlliedRemove(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
@@ -306,10 +315,16 @@ client.on('interactionCreate', async (interaction) => {
                 return await handleWelcomeRemoveRegistration(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId === 'welcome_remove_pilot') {
-                return await handleWelcomeRemovePilot(interaction, getRankingDb());
+                return await handleWelcomeRemovePilot(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId === 'selfremove_yes' || interaction.customId === 'selfremove_no') {
                 return await handleSelfRemoveConfirm(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'restorebackup-confirm') {
+                return await handleRestoreBackupConfirm(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId === 'restorebackup-cancel') {
+                return await handleRestoreBackupCancel(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId.startsWith('approve_owner_')) {
                 return await handleApproveOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
@@ -339,6 +354,9 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId === 'manage_allied') {
                 return await handleManageAllied(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
+            if (interaction.customId === 'manage_allied_remove') {
+                return await handleManageAlliedRemove(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
             if (interaction.customId.startsWith('manage_allied_add_')) {
                 return await handleManageAlliedAdd(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
@@ -348,6 +366,12 @@ client.on('interactionCreate', async (interaction) => {
         }
 
     } catch (error) {
+        // 10062 = interaction already expired / already handled — keep to one log line
+        if (isExpiredError(error)) {
+            const target = interaction.customId || interaction.commandName || 'unknown interaction';
+            console.warn(`⚠️ [Router] Interaction expired on "${target}" (${error.code || 10062}) — skipping`);
+            return;
+        }
         logger.error('Router', 'Error caught in unified interaction router', error, {
             command: interaction.commandName,
             customId: interaction.customId,

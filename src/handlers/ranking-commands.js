@@ -1,11 +1,9 @@
-import fs from 'node:fs';
 import {
     ActionRowBuilder,
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
-    ButtonStyle,
-    PermissionFlagsBits
+    ButtonStyle
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
@@ -13,17 +11,18 @@ import {
     pendingRegistrations,
     pendingPilotApprovals,
     adminChannelId,
-    APPROVER_ROLE_IDS,
     WELCOME_PANEL_MESSAGE,
-    REGISTRATION_CHANNEL_ID,
+    SUPER_ADMIN_USER_ID,
+    MAX_NICKNAME_SUGGESTIONS,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
+import { getLocalRankingCache, getRankingCacheUpdatedAt } from '../core/ranking-cache.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
-import { runDailySynchronization } from '../core/ranking-sync-engine.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { hasMemberRole } from '../core/clan-roles.js';
+import { runDailySynchronization, getOutOfAlliedGraceStatus } from '../core/ranking-sync-engine.js';
+import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
+import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
+import { buildUserListPage } from './ranking-management.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -42,7 +41,7 @@ function buildManualNicknameSelect(userId, typedNick, topSuggestions, hasSuggest
             .setDefault(true),
         ...topSuggestions
             .filter(s => s.nickname.toLowerCase() !== typedNick.toLowerCase())
-            .slice(0, 2)
+            .slice(0, MAX_NICKNAME_SUGGESTIONS)
             .map(s => new StringSelectMenuOptionBuilder()
                 .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
                 .setValue(s.nickname)
@@ -58,30 +57,84 @@ function buildManualNicknameSelect(userId, typedNick, topSuggestions, hasSuggest
     );
 }
 
+// Helper: build a nickname correction dropdown for /pending (owner registrations)
+function buildPendingNicknameSelect(userId, typedNick, topSuggestions, defaultNick) {
+    const selectOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel(`📝 Keep as typed: ${typedNick.substring(0, 80)}`)
+            .setValue(typedNick)
+            .setDescription('Use the nickname exactly as submitted')
+            .setDefault(!defaultNick || defaultNick === typedNick),
+        ...topSuggestions
+            .filter(s => s.nickname.toLowerCase() !== typedNick.toLowerCase())
+            .slice(0, MAX_NICKNAME_SUGGESTIONS)
+            .map(s => new StringSelectMenuOptionBuilder()
+                .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
+                .setValue(s.nickname)
+                .setDescription(s.inAlliedClan ? `✅ Allied clan - ${s.clanName}` : `❌ Not allied - ${s.clanName}`)
+                .setDefault(!!defaultNick && s.nickname === defaultNick)
+            )
+    ];
+
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`select_pending_nickname_${userId}`)
+            .setPlaceholder('🔍 Choose the correct nickname')
+            .addOptions(selectOptions)
+    );
+}
+
+// Helper: build an owner-correction dropdown for /pending (pilot approvals)
+function buildPendingPilotOwnerSelect(pilotId, typedOwnerNick, candidates, currentOwnerId) {
+    const selectOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel(`📝 Keep as typed: ${typedOwnerNick.substring(0, 80)}`)
+            .setValue('keep')
+            .setDescription('Keep the owner as currently registered')
+            .setDefault(!candidates.some(c => c.id === currentOwnerId)),
+        ...candidates.slice(0, MAX_NICKNAME_SUGGESTIONS).map(c => new StringSelectMenuOptionBuilder()
+            .setLabel(`🔍 ${c.nickname.substring(0, 80)}`)
+            .setValue(c.id)
+            .setDescription(`Similarity ${Math.round(c.score * 100)}%`)
+            .setDefault(c.id === currentOwnerId)
+        )
+    ];
+
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`select_pending_pilot_owner_${pilotId}`)
+            .setPlaceholder('🔍 Choose the correct owner')
+            .addOptions(selectOptions)
+    );
+}
+
 export async function handleRankingCommand(interaction, db, saveLocalStorage, logEvent) {
     const { commandName, options, user, guild } = interaction;
 
     // ── removepilot ──
     if (commandName === 'removepilot') {
+        // Defer immediately: we fetch guild members below, which can exceed Discord's 3s reply window
+        if (!await deferReplySafe(interaction)) return;
+
         const userProfile = db.users[user.id];
         const isActuallyRegistered = userProfile && (userProfile.registeredAt || userProfile.manual === true);
 
         if (!isActuallyRegistered || !userProfile.pilotIds || userProfile.pilotIds.length === 0) {
-            return interaction.reply({ content: getMsg('ranking.responses.removepilot.noPilots'), flags: 64 });
+            return interaction.editReply({ content: getMsg('ranking.responses.removepilot.noPilots') });
         }
 
-        const menuOptions = [];
-        for (const pilotId of userProfile.pilotIds) {
+        // Fetch all pilots concurrently to build the menu (independent lookups).
+        const menuOptions = await Promise.all(userProfile.pilotIds.map(async (pilotId) => {
             const memberObj = await guild.members.fetch(pilotId).catch(() => null);
             const pilotTag = memberObj ? memberObj.user.tag : `Disconnected User (${pilotId})`;
             const pilotNick = memberObj ? (memberObj.nickname || memberObj.user.username) : 'Unknown';
 
-            menuOptions.push({
+            return {
                 label: pilotTag,
                 description: `${pilotNick} - ${getMsg('ranking.responses.removepilot.optionDescription')}`,
                 value: pilotId
-            });
-        }
+            };
+        }));
 
         const pilotMenu = new StringSelectMenuBuilder()
             .setCustomId('select_pilot_to_remove')
@@ -90,18 +143,21 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         const row = new ActionRowBuilder().addComponents(pilotMenu);
 
-        return interaction.reply({
+        return interaction.editReply({
             content: getMsg('ranking.responses.removepilot.menuContent'),
-            components: [row],
-            flags: 64
+            components: [row]
         });
     }
 
     // ── forcesync ──
     if (commandName === 'forcesync') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
         logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
-        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
+        const ran = await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
+
+        if (!ran) {
+            return interaction.editReply('⏳ **Sincronização não executada.**\n\nOutro sync (startup, cron ou outro comando) já está em andamento, ou o servidor não está disponível. Espere o sync atual terminar e tente novamente — rodar dois syncs ao mesmo tempo fazia o bot travar e parar de responder.');
+        }
 
         let responseMsg = getMsg('ranking.responses.forcesync.success') || '✅ **Force sync completed!**';
 
@@ -110,11 +166,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── manualregister ──
     if (commandName === 'manualregister') {
+        // Defer immediately: the ranking-cache lookups below can take several seconds
+        if (!await deferReplySafe(interaction)) return;
+
         const targetMember = options.getMember('member');
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
         const lookup = lookupNickname(nickname, db);
-        const topSuggestions = lookupTopNicknames(nickname, db, null, 2);
+        // Reuse the fuzzy pool lookupNickname already computed (exact-miss path)
+        // so the suggestion dropdown doesn't re-scan the ranking.
+        const topSuggestions = lookupTopNicknames(nickname, db, null, MAX_NICKNAME_SUGGESTIONS, lookup.fuzzyCandidates);
         const hasSuggestions = topSuggestions.some(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
 
         if (lookup.found) {
@@ -142,7 +203,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 selectedNickname: nickname
             };
 
-            return interaction.reply({
+            return interaction.editReply({
                 content: getMsg('ranking.responses.manualregister.confirm', { nickname: lookup.nickname, clan: lookup.clanName, username: targetMember.displayName }) + `\n${statusLine}${fuzzyManualNote}${hasSuggestions ? '\n\n📌 Use the **dropdown below** to select a different nickname before confirming.' : ''}`,
                 components: [
                     ...(nicknameRow ? [nicknameRow] : []),
@@ -150,8 +211,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                         new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                     )
-                ],
-                flags: 64
+                ]
             });
         }
 
@@ -168,7 +228,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 selectedNickname: nickname
             };
 
-            return interaction.reply({
+            return interaction.editReply({
                 content: `❌ **"${nickname}" not found in ranking.**\n\nHowever, there are similar nicknames available. Select one from the dropdown below and confirm to register as temporary (3 days).${hasSuggestions ? '\n\n📌 Use the **dropdown below** to select a different nickname before confirming.' : ''}`,
                 components: [
                     ...(nicknameRow ? [nicknameRow] : []),
@@ -176,8 +236,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                         new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                         new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                     )
-                ],
-                flags: 64
+                ]
             });
         }
 
@@ -191,15 +250,14 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             selectedNickname: nickname
         };
 
-        return interaction.reply({
+        return interaction.editReply({
             content: `❌ **"${nickname}" not found in ranking.** Register as temporary (3 days) anyway? The user will be converted to permanent once found in an allied clan during daily sync.`,
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('confirm-manualregister-yes').setLabel('✅ Yes, register').setStyle(ButtonStyle.Success),
                     new ButtonBuilder().setCustomId('confirm-manualregister-no').setLabel('❌ No, cancel').setStyle(ButtonStyle.Secondary)
                 )
-            ],
-            flags: 64
+            ]
         });
     }
 
@@ -277,90 +335,13 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         });
     }
 
-    // ── cleandb ──
-    if (commandName === 'cleandb') {
-        await interaction.deferReply({ flags: 64 });
-        const seenNicknames = {};
-        const duplicatesRemoved = [];
-
-        for (const [memberId, userData] of Object.entries(db.users)) {
-            const cleanNick = userData.nickname.trim().normalize('NFC').toLowerCase();
-            if (!seenNicknames[cleanNick]) seenNicknames[cleanNick] = [];
-            seenNicknames[cleanNick].push({ id: memberId, ...userData });
-        }
-
-        for (const [cleanNick, userList] of Object.entries(seenNicknames)) {
-            if (userList.length > 1) {
-                let realOwnerId = null;
-                for (const u of userList) {
-                    const member = await guild.members.fetch(u.id).catch(() => null);
-                    if (member) {
-                        const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
-                        if (!currentNick.endsWith(' - Pilot')) { realOwnerId = u.id; break; }
-                    }
-                }
-                if (!realOwnerId) {
-                    userList.sort((a, b) => new Date(a.registeredAt) - new Date(b.registeredAt));
-                    realOwnerId = userList[0].id;
-                }
-                for (const u of userList) {
-                    if (u.id !== realOwnerId) {
-                        duplicatesRemoved.push(`${u.nickname} (ID: ${u.id})`);
-                        delete db.users[u.id];
-                    }
-                }
-            }
-        }
-
-        saveLocalStorage();
-        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
-        if (duplicatesRemoved.length === 0) return interaction.editReply(getMsg('ranking.responses.cleandb.noDuplicates'));
-        return interaction.editReply(getMsg('ranking.responses.cleandb.success', { list: duplicatesRemoved.map(d => `• ${d}`).join('\n') }));
-    }
-
     // ── manage (/manage slash command) ──
     if (commandName === 'manage') {
-        const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
-        if (userEntries.length === 0) {
+        const { content, components, count } = buildUserListPage(db, 0, { withAlliedButton: true });
+        if (count === 0) {
             return interaction.reply({ content: getMsg('ranking.responses.manage.noUsers'), flags: 64 });
         }
-
-        const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
-        const PAGE_SIZE = 25;
-        const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
-        const page = 0;
-        const pageItems = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-
-        const selectOptions = pageItems.map(([id, data]) => ({
-            label: data.nickname.substring(0, 100),
-            description: `${data.tempUntil ? '⏳ Temp' : '✅ Perm'} | ${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
-            value: id
-        }));
-
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`manage_user_page_${page}`)
-            .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
-            .addOptions(selectOptions);
-
-        const components = [new ActionRowBuilder().addComponents(selectMenu)];
-
-        if (totalPages > 1) {
-            const navRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('manage_user_prev_0').setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(true),
-                new ButtonBuilder().setCustomId('manage_user_next_0').setLabel('Next ▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
-            );
-            components.push(navRow);
-        }
-
-        components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary)
-        ));
-
-        return interaction.reply({
-            content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),
-            components,
-            flags: 64
-        });
+        return interaction.reply({ content, components, flags: 64 });
     }
 
     // ── manualremove ──
@@ -411,7 +392,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── sendpanel ──
     if (commandName === 'sendpanel') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const panelMessage = await interaction.channel.send({ content: WELCOME_PANEL_MESSAGE, components: buildWelcomePanelComponents() });
 
@@ -424,91 +405,9 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         return interaction.editReply('✅ **Registration panel sent!**');
     }
 
-    // ── listunregistered ──
-    if (commandName === 'listunregistered') {
-        await interaction.deferReply({ flags: 64 });
-
-        const doNotify = options.getBoolean('notify') || false;
-
-        const allMembers = await guild.members.fetch().catch(() => null);
-        if (!allMembers || allMembers.size === 0) {
-            return interaction.editReply('❌ Could not fetch guild members.');
-        }
-
-        const unregistered = [];
-        for (const [memberId, member] of allMembers) {
-            if (member.user.bot) continue;
-            if (!hasMemberRole(member, db)) continue;
-            if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) continue;
-            unregistered.push(member);
-        }
-
-        if (unregistered.length === 0) {
-            logEvent(`📋 Admin ${interaction.user.tag} checked unregistered members — none found`);
-            return interaction.editReply('✅ **All members with the role are registered!** No unregistered members found.');
-        }
-
-        const listLines = unregistered.map((m, i) => `${i + 1}. ${m.toString()} — ${m.user.tag}`);
-        let report = `📋 **Unregistered Members — ${unregistered.length} total**\n\n`;
-        report += listLines.join('\n');
-
-        if (report.length > 1900) {
-            report = `📋 **Unregistered Members — ${unregistered.length} total**\n\n`;
-            report += listLines.slice(0, 30).join('\n');
-            report += `\n\n... and ${unregistered.length - 30} more`;
-        }
-
-        if (doNotify) {
-            report += `\n\n✉️ **Sending DMs to ${unregistered.length} members...**`;
-            await interaction.editReply(report);
-
-            let sent = 0;
-            let failed = 0;
-            logEvent(`📋 Admin ${interaction.user.tag} started sending DMs to ${unregistered.length} unregistered members...`);
-            for (let i = 0; i < unregistered.length; i++) {
-                const member = unregistered[i];
-                try {
-                    await member.send(`👋 Hey **${member.displayName}**, you currently have a role but haven't registered your MIR4 account yet!\n\nPlease go to <#${REGISTRATION_CHANNEL_ID}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nThis helps us keep the server organized. Thanks! 🚀`);
-                    sent++;
-                    logEvent(`✅ DM sent to ${member.user.tag} (${member.id}) — ${sent}/${unregistered.length}`);
-                } catch (e) {
-                    failed++;
-                    logEvent(`❌ DM failed for ${member.user.tag} (${member.id}) — ${e.message}`);
-                }
-                if (i < unregistered.length - 1) {
-                    await new Promise(r => setTimeout(r, 5000));
-                }
-            }
-
-            logEvent(`📋 Admin ${interaction.user.tag} finished notifying — ${sent} sent, ${failed} failed`);
-
-            if (adminChannelId) {
-                const adminCh = interaction.guild.channels.cache.get(adminChannelId);
-                if (adminCh) {
-                    const summary = `📋 **Bulk DM Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total unregistered:** ${unregistered.length}\n✉️ **DMs sent:** ${sent} ✅\n❌ **Failed:** ${failed}\n🕐 **Finished:** ${new Date().toLocaleString('en-US')}`;
-                    await adminCh.send({ content: summary }).catch(() => {});
-                }
-            }
-
-            return interaction.editReply(`📋 **Unregistered Members — ${unregistered.length} total**\n\n✉️ DMs sent: **${sent}** ✅\n❌ Failed: **${failed}**`);
-        }
-
-        logEvent(`📋 Admin ${interaction.user.tag} listed ${unregistered.length} unregistered member(s)`);
-
-        if (adminChannelId) {
-            const adminCh = interaction.guild.channels.cache.get(adminChannelId);
-            if (adminCh) {
-                const summary = `📋 **Unregistered Members Report**\n\n👤 **Admin:** ${interaction.user.tag}\n📊 **Total unregistered:** ${unregistered.length}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`;
-                await adminCh.send({ content: summary }).catch(() => {});
-            }
-        }
-
-        return interaction.editReply(report);
-    }
-
     // ── pending ──
     if (commandName === 'pending') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const ownerEntries = Object.entries(pendingRegistrations);
         const pilotEntries = Object.entries(pendingPilotApprovals);
@@ -520,12 +419,28 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         let report = `⏳ **Pending Registrations**\n\n`;
         const rankingCache = getLocalRankingCache();
         let panelsRestored = 0;
+        // Dropdowns to correct nicknames via fuzzy suggestions (Discord allows max 5 action rows)
+        const fuzzySelectRows = [];
+
+        // Resolve all pending users CONCURRENTLY (pure reads — no rate-limit
+        // risk on GETs). The loops below only consume these maps; the admin
+        // channel sends stay serial inside the loop to respect write limits.
+        const ownerMemberById = new Map();
+        const pilotMemberById = new Map();
+        await Promise.all([
+            ...ownerEntries.map(async ([userId]) => {
+                ownerMemberById.set(userId, await guild.members.fetch(userId).catch(() => null));
+            }),
+            ...pilotEntries.map(async ([pilotId]) => {
+                pilotMemberById.set(pilotId, await guild.members.fetch(pilotId).catch(() => null));
+            })
+        ]);
 
         // ── Owner registrations ──
         if (ownerEntries.length > 0) {
             report += `👑 **Owner Registrations (${ownerEntries.length})**\n`;
             for (const [userId, pending] of ownerEntries) {
-                const member = await guild.members.fetch(userId).catch(() => null);
+                const member = ownerMemberById.get(userId);
                 const userTag = member ? member.toString() : `<@${userId}>`;
                 const hoursLeft = pending.timestamp
                     ? ((Date.now() - pending.timestamp) / (1000 * 60 * 60)).toFixed(1)
@@ -537,12 +452,27 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 let line = `\n${userTag} — **${pending.nickname}**\n`;
                 line += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
 
+                if (pending.selectedNickname && pending.selectedNickname !== pending.nickname) {
+                    line += `   ✅ **Selected:** "${pending.selectedNickname}"\n`;
+                }
+
                 const lookup = lookupNickname(pending.nickname, db, rankingCache);
                 if (lookup.fuzzySuggestion) {
                     line += `   🔍 **Fuzzy suggestion:** "${pending.nickname}" → "${lookup.fuzzySuggestion}" (${lookup.serverName})\n`;
                 }
 
                 report += line;
+
+                // Offer a dropdown to correct the nickname when fuzzy suggestions exist
+                if (fuzzySelectRows.length < 5) {
+                    // Reuse the fuzzy pool lookupNickname already computed
+                    // (exact-miss path) instead of re-scanning the ranking.
+                    const topSuggestions = lookupTopNicknames(pending.nickname, db, rankingCache, MAX_NICKNAME_SUGGESTIONS, lookup.fuzzyCandidates);
+                    const hasFuzzyOptions = topSuggestions.some(s => s.nickname.toLowerCase() !== pending.nickname.toLowerCase());
+                    if (hasFuzzyOptions) {
+                        fuzzySelectRows.push(buildPendingNicknameSelect(userId, pending.nickname, topSuggestions, pending.selectedNickname));
+                    }
+                }
 
                 // Re-send admin panel
                 if (adminChannelId) {
@@ -564,6 +494,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                         const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
 
+                        const displayNick = pending.selectedNickname || pending.nickname;
+                        const selectedNote = pending.selectedNickname && pending.selectedNickname !== pending.nickname
+                            ? `\n✅ **Corrected by admin:** "${pending.nickname}" → "${pending.selectedNickname}"`
+                            : '';
+
                         const approveButtons = [
                             new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
                         ];
@@ -580,7 +515,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                         try {
                             const adminMsg = await adminChannel.send({
-                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${pending.nickname}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${displayNick}${selectedNote}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
                                 components: [
                                     new ActionRowBuilder().addComponents(approveButtons)
                                 ]
@@ -604,17 +539,8 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             if (ownerEntries.length > 0) report += '\n';
             report += `✈️ **Pilot Approvals (${pilotEntries.length})**\n`;
 
-            const pilotIdSet = new Set();
-            for (const [, data] of Object.entries(db.users || {})) {
-                if (data.pilotIds && data.pilotIds.length > 0) {
-                    for (const pid of data.pilotIds) {
-                        pilotIdSet.add(pid);
-                    }
-                }
-            }
-
             for (const [pilotId, pending] of pilotEntries) {
-                const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
+                const pilotMember = pilotMemberById.get(pilotId);
                 const pilotTag = pilotMember ? pilotMember.toString() : `<@${pilotId}>`;
                 const hoursLeft = pending.timestamp
                     ? ((Date.now() - pending.timestamp) / (1000 * 60 * 60)).toFixed(1)
@@ -630,44 +556,21 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 let line = `\n${pilotTag} → Owner **${pending.ownerNick}**\n`;
                 line += `   ⏰ Expires in: ${expiresIn}\n`;
 
-                if (!ownerMatch) {
-                    const cleanedInput = cleanNickname(pending.ownerNick);
-                    if (cleanedInput.length >= 2) {
-                        let bestMatch = null;
-                        let bestScore = 0;
+                if (pending.originalOwnerNick && pending.originalOwnerNick !== pending.ownerNick) {
+                    line += `   ✅ **Owner corrected:** "${pending.originalOwnerNick}" → "${pending.ownerNick}"\n`;
+                }
 
-                        for (const [id, data] of Object.entries(db.users || {})) {
-                            if (!data.nickname) continue;
-                            if (pilotIdSet.has(id)) continue;
-                            const cleanedNick = cleanNickname(data.nickname);
-                            if (cleanedNick.length < 2) continue;
-
-                            const inputChars = new Set(cleanedInput);
-                            const nickChars = new Set(cleanedNick);
-                            let commonChars = 0;
-                            for (const c of inputChars) {
-                                if (nickChars.has(c)) commonChars++;
-                            }
-                            const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
-                            if (overlap < 0.3) continue;
-
-                            const distance = levenshteinDistance(cleanedInput, cleanedNick);
-                            const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
-                            const similarity = 1 - (distance / maxLen);
-
-                            if (similarity > bestScore && similarity >= 0.55) {
-                                bestScore = similarity;
-                                bestMatch = data.nickname;
-                            }
-                        }
-
-                        if (bestMatch) {
-                            line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${bestMatch}"\n`;
-                        }
-                    }
+                const ownerCandidates = !ownerMatch ? findOwnerCandidates(pending.ownerNick, db, MAX_NICKNAME_SUGGESTIONS) : [];
+                if (!ownerMatch && ownerCandidates.length > 0) {
+                    line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${ownerCandidates[0].nickname}"\n`;
                 }
 
                 report += line;
+
+                // Offer a dropdown to correct the owner when they aren't found (Discord allows max 5 action rows total)
+                if (!ownerMatch && ownerCandidates.length > 0 && fuzzySelectRows.length < 5) {
+                    fuzzySelectRows.push(buildPendingPilotOwnerSelect(pilotId, pending.ownerNick, ownerCandidates, pending.ownerId));
+                }
             }
         }
 
@@ -680,46 +583,15 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         }
 
         logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots, ${panelsRestored} panels restored)`);
-        return interaction.editReply(report);
-    }
-
-    // ── elderguide ──
-    if (commandName === 'elderguide') {
-        const isApprover = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
-            interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
-
-        if (!isApprover) {
-            return interaction.reply({ content: '❌ You do not have permission to view this guide.', flags: 64 });
-        }
-
-        const guide = `📋 **Elder Guide**\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `📩 **1. How approvals appear**\n\n` +
-            `When someone clicks **👑 Register as Owner**, a message appears in the admin channel with the user info, ranking status, and allied clan status.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `✅ **2. Approve (permanent)**\n\n` +
-            `Click **✅ Approve** when the nickname is in the ranking AND in an allied clan. → Permanent role + nickname set automatically.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `⏳ **3. Approve Temporarily (3 days)**\n\n` +
-            `Click **⏳ Approve Temporarily** when NOT in ranking or NOT in allied clan yet. → Temporary role (3 days). Auto-converts to permanent once found in an allied clan during daily sync.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `❌ **4. Reject with reason**\n\n` +
-            `Click **❌ Reject** → write the reason. The user gets a DM explaining why. Always write a clear reason so the user can fix it.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `✈️ **5. Pilot Registration**\n\n` +
-            `When someone clicks **✈️ Register as Pilot**, the bot DMs the owner to approve/reject directly. Elders do NOT approve pilots.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `⏰ **6. Expiration**\n\n` +
-            `Pending approvals expire after **24h**. The message updates showing "expired". User must re-submit.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `❓ Need help? Contact an Administrator.`;
-
-        return interaction.reply({ content: guide });
+        return interaction.editReply({
+            content: report,
+            components: fuzzySelectRows
+        });
     }
 
     // ── stats ──
     if (commandName === 'stats') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         // Count owners (registered users who are not pilots of someone else)
         const pilotIdSet = new Set();
@@ -748,34 +620,30 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const pendingOwners = Object.keys(pendingRegistrations).length;
         const pendingPilots = Object.keys(pendingPilotApprovals).length;
 
-        // Ranking cache stats
-        const cachePath = './ranking_cache.json';
+        // Ranking cache stats — served from the in-memory cache. The previous
+        // code re-read and re-parsed the whole ~76k-player file on every /stats;
+        // getLocalRankingCache() returns the same in-memory reference instead.
+        const rankingCache = getLocalRankingCache();
+        const cacheUpdatedAt = getRankingCacheUpdatedAt();
         let lastSync = '❌ Nunca sincronizado';
         let worldsInCache = 0;
         let playersInCache = 0;
 
-        try {
-            if (fs.existsSync(cachePath)) {
-                const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-                if (raw.updatedAt) {
-                    const syncDate = new Date(raw.updatedAt);
-                    const hoursAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60 * 60));
-                    const minsAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60));
-                    if (hoursAgo < 1) {
-                        lastSync = `🟢 ${minsAgo} min atrás`;
-                    } else if (hoursAgo < 24) {
-                        lastSync = `🟡 ${hoursAgo}h atrás`;
-                    } else {
-                        lastSync = `🔴 ${Math.floor(hoursAgo / 24)}d atrás`;
-                    }
-                }
-                if (raw.ranking) {
-                    worldsInCache = Object.keys(raw.ranking).length;
-                    playersInCache = Object.values(raw.ranking).reduce((sum, w) => sum + (w ? Object.keys(w).length : 0), 0);
+        if (rankingCache) {
+            if (cacheUpdatedAt) {
+                const syncDate = new Date(cacheUpdatedAt);
+                const hoursAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60 * 60));
+                const minsAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60));
+                if (hoursAgo < 1) {
+                    lastSync = `🟢 ${minsAgo} min atrás`;
+                } else if (hoursAgo < 24) {
+                    lastSync = `🟡 ${hoursAgo}h atrás`;
+                } else {
+                    lastSync = `🔴 ${Math.floor(hoursAgo / 24)}d atrás`;
                 }
             }
-        } catch (e) {
-            lastSync = '❌ Erro ao ler cache';
+            worldsInCache = Object.keys(rankingCache).length;
+            playersInCache = Object.values(rankingCache).reduce((sum, w) => sum + (w ? Object.keys(w).length : 0), 0);
         }
 
         // Allied clans
@@ -832,84 +700,187 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         return interaction.editReply(report);
     }
 
-    // ── refreshnames ──
-    if (commandName === 'refreshnames') {
-        await interaction.deferReply({ flags: 64 });
+    // ── grace ──
+    if (commandName === 'grace') {
+        if (!await deferReplySafe(interaction)) return;
 
-        const allMembers = await guild.members.fetch().catch(() => null);
-        if (!allMembers || allMembers.size === 0) {
-            return interaction.editReply('❌ Could not fetch guild members.');
-        }
+        const targetOption = options.getMember('member') || options.getUser('member');
 
-        let updated = 0;
-        let skipped = 0;
-        let failed = 0;
-        const details = [];
+        // ── Single-member lookup ──
+        if (targetOption) {
+            const memberId = targetOption.id;
+            const userData = db.users[memberId];
+            const grace = getOutOfAlliedGraceStatus(db, memberId);
+            const displayName = targetOption.displayName || targetOption.user?.username || targetOption.tag || targetOption.username || `<@${memberId}>`;
+            const nicknameLine = userData?.nickname ? `\n📝 **Nickname:** ${userData.nickname}` : '';
 
-        for (const [memberId, member] of allMembers) {
-            if (member.user.bot) continue;
-
-            // Check if this member is a pilot
-            const ownerIdOfThisPilot = Object.keys(db.users || {}).find(id =>
-                db.users[id].pilotIds && db.users[id].pilotIds.includes(memberId)
-            );
-            const isPilot = !!ownerIdOfThisPilot;
-
-            if (isPilot) {
-                const ownerNick = db.users[ownerIdOfThisPilot].nickname;
-                if (!ownerNick) { skipped++; continue; }
-
-                const prefixed = buildPrefixedNickname(ownerNick, db, 'Pilot');
-                if ((member.nickname || '') !== prefixed) {
-                    try {
-                        await member.setNickname(prefixed);
-                        updated++;
-                        if (details.length < 20) details.push(`✈️ ${member.user.tag} → ${prefixed}`);
-                    } catch {
-                        failed++;
-                    }
-                } else {
-                    skipped++;
-                }
-            } else if (db.users[memberId] && (db.users[memberId].registeredAt || db.users[memberId].manual === true)) {
-                // Owner
-                const nickname = db.users[memberId].nickname;
-                if (!nickname) { skipped++; continue; }
-
-                const prefixed = buildPrefixedNickname(nickname, db);
-                if ((member.nickname || '') !== prefixed) {
-                    try {
-                        await member.setNickname(prefixed);
-                        updated++;
-                        if (details.length < 20) details.push(`👑 ${member.user.tag} → ${prefixed}`);
-                    } catch {
-                        failed++;
-                    }
-                } else {
-                    skipped++;
-                }
+            if (!grace.started) {
+                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}\n\n✅ **No active grace period.** This member is currently in an allied clan (or was never detected outside one).`);
             }
+
+            const since = db.roleNotify?.[memberId]?.outOfAlliedSince;
+            const startedLine = since ? `\n🕐 **Started:** ${new Date(since).toLocaleString()}` : '';
+
+            if (grace.expired) {
+                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n❌ **Grace EXPIRED** — their role can be removed on the next sync.`);
+            }
+
+            return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n🟢 **${grace.hoursLeft}h remaining** of the 72h grace period.\n\n⚠️ Their role will be removed if they don't rejoin an allied clan before the deadline.`);
         }
 
-        let report = `🔄 **Nickname Refresh Complete**\n\n`;
-        report += `✅ Updated: **${updated}**\n`;
-        report += `⏭️ Already correct: **${skipped}**\n`;
-        report += `❌ Failed: **${failed}**\n`;
-
-        if (details.length > 0) {
-            report += `\n📋 **Details:**\n${details.join('\n')}`;
+        // ── Full report: all members with an active grace timer ──
+        const graceEntries = [];
+        for (const [memberId, flags] of Object.entries(db.roleNotify || {})) {
+            if (!flags || !flags.outOfAlliedSince) continue;
+            const status = getOutOfAlliedGraceStatus(db, memberId);
+            graceEntries.push({ memberId, status, since: flags.outOfAlliedSince });
         }
 
-        logEvent(`🔄 Admin ${interaction.user.tag} ran /refreshnames — ${updated} updated, ${skipped} skipped, ${failed} failed`);
+        if (graceEntries.length === 0) {
+            return interaction.editReply('⏳ **72h Grace Period Status**\n\n✅ **No members currently in the 72h grace period.** Everyone is in an allied clan (or has no active out-of-allied timer).');
+        }
+
+        // Resolve display names concurrently (pure reads — no rate-limit risk on GETs).
+        // Cap the fetches: the ~1900-char report only renders a few dozen rows, so
+        // fetching more than FETCH_CAP members wastes GET requests on data the
+        // truncated report would never display. Unfetched members fall back to a
+        // plain mention below.
+        const FETCH_CAP = 100;
+        const fetchList = graceEntries.slice(0, FETCH_CAP);
+        const memberById = new Map();
+        await Promise.all(fetchList.map(async ({ memberId }) => {
+            memberById.set(memberId, await guild.members.fetch(memberId).catch(() => null));
+        }));
+
+        const inGrace = graceEntries.filter(({ status }) => !status.expired)
+            .sort((a, b) => a.status.hoursLeft - b.status.hoursLeft); // most urgent first
+        const expired = graceEntries.filter(({ status }) => status.expired);
+
+        let report = `⏳ **72h Grace Period Status**\n\n`;
+
+        if (inGrace.length > 0) {
+            report += `🟢 **In grace (${inGrace.length})**\n`;
+            for (const { memberId, status } of inGrace) {
+                const member = memberById.get(memberId);
+                const tag = member ? member.toString() : `<@${memberId}>`;
+                const nick = db.users[memberId]?.nickname ? ` — **${db.users[memberId].nickname}**` : '';
+                report += `• ${tag}${nick} — ⏳ ${status.hoursLeft}h left\n`;
+            }
+            report += '\n';
+        }
+
+        if (expired.length > 0) {
+            report += `🔴 **Grace expired (${expired.length})**\n`;
+            for (const { memberId, since } of expired) {
+                const member = memberById.get(memberId);
+                const tag = member ? member.toString() : `<@${memberId}>`;
+                const nick = db.users[memberId]?.nickname ? ` — **${db.users[memberId].nickname}**` : '';
+                const sinceLine = since ? ` — since ${new Date(since).toLocaleDateString()}` : '';
+                report += `• ${tag}${nick} — ❌ role can be removed${sinceLine}\n`;
+            }
+            report += '\n';
+        }
+
+        report += `━━━━━━━━━━━━━━━━━━━━━━\nℹ️ Members keep their role for **72h** after leaving an allied clan; the timer resets when they return.`;
+
+        if (report.length > 1900) {
+            report = report.substring(0, 1900) + '\n\n... (truncated)';
+        }
+
+        logEvent(`⏳ Admin ${interaction.user.tag} checked 72h grace status (${graceEntries.length} members)`);
         return interaction.editReply(report);
     }
+
+    // ── restorebackup ──
+    if (commandName === 'restorebackup') {
+        // Super admin only
+        if (user.id !== SUPER_ADMIN_USER_ID) {
+            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
+        }
+
+        if (!await deferReplySafe(interaction)) return;
+
+        const fs = await import('node:fs');
+        const BACKUP_DIR = './backups';
+        const DB_RANKING_PATH = './database_ranking.json';
+
+        try {
+            if (!fs.existsSync(BACKUP_DIR)) {
+                return interaction.editReply('❌ **No backup directory found.** No backups available to restore.');
+            }
+
+            const backupFiles = fs.readdirSync(BACKUP_DIR)
+                .filter(f => f.startsWith('database_ranking_') && f.endsWith('.json'))
+                .sort()
+                .reverse();
+
+            if (backupFiles.length === 0) {
+                return interaction.editReply('❌ **No database backups found** in ./backups/');
+            }
+
+            // Store in confirmation cache
+            confirmationCache[`${user.id}-restorebackup`] = {
+                backups: backupFiles,
+                timestamp: Date.now()
+            };
+
+            // Build backup list
+            let report = '💾 **Available Database Backups**\n\n';
+            report += `📁 Found: **${backupFiles.length}** backup(s)\n\n`;
+
+            const selectOptions = backupFiles.slice(0, 25).map((file, i) => {
+                const stats = fs.statSync(`${BACKUP_DIR}/${file}`);
+                const ageMs = Date.now() - stats.mtimeMs;
+                const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+                const ageDays = Math.floor(ageHours / 24);
+                const sizeKB = (stats.size / 1024).toFixed(1);
+
+                // Extract timestamp from filename
+                const timestamp = file.replace('database_ranking_', '').replace('.json', '');
+
+                let ageStr;
+                if (ageHours < 1) {
+                    ageStr = `${Math.floor(ageMs / (1000 * 60))}min ago`;
+                } else if (ageHours < 24) {
+                    ageStr = `${ageHours}h ago`;
+                } else {
+                    ageStr = `${ageDays}d ago`;
+                }
+
+                return {
+                    label: `Backup #${i + 1} (${ageStr})`,
+                    description: `${sizeKB} KB - ${timestamp.substring(0, 19)}`,
+                    value: file
+                };
+            });
+
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('restorebackup_select')
+                .setPlaceholder('Select a backup to restore...')
+                .addOptions(selectOptions);
+
+            const components = [
+                new ActionRowBuilder().addComponents(selectMenu),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('restorebackup-cancel').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
+                )
+            ];
+
+            logEvent(`💾 ${user.tag} opened /restorebackup (${backupFiles.length} backups available)`);
+            return interaction.editReply({ content: report, components });
+
+        } catch (e) {
+            return interaction.editReply(`❌ **Error listing backups:** ${e.message}`);
+        }
+    }
+
 
     return false;
 }
 
 // ── Select Menu: Admin chooses nickname for manualregister ──
 export async function handleSelectManualNickname(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const userId = interaction.customId.replace('select_manual_nickname_', '');
     const selectedNick = interaction.values[0];
@@ -934,4 +905,151 @@ export async function handleSelectManualNickname(interaction, db, saveLocalStora
     }).catch(() => {});
 
     logEvent(`📌 Admin selected nickname "${selectedNick}" for manualregister (was "${cached.nickname}")`);
+}
+
+// ── Select Menu: Admin corrects the nickname of a pending owner registration ──
+export async function handleSelectPendingNickname(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
+    const userId = interaction.customId.replace('select_pending_nickname_', '');
+    const selectedNick = interaction.values[0];
+    const pending = pendingRegistrations[userId];
+
+    if (!pending) {
+        await interaction.followUp({ content: '⌛ This pending registration no longer exists. Run /pending again.', flags: 64 }).catch(() => {});
+        return;
+    }
+
+    const previousNick = pending.selectedNickname || pending.nickname;
+    pending.selectedNickname = selectedNick;
+    saveLocalStorage();
+
+    // Update the /pending report: replace this user's fuzzy line with the selection (anchored to avoid touching other entries)
+    let updatedContent = interaction.message.content;
+    const anchor = `<@${userId}> — **`;
+    const anchorIdx = updatedContent.indexOf(anchor);
+    if (anchorIdx !== -1) {
+        const blockStart = anchorIdx;
+        const blockEnd = updatedContent.indexOf('\n<@', anchorIdx + anchor.length);
+        const block = blockEnd === -1 ? updatedContent.slice(blockStart) : updatedContent.slice(blockStart, blockEnd);
+        const selectionLine = `   ✅ **Selected:** "${selectedNick}" (instead of "${previousNick}")\n`;
+        // Drop any previous selection line first, then replace the fuzzy line (or append)
+        let newBlock = block.replace(/\n {3}✅ \*\*Selected:\*\* .*\n?/, '\n');
+        if (/ {3}🔍 \*\*Fuzzy suggestion:\*\* .*\n?/.test(newBlock)) {
+            newBlock = newBlock.replace(/ {3}🔍 \*\*Fuzzy suggestion:\*\* .*\n?/, selectionLine);
+        } else {
+            newBlock = `${newBlock.replace(/\n+$/, '')}\n${selectionLine}`;
+        }
+        updatedContent = updatedContent.slice(0, blockStart) + newBlock + (blockEnd === -1 ? '' : updatedContent.slice(blockEnd));
+    } else {
+        // Fallback: append a note at the end
+        updatedContent = `${updatedContent.replace(/\n+$/, '')}\n📌 **Selected for <@${userId}>:** "${selectedNick}"`;
+    }
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    // Keep the admin panel in sync so approval uses the corrected nickname
+    if (pending.channelId && pending.messageId) {
+        try {
+            const channel = interaction.guild.channels.cache.get(pending.channelId);
+            if (channel) {
+                const panelMsg = await channel.messages.fetch(pending.messageId).catch(() => null);
+                if (panelMsg) {
+                    const correctedNote = previousNick !== selectedNick
+                        ? ` (corrected from "${previousNick}")`
+                        : '';
+                    const panelContent = panelMsg.content
+                        .replace(/📝 \*\*Nickname:\*\* [^\n]*/, `📝 **Nickname:** ${selectedNick}${correctedNote}`)
+                        .replace(/\n✅ \*\*Corrected by admin:\*\* [^\n]*/, '');
+                    await panelMsg.edit({ content: panelContent.substring(0, 1900), components: panelMsg.components }).catch(() => {});
+                }
+            }
+        } catch {
+            // best-effort: never let a panel sync failure break the selection
+        }
+    }
+
+    logEvent(`✅ Admin ${interaction.user.tag} corrected pending nickname for <@${userId}>: "${pending.nickname}" → "${selectedNick}"`);
+}
+
+// ── Select Menu: Admin corrects the owner of a pending pilot approval ──
+export async function handleSelectPendingPilotOwner(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
+    const pilotId = interaction.customId.replace('select_pending_pilot_owner_', '');
+    const selected = interaction.values[0];
+    const pending = pendingPilotApprovals[pilotId];
+
+    if (!pending) {
+        await interaction.followUp({ content: '⌛ This pilot request no longer exists. Run /pending again.', flags: 64 }).catch(() => {});
+        return;
+    }
+
+    const previousNick = pending.ownerNick;
+    const previousOwnerId = pending.ownerId;
+
+    if (selected !== 'keep') {
+        const ownerData = db.users[selected];
+        if (!ownerData) {
+            await interaction.followUp({ content: '❌ That owner is no longer registered.', flags: 64 }).catch(() => {});
+            return;
+        }
+        if (!pending.originalOwnerNick) pending.originalOwnerNick = pending.ownerNick;
+        pending.ownerId = selected;
+        pending.ownerNick = ownerData.nickname;
+    }
+    saveLocalStorage();
+
+    // Update the /pending report: replace this pilot's fuzzy line with the correction note (anchored per-entry)
+    let updatedContent = interaction.message.content;
+    const anchor = `<@${pilotId}> → Owner **`;
+    const anchorIdx = updatedContent.indexOf(anchor);
+    if (anchorIdx !== -1) {
+        const blockEnd = updatedContent.indexOf('\n<@', anchorIdx + anchor.length);
+        const block = blockEnd === -1 ? updatedContent.slice(anchorIdx) : updatedContent.slice(anchorIdx, blockEnd);
+        const note = selected === 'keep'
+            ? `   ✅ **Owner kept as typed:** "${pending.ownerNick}"\n`
+            : `   ✅ **Owner corrected:** "${pending.originalOwnerNick}" → "${pending.ownerNick}"\n`;
+        // Drop any previous correction note first, then replace the fuzzy line (or append)
+        let newBlock = block.replace(/\n {3}✅ \*\*Owner (corrected|kept as typed):\*\* .*\n?/, '\n');
+        if (/ {3}🔍 \*\*Fuzzy suggestion:\*\* owner .*\n?/.test(newBlock)) {
+            newBlock = newBlock.replace(/ {3}🔍 \*\*Fuzzy suggestion:\*\* owner .*\n?/, note);
+        } else {
+            newBlock = `${newBlock.replace(/\n+$/, '')}\n${note}`;
+        }
+        updatedContent = updatedContent.slice(0, anchorIdx) + newBlock + (blockEnd === -1 ? '' : updatedContent.slice(blockEnd));
+    } else {
+        // Fallback: append a note at the end
+        updatedContent = `${updatedContent.replace(/\n+$/, '')}\n📌 **Owner corrected for <@${pilotId}>:** "${pending.ownerNick}"`;
+    }
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    // Notify the corrected owner so they can approve (best-effort)
+    if (selected !== 'keep' && pending.ownerId !== previousOwnerId) {
+        try {
+            const ownerMember = await interaction.guild.members.fetch(pending.ownerId);
+            const dmChannel = await ownerMember.createDM();
+            await dmChannel.send({
+                content: `✈️ **Pilot Approval**\n\n👤 **${pending.pilotTag}** wants to register as your pilot.\n📝 **Owner nickname:** ${pending.ownerNick}\n\nDo you approve this pilot?`,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+                    )
+                ]
+            });
+            logEvent(`✈️ Admin ${interaction.user.tag} corrected owner for pilot ${pilotId}: "${previousNick}" → "${pending.ownerNick}" — DM sent to new owner`);
+        } catch (err) {
+            logEvent(`⚠️ Could not DM corrected owner ${pending.ownerNick} for pilot ${pilotId}: ${err.message}`);
+        }
+    } else {
+        logEvent(`✅ Admin ${interaction.user.tag} kept owner for pilot ${pilotId}: "${previousNick}"`);
+    }
 }

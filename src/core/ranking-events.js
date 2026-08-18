@@ -1,13 +1,11 @@
 import cron from 'node-cron';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
-import { adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig, loadChannelIdsFromConfig } from './ranking-constants.js';
+import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig } from './ranking-constants.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { buildPrefixedNickname } from './ranking-utils.js';
-import { assignClanRole, removeMemberRoles } from './clan-roles.js';
 import { buildWelcomePanelComponents } from '../handlers/ranking-welcome.js';
-import { clearChannelCompletely } from './channel-cleanup.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
@@ -39,7 +37,7 @@ async function handleTextCommands(message, db, saveLocalStorage) {
         ensureConfig(db);
         db.config.rankingValidationEnabled = true;
         saveLocalStorage();
-        return message.reply('✅ **Ranking validation ENABLED!** Members not found in the NA42 ranking will lose their role on next sync.');
+        return message.reply('✅ **Ranking validation ENABLED!** Members not found in any EU ranking will lose their role on next sync.');
     }
 
     if (command === 'disablevalidation') {
@@ -89,6 +87,11 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
         let restoredCount = 0;
         let expiredCount = 0;
 
+        // ── Phase 1 (serial): filter + check existing admin messages ──
+        // Existing-message lookups stay serial because each registration's
+        // outcome (exists / expired / needs re-send) is decided before the next
+        // one is inspected.
+        const toRestore = [];
         for (const [userId, pending] of pendingEntries) {
             if (!pending.nickname) continue;
 
@@ -135,8 +138,20 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
                 continue;
             }
 
-            // Fetch the user to display their info
-            const user = await client.users.fetch(userId).catch(() => null);
+            toRestore.push({ userId, pending });
+        }
+
+        // ── Phase 2 (parallel): resolve users concurrently (pure reads) ──
+        // users.fetch is read-only and can't be rate-limited — all pending
+        // users resolve in a single round-trip instead of one per registration.
+        const userResults = await Promise.all(toRestore.map(async ({ userId, pending }) => ({
+            userId,
+            pending,
+            user: await client.users.fetch(userId).catch(() => null)
+        })));
+
+        // ── Phase 3 (serial): build + send admin messages (rate-limit safe) ──
+        for (const { userId, pending, user } of userResults) {
             if (!user) {
                 logEvent(`⚠️ [Admin Panel Restore] User ${userId} no longer exists — removing pending registration`);
                 delete pendingRegistrations[userId];
@@ -230,9 +245,6 @@ async function restoreWelcomePanel(client, db, saveLocalStorage, logEvent) {
             }
         }
 
-        // Completely clear the channel before re-sending the panel
-        await clearChannelCompletely(panelChannel, logEvent);
-
         // Re-send the panel
         const newMsg = await panelChannel.send({ content: WELCOME_PANEL_MESSAGE, components: buildWelcomePanelComponents() });
         db.config.panelMessageId = newMsg.id;
@@ -252,11 +264,22 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         setAdminChannelId(db.config.adminChannelId);
     }
 
-    // Load persisted channel IDs saved by /setup (registration channel)
-    loadChannelIdsFromConfig(db.config);
-
-    // Pre-registrations no longer expire by time — they are validated against the
-    // NA42 ranking on every sync (not found in the ranking → removed immediately).
+    // Clean up expired pre-registrations on startup
+    if (db.preRegistrations) {
+        const now = Date.now();
+        const entries = Object.entries(db.preRegistrations);
+        let cleaned = 0;
+        for (const [userId, preReg] of entries) {
+            if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < now) {
+                delete db.preRegistrations[userId];
+                cleaned++;
+            }
+        }
+        if (cleaned > 0) {
+            saveLocalStorage();
+            logEvent(`🧹 [PreReg] Cleaned up ${cleaned} expired pre-registration(s) on startup`);
+        }
+    }
 
     // Restore the welcome/fixed panel on startup if it was deleted
     restoreWelcomePanel(client, db, saveLocalStorage, logEvent).catch(err => {
@@ -284,12 +307,10 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
             // ── Check for pre-registration first ──
             if (member.guild.id === DISCORD_SERVER_ID && db.preRegistrations && db.preRegistrations[member.id]) {
                 const preReg = db.preRegistrations[member.id];
+                const expiresAt = new Date(preReg.expiresAt).getTime();
 
-                // Pre-registration is always applied on join — no time-based expiry.
-                // Ranking validity is enforced by the sync engine (not in the NA42
-                // ranking → removed immediately).
-                {
-                    // Check if pilot (has ownerNick)
+                if (expiresAt > Date.now()) {
+                    // Valid pre-registration — check if pilot (has ownerNick)
                     if (preReg.ownerNick) {
                         // Try to find the owner: by ownerId or by nickname lookup
                         let ownerId = preReg.ownerId;
@@ -317,9 +338,13 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             delete db.preRegistrations[member.id];
                             saveLocalStorage();
 
-                            await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            // Pilots inherit the owner's clan role
-                            await assignClanRole(member, db, logEvent);
+                            // Nickname + role are independent — run concurrently.
+                            await Promise.all([
+                                member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {}),
+                                !member.roles.cache.has(MEMBER_ROLE_ID)
+                                    ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                                    : Promise.resolve()
+                            ]);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
                         } else {
@@ -337,8 +362,13 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             }
                             saveLocalStorage();
 
-                            await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            // Owner not in Discord yet — no member role until the link resolves
+                            // Nickname + role are independent — run concurrently.
+                            await Promise.all([
+                                member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {}),
+                                !member.roles.cache.has(MEMBER_ROLE_ID)
+                                    ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                                    : Promise.resolve()
+                            ]);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — registered as pilot awaiting owner "${preReg.ownerNick}"`);
                         }
@@ -352,12 +382,21 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         delete db.preRegistrations[member.id];
                         saveLocalStorage();
 
-                        await member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
-                        // Pre-registered owner — assign the clan role if found in an allied clan
-                        await assignClanRole(member, db, logEvent);
+                        // Nickname + role are independent — run concurrently.
+                        await Promise.all([
+                            member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {}),
+                            !member.roles.cache.has(MEMBER_ROLE_ID)
+                                ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                                : Promise.resolve()
+                        ]);
 
                         logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                     }
+                } else {
+                    // Expired — remove pre-registration
+                    delete db.preRegistrations[member.id];
+                    saveLocalStorage();
+                    logEvent(`📥 [PreReg] ${member.user.tag} joined — pre-registration expired (was "${preReg.nickname}")`);
                 }
             }
 
@@ -376,14 +415,17 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                     logEvent(getMsg('ranking.logs.memberLeave', { tag: member.user.tag }));
                     
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
-                        for (const pId of userData.pilotIds) {
+                        // Fetch + clean up every linked pilot concurrently.
+                        await Promise.all(userData.pilotIds.map(async (pId) => {
                             const pilotMember = await member.guild.members.fetch(pId).catch(() => null);
                             if (pilotMember) {
-                                await removeMemberRoles(pilotMember, db);
-                                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                                await Promise.all([
+                                    pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {}),
+                                    pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+                                ]);
                                 logEvent(getMsg('ranking.logs.pilotCleaned', { tag: pilotMember.user.tag }));
                             }
-                        }
+                        }));
                     }
                     delete db.users[member.id];
                     saveLocalStorage();
@@ -394,7 +436,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         }
     });
 
-    cron.schedule('0 17 * * *', async () => {
+    cron.schedule('0 20 * * *', async () => {
         await runDailySynchronization(client, db, saveLocalStorage, logEvent, true);
-    }, { scheduled: true, timezone: "Etc/GMT+4" }); // NA fixed UTC-4 — never changes (no DST)
+    }, { scheduled: true, timezone: "America/Sao_Paulo" });
 }

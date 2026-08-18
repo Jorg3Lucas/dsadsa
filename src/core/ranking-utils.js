@@ -1,32 +1,53 @@
 // ==========================================
 // 🛠️ SHARED UTILITIES
 // ==========================================
+import { MEMBER_ROLE_ID } from './ranking-constants.js';
 import { getMsg } from '../lang/lang.js';
-import { assignClanRole } from './clan-roles.js';
+import { getLocalRankingCache } from './ranking-cache.js';
+import { lookupNickname } from './ranking-service.js';
 
 /**
- * Assign the membership role to a verified player.
- * The fixed member role was removed from the server — clan roles are now the
- * only member marker (no temporary role).
+ * Assign the general member role to a verified player
  */
-export async function assignMemberRole(targetMember, db, logEvent) {
-    const assigned = await assignClanRole(targetMember, db, logEvent);
-    logEvent(getMsg('ranking.logs.roleAdded', { clan: assigned ? 'Clan' : '—', username: targetMember.user.username }));
+export async function assignMemberRole(targetMember, logEvent) {
+    if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+        await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
+    }
 }
 
 /**
- * Build the nickname for a registered player.
- * No server prefix is added — members keep their plain in-game name.
+ * Build a server-prefixed nickname for a registered player.
+ * Looks up the player's character name in the ranking cache to find their server,
+ * then prefixes the nickname with the server name.
  *
  * Examples:
- *   buildPrefixedNickname('PlayerOne', db)          → 'PlayerOne'
- *   buildPrefixedNickname('PlayerOne', db, 'Pilot') → 'PlayerOne - Pilot'
+ *   buildPrefixedNickname('PlayerOne', db)          → 'EU011 - PlayerOne'
+ *   buildPrefixedNickname('PlayerOne', db, 'Pilot') → 'EU011 - PlayerOne - Pilot'
+ *
+ * If the player is not found in the ranking cache, returns the nickname without prefix.
  *
  * @param {string} nickname - The base in-game character name (or owner nickname for pilots)
- * @param {object} db - Kept for API compatibility (unused)
+ * @param {object} db - The database object (for allied clan config, etc.)
  * @param {string} [suffix=''] - Optional suffix like 'Pilot'
- * @returns {string} The nickname
+ * @returns {string} The prefixed nickname
  */
-export function buildPrefixedNickname(nickname, db, suffix = '') {
-    return suffix ? `${nickname} - ${suffix}` : nickname;
+export function buildPrefixedNickname(nickname, db, suffix = '', precomputedLookup = null) {
+    // Hot path: the sync engine already resolved this nickname against the ranking
+    // cache for role management. Passing that lookup in avoids a second
+    // getLocalRankingCache() (filesystem stat) + lookupNickname() per member.
+    let lookup = precomputedLookup;
+    if (!lookup) {
+        const cache = getLocalRankingCache();
+        if (!cache) {
+            return suffix ? `${nickname} - ${suffix}` : nickname;
+        }
+        lookup = lookupNickname(nickname, db, cache);
+    }
+    const prefix = lookup.found && lookup.serverName ? `${lookup.serverName} - ` : '';
+
+    if (suffix) {
+        return `${prefix}${nickname} - ${suffix}`;
+    }
+    return `${prefix}${nickname}`;
 }

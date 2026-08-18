@@ -10,16 +10,64 @@ import {
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
+    MEMBER_ROLE_ID,
     WORLD_IDS,
     confirmationCache,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
-import { assignClanRole, removeMemberRoles } from '../core/clan-roles.js';
+import { findTopClanSuggestions, getLocalRankingCache } from '../core/ranking-cache.js';
+import { lookupNickname } from '../core/ranking-service.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
 // ==========================================
+
+const USER_PAGE_SIZE = 25;
+
+/**
+ * Shared builder for the /manage user-list page (used by the /manage command
+ * and by handleManageNav back/next/prev navigation).
+ * Returns { content, components, totalPages, count }.
+ */
+export function buildUserListPage(db, page = 0, options = {}) {
+    const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
+    const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
+    const totalPages = Math.ceil(sorted.length / USER_PAGE_SIZE);
+    const pageItems = sorted.slice(page * USER_PAGE_SIZE, (page + 1) * USER_PAGE_SIZE);
+
+    const selectOptions = pageItems.map(([id, data]) => ({
+        label: data.nickname.substring(0, 100),
+        description: `${data.tempUntil ? '⏳ Temp' : '✅ Perm'} | ${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
+        value: id
+    }));
+
+    const components = [new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`manage_user_page_${page}`)
+            .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
+            .addOptions(selectOptions)
+    )];
+
+    if (totalPages > 1) {
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`manage_user_prev_${page}`).setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+            new ButtonBuilder().setCustomId(`manage_user_next_${page}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary).setDisabled(page >= totalPages - 1)
+        ));
+    }
+
+    if (options.withAlliedButton) {
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary)
+        ));
+    }
+
+    return {
+        content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),
+        components,
+        totalPages,
+        count: sorted.length
+    };
+}
 
 // ── Manage: User selected from page → show actions ──
 export async function handleManageUserPage(interaction, db, saveLocalStorage, logEvent) {
@@ -79,6 +127,9 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
+    
+    // Defer early for heavy operations (status lookup, pilot fetch)
+    try { await interaction.deferUpdate(); } catch (e) { return; }
 
     const [actionType, targetUserId] = interaction.values[0].split('_', 2);
     const userData = db.users[targetUserId];
@@ -105,12 +156,11 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     if (actionType === 'clan') {
         const clanTarget = await interaction.guild.members.fetch(targetUserId).catch(() => null);
-        if (clanTarget) {
-            // Clan role is the only member marker
-            await assignClanRole(clanTarget, db, logEvent);
+        if (clanTarget && !clanTarget.roles.cache.has(MEMBER_ROLE_ID)) {
+            await clanTarget.roles.add(MEMBER_ROLE_ID).catch(() => {});
         }
         return interaction.update({
-            content: '✅ Clan role assigned.',
+            content: '✅ Member role assigned.',
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
@@ -124,12 +174,12 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             return interaction.update({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {});
         }
 
-        const pilotOptions = [];
-        for (const pId of userData.pilotIds) {
+        // Fetch all pilots concurrently to build the menu (independent lookups).
+        const pilotOptions = await Promise.all(userData.pilotIds.map(async (pId) => {
             const memberObj = await interaction.guild.members.fetch(pId).catch(() => null);
             const label = memberObj ? memberObj.user.tag : `Unknown (${pId})`;
-            pilotOptions.push({ label: label.substring(0, 100), value: pId });
-        }
+            return { label: label.substring(0, 100), value: pId };
+        }));
 
         const pilotMenu = new StringSelectMenuBuilder()
             .setCustomId(`manage_pilot_${targetUserId}`)
@@ -149,7 +199,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     // ── View Status ──
     if (actionType === 'status') {
-        const cacheHit = findNicknameInCache(userData.nickname);
+        const lookup = lookupNickname(userData.nickname, db);
 
         let statusLines = `📋 **User Status: ${userData.nickname}**\n\n`;
         statusLines += `🆔 **ID:** ${targetUserId}\n`;
@@ -165,13 +215,13 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
         statusLines += `✈️ **Pilots:** ${userData.pilotIds ? userData.pilotIds.length : 0}\n`;
 
-        if (cacheHit) {
-            const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
-            const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
-            const inAlliedClan = worldAlliedClans && worldAlliedClans.some(c => cleanNickname(c) === cleanNickname(cacheHit.clanName));
-            statusLines += `\n🔍 **Ranking:** ✅ Found — ${serverName}\n`;
-            statusLines += `🏰 **Clan:** ${cacheHit.clanName}\n`;
-            statusLines += `${inAlliedClan ? '✅ **Allied Clan:** Yes' : '❌ **Allied Clan:** No'}\n`;
+        if (lookup.found) {
+            statusLines += `\n🔍 **Ranking:** ✅ Found — ${lookup.serverName}\n`;
+            statusLines += `🏰 **Clan:** ${lookup.clanName}\n`;
+            statusLines += `${lookup.inAlliedClan ? '✅ **Allied Clan:** Yes' : '❌ **Allied Clan:** No'}\n`;
+            if (!lookup.exactMatch && lookup.fuzzySuggestion) {
+                statusLines += `🔎 **Matched by similarity:** "${userData.nickname}" ≈ "${lookup.fuzzySuggestion}" — not an exact ranking match\n`;
+            }
         } else {
             statusLines += `\n🔍 **Ranking:** ❌ Not found\n`;
         }
@@ -226,7 +276,9 @@ export async function handleManagePilotRemove(interaction, db, saveLocalStorage,
 
     interaction.guild.members.fetch(pilotToRemoveId).then(async (pilotMember) => {
         if (pilotMember) {
-            await removeMemberRoles(pilotMember, db);
+            if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+            }
             await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
         }
     }).catch(() => {});
@@ -238,32 +290,22 @@ export async function handleManagePilotRemove(interaction, db, saveLocalStorage,
     }).catch(() => {});
 }
 
-// ── Allied Clans: Show world selector ──
+// ── Allied Clans: Show the single configured server (NA42) ──
 export async function handleManageAllied(interaction, db, saveLocalStorage, logEvent) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    const worldOptions = Object.entries(WORLD_IDS).map(([id, name]) => ({
-        label: name,
-        description: `World ID ${id}`,
-        value: id
-    }));
+    // Single-server mode: the only configured world (NA42) is managed directly,
+    // without region/world selection steps.
+    const worldId = Object.keys(WORLD_IDS)[0];
+    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
 
-    const worldMenu = new StringSelectMenuBuilder()
-        .setCustomId('manage_allied_world')
-        .setPlaceholder('Select a server to manage allied clans...')
-        .addOptions(worldOptions);
+    ensureConfig(db);
+    if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
 
-    return interaction.update({
-        content: '🌍 **Allied Clans Configuration**\n\nSelect a server to view and manage its allied clans.\n\nMembers will only keep their role if they are in an allied clan of any configured server.',
-        components: [
-            new ActionRowBuilder().addComponents(worldMenu),
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('manage_allied_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
-            )
-        ]
-    }).catch(() => {});
+    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName, 0);
+    return interaction.update({ content, components }).catch(() => {});
 }
 
 // ==========================================
@@ -274,7 +316,8 @@ export async function handleManageAllied(interaction, db, saveLocalStorage, logE
  * Build the content string and component rows for a world's allied clans view.
  * Returns { content, components } ready to pass to interaction.update/editReply.
  */
-function buildAlliedWorldView(worldId, clans, worldName) {
+function buildAlliedWorldView(worldId, clans, worldName, page = 0) {
+    const MAX_OPTIONS = 25;
     let content = `🌍 **${worldName}** (ID: ${worldId})\n\n`;
     if (clans.length === 0) {
         content += '❌ No allied clans configured for this server yet.\n\nUse **Add Clan** below to add one.';
@@ -283,11 +326,18 @@ function buildAlliedWorldView(worldId, clans, worldName) {
         clans.forEach((clan, i) => {
             content += `\n${i + 1}. **${clan}**`;
         });
+        const totalPages = Math.ceil(clans.length / MAX_OPTIONS);
+        if (totalPages > 1) {
+            content += `\n\n📄 Page ${page + 1}/${totalPages} (${clans.length} total clans)`;
+        }
     }
 
-    const removeOptions = clans.map((clan, i) => ({
-        label: `🗑️ ${clan}`,
-        value: `${worldId}_${i}`
+    // Paginate remove options to respect Discord's 25-option limit
+    const startIdx = page * MAX_OPTIONS;
+    const pageClans = clans.slice(startIdx, startIdx + MAX_OPTIONS);
+    const removeOptions = pageClans.map((clan, i) => ({
+        label: `🗑️ ${clan}`.substring(0, 100),
+        value: `${worldId}_${startIdx + i}`
     }));
 
     const components = [];
@@ -299,27 +349,50 @@ function buildAlliedWorldView(worldId, clans, worldName) {
                 .addOptions(removeOptions)
         ));
     }
+
+    // Add pagination buttons if needed
+    const totalPages = Math.ceil(clans.length / MAX_OPTIONS);
+    if (totalPages > 1) {
+        const paginationButtons = [];
+        if (page > 0) {
+            paginationButtons.push(
+                new ButtonBuilder().setCustomId(`manage_allied_page_${worldId}_${page - 1}`).setLabel('◀️ Prev').setStyle(ButtonStyle.Secondary)
+            );
+        }
+        if (page < totalPages - 1) {
+            paginationButtons.push(
+                new ButtonBuilder().setCustomId(`manage_allied_page_${worldId}_${page + 1}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary)
+            );
+        }
+        if (paginationButtons.length > 0) {
+            components.push(new ActionRowBuilder().addComponents(...paginationButtons));
+        }
+    }
+
     components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`manage_allied_add_${worldId}`).setLabel('➕ Add Clan').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('manage_allied').setLabel('🔙 Back to Worlds').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('manage_allied_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
     ));
 
     return { content, components };
 }
 
-// ── Allied Clans: World selected → show clans ──
-export async function handleManageAlliedWorld(interaction, db, saveLocalStorage, logEvent) {
+// ── Allied Clans: Pagination for clans list ──
+export async function handleManageAlliedPage(interaction, db, saveLocalStorage, logEvent) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    const worldId = interaction.values[0];
+    // Parse customId: manage_allied_page_{worldId}_{page}
+    const parts = interaction.customId.split('_');
+    const worldId = parts[3];
+    const page = parseInt(parts[4], 10);
     const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
 
     ensureConfig(db);
     if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
 
-    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName);
+    const { content, components } = buildAlliedWorldView(worldId, db.config.alliedClans[worldId], worldName, page);
     return interaction.update({ content, components }).catch(() => {});
 }
 
@@ -366,7 +439,12 @@ export async function handleManageAlliedAddModal(interaction, db, saveLocalStora
         return interaction.reply({ content: '❌ Permission denied.', flags: 64 }).catch(() => {});
     }
 
-    await interaction.deferReply({ flags: 64 });
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Manage] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const clanName = interaction.fields.getTextInputValue('clan_name').trim();
     const worldId = interaction.fields.getTextInputValue('world_id').trim();
@@ -491,7 +569,12 @@ export async function handleAddClanSuggestion(interaction, db, saveLocalStorage,
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (e) {
+        console.warn(`⚠️ [Manage] deferUpdate failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
 
     const customId = interaction.customId;
     const cacheKey = `${interaction.user.id}-addclan`;
@@ -559,71 +642,27 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
+    
+    // Defer early for heavy operations (user list building)
+    try { await interaction.deferUpdate(); } catch (e) { return; }
 
     if (interaction.customId === 'manage_back' || interaction.customId === 'manage_allied_back') {
-        const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
-        if (userEntries.length === 0) {
+        const { content, components, count } = buildUserListPage(db, 0);
+        if (count === 0) {
             return interaction.update({ content: getMsg('ranking.responses.manage.noUsers'), components: [] }).catch(() => {});
         }
-        const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
-        const PAGE_SIZE = 25;
-        const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
-        const page = 0;
-        const pageItems = sorted.slice(0, PAGE_SIZE);
-        const selectOptions = pageItems.map(([id, data]) => ({
-            label: data.nickname.substring(0, 100),
-            description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
-            value: id
-        }));
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`manage_user_page_0`)
-            .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
-            .addOptions(selectOptions);
-        const components = [new ActionRowBuilder().addComponents(selectMenu)];
-        if (totalPages > 1) {
-            components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('manage_user_prev_0').setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(true),
-                new ButtonBuilder().setCustomId('manage_user_next_0').setLabel('Next ▶️').setStyle(ButtonStyle.Primary)
-            ));
-        }
-        return interaction.update({
-            content: getMsg('ranking.responses.manage.pageInfo', { current: 1, total: totalPages, count: sorted.length }),
-            components
-        }).catch(() => {});
+        return interaction.update({ content, components }).catch(() => {});
     }
 
     const [, , , pageStr] = interaction.customId.split('_');
     const currentPage = parseInt(pageStr, 10);
     const newPage = interaction.customId.includes('next') ? currentPage + 1 : currentPage - 1;
 
-    const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
-    const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
-    const PAGE_SIZE = 25;
-    const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+    const { content, components, totalPages } = buildUserListPage(db, newPage);
 
     if (newPage < 0 || newPage >= totalPages) {
         return interaction.deferUpdate().catch(() => {});
     }
 
-    const pageItems = sorted.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE);
-    const selectOptions = pageItems.map(([id, data]) => ({
-        label: data.nickname.substring(0, 100),
-        description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
-        value: id
-    }));
-
-    const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId(`manage_user_page_${newPage}`)
-        .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
-        .addOptions(selectOptions);
-
-    const navRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`manage_user_prev_${newPage}`).setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(newPage === 0),
-        new ButtonBuilder().setCustomId(`manage_user_next_${newPage}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary).setDisabled(newPage >= totalPages - 1)
-    );
-
-    return interaction.update({
-        content: getMsg('ranking.responses.manage.pageInfo', { current: newPage + 1, total: totalPages, count: sorted.length }),
-        components: [new ActionRowBuilder().addComponents(selectMenu), navRow]
-    }).catch(() => {});
+    return interaction.update({ content, components }).catch(() => {});
 }
