@@ -59,6 +59,54 @@ Claim confirmations, boss respawn reminders, and warnings are sent via **DM**. E
 
 ---
 
+## 🌐 Claim Website (browser)
+
+The bot also serves a **local claim website** for members who can't use Discord. It runs **inside the bot process** and drives the **exact same claim handlers** — punishments, queues, cooldowns, daily logs and panel refreshes behave identically to Discord. The bot remains the **only writer** of the JSON databases.
+
+### Env vars (`.env`)
+```
+# Optional — defaults shown
+WEB_ENABLED=true        # set false to disable the website
+WEB_HOST=0.0.0.0        # bind address (0.0.0.0 to expose on a VPS)
+WEB_PORT=3000           # port
+WEB_HTTPS=true          # set true ONLY behind an HTTPS reverse proxy (secure cookies)
+```
+
+> ⚠️ For public access, put the bot behind an **HTTPS reverse proxy** (nginx/caddy) and set `WEB_HTTPS=true`. Without HTTPS, passwords travel in plain text.
+
+### Managing accounts
+Accounts live in `web-accounts.json` (gitignored). The admin can manage them **in the website** (👑 Admin button — create/remove/change password) or from the command line:
+
+```
+# Member with Discord — use their Discord ID so website claims merge with Discord claims
+npm run web:adduser -- add john "senha123" --uid 123456789012345678 --name "John"
+
+# Member WITHOUT Discord — omit --uid (a synthetic web:<username> identity is used)
+npm run web:adduser -- add mary "senha456" --name "Mary"
+
+# Mod/admin (can force-cancel any claim)
+npm run web:adduser -- add mod1 "senha789" --uid 987654321098765432 --mod
+npm run web:adduser -- add boss "senha000" --uid 111222333444555666 --admin
+
+npm run web:adduser -- list          # list accounts
+npm run web:adduser -- remove john   # remove account
+npm run web:adduser -- passwd john nova-senha
+```
+
+Admin safeguards: only admins can manage accounts, an admin cannot remove their own account, and the last admin account can never be removed.
+
+### Site views
+- **Painéis** — mostra o **estado vivo exato dos painéis do Discord** (via `renderEmbed`): countdowns de respawn, "Xm atrás", donos, filas com ETA, salas com senha e reservas — atualizado a cada 15s. E renderiza **os mesmos botões dos painéis** (via `renderButtons`): claim/cancelar, death marks (💀 nos Leaders/Red Boss, com confirmação de atualização), claim de eventos fixos (Fury/Frenzy), filas e menus de sala/passwords (antidemon/summon/event group). O toggle 🔕 DM fica no cabeçalho do site.
+- **📜 Histórico** — últimas atividades de claim (do `daily-logs.json`) e punições ativas, com nomes resolvidos (conta do site → claim atual → Discord).
+- **👑 Admin** (só admins) — criar/remover contas e trocar senhas sem usar o terminal.
+
+### Notes
+- Sessions are in-memory — members re-login after a bot restart.
+- Login is rate-limited (5 failed attempts → 15 min lockout) + per-IP API throttling.
+- Non-Discord members have a synthetic identity: claims show their display name, and DMs simply can't be delivered to them (logged, never crashes).
+
+---
+
 ## 👑 Admin Tools
 
 ### 🔄 Reset Panel
@@ -128,6 +176,7 @@ Each channel gets its panel embeds + buttons posted automatically.
 | `punishments.json` | Temporary claim cooldowns after kick/leave |
 | `early-claim-users.json` | Users allowed to claim early |
 | `dm-optout.json` | Users who disabled DMs |
+| `web-accounts.json` | Website accounts (scrypt password hashes) |
 
 All are gitignored.
 
@@ -157,6 +206,8 @@ TOKEN=your-bot-token
 npm install
 npm start
 ```
+
+The claim website starts automatically (see [Claim Website](#-claim-website)).
 
 ---
 

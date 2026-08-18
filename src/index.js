@@ -43,6 +43,7 @@ import {
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
+import { startWebServer } from './web/server.js';
 import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
 import { TEMP_ROLE_NAME, applyClaimChannelPermissions } from './core/clan-roles.js';
 import { logRankingEvent } from './core/ranking-logger.js';
@@ -197,6 +198,14 @@ client.once('clientReady', async () => {
     // Inicia o tick AFTER os canais/painéis existirem
     const { startTickInterval } = await import('./handlers/panel-tick.js');
     startTickInterval();
+
+    // 🌐 Claim website (local/API) — runs inside the bot process, reuses the
+    // same claim handlers; the bot stays the only writer of the JSON databases.
+    try {
+        startWebServer({ log: logClaimEvent });
+    } catch (err) {
+        logger.error('Web', 'Failed to start web server', err);
+    }
 
     // Early claim admin commands (!earlyclaim add/remove/list)
     initEarlyClaimCommands(client);

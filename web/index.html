@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIR4 Claim</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- LOGIN VIEW -->
+    <div id="view-login" class="view hidden">
+        <div class="login-card">
+            <div class="logo">🎮</div>
+            <h1>MIR4 Claim</h1>
+            <p class="subtitle">Sign in to claim floors and rooms from your browser.</p>
+            <form id="login-form" autocomplete="off">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autocomplete="username">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+                <button type="submit" id="login-btn">Sign in</button>
+                <p id="login-error" class="error"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- APP SHELL -->
+    <div id="app" class="hidden">
+        <header class="app-header">
+            <div class="brand">🎮 <b>MIR4 Claim</b></div>
+            <nav class="tabs">
+                <button id="tab-panels" class="tab active">🗺️ Panels</button>
+                <button id="tab-events" class="tab">⏰ Events</button>
+                <button id="tab-history" class="tab">📜 History</button>
+                <button id="tab-admin" class="tab hidden">👑 Admin</button>
+            </nav>
+            <span class="live-indicator" id="live-indicator" title="Connection status">
+                <span class="live-dot"></span><span id="updated-at">—</span>
+            </span>
+            <div class="user-box">
+                <span id="user-name" class="user-name"></span>
+                <button id="dm-btn" class="ghost" title="Toggle DM notifications">🔕 DM</button>
+                <button id="logout-btn" class="ghost">Log out</button>
+            </div>
+        </header>
+
+        <main id="main" class="main"></main>
+    </div>
+
+    <!-- DETAIL DRAWER -->
+    <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+    <aside id="drawer" class="drawer hidden" aria-label="Panel details">
+        <div class="drawer-head">
+            <h2 id="drawer-title"></h2>
+            <button id="drawer-close" class="ghost" title="Close">✕</button>
+        </div>
+        <div id="drawer-body" class="drawer-body"></div>
+    </aside>
+
+    <!-- TOAST -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
