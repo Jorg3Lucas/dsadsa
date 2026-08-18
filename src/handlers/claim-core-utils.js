@@ -5,7 +5,7 @@
 // ==========================================
 
 import { getLocalTime, parseStringToDate } from "../core/time-utils.js";
-import { db, punishments, saveLocalStorage, savePunishmentsToDisk } from "../core/state.js";
+import { db, punishments, savePunishmentsToDisk } from "../core/state.js";
 import { getMsg } from "../core/lang.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys, getAntidemonRoomName } from "./claim-core-rooms.js";
 
@@ -113,7 +113,7 @@ export function checkPunishment(uid) {
                 seconds: Math.floor(rem % 6e4 / 1e3)
             });}
             delete punishments[linkedUid];
-            saveLocalStorage();
+            savePunishmentsToDisk();
         }
     }
     return null;

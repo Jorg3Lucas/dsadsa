@@ -12,7 +12,7 @@ import { getMsg } from '../core/lang.js';
 import { db, lastMessages, saveLocalStorage } from '../core/state.js';
 import { renderEmbed, renderButtons } from './panel-render.js';
 import { CLAIM_CATEGORIES } from '../core/server-structure.js';
-import { clearChannelCompletely } from '../core/channel-cleanup.js';
+import { clearChannelCompletely, deleteMessageIfExists } from '../core/channel-cleanup.js';
 
 // Build lookup: channel key (ms7, sp10, summons...) -> panel keys to post
 const CHANNEL_PANELS = {};
@@ -65,6 +65,15 @@ export function initPanelCommands(client) {
                 }
             }
             await clearChannelCompletely(message.channel);
+            // Fallback per-panel delete: if the bulk clear failed (missing
+            // MANAGE_MESSAGES), at least remove each panel's own old message
+            // so the re-post below never duplicates it.
+            for (const panelKey of panelKeys) {
+                const mapping = db._panelMapping[panelKey];
+                if (mapping && mapping.channelId === message.channel.id) {
+                    await deleteMessageIfExists(message.channel, mapping.messageId);
+                }
+            }
         }
 
         // ── Post fresh panels and register them for the tick refresh ──

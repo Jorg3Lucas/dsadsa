@@ -23,6 +23,17 @@ export function removeUserFromQueue(floorObj, uid) {
     return false;
 }
 
+/** Give the current queue head a fresh 5-minute claim window and notify them. @param {object} floorObj - Floor panel object @returns {boolean} True when there was a head to activate */
+export function activateNextQueueHead(floorObj) {
+    if (!floorObj.next) return false;
+    const grace = new Date(getLocalTime().getTime() + 3e5);
+    floorObj.next.endLimit = getFormattedTime12h(grace);
+    notifyUserDM(floorObj.next.userId, getMsg("rooms.floorTurnArrivedDM", {
+        title: floorObj.title
+    }));
+    return true;
+}
+
 export function freeFloorAndActivateNextGracePeriod(floorObj) {
     logEvent(`${floorObj.title} completely released/closed.`);
     floorObj.ownerId = null;
@@ -30,13 +41,7 @@ export function freeFloorAndActivateNextGracePeriod(floorObj) {
     floorObj.timeWindow = "";
     if (floorObj._claimTimestamp) delete floorObj._claimTimestamp;
 
-    if (floorObj.next) {
-        const grace = new Date(getLocalTime().getTime() + 3e5);
-        floorObj.next.endLimit = getFormattedTime12h(grace);
-        notifyUserDM(floorObj.next.userId, getMsg("rooms.floorTurnArrivedDM", {
-            title: floorObj.title
-        }));
-    }
+    activateNextQueueHead(floorObj);
     saveLocalStorage();
 }
 

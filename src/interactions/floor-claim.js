@@ -14,6 +14,7 @@ import {
     applyFiveMinCooldown,
     removeUserFromQueue,
     freeFloorAndActivateNextGracePeriod,
+    activateNextQueueHead,
     buildActiveClaimMessage
 } from "../handlers/claim-core.js";
 import { getFormattedTime12h, getLocalTime, parseStringToDate, isRoomOpen, calculateNextOpening } from "../core/time-utils.js";
@@ -56,9 +57,13 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
     }
 
     if (inQueue) {
+        const wasHead = targetObj.next && targetObj.next.userId === uid;
         pushToDailyLogs("CANCEL", uName, targetObj.title, getMsg("logs.queueLeave"));
         notifyUserDM(uid, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.queueLeave") }));
         removeUserFromQueue(targetObj, uid);
+        // The user was the queue head — pass the 5-min claim window to the next
+        // person, or the queue would stall forever waiting on an endLimit.
+        if (wasHead) activateNextQueueHead(targetObj);
         saveLocalStorage();
         await refreshVisualPanel(panelKey);
         return await interaction.reply({ content: getMsg("rooms.removedFromQueueFeedback"), flags: 64 }).catch(noop);
@@ -197,6 +202,9 @@ export async function handleGeneralClaim(interaction, uid, uName, targetObj, pan
 
     if (targetObj.next && targetObj.next.userId === uid) {
         targetObj.next = targetObj.next.nextQueue || null;
+        // The claiming user was the queue head — the next person in line gets
+        // their own 5-min window, otherwise the queue never advances.
+        activateNextQueueHead(targetObj);
     }
 
     saveLocalStorage();
@@ -251,6 +259,13 @@ export async function handleGeneralNext(interaction, uid, uName, targetObj, pane
         lastNode.nextQueue = node;
     } else {
         targetObj.next = node;
+    }
+
+    // Joining the queue of an UNCLAIMED floor as head = a 5-min reservation;
+    // without an endLimit the head would reserve it forever and the queue could
+    // never be advanced by the absence tick.
+    if (!targetObj.ownerId && targetObj.next && targetObj.next.userId === uid) {
+        activateNextQueueHead(targetObj);
     }
 
     pushToDailyLogs("QUEUE_JOIN", uName, targetObj.title, getMsg("render.joinedNextLine"));

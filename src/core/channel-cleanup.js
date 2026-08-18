@@ -53,3 +53,18 @@ export async function clearChannelCompletely(channel, logEvent) {
     if (logEvent && total > 0) logEvent(`🧹 [Channel Cleanup] Removed ${total} message(s) from #${channel.name}`);
     return total;
 }
+
+/**
+ * Best-effort delete of a single message by ID — used to remove a panel's own
+ * previously-mapped message before re-posting it, so a failed channel-wide
+ * cleanup can never leave an old panel behind next to the new one.
+ * @param {import('discord.js').TextChannel} channel
+ * @param {string} messageId
+ * @returns {Promise<boolean>} True when the message existed and was deleted
+ */
+export async function deleteMessageIfExists(channel, messageId) {
+    if (!channel || !messageId || typeof channel.messages?.fetch !== 'function') return false;
+    const msg = await channel.messages.fetch(messageId).catch(() => null);
+    if (!msg) return false;
+    return msg.delete().then(() => true).catch(() => false);
+}

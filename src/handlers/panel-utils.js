@@ -2,7 +2,7 @@ import { db, client, saveLocalStorage, logEvent, lastMessages } from "../core/st
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { STATUS_AVAILABLE } from "../core/constants.js";
 import { logger } from "../core/logger.js";
-import { clearChannelCompletely } from "../core/channel-cleanup.js";
+import { clearChannelCompletely, deleteMessageIfExists } from "../core/channel-cleanup.js";
 
 // Re-export from sub-modules
 export { refreshVisualPanel, notifyUserDM } from "./panel-dm.js";
@@ -150,6 +150,22 @@ export function resetPanelData(key) {
  * is COMPLETELY cleared (all messages deleted), so no stale panels, duplicates
  * or leftover chatter remain.
  */
+/**
+ * Resolve a panel's persisted channel/message mapping, falling back to the
+ * last-known message reference loaded at boot when _panelMapping is missing or
+ * stale (the two can diverge if a save was interrupted mid-update).
+ * @param {string} key - Panel key
+ * @returns {{channelId: string, messageId: string|null}|null}
+ */
+function getPanelMapping(key) {
+    if (db._panelMapping && db._panelMapping[key]) return db._panelMapping[key];
+    const lm = lastMessages[key];
+    if (lm && typeof lm === "object" && !lm.edit && typeof lm.channelId === "string") {
+        return { channelId: lm.channelId, messageId: lm.messageId || null };
+    }
+    return null;
+}
+
 export async function processAutoRecoveryOnBoot() {
     logEvent("Starting automatic panel recovery and chat cleanup...");
     if (!db._panelMapping) db._panelMapping = {};
@@ -158,7 +174,7 @@ export async function processAutoRecoveryOnBoot() {
     const channelIds = new Set();
     for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        const mapping = db._panelMapping[key];
+        const mapping = getPanelMapping(key);
         if (mapping && mapping.channelId) channelIds.add(mapping.channelId);
     }
 
@@ -175,11 +191,15 @@ export async function processAutoRecoveryOnBoot() {
     // or it would silently disappear after the cleanup above.
     for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
-        const mapping = db._panelMapping[key];
+        const mapping = getPanelMapping(key);
         if (!mapping || !mapping.channelId) continue;
         try {
             const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
             if (!channel) continue;
+            // Remove this panel's own old message first (the channel-wide clear
+            // above may have failed without MANAGE_MESSAGES) so re-posting can
+            // never leave a duplicate behind.
+            await deleteMessageIfExists(channel, mapping.messageId);
             const newMsg = await channel.send({
                 embeds: [renderEmbed(key)],
                 components: renderButtons(key)

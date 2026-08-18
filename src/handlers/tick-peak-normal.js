@@ -1,4 +1,4 @@
-import { isRoomOpen } from "../core/time-utils.js";
+import { isRoomOpen, getNextScheduleAfter, parseStringToDate } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { alertCache } from "../core/state.js";
 import { notifyUserDM } from "./panel-utils.js";
@@ -28,7 +28,16 @@ export async function handlePeakNormal(current, key, now, redBossSchedules, lead
                     alertCache.warning5mAfter[`${key}-red-${now.getHours()}`] = Date.now();
                 }
             }
-            if (STATUS_AVAILABLE !== current.red.status && now.getMinutes() === 0) {
+        }
+        // Respawn when the schedule boundary is crossed (now >= next spawn)
+        // instead of only at minute 0, so a missed tick or a restart mid-hour
+        // no longer leaves the boss stuck as "Killed" until the next full hour.
+        if (STATUS_AVAILABLE !== current.red.status) {
+            let killedDate = null;
+            if (current.red._lastKilledAt) killedDate = new Date(current.red._lastKilledAt);
+            else killedDate = parseStringToDate(current.red.status.replace(STATUS_KILLED_PREFIX, "").trim());
+            const nextSpawn = killedDate && !isNaN(killedDate.getTime()) ? getNextScheduleAfter(killedDate, peakRedScheds) : null;
+            if (nextSpawn && now >= nextSpawn) {
                 current.red._lastKilledTimeStr = current.red.status.replace(STATUS_KILLED_PREFIX, "").trim();
                 current.red.status = STATUS_AVAILABLE;
                 current.red._freeSince = now.getTime();
@@ -45,30 +54,40 @@ export async function handlePeakNormal(current, key, now, redBossSchedules, lead
     }
 
     // ── NORMAL: Leader 3 auto-respawn ──
-    if ("normal" === current.type && current.boss3 && isRoomOpen(leader3Schedules)) {
-        // DM warning: 5min after Leader 3 auto-respawn, if still not killed/marked
-        if (STATUS_AVAILABLE === current.boss3.status && current.boss3._freeSince > 0 && current.ownerId) {
-            const minutesIdle = Math.floor((now.getTime() - current.boss3._freeSince) / 6e4);
-            if (minutesIdle >= 5 && (!alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] || Date.now() - alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] > 36e5)) {
-                await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
-                    title: current.title,
-                    boss: current.boss3.name
-                })).catch(noop);
-                alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] = Date.now();
+    if ("normal" === current.type && current.boss3) {
+        if (isRoomOpen(leader3Schedules)) {
+            // DM warning: 5min after Leader 3 auto-respawn, if still not killed/marked
+            if (STATUS_AVAILABLE === current.boss3.status && current.boss3._freeSince > 0 && current.ownerId) {
+                const minutesIdle = Math.floor((now.getTime() - current.boss3._freeSince) / 6e4);
+                if (minutesIdle >= 5 && (!alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] || Date.now() - alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] > 36e5)) {
+                    await notifyUserDM(current.ownerId, getMsg("rooms.dmBossNotMarkedWarning", {
+                        title: current.title,
+                        boss: current.boss3.name
+                    })).catch(noop);
+                    alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`] = Date.now();
+                }
             }
         }
-        if (STATUS_AVAILABLE !== current.boss3.status && now.getMinutes() === 0) {
-            current.boss3._lastKilledTimeStr = current.boss3.status.replace(STATUS_KILLED_PREFIX, "").trim();
-            current.boss3.status = STATUS_AVAILABLE;
-            current.boss3._freeSince = now.getTime();
-            delete alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`];
-            if (current.ownerId) {
-                await notifyUserDM(current.ownerId, getMsg("rooms.dmImmediateSpawnFixed", {
-                    title: current.title,
-                    boss: current.boss3.name
-                })).catch(noop);
+        // Respawn when the schedule boundary is crossed (same robustness fix as
+        // Red Boss above — no longer tied to a single 1-minute window per hour).
+        if (STATUS_AVAILABLE !== current.boss3.status) {
+            let killedDate = null;
+            if (current.boss3._lastKilledAt) killedDate = new Date(current.boss3._lastKilledAt);
+            else killedDate = parseStringToDate(current.boss3.status.replace(STATUS_KILLED_PREFIX, "").trim());
+            const nextSpawn = killedDate && !isNaN(killedDate.getTime()) ? getNextScheduleAfter(killedDate, leader3Schedules) : null;
+            if (nextSpawn && now >= nextSpawn) {
+                current.boss3._lastKilledTimeStr = current.boss3.status.replace(STATUS_KILLED_PREFIX, "").trim();
+                current.boss3.status = STATUS_AVAILABLE;
+                current.boss3._freeSince = now.getTime();
+                delete alertCache.warning5mAfter[`${key}-boss3-${now.getHours()}`];
+                if (current.ownerId) {
+                    await notifyUserDM(current.ownerId, getMsg("rooms.dmImmediateSpawnFixed", {
+                        title: current.title,
+                        boss: current.boss3.name
+                    })).catch(noop);
+                }
+                updateNeeded = true;
             }
-            updateNeeded = true;
         }
     }
 

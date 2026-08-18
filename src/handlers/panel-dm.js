@@ -42,8 +42,20 @@ async function processDMQueue() {
     dmQueueProcessing = false;
 }
 
+// In-flight guard: concurrent refreshes of the SAME panel (tick + button click)
+// share one promise, so two recovery paths can never both decide the message is
+// gone and post a fresh duplicate.
+const pendingRefreshes = {};
+
 /** Edit a panel's embed + buttons in-place, or recover by re-using the persisted panel message. @param {string} key - Panel key */
 export async function refreshVisualPanel(key) {
+    if (pendingRefreshes[key]) return pendingRefreshes[key];
+    const run = doRefreshVisualPanel(key).finally(() => { delete pendingRefreshes[key]; });
+    pendingRefreshes[key] = run;
+    return run;
+}
+
+async function doRefreshVisualPanel(key) {
     const payload = {
         embeds: [renderEmbed(key)],
         components: renderButtons(key)

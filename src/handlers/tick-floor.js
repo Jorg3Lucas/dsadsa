@@ -2,7 +2,7 @@ import { parseStringToDate, getFormattedTime12h } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import { notifyUserDM } from "./panel-utils.js";
-import { freeFloorAndActivateNextGracePeriod } from "./claim-core.js";
+import { freeFloorAndActivateNextGracePeriod, activateNextQueueHead } from "./claim-core.js";
 import { noop } from "../core/config.js";
 
 // ==========================================
@@ -27,6 +27,12 @@ export async function handleFloor(current, now) {
             freeFloorAndActivateNextGracePeriod(current);
             updateNeeded = true;
         }
+    }
+
+    // ── Self-heal: a queue head with no grace window (older data) while the
+    // floor is unclaimed gets a fresh 5-min window, so stale queues can't stall.
+    if (current.next && !current.next.endLimit && !current.ownerId && "fixed" !== current.type) {
+        if (activateNextQueueHead(current)) updateNeeded = true;
     }
 
     // ── Queue absence endLimit ──
