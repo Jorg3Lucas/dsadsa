@@ -169,29 +169,33 @@ export async function processAutoRecoveryOnBoot() {
         await clearChannelCompletely(channel, logEvent);
     }
 
-    // ── 3. Post fresh panels and register them for the tick refresh ──
+    // ── 3. Post fresh panels for EVERY panel with a known channel ──
+    // A missing messageId means the panel message was lost, not the panel
+    // itself — it still belongs in that channel and must be re-posted here,
+    // or it would silently disappear after the cleanup above.
     for (const key in db) {
         if (!db[key] || key.startsWith("_")) continue;
         const mapping = db._panelMapping[key];
-        if (mapping && mapping.channelId && mapping.messageId) {
-            try {
-                const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
-                if (!channel) continue;
-                const newMsg = await channel.send({
-                    embeds: [renderEmbed(key)],
-                    components: renderButtons(key)
-                }).catch(() => null);
-                if (newMsg) {
-                    lastMessages[key] = newMsg;
-                    db._panelMapping[key] = {
-                        channelId: channel.id,
-                        messageId: newMsg.id
-                    };
-                }
-            } catch (s) {
-                logger.error('Panel', `Failed to restore panel ${key}`, s);
-                logEvent(`Failed to restore panel ${key}: ${s.message}`);
+        if (!mapping || !mapping.channelId) continue;
+        try {
+            const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+            if (!channel) continue;
+            const newMsg = await channel.send({
+                embeds: [renderEmbed(key)],
+                components: renderButtons(key)
+            }).catch(() => null);
+            if (newMsg) {
+                lastMessages[key] = newMsg;
+                db._panelMapping[key] = {
+                    channelId: channel.id,
+                    messageId: newMsg.id
+                };
+            } else {
+                logEvent(`⚠️ Failed to re-post panel ${key} in channel ${mapping.channelId}`);
             }
+        } catch (s) {
+            logger.error('Panel', `Failed to restore panel ${key}`, s);
+            logEvent(`Failed to restore panel ${key}: ${s.message}`);
         }
     }
     saveLocalStorage();

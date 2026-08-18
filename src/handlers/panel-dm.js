@@ -42,34 +42,53 @@ async function processDMQueue() {
     dmQueueProcessing = false;
 }
 
-/** Edit a panel's embed + buttons in-place, or recover by re-sending if the cached message is gone. @param {string} key - Panel key */
+/** Edit a panel's embed + buttons in-place, or recover by re-using the persisted panel message. @param {string} key - Panel key */
 export async function refreshVisualPanel(key) {
+    const payload = {
+        embeds: [renderEmbed(key)],
+        components: renderButtons(key)
+    };
     const cachedMsg = lastMessages[key];
-    if (cachedMsg) {try {
-        await cachedMsg.edit({
-            embeds: [renderEmbed(key)],
-            components: renderButtons(key)
-        })
-    } catch (n) {
-        delete lastMessages[key];
+    const mapping = db._panelMapping && db._panelMapping[key];
+
+    // Fast path: the cached reference is a real Message → edit in place.
+    if (cachedMsg && typeof cachedMsg.edit === 'function') {
         try {
-            const mapping = db._panelMapping && db._panelMapping[key];
-            if (mapping && mapping.channelId && mapping.messageId) {
-                const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
-                if (channel) {
-                    const newMsg = await channel.send({
-                        embeds: [renderEmbed(key)],
-                        components: renderButtons(key)
-                    });
-                    lastMessages[key] = newMsg;
-                    db._panelMapping[key] = { channelId: channel.id, messageId: newMsg.id };
-                    saveLocalStorage();
+            await cachedMsg.edit(payload);
+            return;
+        } catch {
+            // Message may have been deleted — fall through to recovery.
+        }
+    }
+
+    // Recovery: edit the EXISTING panel message (via the persisted mapping) so a
+    // transient edit failure never leaves a duplicate behind. Only when that
+    // message is truly gone do we post a fresh one and re-map.
+    if (mapping && mapping.channelId) {
+        try {
+            const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
+            if (!channel) return;
+
+            if (mapping.messageId) {
+                const existing = await channel.messages.fetch(mapping.messageId).catch(() => null);
+                if (existing) {
+                    await existing.edit(payload).catch(() => null);
+                    lastMessages[key] = existing;
+                    return;
                 }
+            }
+
+            const newMsg = await channel.send(payload).catch(() => null);
+            if (newMsg) {
+                lastMessages[key] = newMsg;
+                db._panelMapping[key] = { channelId: channel.id, messageId: newMsg.id };
+                saveLocalStorage();
             }
         } catch (e) {
             logEvent(`Failed to recover panel ${key}: ${e.message}`);
         }
-    }}
+    }
+    // No mapping → panel was never posted; nothing to refresh.
 }
 
 /** Send a DM to a user through the rate-limited queue (auto-skips opt-outs). @param {string} uid - Discord user ID @param {string} msgContent - Message text */
