@@ -75,11 +75,6 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 6, name: 'member', description: 'Check a specific member (optional).', required: false }
                 ]
             },
-            {
-                name: 'notify',
-                description: '📧 [Admin] Send notifications to server members',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {

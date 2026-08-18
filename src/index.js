@@ -31,11 +31,6 @@ import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemov
 import { handleConfirmAction, handleRestoreBackupSelect, handleRestoreBackupCancel, handleRestoreBackupConfirm } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname, handleSelectPendingNickname, handleSelectPendingPilotOwner } from './handlers/ranking-commands.js';
 import {
-    handleNotifyCommand,
-    handleNotifySelect,
-    handleNotifyButton
-} from './handlers/ranking-notify.js';
-import {
     handleManageUserPage,
     handleManageAction,
     handleManagePilotRemove,
@@ -223,11 +218,6 @@ client.on('interactionCreate', async (interaction) => {
     try {
         // A. SLASH COMMANDS — ranking system only
         if (interaction.isCommand()) {
-            // Notify command
-            if (interaction.commandName === 'notify') {
-                return await handleNotifyCommand(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
-            }
-
             const result = await handleRankingCommand(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             // Fallback: if command wasn't handled by new module, try legacy dispatcher
             if (result !== false) return;
@@ -241,9 +231,6 @@ client.on('interactionCreate', async (interaction) => {
         // C. RANKING ROUTER — string select menus, modals, buttons
         // C1. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
-            if (interaction.customId === 'notify_select_action') {
-                return await handleNotifySelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
-            }
             if (interaction.customId === 'select_pilot_to_remove') {
                 return await handlePilotRemoveSelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
@@ -302,9 +289,6 @@ client.on('interactionCreate', async (interaction) => {
 
         // C3. BUTTON CLICKS
         if (interaction.isButton()) {
-            if (interaction.customId.startsWith('notify_')) {
-                return await handleNotifyButton(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
-            }
             if (interaction.customId === 'welcome_register_owner') {
                 return handleWelcomeRegisterOwner(interaction);
             }

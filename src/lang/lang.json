@@ -219,9 +219,6 @@
                     "nickname": "In-game character name (exact as typed)."
                 }
             },
-            "notify": {
-                "description": "📧 [Admin] Send notifications to server members"
-            },
             "grace": {
                 "description": "⏳ [Admin] Show remaining 72h grace time for members outside allied clans.",
                 "options": {
@@ -230,35 +227,6 @@
             }
         },
         "responses": {
-            "notify": {
-                "prompt": "📧 **Select the type of notification to send:**",
-                "placeholder": "Choose an option...",
-                "optionNoRole": {
-                    "label": "📧 No Role",
-                    "description": "Notify members with no roles via DM to register"
-                },
-                "optionDomination": {
-                    "label": "⚔️ Domination",
-                    "description": "Call all members to Domination"
-                },
-                "optionStandby": {
-                    "label": "⏳ Standby",
-                    "description": "Call all members to the Standby channel"
-                },
-                "confirmBtn": "✅ Yes, notify",
-                "cancelBtn": "❌ Cancel",
-                "noRoleConfirm": "⚠️ **Are you sure you want to DM ALL members with no roles?**\n\nThis may take a few minutes depending on the number of members.",
-                "dominationConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Domination?**\n\nThis may take a few minutes depending on the number of members.",
-                "standbyConfirm": "⚠️ **Are you sure you want to DM ALL members with the member role calling for Standby?**\n\nThis may take a few minutes depending on the number of members.",
-                "sendingDms": "📧 **Sending DMs to {count} members...**\nPlease wait, this may take a few minutes.",
-                "cancelled": "❌ **Notification cancelled.**",
-                "noRoleDm": "👋 Hey **{displayName}**, you don't have any roles on the server yet!\n\nPlease go to <#{channelId}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nGet your roles and join the fun! 🚀",
-                "noRoleResult": "📧 **Notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
-                "dominationDm": "⚔️ **ATTENTION — DOMINATION!**\n\n{displayName}, all members must join the Domination channel to fight NOW!\n\n🔗 <#{channelId}>\n\nJoin and help the clan win! 💪",
-                "standbyDm": "⏳ **ATTENTION — STANDBY!**\n\n{displayName}, all members must join the Standby channel and await commands!\n\n🔗 <#{channelId}>\n\nGet ready for instructions! 🎯",
-                "dominationResult": "⚔️ **Domination notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**",
-                "standbyResult": "⏳ **Standby notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**"
-            },
             "removepilot": {
                 "noPilots": "❌ You don't have any active pilots on your account.",
                 "menuContent": "👇 **Pilot Management:** Select which pilot to remove from your account:",

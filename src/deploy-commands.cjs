@@ -119,11 +119,6 @@ const commands = [
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
   {
-    name: 'notify',
-    description: '📧 [Admin] Send notifications to server members',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
     name: 'grace',
     description: '⏳ [Admin] Show remaining 72h grace time for members outside allied clans.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString(),
