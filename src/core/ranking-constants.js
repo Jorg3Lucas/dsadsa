@@ -22,7 +22,8 @@ export function setAdminChannelId(id) {
     adminChannelId = id;
 }
 
-export const MEMBER_ROLE_ID = '1503933709756141620';
+// Fixed member role granted to registered members (assigned on approval/sync).
+export const MEMBER_ROLE_ID = '1440301743106818169';
 
 // Roles that can approve/reject member registrations (in addition to Administrator)
 export const APPROVER_ROLE_IDS = [
