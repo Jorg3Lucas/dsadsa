@@ -24,7 +24,7 @@ export const CLAIM_CATEGORIES = [
         legacyId: '1499858717456334878',
         channels: [
             { name: '🔸 SP-7F', key: 'sp7', legacyName: '🔸┃sp7', panels: ['7peak'] },
-            { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squarenormal', '7squareantidemon'] }
+            { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squareantidemon'] }
         ]
     },
     {
@@ -32,7 +32,7 @@ export const CLAIM_CATEGORIES = [
         legacyId: '1499858702814150758',
         channels: [
             { name: '🔸 SP-8F', key: 'sp8', legacyName: '🔸┃sp8', panels: ['8peak'] },
-            { name: '🔹 MS-8F', key: 'ms8', legacyName: '🔹┃ms8', panels: ['8squarenormal', '8squareantidemon'] }
+            { name: '🔹 MS-8F', key: 'ms8', legacyName: '🔹┃ms8', panels: ['8squareantidemon'] }
         ]
     },
     {
@@ -40,7 +40,7 @@ export const CLAIM_CATEGORIES = [
         legacyId: '1499858660678041753',
         channels: [
             { name: '🔸 SP-9F', key: 'sp9', legacyName: '🔸┃sp9', panels: ['9peak'] },
-            { name: '🔹 MS-9F', key: 'ms9', legacyName: '🔹┃ms9', panels: ['9squarenormal', '9squareantidemon'] }
+            { name: '🔹 MS-9F', key: 'ms9', legacyName: '🔹┃ms9', panels: ['9squareantidemon'] }
         ]
     },
     {
@@ -48,7 +48,7 @@ export const CLAIM_CATEGORIES = [
         legacyId: '1499857572453421159',
         channels: [
             { name: '🔸 SP-10F', key: 'sp10', legacyName: '🔸┃sp10', panels: ['10peak'] },
-            { name: '🔹 MS-10F', key: 'ms10', legacyName: '🔹┃ms10', panels: ['10squarenormal', '10squareantidemon'] }
+            { name: '🔹 MS-10F', key: 'ms10', legacyName: '🔹┃ms10', panels: ['10squareantidemon'] }
         ]
     },
     {

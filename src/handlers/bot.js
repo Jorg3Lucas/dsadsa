@@ -16,7 +16,6 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
 
     defaultFloors.forEach(floor => {
         allPanelKeys.push(`${floor}peak`);
-        allPanelKeys.push(`${floor}squarenormal`);
         if (floor !== "9" && floor !== "10") {
             allPanelKeys.push(`${floor}squareantidemon`);
         }

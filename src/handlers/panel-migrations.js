@@ -118,7 +118,9 @@ export function removeMS1112Panels() {
         "11squareleaders", "12squareleaders",
         "11squareevents", "12squareevents",
         "11squareantidemon", "12squareantidemon",
-        "12randomevent"
+        "12randomevent",
+        // Normal MS panels removed (leaders/plant/ore claim removed)
+        "7squarenormal", "8squarenormal", "9squarenormal", "10squarenormal"
     ];
     let removed = 0;
     for (const key of keys) {

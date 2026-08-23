@@ -44,22 +44,6 @@ export function buildPanelDefaults(key) {
         };
     }
 
-    // ── Normal MS panels: 7squarenormal-10squarenormal ──
-    const normalMatch = key.match(/^(\d+)squarenormal$/);
-    if (normalMatch) {
-        const floor = normalMatch[1];
-        return {
-            type: "normal",
-            title: `Magic Square ${floor}F`,
-            timeWindow: "", next: null, ownerId: null, ownerName: null,
-            boss1: { name: "1️⃣ Leader 1", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
-            boss2: { name: "2️⃣ Leader 2", status: STATUS_AVAILABLE, cooldown: 60, _freeSince: 0, _lastKilledTimeStr: "" },
-            boss3: { name: "3️⃣ Leader 3", status: STATUS_AVAILABLE, cooldown: 180, _freeSince: 0, _lastKilledTimeStr: "" },
-            plant: { name: "🌱 Plant", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" },
-            ore: { name: "⛏️ Ore", status: STATUS_AVAILABLE, cooldown: 30, _freeSince: 0, _lastKilledTimeStr: "" }
-        };
-    }
-
     // ── Antidemon panels ──
     const antiMatch = key.match(/^(\d+)squareantidemon(\d+)?$/);
     if (antiMatch) {
