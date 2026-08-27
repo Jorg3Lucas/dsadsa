@@ -12,6 +12,8 @@ import {
     cleanNickname,
     levenshteinDistance
 } from './ranking-cache.js';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 // Decoration tolerance for allied-clan comparison.
 const ALLIED_CLAN_SIMILARITY = 0.8; // Levenshtein similarity threshold
@@ -119,6 +121,73 @@ function buildResult(cacheHit, db, extraFields = {}, inAlliedClan) {
     };
 }
 
+const FORUM_RANK_URL = 'https://forum.mir4global.com/rank?ranktype=1&classtype=&searchname=';
+const FORUM_REQUEST_TIMEOUT_MS = 15000;
+
+/**
+ * Search the MIR4 forum ranking directly by name.
+ * Used as a fallback when the name is not in the local cache
+ * (e.g. player is outside the top 1000 scraped per world).
+ * Returns an array of { nickname, clanName, worldId } or [].
+ */
+async function searchRankingForum(nickname) {
+    try {
+        const url = FORUM_RANK_URL + encodeURIComponent(nickname);
+        const { data } = await axios.get(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+            timeout: FORUM_REQUEST_TIMEOUT_MS
+        });
+        const $ = cheerio.load(data);
+        const results = [];
+        const searchLower = nickname.toLowerCase();
+
+        $('table tbody tr').each((_, el) => {
+            const cells = $(el).find('td');
+            if (cells.length < 4) return;
+            const nick = cells.eq(1).text().replace(/[\n\t\r]/g, '').trim().normalize('NFC');
+            if (nick.toLowerCase() !== searchLower) return;
+
+            // Search results have 5 columns: Rank, Character, Server(empty), Clan, Power
+            // Normal ranking has 4 columns: Rank, Character, Clan, Power
+            // Detect by checking if cell 2 is empty (search) or has content (normal)
+            let clan, serverText;
+            if (cells.length === 5) {
+                // Search result format
+                serverText = cells.eq(2).text().replace(/[\n\t\r]/g, '').trim();
+                clan = cells.eq(3).text().replace(/[\n\t\r]/g, '').trim();
+            } else {
+                // Normal format — cell 2 is clan
+                clan = cells.eq(2).text().replace(/[\n\t\r]/g, '').trim();
+                serverText = '';
+            }
+            if (!clan || clan === '-' || clan === '—') clan = 'No Clan';
+
+            // Try to find worldId by matching clan against allied clans config
+            // Since we don't know the server from search, we search all worlds
+            results.push({ nickname: nick, clanName: clan, worldId: null });
+        });
+
+        return results;
+    } catch (err) {
+        console.error(`⚠️ [Ranking] Forum search failed for "${nickname}": ${err.message}`);
+        return [];
+    }
+}
+
+/**
+ * Find which worldId a player belongs to by checking the ranking cache
+ * for the clan name. Falls back to scanning all worlds if needed.
+ */
+function findWorldForClan(clanName, cache) {
+    if (!cache) return null;
+    for (const [worldId, players] of Object.entries(cache)) {
+        for (const [, playerClan] of Object.entries(players)) {
+            if (playerClan === clanName) return worldId;
+        }
+    }
+    return null;
+}
+
 export function lookupNickname(nickname, db, cache) {
     if (!cache) {
         cache = getLocalRankingCache();
@@ -133,21 +202,10 @@ export function lookupNickname(nickname, db, cache) {
     }
 
     // 2. Fuzzy match — among the closest candidates, prefer an allied-clan hit.
-    //    NOTE: a fuzzy hit is only a guess, so consumers must never use it as
-    //    the sole reason to remove a member role (see ranking-sync-engine.js).
-    //    The candidate window is generous so an allied hit with a slightly lower
-    //    raw score is not dropped (findTopNicknamesInCache computes all matches
-    //    before slicing, so a bigger limit costs nothing).
-    //
-    //    The scored pool is computed ONCE at FUZZY_POOL width and exposed as
-    //    `fuzzyCandidates` so a co-located lookupTopNicknames call can reuse it
-    //    instead of re-running the same fuzzy scan (see precomputedTopMatches).
     const fuzzyCandidates = findTopNicknamesInCache(nickname, cache, FUZZY_POOL);
     if (fuzzyCandidates.length > 0) {
         const preferred = pickPreferredMatch(fuzzyCandidates, db);
         const chosen = preferred.match;
-        // pickPreferredMatch returns null only for empty matches — already
-        // guarded above, so chosen is always set here.
         if (chosen.nickname.toLowerCase() !== nickname.toLowerCase()) {
             return buildResult(chosen, db, {
                 exactMatch: false,
@@ -157,7 +215,51 @@ export function lookupNickname(nickname, db, cache) {
         }
     }
 
+    // 3. Forum search fallback — name might be outside the scraped top-N range.
+    //    This is async but lookupNickname is called synchronously in some paths,
+    //    so we expose a separate async version for callers that can await it.
     return { found: false, fuzzyCandidates };
+}
+
+/**
+ * Async version of lookupNickname that falls back to a live forum search
+ * when the name is not in the local cache. Use this in slash-command handlers
+ * (which run async) instead of the sync lookupNickname.
+ */
+export async function lookupNicknameWithSearch(nickname, db, cache) {
+    // Try the local cache first (sync, fast)
+    const localResult = lookupNickname(nickname, db, cache);
+    if (localResult.found) return localResult;
+
+    // Cache miss — try the forum search
+    const forumResults = await searchRankingForum(nickname);
+    if (forumResults.length === 0) return { found: false };
+
+    // Use the first match
+    const match = forumResults[0];
+    // Try to determine worldId from the cache by clan name
+    if (!match.worldId && match.clanName) {
+        match.worldId = findWorldForClan(match.clanName, cache);
+    }
+
+    const serverName = match.worldId
+        ? (WORLD_IDS[match.worldId] || `World ${match.worldId}`)
+        : 'Unknown';
+    const inAlliedClan = match.worldId
+        ? isAlliedClanName(match.clanName, db.config?.alliedClans?.[match.worldId])
+        : false;
+
+    return {
+        found: true,
+        nickname: match.nickname,
+        clanName: match.clanName,
+        serverName,
+        worldId: match.worldId,
+        inAlliedClan,
+        exactMatch: true,
+        fuzzySuggestion: null,
+        fromForumSearch: true
+    };
 }
 
 // ── Top N fuzzy matches (for suggestion dropdowns) ──

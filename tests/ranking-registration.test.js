@@ -20,10 +20,11 @@ function getPending() { return constants.pendingRegistrations; }
 
 vi.mock('../src/core/ranking-service.js', () => ({
     lookupNickname: vi.fn(),
-    lookupTopNicknames: vi.fn()
+    lookupTopNicknames: vi.fn(),
+    lookupNicknameWithSearch: vi.fn()
 }));
 
-import { lookupNickname, lookupTopNicknames } from '../src/core/ranking-service.js';
+import { lookupNickname, lookupTopNicknames, lookupNicknameWithSearch } from '../src/core/ranking-service.js';
 import { handleOwnerRegistrationModal } from '../src/handlers/ranking-registration.js';
 
 describe('handleOwnerRegistrationModal', () => {
@@ -73,7 +74,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('errors when admin channel not configured', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
-        lookupNickname.mockReturnValue({ found: false });
+        lookupNicknameWithSearch.mockReturnValue({ found: false });
         lookupTopNicknames.mockReturnValue([]);
 
         constants.adminChannelId = null;
@@ -89,7 +90,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('errors when admin channel not found', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
-        lookupNickname.mockReturnValue({ found: false });
+        lookupNicknameWithSearch.mockReturnValue({ found: false });
         lookupTopNicknames.mockReturnValue([]);
 
         constants.adminChannelId = 'admin-ch-123';
@@ -107,7 +108,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('sends approval message to admin channel and saves pending', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
-        lookupNickname.mockReturnValue({ found: true, serverName: 'EU011', clanName: 'ToxicFamily', inAlliedClan: true, exactMatch: true, fuzzySuggestion: null });
+        lookupNicknameWithSearch.mockReturnValue({ found: true, serverName: 'EU011', clanName: 'ToxicFamily', inAlliedClan: true, exactMatch: true, fuzzySuggestion: null });
         lookupTopNicknames.mockReturnValue([]);
 
         constants.adminChannelId = 'admin-ch-123';
@@ -143,7 +144,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('shows not-found ranking status when lookup fails', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
-        lookupNickname.mockReturnValue({ found: false });
+        lookupNicknameWithSearch.mockReturnValue({ found: false });
         lookupTopNicknames.mockReturnValue([]);
 
         constants.adminChannelId = 'admin-ch-123';
@@ -162,7 +163,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('includes temp approval button in components when not found in ranking', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
-        lookupNickname.mockReturnValue({ found: false });
+        lookupNicknameWithSearch.mockReturnValue({ found: false });
         lookupTopNicknames.mockReturnValue([]);
 
         constants.adminChannelId = 'admin-ch-123';
@@ -182,7 +183,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('includes select menu when suggestions exist', async () => {
         interaction.fields.getTextInputValue.mockReturnValue('PlayrOne');
-        lookupNickname.mockReturnValue({ found: true, serverName: 'EU011', clanName: 'ToxicFamily', inAlliedClan: true, exactMatch: false, fuzzySuggestion: 'PlayerOne' });
+        lookupNicknameWithSearch.mockReturnValue({ found: true, serverName: 'EU011', clanName: 'ToxicFamily', inAlliedClan: true, exactMatch: false, fuzzySuggestion: 'PlayerOne' });
         lookupTopNicknames.mockReturnValue([
             { nickname: 'PlayerOne', clanName: 'ToxicFamily', serverName: 'EU011', inAlliedClan: true, score: 0.85 },
             { nickname: 'PlayerTwo', clanName: 'GearsofWar', serverName: 'EU011', inAlliedClan: false, score: 0.62 }
@@ -211,7 +212,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('shows allied clan status', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
-        lookupNickname.mockReturnValue({ found: true, serverName: 'EU011', clanName: 'ToxicFamily', inAlliedClan: true, exactMatch: true, fuzzySuggestion: null });
+        lookupNicknameWithSearch.mockReturnValue({ found: true, serverName: 'EU011', clanName: 'ToxicFamily', inAlliedClan: true, exactMatch: true, fuzzySuggestion: null });
         lookupTopNicknames.mockReturnValue([]);
 
         constants.adminChannelId = 'admin-ch-123';
@@ -227,7 +228,7 @@ describe('handleOwnerRegistrationModal', () => {
 
     it('shows not-allied status when not in allied clan', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
-        lookupNickname.mockReturnValue({ found: true, serverName: 'EU012', clanName: 'RandomClan', inAlliedClan: false, exactMatch: true, fuzzySuggestion: null });
+        lookupNicknameWithSearch.mockReturnValue({ found: true, serverName: 'EU012', clanName: 'RandomClan', inAlliedClan: false, exactMatch: true, fuzzySuggestion: null });
         lookupTopNicknames.mockReturnValue([]);
 
         constants.adminChannelId = 'admin-ch-123';

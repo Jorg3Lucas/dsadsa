@@ -6,7 +6,7 @@ import {
     StringSelectMenuOptionBuilder
 } from 'discord.js';
 import { pendingRegistrations, adminChannelId, MAX_NICKNAME_SUGGESTIONS, resolveServerName } from '../core/ranking-constants.js';
-import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
+import { lookupNickname, lookupTopNicknames, lookupNicknameWithSearch } from '../core/ranking-service.js';
 
 // ==========================================
 // 👑 OWNER REGISTRATION MODAL HANDLER
@@ -120,7 +120,7 @@ async function submitOwnerRegistration(interaction, db, saveLocalStorage, logEve
         return interaction.editReply('❌ Admin approval channel not found. Contact an administrator.');
     }
 
-    const lookup = lookupNickname(nickname, db);
+    const lookup = await lookupNicknameWithSearch(nickname, db);
 
     let rankingStatus = '❌ Not found in ranking';
     let alliedClanStatus = '❌ Not in allied clan';

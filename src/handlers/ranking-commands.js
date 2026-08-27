@@ -21,7 +21,7 @@ import {
     ensureConfig
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, getRankingCacheUpdatedAt, findAllNicknameMatchesInCache } from '../core/ranking-cache.js';
-import { lookupNickname, lookupTopNicknames, isAlliedClanName } from '../core/ranking-service.js';
+import { lookupNickname, lookupTopNicknames, isAlliedClanName, lookupNicknameWithSearch } from '../core/ranking-service.js';
 import { runDailySynchronization, getOutOfAlliedGraceStatus } from '../core/ranking-sync-engine.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
@@ -1013,39 +1013,34 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 }
             }
 
-            // Exact match only — no fuzzy
-            const exactMatches = findAllNicknameMatchesInCache(gameNickname, cache);
+            // Try cache first, then forum search fallback
+            const lookup = await lookupNicknameWithSearch(gameNickname, db, cache);
 
-            if (exactMatches.length > 0) {
-                // Check allied status for the best match
-                const match = exactMatches[0];
-                const inAlliedClan = isAlliedClanName(match.clanName, alliedClans[match.worldId]);
-                const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
-
-                if (inAlliedClan) {
+            if (lookup.found) {
+                if (lookup.inAlliedClan) {
                     // Register: save to db and add role
                     db.users[member.id] = {
-                        nickname: match.nickname,
+                        nickname: lookup.nickname,
                         registeredAt: new Date().toISOString(),
-                        serverName,
-                        clanName: match.clanName,
-                        worldId: match.worldId,
+                        serverName: lookup.serverName,
+                        clanName: lookup.clanName,
+                        worldId: lookup.worldId,
                         pilotIds: []
                     };
                     await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                     saveLocalStorage(db);
                     registered.push({
                         username: member.user.username,
-                        nickname: match.nickname,
-                        server: serverName,
-                        clan: match.clanName
+                        nickname: lookup.nickname,
+                        server: lookup.serverName,
+                        clan: lookup.clanName
                     });
-                    logEvent(`🎯 Auto-registered ${member.user.tag} → ${match.nickname} (${match.clanName} @ ${serverName})`);
+                    logEvent(`🎯 Auto-registered ${member.user.tag} → ${lookup.nickname} (${lookup.clanName} @ ${lookup.serverName})${lookup.fromForumSearch ? ' (via forum search)' : ''}`);
                 } else {
                     skipped.push({
                         username: member.user.username,
-                        nickname: match.nickname,
-                        reason: `Not allied (${match.clanName})`
+                        nickname: lookup.nickname,
+                        reason: `Not allied (${lookup.clanName})`
                     });
                 }
             } else {
