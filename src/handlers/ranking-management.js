@@ -295,11 +295,13 @@ export async function handleManagePilotRemove(interaction, db, saveLocalStorage,
 
 // ── Helper: Build region selector view ──
 function buildRegionSelectorView() {
-    const regionOptions = Object.entries(REGION_NAMES).map(([key, name]) => ({
-        label: name,
-        description: `${WORLDS_BY_REGION[key].length} servers available`,
-        value: key
-    }));
+    const regionOptions = Object.entries(REGION_NAMES)
+        .filter(([key]) => WORLDS_BY_REGION[key])
+        .map(([key, name]) => ({
+            label: name,
+            description: `${WORLDS_BY_REGION[key].length} servers available`,
+            value: key
+        }));
 
     const content = '🌍 **Allied Clans Configuration**\n\n**Step 1:** Select a region to view its servers.\n\nMembers will only keep their role if they are in an allied clan of any configured server.';
 

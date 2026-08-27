@@ -1,8 +1,13 @@
 import {
     Client,
-    GatewayIntentBits
+    GatewayIntentBits,
+    PermissionFlagsBits
 } from 'discord.js';
 import 'dotenv/config';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 import { registerMir4SlashCommands } from './core/ranking-deploy.js';
 import { destroyRankingScraperAgents } from './core/ranking-scraper.js';
@@ -35,7 +40,7 @@ import {
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
 import { startAutoBackup, getBackupStats } from './auto-backup.js';
-import { DISCORD_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
+import { DISCORD_SERVER_ID, ensureConfig, migrateAlliedClans } from './core/ranking-constants.js';
 import { getLocalRankingCache } from './core/ranking-cache.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, getStorageStats } from './core/ranking-storage.js';
@@ -91,6 +96,13 @@ client.once('ready', async () => {
 
     // Ensure db.config and alliedClans are initialized before any system runs
     ensureConfig(rankingDb);
+
+    // Migrate allied clans from absorbed servers to surviving servers (one-time)
+    const mergeResult = migrateAlliedClans(rankingDb);
+    if (mergeResult.migrated > 0) {
+        saveRankingStorageWrapped();
+        logRankingEvent(`🔄 [Server Merge] Migrated allied clans from ${mergeResult.migrated} absorbed server(s): ${mergeResult.clansMoved} clan(s) moved`);
+    }
 
     // Register interaction listeners + kick off the async startup restores
     // (welcome panel + admin approval messages) FIRST, so their Discord API
@@ -183,6 +195,51 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // ==========================================
+// 🔄 UPDATE COMMAND HANDLER
+// ==========================================
+
+async function handleUpdateCommand(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: '❌ Permission denied.', flags: 64 }).catch(() => {});
+    }
+
+    try {
+        await interaction.reply({ content: '🔄 Pulling latest code and restarting bot...', flags: 64 });
+    } catch (e) {
+        return;
+    }
+
+    try {
+        const { stdout: pullOut, stderr: pullErr } = await execAsync('git pull', { timeout: 30000 });
+        const pullResult = (pullOut || '').trim();
+        console.log(`🔄 [Update] git pull: ${pullResult}`);
+
+        await interaction.editReply({ content: `✅ **Update complete!**
+
+📥 **git pull:**
+\`\`\`
+${pullResult}
+\`\`\`
+
+🔄 Restarting bot via PM2...` }).catch(() => {});
+
+        // Give time for the reply to be sent before restart kills the process
+        setTimeout(() => {
+            exec('pm2 restart gear', (err) => {
+                if (err) console.error('❌ PM2 restart failed:', err.message);
+            });
+        }, 1000);
+    } catch (error) {
+        const errMsg = error.stdout || error.stderr || error.message || String(error);
+        await interaction.editReply({
+            content: `❌ **Update failed:**\n\`\`\`
+${String(errMsg).substring(0, 1800)}
+\`\`\``
+        }).catch(() => {});
+    }
+}
+
+// ==========================================
 // 🖱️ INTERACTION ROUTER
 // ==========================================
 // Map-based router: exact match (O(1)) first, prefix match as fallback.
@@ -192,6 +249,7 @@ process.on('unhandledRejection', (reason) => {
 // ── Slash commands ──
 const COMMAND_ROUTES = new Map([
     ['notify', handleNotifyCommand],
+    ['update', handleUpdateCommand],
 ]);
 
 // ── Exact match routes ──

@@ -139,6 +139,11 @@ const commands = [
     description: '💾 [Super Admin] List and restore database backups.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
+  {
+    name: 'update',
+    description: '🔄 [Super Admin] Pull latest code and restart the bot.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

@@ -93,6 +93,11 @@ export async function registerMir4SlashCommands(guild) {
                 description: '💾 [Super Admin] List and restore database backups.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
+            {
+                name: 'update',
+                description: '🔄 [Super Admin] Pull latest code and restart the bot.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {
