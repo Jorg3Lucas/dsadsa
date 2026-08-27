@@ -956,8 +956,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         const alliedClans = db.config?.alliedClans || {};
 
-        // Fetch all members
-        await guild.members.fetch();
+        // Fetch all members (with rate-limit handling)
+        try {
+            await guild.members.fetch();
+        } catch (err) {
+            if (err.code === 429 || err instanceof Error && err.message?.includes('rate limit')) {
+                return interaction.editReply('⏳ **Rate limited by Discord.** Try again in a few seconds.');
+            }
+            // If cache already has members, continue with what we have
+            if (guild.members.cache.size === 0) throw err;
+        }
 
         // Get members with access to the target channel
         const membersWithAccess = [];
