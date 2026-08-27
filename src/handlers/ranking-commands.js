@@ -3,7 +3,8 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    PermissionFlagsBits
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
@@ -936,6 +937,141 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         } catch (e) {
             return interaction.editReply(`❌ **Error listing backups:** ${e.message}`);
         }
+    }
+
+    // ── autoregister ──
+    if (commandName === 'autoregister') {
+        if (!await deferReplySafe(interaction)) return;
+
+        const targetChannel = options.getChannel('channel');
+        if (!targetChannel) {
+            return interaction.editReply('❌ Channel not found.');
+        }
+
+        // Check if ranking cache exists
+        const cache = getLocalRankingCache();
+        if (!cache || Object.keys(cache).length === 0) {
+            return interaction.editReply('❌ **Ranking cache not available.** Run /forcesync first to build the cache.');
+        }
+
+        // Fetch all members
+        await guild.members.fetch();
+
+        // Get members with access to the target channel
+        const membersWithAccess = [];
+        for (const [, member] of guild.members.cache) {
+            try {
+                const permissions = targetChannel.permissionsFor(member);
+                if (permissions && permissions.has(PermissionFlagsBits.ViewChannel)) {
+                    membersWithAccess.push(member);
+                }
+            } catch (e) {}
+        }
+
+        const registered = [];
+        const skipped = [];
+        const notFound = [];
+
+        for (const member of membersWithAccess) {
+            // Skip members who already have the role
+            if (member.roles.cache.has(MEMBER_ROLE_ID)) continue;
+
+            const nickname = member.nickname || member.user.username;
+
+            // Extract game nickname from Discord nickname
+            let gameNickname = nickname;
+            let serverCode = null;
+
+            // Remove " - Pilot" suffix
+            gameNickname = gameNickname.replace(/\s*-\s*Pilot$/i, '').trim();
+            // Remove "* " prefix
+            gameNickname = gameNickname.replace(/^\*\s+/, '').trim();
+            // Remove "Name: " prefix
+            gameNickname = gameNickname.replace(/^Name:\s*/i, '').trim();
+
+            // Try "ServerCode - GameName" or "ServerCode | GameName"
+            const serverMatch = gameNickname.match(/^(EU|SA|NA|ASIA|BASIA|BNA|BEU|BSA|BINMENA|INMENA)(\d{3})\s*[-|]\s*(.+)$/i);
+            if (serverMatch) {
+                serverCode = serverMatch[1].toUpperCase() + serverMatch[2];
+                gameNickname = serverMatch[3].trim();
+            } else {
+                // Try without separator
+                const serverMatch2 = gameNickname.match(/^(EU|SA|NA|ASIA|BASIA|BNA|BEU|BSA|BINMENA|INMENA)(\d{3})\s+(.+)$/i);
+                if (serverMatch2) {
+                    serverCode = serverMatch2[1].toUpperCase() + serverMatch2[2];
+                    gameNickname = serverMatch2[3].trim();
+                }
+            }
+
+            // Look up in ranking cache
+            const lookup = lookupNickname(gameNickname, db, cache);
+
+            if (lookup.found && lookup.inAlliedClan) {
+                // Register: save to db and add role
+                db.users[member.id] = {
+                    nickname: lookup.nickname,
+                    registeredAt: new Date().toISOString(),
+                    serverName: lookup.serverName,
+                    clanName: lookup.clanName,
+                    worldId: lookup.worldId,
+                    pilotIds: []
+                };
+                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                saveLocalStorage(db);
+                registered.push({
+                    username: member.user.username,
+                    nickname: lookup.nickname,
+                    server: lookup.serverName,
+                    clan: lookup.clanName
+                });
+                logEvent(`🎯 Auto-registered ${member.user.tag} → ${lookup.nickname} (${lookup.clanName} @ ${lookup.serverName})`);
+            } else if (lookup.found && !lookup.inAlliedClan) {
+                skipped.push({
+                    username: member.user.username,
+                    nickname: lookup.nickname,
+                    reason: `Not allied (${lookup.clanName})`
+                });
+            } else {
+                notFound.push({
+                    username: member.user.username,
+                    discordNickname: nickname,
+                    extracted: gameNickname
+                });
+            }
+        }
+
+        // Build response
+        let response = `🎯 **Auto-Register Results** — Channel: ${targetChannel}\n\n`;
+        response += `📋 Scanned: ${membersWithAccess.length} members with access\n\n`;
+
+        if (registered.length > 0) {
+            response += `✅ **Registered (${registered.length}):**\n`;
+            for (const r of registered) {
+                response += `   • ${r.username} → ${r.nickname} (${r.clan} @ ${r.server})\n`;
+            }
+            response += '\n';
+        }
+
+        if (skipped.length > 0) {
+            response += `⏳ **Skipped - not allied (${skipped.length}):**\n`;
+            for (const s of skipped) {
+                response += `   • ${s.username} → ${s.nickname} — ${s.reason}\n`;
+            }
+            response += '\n';
+        }
+
+        if (notFound.length > 0) {
+            response += `❌ **Not found in ranking (${notFound.length}):**\n`;
+            for (const n of notFound) {
+                response += `   • ${n.username} (${n.extracted})\n`;
+            }
+        }
+
+        if (registered.length === 0 && skipped.length === 0 && notFound.length === 0) {
+            response += 'ℹ️ All members already have the role.';
+        }
+
+        return interaction.editReply({ content: response.substring(0, 2000) });
     }
 
 

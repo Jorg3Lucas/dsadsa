@@ -144,6 +144,14 @@ const commands = [
     description: '🔄 [Super Admin] Pull latest code and restart the bot.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
+  {
+    name: 'autoregister',
+    description: '🎯 [Admin] Auto-register channel members found in allied clans via ranking cache.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    options: [
+      { type: 7, name: 'channel', description: 'Channel to scan for members.', required: true }
+    ]
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
