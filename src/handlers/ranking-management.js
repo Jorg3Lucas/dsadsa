@@ -15,7 +15,8 @@ import {
     REGION_NAMES,
     WORLDS_BY_REGION,
     confirmationCache,
-    ensureConfig
+    ensureConfig,
+    resolveServerName
 } from '../core/ranking-constants.js';
 import { findTopClanSuggestions, getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname } from '../core/ranking-service.js';
@@ -323,7 +324,7 @@ function buildWorldSelectorView(regionKey) {
     const worldIds = WORLDS_BY_REGION[regionKey] || [];
 
     const worldOptions = worldIds.map(id => ({
-        label: WORLD_IDS[id] || `World ${id}`,
+        label: resolveServerName(WORLD_IDS[id] || `World ${id}`),
         description: `World ID ${id}`,
         value: String(id)
     }));
@@ -442,7 +443,7 @@ export async function handleManageAlliedWorld(interaction, db, saveLocalStorage,
     }
 
     const worldId = interaction.values[0];
-    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+    const worldName = resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`);
 
     ensureConfig(db);
     if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
@@ -461,7 +462,7 @@ export async function handleManageAlliedPage(interaction, db, saveLocalStorage, 
     const parts = interaction.customId.split('_');
     const worldId = parts[3];
     const page = parseInt(parts[4], 10);
-    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+    const worldName = resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`);
 
     ensureConfig(db);
     if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
@@ -477,7 +478,7 @@ export async function handleManageAlliedAdd(interaction, db, saveLocalStorage, l
     }
 
     const worldId = interaction.customId.replace('manage_allied_add_', '');
-    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+    const worldName = resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`);
 
     const modal = new ModalBuilder()
         .setCustomId('manage_allied_add_modal')
@@ -522,7 +523,7 @@ export async function handleManageAlliedAddModal(interaction, db, saveLocalStora
 
     const clanName = interaction.fields.getTextInputValue('clan_name').trim();
     const worldId = interaction.fields.getTextInputValue('world_id').trim();
-    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+    const worldName = resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`);
 
     if (!clanName) {
         return interaction.editReply('❌ Clan name cannot be empty.');
@@ -619,7 +620,7 @@ export async function handleManageAlliedRemove(interaction, db, saveLocalStorage
     const value = interaction.values[0];
     const [worldId, indexStr] = value.split('_');
     const index = parseInt(indexStr, 10);
-    const worldName = WORLD_IDS[worldId] || `World ${worldId}`;
+    const worldName = resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`);
 
     if (db.config?.alliedClans?.[worldId]?.[index]) {
         const removedClan = db.config.alliedClans[worldId][index];

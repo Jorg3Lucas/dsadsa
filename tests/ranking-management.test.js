@@ -145,7 +145,8 @@ vi.mock('../src/core/ranking-constants.js', () => ({
     ensureConfig: vi.fn((db) => {
         if (!db.config) db.config = {};
         if (!db.config.alliedClans) db.config.alliedClans = {};
-    })
+    }),
+    resolveServerName: (name) => name
 }));
 
 // Mock cache module

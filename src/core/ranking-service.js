@@ -4,7 +4,7 @@
 // Centralized service for looking up nicknames in the ranking cache
 // with automatic fuzzy matching and allied clan verification.
 
-import { WORLD_IDS, MAX_NICKNAME_SUGGESTIONS } from './ranking-constants.js';
+import { WORLD_IDS, MAX_NICKNAME_SUGGESTIONS, resolveServerName } from './ranking-constants.js';
 import {
     findAllNicknameMatchesInCache,
     findTopNicknamesInCache,
@@ -105,7 +105,7 @@ function pickPreferredMatch(matches, db) {
 }
 
 function buildResult(cacheHit, db, extraFields = {}, inAlliedClan) {
-    const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
+    const serverName = resolveServerName(WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`);
     return {
         found: true,
         worldId: cacheHit.worldId,
@@ -186,7 +186,7 @@ export function lookupTopNicknames(nickname, db, cache, limit = MAX_NICKNAME_SUG
     const topMatches = precomputedTopMatches || findTopNicknamesInCache(nickname, cache, poolSize);
 
     const enriched = topMatches.map(match => {
-        const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
+        const serverName = resolveServerName(WORLD_IDS[match.worldId] || `World ${match.worldId}`);
         const inAlliedClan = isAlliedClanName(match.clanName, db.config?.alliedClans?.[match.worldId]);
         return {
             worldId: match.worldId,

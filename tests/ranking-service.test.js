@@ -11,7 +11,8 @@ vi.mock('../src/core/ranking-cache.js', () => ({
 
 vi.mock('../src/core/ranking-constants.js', () => ({
     WORLD_IDS: { 611: 'EU011', 612: 'EU012' },
-    MAX_NICKNAME_SUGGESTIONS: 6
+    MAX_NICKNAME_SUGGESTIONS: 6,
+    resolveServerName: (name) => name
 }));
 
 import { lookupNickname, lookupTopNicknames, isAlliedClanName } from '../src/core/ranking-service.js';

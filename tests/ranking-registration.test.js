@@ -8,6 +8,7 @@ vi.mock('../src/core/ranking-constants.js', () => {
         WORLD_IDS: { 611: 'EU011', 612: 'EU012' },
         MAX_NICKNAME_SUGGESTIONS: 6,
         pendingRegistrations: regStore,
+        resolveServerName: (name) => name,
         get adminChannelId() { return chId; },
         set adminChannelId(v) { chId = v; }
     };

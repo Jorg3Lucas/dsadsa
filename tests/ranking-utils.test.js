@@ -9,7 +9,13 @@ vi.mock('../src/core/ranking-service.js', () => ({
 }));
 
 vi.mock('../src/core/ranking-constants.js', () => ({
-    MEMBER_ROLE_ID: '123'
+    MEMBER_ROLE_ID: '123',
+    SERVER_MERGES: {
+        'ASIA013': 'ASIA021', 'EU013': 'EU011', 'NA041': 'NA012'
+    },
+    resolveServerName: (name) => ({
+        'ASIA013': 'ASIA021', 'EU013': 'EU011', 'NA041': 'NA012'
+    }[name] || name)
 }));
 
 vi.mock('../src/lang/lang.js', () => ({
@@ -17,6 +23,7 @@ vi.mock('../src/lang/lang.js', () => ({
 }));
 
 import { buildPrefixedNickname } from '../src/core/ranking-utils.js';
+import { resolveServerName } from '../src/core/ranking-constants.js';
 import { getLocalRankingCache } from '../src/core/ranking-cache.js';
 import { lookupNickname } from '../src/core/ranking-service.js';
 
@@ -61,5 +68,24 @@ describe('buildPrefixedNickname', () => {
         const result = buildPrefixedNickname('PlayerOne', db, 'Pilot');
         expect(result).toBe('PlayerOne - Pilot');
         expect(lookupNickname).not.toHaveBeenCalled();
+    });
+});
+
+describe('resolveServerName', () => {
+    it('returns the surviving server for an absorbed server', () => {
+        expect(resolveServerName('ASIA013')).toBe('ASIA021');
+        expect(resolveServerName('EU013')).toBe('EU011');
+        expect(resolveServerName('NA041')).toBe('NA012');
+    });
+
+    it('returns the same name when the server is not merged', () => {
+        expect(resolveServerName('EU011')).toBe('EU011');
+        expect(resolveServerName('ASIA021')).toBe('ASIA021');
+        expect(resolveServerName('NA011')).toBe('NA011');
+    });
+
+    it('returns the same name for unknown server names', () => {
+        expect(resolveServerName('UNKNOWN')).toBe('UNKNOWN');
+        expect(resolveServerName('')).toBe('');
     });
 });

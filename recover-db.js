@@ -15,7 +15,7 @@
 import 'dotenv/config';
 import fs from 'node:fs';
 import { Client, GatewayIntentBits } from 'discord.js';
-import { WORLD_IDS } from './src/core/ranking-constants.js';
+import { WORLD_IDS, SERVER_MERGES } from './src/core/ranking-constants.js';
 
 const TOKEN = process.env.TOKEN || process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.DISCORD_SERVER_ID || '1481566364631044119';
@@ -28,8 +28,10 @@ if (!TOKEN) {
     process.exit(1);
 }
 
-// Exact server prefixes from WORLD_IDS (e.g. "EU011 - ", "ASIA311 - ")
-const SERVER_NAMES = Object.values(WORLD_IDS).sort((a, b) => b.length - a.length);
+// Exact server prefixes: surviving servers (WORLD_IDS) + absorbed servers (SERVER_MERGES)
+// so that old Discord nicknames like "ASIA013 - PlayerName" are still stripped correctly.
+const ABSORBED_NAMES = Object.keys(SERVER_MERGES);
+const SERVER_NAMES = [...Object.values(WORLD_IDS), ...ABSORBED_NAMES].sort((a, b) => b.length - a.length);
 const PREFIX_REGEX = new RegExp(`^(?:${SERVER_NAMES.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\s*[-–—]\\s*(.+)$`);
 
 function stripServerPrefix(nick) {
@@ -37,13 +39,25 @@ function stripServerPrefix(nick) {
     return m ? m[1].trim() : nick.trim();
 }
 
-// Returns { isPilot, baseNick } — baseNick is the raw in-game name / owner name
+// Returns { isPilot, baseNick, absorbedPrefix } — baseNick is the raw in-game name / owner name,
+// absorbedPrefix is the old server name if the nickname had an absorbed-server prefix (e.g. "ASIA013")
 function parseNickname(displayName) {
     const clean = (displayName || '').trim().normalize('NFC');
+    let nick = clean;
+    let isPilot = false;
     if (clean.endsWith(PILOT_SUFFIX)) {
-        return { isPilot: true, baseNick: stripServerPrefix(clean.slice(0, -PILOT_SUFFIX.length)) };
+        isPilot = true;
+        nick = clean.slice(0, -PILOT_SUFFIX.length);
     }
-    return { isPilot: false, baseNick: stripServerPrefix(clean) };
+    // Detect absorbed-server prefix before stripping
+    let absorbedPrefix = null;
+    for (const absorbed of ABSORBED_NAMES) {
+        if (nick.startsWith(absorbed)) {
+            absorbedPrefix = absorbed;
+            break;
+        }
+    }
+    return { isPilot, baseNick: stripServerPrefix(nick), absorbedPrefix };
 }
 
 const client = new Client({
@@ -78,12 +92,18 @@ client.once('clientReady', async () => {
 
         roleMembers.push(member);
         const displayName = member.nickname || member.user.username;
-        const { isPilot, baseNick } = parseNickname(displayName);
+        const { isPilot, baseNick, absorbedPrefix } = parseNickname(displayName);
 
         // No usable game nickname (nickname == username or empty after parsing)
         if (!baseNick || baseNick.length === 0 || baseNick === member.user.username) {
             noNickMembers.push({ id, username: member.user.username });
             continue;
+        }
+
+        // Warn if the prefix was from an absorbed server (member will be re-resolved on next sync)
+        if (absorbedPrefix) {
+            const surviving = SERVER_MERGES[absorbedPrefix];
+            console.log(`   ⚠️ ${member.user.tag} has absorbed prefix "${absorbedPrefix}" → resolving to "${surviving}"`);
         }
 
         const entry = {
