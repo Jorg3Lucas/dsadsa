@@ -20,8 +20,8 @@ import {
     DISCORD_SERVER_ID,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { getLocalRankingCache, getRankingCacheUpdatedAt } from '../core/ranking-cache.js';
-import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
+import { getLocalRankingCache, getRankingCacheUpdatedAt, findAllNicknameMatchesInCache } from '../core/ranking-cache.js';
+import { lookupNickname, lookupTopNicknames, isAlliedClanName } from '../core/ranking-service.js';
 import { runDailySynchronization, getOutOfAlliedGraceStatus } from '../core/ranking-sync-engine.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
@@ -954,6 +954,8 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             return interaction.editReply('❌ **Ranking cache not available.** Run /forcesync first to build the cache.');
         }
 
+        const alliedClans = db.config?.alliedClans || {};
+
         // Fetch all members
         await guild.members.fetch();
 
@@ -1003,34 +1005,41 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 }
             }
 
-            // Look up in ranking cache
-            const lookup = lookupNickname(gameNickname, db, cache);
+            // Exact match only — no fuzzy
+            const exactMatches = findAllNicknameMatchesInCache(gameNickname, cache);
 
-            if (lookup.found && lookup.inAlliedClan) {
-                // Register: save to db and add role
-                db.users[member.id] = {
-                    nickname: lookup.nickname,
-                    registeredAt: new Date().toISOString(),
-                    serverName: lookup.serverName,
-                    clanName: lookup.clanName,
-                    worldId: lookup.worldId,
-                    pilotIds: []
-                };
-                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                saveLocalStorage(db);
-                registered.push({
-                    username: member.user.username,
-                    nickname: lookup.nickname,
-                    server: lookup.serverName,
-                    clan: lookup.clanName
-                });
-                logEvent(`🎯 Auto-registered ${member.user.tag} → ${lookup.nickname} (${lookup.clanName} @ ${lookup.serverName})`);
-            } else if (lookup.found && !lookup.inAlliedClan) {
-                skipped.push({
-                    username: member.user.username,
-                    nickname: lookup.nickname,
-                    reason: `Not allied (${lookup.clanName})`
-                });
+            if (exactMatches.length > 0) {
+                // Check allied status for the best match
+                const match = exactMatches[0];
+                const inAlliedClan = isAlliedClanName(match.clanName, alliedClans[match.worldId]);
+                const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
+
+                if (inAlliedClan) {
+                    // Register: save to db and add role
+                    db.users[member.id] = {
+                        nickname: match.nickname,
+                        registeredAt: new Date().toISOString(),
+                        serverName,
+                        clanName: match.clanName,
+                        worldId: match.worldId,
+                        pilotIds: []
+                    };
+                    await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                    saveLocalStorage(db);
+                    registered.push({
+                        username: member.user.username,
+                        nickname: match.nickname,
+                        server: serverName,
+                        clan: match.clanName
+                    });
+                    logEvent(`🎯 Auto-registered ${member.user.tag} → ${match.nickname} (${match.clanName} @ ${serverName})`);
+                } else {
+                    skipped.push({
+                        username: member.user.username,
+                        nickname: match.nickname,
+                        reason: `Not allied (${match.clanName})`
+                    });
+                }
             } else {
                 notFound.push({
                     username: member.user.username,

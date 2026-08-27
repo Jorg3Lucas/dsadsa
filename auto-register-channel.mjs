@@ -8,8 +8,9 @@
 import { Client, GatewayIntentBits, PermissionFlagsBits } from 'discord.js';
 import 'dotenv/config';
 import { loadLocalStorageRanking, saveRankingStorage } from './src/core/ranking-storage.js';
-import { lookupNickname } from './src/core/ranking-service.js';
-import { getLocalRankingCache } from './src/core/ranking-cache.js';
+import { isAlliedClanName } from './src/core/ranking-service.js';
+import { WORLD_IDS } from './src/core/ranking-constants.js';
+import { getLocalRankingCache, findAllNicknameMatchesInCache } from './src/core/ranking-cache.js';
 import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, ensureConfig } from './src/core/ranking-constants.js';
 import { logRankingEvent } from './src/core/ranking-logger.js';
 
@@ -102,32 +103,39 @@ client.once('ready', async () => {
         const discordNick = member.nickname || member.user.username;
         const { gameNickname } = extractGameNickname(discordNick);
 
-        const lookup = lookupNickname(gameNickname, db, cache);
+        // Exact match only — no fuzzy
+        const exactMatches = findAllNicknameMatchesInCache(gameNickname, cache);
 
-        if (lookup.found && lookup.inAlliedClan) {
-            // ✅ Register
-            db.users[member.id] = {
-                nickname: lookup.nickname,
-                registeredAt: new Date().toISOString(),
-                serverName: lookup.serverName,
-                clanName: lookup.clanName,
-                worldId: lookup.worldId,
-                pilotIds: []
-            };
-            await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-            registered.push({
-                username: member.user.username,
-                nickname: lookup.nickname,
-                server: lookup.serverName,
-                clan: lookup.clanName
-            });
-            logRankingEvent(`🎯 Auto-registered ${member.user.tag} → ${lookup.nickname} (${lookup.clanName} @ ${lookup.serverName})`);
-        } else if (lookup.found && !lookup.inAlliedClan) {
-            skippedNotAllied.push({
-                username: member.user.username,
-                nickname: lookup.nickname,
-                clan: lookup.clanName
-            });
+        if (exactMatches.length > 0) {
+            const match = exactMatches[0];
+            const inAlliedClan = isAlliedClanName(match.clanName, alliedClans[match.worldId]);
+            const serverName = WORLD_IDS[match.worldId] || `World ${match.worldId}`;
+
+            if (inAlliedClan) {
+                // ✅ Register
+                db.users[member.id] = {
+                    nickname: match.nickname,
+                    registeredAt: new Date().toISOString(),
+                    serverName,
+                    clanName: match.clanName,
+                    worldId: match.worldId,
+                    pilotIds: []
+                };
+                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                registered.push({
+                    username: member.user.username,
+                    nickname: match.nickname,
+                    server: serverName,
+                    clan: match.clanName
+                });
+                logRankingEvent(`🎯 Auto-registered ${member.user.tag} → ${match.nickname} (${match.clanName} @ ${serverName})`);
+            } else {
+                skippedNotAllied.push({
+                    username: member.user.username,
+                    nickname: match.nickname,
+                    clan: match.clanName
+                });
+            }
         } else {
             notFound.push({
                 username: member.user.username,
