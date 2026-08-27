@@ -50,28 +50,6 @@ async function handleTextCommands(message, db, saveLocalStorage) {
         saveLocalStorage();
         return message.reply('🔓 **Ranking validation DISABLED!** Members won\'t lose roles automatically.');
     }
-
-    if (command === 'disablegrace') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You must be an Administrator to use this command.');
-        }
-
-        ensureConfig(db);
-        db.config.graceEnabled = false;
-        saveLocalStorage();
-        return message.reply('🔓 **72h Grace period DISABLED!** Members not in allied clans will lose their role immediately on the next sync (no 72h grace).\n\nUse `!enablegrace` to restore the grace period.');
-    }
-
-    if (command === 'enablegrace') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You must be an Administrator to use this command.');
-        }
-
-        ensureConfig(db);
-        db.config.graceEnabled = true;
-        saveLocalStorage();
-        return message.reply('✅ **72h Grace period ENABLED!** Members not in allied clans will have 72h before losing their role.\n\nUse `!disablegrace` to disable it.');
-    }
 }
 
 // ==========================================

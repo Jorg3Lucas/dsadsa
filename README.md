@@ -12,6 +12,7 @@ A Discord bot for managing MIR4 clan member registrations, role assignment, and 
 - **24h reminder DM** before temp registration expires
 - **Clan expedition weekend grace period** (Fri 00:01 → Sun 17:00 BRT) — no removals during this window
 - **72h out-of-allied-clan grace (per person)** — members keep their role for 72h after leaving an allied clan (or the ranking), so temporary clan switches for events don't strip roles before they can rejoin
+- **Automatic grace warning DM** — members are DM'd the first time they're detected outside an allied clan, warning that their role will be removed in 72h
 - **Allied Clans system** — configure which clans are allied per world
 - **Anti-impersonation security system**
 - **Auto-backup** of database files
