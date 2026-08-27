@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createWriteBatcher, WRITE_BATCH_SIZE, WRITE_BATCH_PAUSE_MS, startOutOfAlliedGrace, getOutOfAlliedGraceStatus, sendOutOfAlliedGraceDm } from '../src/core/ranking-sync-engine.js';
+import { createWriteBatcher, WRITE_BATCH_SIZE, WRITE_BATCH_PAUSE_MS, startOutOfAlliedGrace, getOutOfAlliedGraceStatus } from '../src/core/ranking-sync-engine.js';
 import { OUT_OF_ALLIED_GRACE_MS } from '../src/core/ranking-constants.js';
 
 describe('createWriteBatcher (conservative Discord-write batching)', () => {
@@ -180,39 +180,4 @@ describe('72h out-of-allied-clan grace (per person)', () => {
     });
 });
 
-describe('sendOutOfAlliedGraceDm — 72h grace warning DM', () => {
-    function makeMember({ sendImpl } = {}) {
-        return {
-            id: 'member-123',
-            user: {
-                tag: 'TestUser#1234',
-                send: sendImpl || vi.fn().mockResolvedValue(undefined)
-            }
-        };
-    }
 
-    it('sends the warning DM and logs success', async () => {
-        const send = vi.fn().mockResolvedValue(undefined);
-        const member = makeMember({ sendImpl: send });
-        const logs = [];
-        const logEvent = (msg) => logs.push(msg);
-
-        await sendOutOfAlliedGraceDm(member, logEvent);
-
-        expect(send).toHaveBeenCalledTimes(1);
-        const msg = send.mock.calls[0][0];
-        expect(msg).toContain('outside an allied clan');
-        expect(msg).toContain('removed in 72 hours');
-        expect(logs.some(l => l.includes('[Grace DM]') && l.includes('warned'))).toBe(true);
-    });
-
-    it('logs a failure without throwing when the DM cannot be sent', async () => {
-        const send = vi.fn().mockRejectedValue(new Error('Cannot send messages to this user'));
-        const member = makeMember({ sendImpl: send });
-        const logs = [];
-        const logEvent = (msg) => logs.push(msg);
-
-        await expect(sendOutOfAlliedGraceDm(member, logEvent)).resolves.toBeUndefined();
-        expect(logs.some(l => l.includes('[Grace DM]') && l.includes('Failed to send DM'))).toBe(true);
-    });
-});

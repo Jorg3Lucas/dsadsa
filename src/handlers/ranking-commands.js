@@ -705,6 +705,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     if (commandName === 'grace') {
         if (!await deferReplySafe(interaction)) return;
 
+        const graceEnabled = db.config?.graceEnabled !== false; // default: enabled
+        const graceStatusLine = graceEnabled
+            ? '✅ **Grace: ENABLED** (members have 72h before role removal)'
+            : '🔓 **Grace: DISABLED** (members lose role immediately on next sync)';
+
         const targetOption = options.getMember('member') || options.getUser('member');
 
         // ── Single-member lookup ──
@@ -716,17 +721,17 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             const nicknameLine = userData?.nickname ? `\n📝 **Nickname:** ${userData.nickname}` : '';
 
             if (!grace.started) {
-                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}\n\n✅ **No active grace period.** This member is currently in an allied clan (or was never detected outside one).`);
+                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}\n\n${graceStatusLine}\n\n✅ **No active grace period.** This member is currently in an allied clan (or was never detected outside one).`);
             }
 
             const since = db.roleNotify?.[memberId]?.outOfAlliedSince;
             const startedLine = since ? `\n🕐 **Started:** ${new Date(since).toLocaleString()}` : '';
 
             if (grace.expired) {
-                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n❌ **Grace EXPIRED** — their role can be removed on the next sync.`);
+                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n${graceStatusLine}\n\n❌ **Grace EXPIRED** — their role can be removed on the next sync.`);
             }
 
-            return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n🟢 **${grace.hoursLeft}h remaining** of the 72h grace period.\n\n⚠️ Their role will be removed if they don't rejoin an allied clan before the deadline.`);
+            return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n${graceStatusLine}\n\n🟢 **${grace.hoursLeft}h remaining** of the 72h grace period.\n\n⚠️ Their role will be removed if they don't rejoin an allied clan before the deadline.`);
         }
 
         // ── Full report: all members with an active grace timer ──
@@ -738,7 +743,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         }
 
         if (graceEntries.length === 0) {
-            return interaction.editReply('⏳ **72h Grace Period Status**\n\n✅ **No members currently in the 72h grace period.** Everyone is in an allied clan (or has no active out-of-allied timer).');
+            return interaction.editReply(`⏳ **72h Grace Period Status**\n\n${graceStatusLine}\n\n✅ **No members currently in the 72h grace period.** Everyone is in an allied clan (or has no active out-of-allied timer).`);
         }
 
         // Resolve display names concurrently (pure reads — no rate-limit risk on GETs).
@@ -757,7 +762,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             .sort((a, b) => a.status.hoursLeft - b.status.hoursLeft); // most urgent first
         const expired = graceEntries.filter(({ status }) => status.expired);
 
-        let report = `⏳ **72h Grace Period Status**\n\n`;
+        let report = `⏳ **72h Grace Period Status**\n\n${graceStatusLine}\n\n`;
 
         if (inGrace.length > 0) {
             report += `🟢 **In grace (${inGrace.length})**\n`;

@@ -7,12 +7,11 @@ A Discord bot for managing MIR4 clan member registrations, role assignment, and 
 - **Self-registration** via welcome buttons (Owner / Pilot)
 - **Admin approval workflow** with permanent or temporary (3-day) registration
 - **Automatic EU ranking scraper** — fetches Top 1000 players from the official MIR4 ranking portal
-- **Daily synchronization** at 17:00 BRT — syncs nicknames, roles, and ranking validation
+- **Daily synchronization** at 20:00 BRT — syncs nicknames, roles, and ranking validation
 - **Temporary registration** with 3-day expiry, auto-conversion to permanent when found in an allied clan
 - **24h reminder DM** before temp registration expires
 - **Clan expedition weekend grace period** (Fri 00:01 → Sun 17:00 BRT) — no removals during this window
 - **72h out-of-allied-clan grace (per person)** — members keep their role for 72h after leaving an allied clan (or the ranking), so temporary clan switches for events don't strip roles before they can rejoin
-- **Automatic grace warning DM** — members are DM'd the first time they're detected outside an allied clan, warning that their role will be removed in 72h
 - **Allied Clans system** — configure which clans are allied per world
 - **Anti-impersonation security system**
 - **Auto-backup** of database files
@@ -115,7 +114,7 @@ After selecting a user from `/manage`:
 
 ## Synchronization Engine
 
-Runs at **17:00 BRT** daily (configurable in `ranking-events.js`) and on startup:
+Runs at **20:00 BRT** daily (configurable in `ranking-events.js`) and on startup:
 
 | Step | Name | Description |
 |------|------|-------------|
