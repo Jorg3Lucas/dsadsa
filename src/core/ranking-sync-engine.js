@@ -1,4 +1,4 @@
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, ensureConfig } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, OUT_OF_ALLIED_GRACE_MS, ensureConfig } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache, findNicknameInCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
@@ -105,10 +105,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
         await flush();
 
-        // 2.5. RANKING VALIDATION — remove ROLE (not registration) if nickname not in any world's ranking
+        // 2.5. RANKING VALIDATION — remove ROLE (not registration) if nickname not in any world's ranking.
+        //      Subject to the same per-person 72h grace: the role is only stripped once the
+        //      member has been missing from the ranking for over 72h.
         const rankingValidationEnabled = db.config?.rankingValidationEnabled === true;
         if (rankingValidationEnabled && rankingCache) {
             let removedRoleCount = 0;
+            let graceStartedCount = 0;
             const cache = rankingCache;
 
             for (const [memberId, userData] of Object.entries(db.users)) {
@@ -120,37 +123,75 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 const inRanking = findNicknameInCache(nickname, cache);
 
                 if (inRanking) {
-                    // Account is back in the ranking — allow future notifications
+                    // Account is back in the ranking — allow future notifications + reset grace
                     deleteRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt');
+                    deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
                 } else {
                     const member = members.get(memberId);
-                    if (member) {
-                        const displayName = userData.nickname || member.user.username;
-                        logEvent(`⚠️ [Ranking Validation] ${member.user.tag} (${displayName}) not found in any EU ranking — removing role (keeping registration)`);
+                    const grace = getOutOfAlliedGraceStatus(db, memberId);
 
-                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
-                        }
-
-                        // Keep the nickname — only remove the role
-                        removedRoleCount++;
-                    }
-
-                    // Also handle pilots linked to this owner — just remove role, keep nickname
-                    if (userData.pilotIds && userData.pilotIds.length > 0) {
-                        for (const pId of userData.pilotIds) {
-                            const pilotMember = members.get(pId);
-                            if (pilotMember && pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                queueWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
+                    if (!grace.started) {
+                        // First detection — start the 72h timer. A fresh timer only
+                        // matters while the member still holds the role; if it was
+                        // already stripped (e.g. after an earlier grace expiry) there
+                        // is nothing left to remove.
+                        startOutOfAlliedGrace(db, memberId);
+                        graceStartedCount++;
+                        const stillHasRole = !!(member && member.roles.cache.has(MEMBER_ROLE_ID));
+                        logEvent(`⏳ [Ranking Validation] ${member?.user?.tag || memberId} (${userData.nickname}) not found in any EU ranking — 72h grace started${stillHasRole ? ', role kept' : ', role already removed'}`);
+                        // Warn the member the first time they are detected outside an
+                        // allied clan (only meaningful while they still hold the role).
+                        // Step 2.5's check is a raw cache hit, so it can flag a member
+                        // who is genuinely in an allied clan on a stale/partial scrape —
+                        // the allied-clan-aware lookup is authoritative for the DM.
+                        if (stillHasRole) {
+                            const alliedLookup = lookupNickname(userData.nickname, db, cache);
+                            if (!alliedLookup.found || !alliedLookup.inAlliedClan) {
+                                await sendOutOfAlliedGraceDm(member, logEvent);
                             }
                         }
+                    } else if (grace.expired) {
+                        if (member) {
+                            const displayName = userData.nickname || member.user.username;
+                            logEvent(`⚠️ [Ranking Validation] ${member.user.tag} (${displayName}) not found in any EU ranking for over 72h — removing role (keeping registration)`);
+
+                            if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+                                queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                            }
+
+                            // Keep the nickname — only remove the role
+                            removedRoleCount++;
+                        }
+
+                        // Also handle pilots linked to this owner — just remove role, keep nickname.
+                        // Pilots follow their owner, but the per-person grace still applies: a
+                        // pilot with their own running timer only loses the role once that
+                        // timer has elapsed on their own account.
+                        if (userData.pilotIds && userData.pilotIds.length > 0) {
+                            for (const pId of userData.pilotIds) {
+                                const pilotMember = members.get(pId);
+                                if (pilotMember && pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                                    const pilotGrace = getOutOfAlliedGraceStatus(db, pId);
+                                    if (pilotGrace.expired || !pilotGrace.started) {
+                                        queueWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
+                                    }
+                                }
+                            }
+                        }
+
+                        // Grace consumed — clear so a later re-entry restarts the countdown
+                        deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
+                    } else {
+                        logEvent(`⏳ [Ranking Validation] ${member?.user?.tag || memberId} (${userData.nickname}) not found in any EU ranking — within 72h grace (${grace.hoursLeft}h left), role kept`);
                     }
                 }
             }
 
-            if (removedRoleCount > 0) {
+            if (removedRoleCount > 0 || graceStartedCount > 0) {
                 saveLocalStorage();
-                logEvent(`🧹 [Ranking Validation] Removed roles from ${removedRoleCount} member(s) not found in any EU ranking (registrations kept)`);
+                if (removedRoleCount > 0) {
+                    logEvent(`🧹 [Ranking Validation] Removed roles from ${removedRoleCount} member(s) not found in any EU ranking for over 72h (registrations kept)`);
+                }
             }
         }
 
@@ -358,10 +399,11 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
                         logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
                     }
-                    // Role restored — allow future notifications
+                    // Role restored — allow future notifications + reset the 72h grace timer
                     deleteRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt');
                     deleteRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
                     deleteRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt');
+                    deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
                 } else if (syncCache) {
                     // ❌ Not in allied clan — remove role (keep registration)
                     // Only run when the ranking cache is available: if the cache is
@@ -382,8 +424,26 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             logEvent(`[Sync] Kept role for ${member.user.username} — ranking match is fuzzy only (${lookup.serverName}/${lookup.clanName}), skipping removal`);
                         }
                     } else if (hasMemberRole) {
-                        queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
-                        logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan (registration kept)`);
+                        // ⏳ 72h per-person grace: members who leave the clan — or get
+                        // moved to non-registered clans by server managers for events —
+                        // can't rejoin until the server reset, so the role is only
+                        // removed once they have been outside an allied clan for over
+                        // 72h. The timer resets the moment they return to an allied clan.
+                        const grace = getOutOfAlliedGraceStatus(db, memberId);
+                        if (!grace.started) {
+                            startOutOfAlliedGrace(db, memberId);
+                            logEvent(`⏳ [Sync] ${member.user.username} not in allied clan — 72h grace started, role kept (registration kept)`);
+                            // Warn the member the first time they are detected outside
+                            // an allied clan.
+                            await sendOutOfAlliedGraceDm(member, logEvent);
+                        } else if (grace.expired) {
+                            queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                            logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan for over 72h (registration kept)`);
+                            // Grace consumed — clear so a later re-entry restarts the countdown
+                            deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
+                        } else {
+                            logEvent(`⏳ [Sync] ${member.user.username} not in allied clan — within 72h grace (${grace.hoursLeft}h left), role kept`);
+                        }
                     }
                 }
             } else if (!isRegistered && hasMemberRole && rankingValidationEnabled) {
@@ -444,6 +504,100 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 function deleteRoleNotifyFlag(db, memberId, flag) {
     if (!db.roleNotify || !db.roleNotify[memberId]) return;
     delete db.roleNotify[memberId][flag];
+}
+
+// ==========================================
+// ⏳ 72H OUT-OF-ALLIED-CLAN GRACE (per person)
+// ==========================================
+
+/**
+ * Per-person 72h grace before a member's role is removed for being outside an
+ * allied clan (or missing from the ranking). MIR4 players frequently leave the
+ * clan temporarily — or get moved to non-registered clans by server managers
+ * for events — and can't rejoin until the weekly server reset, so stripping the
+ * role on the very next sync is too aggressive. The countdown is stored per
+ * member in db.roleNotify[memberId].outOfAlliedSince and resets the moment the
+ * member is found back in an allied clan.
+ */
+
+/**
+ * Read the grace timestamp for a member, or null when no grace is active.
+ */
+function getOutOfAlliedSince(db, memberId) {
+    return db.roleNotify?.[memberId]?.outOfAlliedSince || null;
+}
+
+/**
+ * Start the 72h grace timer for a member (idempotent — a running timer is kept).
+ */
+export function startOutOfAlliedGrace(db, memberId, now = new Date()) {
+    if (!db.roleNotify) db.roleNotify = {};
+    if (!db.roleNotify[memberId]) db.roleNotify[memberId] = {};
+    if (!db.roleNotify[memberId].outOfAlliedSince) {
+        db.roleNotify[memberId].outOfAlliedSince = now.toISOString();
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Status of the member's 72h grace:
+ *   - started: a timer exists (they were detected outside an allied clan)
+ *   - expired: the 72h window has elapsed (role removal is now allowed)
+ *   - hoursLeft: whole hours remaining until the window closes (0 when expired)
+ * A member with no timer is never "expired" — the first detection starts it.
+ */
+export function getOutOfAlliedGraceStatus(db, memberId, now = new Date()) {
+    const HOUR_MS = 60 * 60 * 1000;
+    const since = getOutOfAlliedSince(db, memberId);
+    if (!since) {
+        // No timer yet — a member detected for the first time effectively has the
+        // full 72h ahead of them (never "expired" until a timer actually runs).
+        return { started: false, expired: false, hoursLeft: OUT_OF_ALLIED_GRACE_MS / HOUR_MS };
+    }
+    const sinceMs = new Date(since).getTime();
+    // Corrupt/unparseable timestamp: treat as no timer (keeps the role, and the
+    // sync will self-heal by starting a fresh timer on the next detection).
+    if (Number.isNaN(sinceMs)) {
+        return { started: false, expired: false, hoursLeft: OUT_OF_ALLIED_GRACE_MS / HOUR_MS };
+    }
+    const elapsed = now.getTime() - sinceMs;
+    if (elapsed >= OUT_OF_ALLIED_GRACE_MS) {
+        return { started: true, expired: true, hoursLeft: 0 };
+    }
+    return {
+        started: true,
+        expired: false,
+        hoursLeft: Math.max(1, Math.ceil((OUT_OF_ALLIED_GRACE_MS - elapsed) / HOUR_MS))
+    };
+}
+
+// ==========================================
+// 📧 OUT-OF-ALLIED-CLAN GRACE DM
+// ==========================================
+
+/**
+ * DM a member warning that they are currently outside an allied clan and that
+ * their member role will be removed in 72h unless they return (or get moved
+ * back) before the grace window closes. Fires only when the grace timer is
+ * first started — never re-sent on later syncs of the same window.
+ *
+ * Deliberately NOT batched: opening a DM channel has its own strict per-user
+ * rate limit, and this path runs at most once per member per grace window.
+ */
+export async function sendOutOfAlliedGraceDm(guildMember, logEvent) {
+    try {
+        await guildMember.user.send(
+            '⚠️ **Heads up!**\n\n' +
+            'You are currently **outside an allied clan** in the EU ranking.\n\n' +
+            'Your **member role will be removed in 72 hours** unless you are in an allied clan again before the grace period ends.\n\n' +
+            'If you left the clan temporarily — or were moved to another clan for an event — make sure you are back in an allied clan before the deadline to keep your role!\n\n' +
+            'Need help? Contact an administrator.'
+        );
+        logEvent(`📧 [Grace DM] ${guildMember.user.tag} warned — outside allied clan, role removal in 72h`);
+    } catch (e) {
+        logEvent(`⚠️ [Grace DM] Failed to send DM to ${guildMember.user.tag} (${guildMember.id}): ${e.message}`);
+    }
 }
 
 // ==========================================

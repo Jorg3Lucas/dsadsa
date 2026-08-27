@@ -19,7 +19,7 @@ import {
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, getRankingCacheUpdatedAt } from '../core/ranking-cache.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
-import { runDailySynchronization } from '../core/ranking-sync-engine.js';
+import { runDailySynchronization, getOutOfAlliedGraceStatus } from '../core/ranking-sync-engine.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
@@ -698,6 +698,97 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             `━━━━━━━━━━━━━━━━━━━━━━`;
 
         logEvent(`📊 ${interaction.user.tag} requested bot stats`);
+        return interaction.editReply(report);
+    }
+
+    // ── grace ──
+    if (commandName === 'grace') {
+        if (!await deferReplySafe(interaction)) return;
+
+        const targetOption = options.getMember('member') || options.getUser('member');
+
+        // ── Single-member lookup ──
+        if (targetOption) {
+            const memberId = targetOption.id;
+            const userData = db.users[memberId];
+            const grace = getOutOfAlliedGraceStatus(db, memberId);
+            const displayName = targetOption.displayName || targetOption.user?.username || targetOption.tag || targetOption.username || `<@${memberId}>`;
+            const nicknameLine = userData?.nickname ? `\n📝 **Nickname:** ${userData.nickname}` : '';
+
+            if (!grace.started) {
+                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}\n\n✅ **No active grace period.** This member is currently in an allied clan (or was never detected outside one).`);
+            }
+
+            const since = db.roleNotify?.[memberId]?.outOfAlliedSince;
+            const startedLine = since ? `\n🕐 **Started:** ${new Date(since).toLocaleString()}` : '';
+
+            if (grace.expired) {
+                return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n❌ **Grace EXPIRED** — their role can be removed on the next sync.`);
+            }
+
+            return interaction.editReply(`⏳ **Grace Status — ${displayName}**${nicknameLine}${startedLine}\n\n🟢 **${grace.hoursLeft}h remaining** of the 72h grace period.\n\n⚠️ Their role will be removed if they don't rejoin an allied clan before the deadline.`);
+        }
+
+        // ── Full report: all members with an active grace timer ──
+        const graceEntries = [];
+        for (const [memberId, flags] of Object.entries(db.roleNotify || {})) {
+            if (!flags || !flags.outOfAlliedSince) continue;
+            const status = getOutOfAlliedGraceStatus(db, memberId);
+            graceEntries.push({ memberId, status, since: flags.outOfAlliedSince });
+        }
+
+        if (graceEntries.length === 0) {
+            return interaction.editReply('⏳ **72h Grace Period Status**\n\n✅ **No members currently in the 72h grace period.** Everyone is in an allied clan (or has no active out-of-allied timer).');
+        }
+
+        // Resolve display names concurrently (pure reads — no rate-limit risk on GETs).
+        // Cap the fetches: the ~1900-char report only renders a few dozen rows, so
+        // fetching more than FETCH_CAP members wastes GET requests on data the
+        // truncated report would never display. Unfetched members fall back to a
+        // plain mention below.
+        const FETCH_CAP = 100;
+        const fetchList = graceEntries.slice(0, FETCH_CAP);
+        const memberById = new Map();
+        await Promise.all(fetchList.map(async ({ memberId }) => {
+            memberById.set(memberId, await guild.members.fetch(memberId).catch(() => null));
+        }));
+
+        const inGrace = graceEntries.filter(({ status }) => !status.expired)
+            .sort((a, b) => a.status.hoursLeft - b.status.hoursLeft); // most urgent first
+        const expired = graceEntries.filter(({ status }) => status.expired);
+
+        let report = `⏳ **72h Grace Period Status**\n\n`;
+
+        if (inGrace.length > 0) {
+            report += `🟢 **In grace (${inGrace.length})**\n`;
+            for (const { memberId, status } of inGrace) {
+                const member = memberById.get(memberId);
+                const tag = member ? member.toString() : `<@${memberId}>`;
+                const nick = db.users[memberId]?.nickname ? ` — **${db.users[memberId].nickname}**` : '';
+                report += `• ${tag}${nick} — ⏳ ${status.hoursLeft}h left\n`;
+            }
+            report += '\n';
+        }
+
+        if (expired.length > 0) {
+            report += `🔴 **Grace expired (${expired.length})**\n`;
+            for (const { memberId, since } of expired) {
+                const member = memberById.get(memberId);
+                const tag = member ? member.toString() : `<@${memberId}>`;
+                const nick = db.users[memberId]?.nickname ? ` — **${db.users[memberId].nickname}**` : '';
+                const sinceLine = since ? ` — since ${new Date(since).toLocaleDateString()}` : '';
+                report += `• ${tag}${nick} — ❌ role can be removed${sinceLine}\n`;
+            }
+            report += '\n';
+        }
+
+        report += `━━━━━━━━━━━━━━━━━━━━━━\nℹ️ Members keep their role for **72h** after leaving an allied clan; the timer resets when they return.`;
+
+        if (report.length > 1900) {
+            report = report.substring(0, 1900) + '\n\n... (truncated)';
+        }
+
+        logEvent(`⏳ Admin ${interaction.user.tag} checked 72h grace status (${graceEntries.length} members)`);
         return interaction.editReply(report);
     }
 

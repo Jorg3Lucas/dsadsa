@@ -40,7 +40,8 @@ vi.mock('../src/lang/lang.js', () => ({
 }));
 
 vi.mock('../src/core/ranking-sync-engine.js', () => ({
-    runDailySynchronization: vi.fn()
+    runDailySynchronization: vi.fn(),
+    getOutOfAlliedGraceStatus: vi.fn()
 }));
 
 
@@ -52,7 +53,9 @@ vi.mock('../src/handlers/ranking-pilot.js', () => ({
     findOwnerCandidates: vi.fn(() => [])
 }));
 
-import { handleSelectPendingNickname } from '../src/handlers/ranking-commands.js';
+import { handleRankingCommand, handleSelectPendingNickname } from '../src/handlers/ranking-commands.js';
+import { getOutOfAlliedGraceStatus } from '../src/core/ranking-sync-engine.js';
+
 
 // ──────────────────────────────────────────
 // handleSelectPendingNickname
@@ -348,5 +351,201 @@ describe('handleSelectPendingNickname', () => {
 
         const payload = interaction.editReply.mock.calls[0][0];
         expect(payload.content).toContain(`📌 **Selected for <@${USER_ID}>:** "${SUGGESTED}"`);
+    });
+});
+
+// ──────────────────────────────────────────
+// /grace — 72h out-of-allied-clan grace status
+// ──────────────────────────────────────────
+
+describe('handleRankingCommand — /grace', () => {
+    const ADMIN_ID = '999999999999999999';
+    const ADMIN_TAG = 'AdminUser#0001';
+    const MEMBER_1 = '111111111111111111';
+    const MEMBER_2 = '222222222222222222';
+    const MEMBER_3 = '333333333333333333';
+
+    function buildInteraction({ memberOption = null } = {}) {
+        const memberFetch = vi.fn().mockResolvedValue(null);
+        return {
+            commandName: 'grace',
+            deferred: true,
+            deferReply: vi.fn().mockResolvedValue(),
+            editReply: vi.fn().mockResolvedValue(),
+            user: { id: ADMIN_ID, tag: ADMIN_TAG },
+            guild: {
+                members: { fetch: memberFetch }
+            },
+            options: {
+                getMember: vi.fn(() => memberOption),
+                getUser: vi.fn(() => null)
+            }
+        };
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('reports no members in grace when roleNotify has no timers', async () => {
+        const interaction = buildInteraction();
+        const db = { users: {}, roleNotify: {} };
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain('No members currently in the 72h grace period');
+    });
+
+    it('lists in-grace members with hours remaining, most urgent first', async () => {
+        const interaction = buildInteraction();
+        const db = {
+            users: {
+                [MEMBER_1]: { nickname: 'PlayerOne' },
+                [MEMBER_2]: { nickname: 'PlayerTwo' }
+            },
+            roleNotify: {
+                [MEMBER_1]: { outOfAlliedSince: '2026-08-01T00:00:00.000Z' },
+                [MEMBER_2]: { outOfAlliedSince: '2026-08-03T00:00:00.000Z' }
+            }
+        };
+        interaction.guild.members.fetch.mockImplementation((id) =>
+            Promise.resolve({ id, toString: () => `<@${id}>` })
+        );
+
+        getOutOfAlliedGraceStatus
+            .mockReturnValueOnce({ started: true, expired: false, hoursLeft: 62 }) // MEMBER_1
+            .mockReturnValueOnce({ started: true, expired: false, hoursLeft: 10 }); // MEMBER_2
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain('In grace (2)');
+        expect(content).toContain(`<@${MEMBER_2}> — **PlayerTwo** — ⏳ 10h left`);
+        expect(content).toContain(`<@${MEMBER_1}> — **PlayerOne** — ⏳ 62h left`);
+        // Sorted most urgent first: PlayerTwo (10h) before PlayerOne (62h)
+        expect(content.indexOf('PlayerTwo')).toBeLessThan(content.indexOf('PlayerOne'));
+    });
+
+    it('shows an expired section alongside in-grace members', async () => {
+        const interaction = buildInteraction();
+        const db = {
+            users: {
+                [MEMBER_1]: { nickname: 'PlayerOne' },
+                [MEMBER_2]: { nickname: 'PlayerTwo' }
+            },
+            roleNotify: {
+                [MEMBER_1]: { outOfAlliedSince: '2026-08-01T00:00:00.000Z' },
+                [MEMBER_2]: { outOfAlliedSince: '2026-08-05T00:00:00.000Z' }
+            }
+        };
+        interaction.guild.members.fetch.mockImplementation((id) =>
+            Promise.resolve({ id, toString: () => `<@${id}>` })
+        );
+
+        getOutOfAlliedGraceStatus
+            .mockReturnValueOnce({ started: true, expired: true, hoursLeft: 0 })  // MEMBER_1 expired
+            .mockReturnValueOnce({ started: true, expired: false, hoursLeft: 30 }); // MEMBER_2 in grace
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain('In grace (1)');
+        expect(content).toContain('Grace expired (1)');
+        expect(content).toContain(`<@${MEMBER_1}> — **PlayerOne** — ❌ role can be removed`);
+    });
+
+    it('handles members not in the guild (fetch fails) with a mention fallback', async () => {
+        const interaction = buildInteraction();
+        const db = {
+            users: { [MEMBER_1]: { nickname: 'PlayerOne' } },
+            roleNotify: { [MEMBER_1]: { outOfAlliedSince: '2026-08-01T00:00:00.000Z' } }
+        };
+        interaction.guild.members.fetch.mockRejectedValue(new Error('Unknown Member'));
+        getOutOfAlliedGraceStatus.mockReturnValue({ started: true, expired: false, hoursLeft: 50 });
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain(`<@${MEMBER_1}>`);
+        expect(content).toContain('50h left');
+    });
+
+    it('truncates an oversized report', async () => {
+        const interaction = buildInteraction();
+        const manyMembers = {};
+        const manyTimers = {};
+        for (let i = 0; i < 60; i++) {
+            // String concatenation (not numeric addition) — Discord IDs are
+            // 18-digit integers beyond MAX_SAFE_INTEGER, so numeric +i would
+            // collapse distinct keys onto the same double.
+            const id = '1000000000000000' + String(i).padStart(2, '0');
+            manyMembers[id] = { nickname: `Player${i}` };
+            manyTimers[id] = { outOfAlliedSince: '2026-08-01T00:00:00.000Z' };
+        }
+        const db = { users: manyMembers, roleNotify: manyTimers };
+        interaction.guild.members.fetch.mockImplementation((id) =>
+            Promise.resolve({ id, toString: () => `<@${id}>` })
+        );
+        getOutOfAlliedGraceStatus.mockReturnValue({ started: true, expired: false, hoursLeft: 40 });
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content.length).toBeLessThanOrEqual(1900 + '\n\n... (truncated)'.length);
+        expect(content).toContain('(truncated)');
+    });
+
+    // ── Single-member lookup ──
+
+    function memberOptionFor(id, name) {
+        return {
+            id,
+            displayName: name,
+            user: { username: name },
+            tag: `${name}#0001`
+        };
+    }
+
+    it('single member: no active grace', async () => {
+        const interaction = buildInteraction({ memberOption: memberOptionFor(MEMBER_1, 'PlayerOne') });
+        const db = { users: { [MEMBER_1]: { nickname: 'PlayerOne' } }, roleNotify: {} };
+        getOutOfAlliedGraceStatus.mockReturnValue({ started: false, expired: false, hoursLeft: 72 });
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain('Grace Status — PlayerOne');
+        expect(content).toContain('No active grace period');
+    });
+
+    it('single member: in grace with hours remaining', async () => {
+        const interaction = buildInteraction({ memberOption: memberOptionFor(MEMBER_1, 'PlayerOne') });
+        const db = {
+            users: { [MEMBER_1]: { nickname: 'PlayerOne' } },
+            roleNotify: { [MEMBER_1]: { outOfAlliedSince: '2026-08-06T12:00:00.000Z' } }
+        };
+        getOutOfAlliedGraceStatus.mockReturnValue({ started: true, expired: false, hoursLeft: 48 });
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain('48h remaining');
+        expect(content).toContain('**Nickname:** PlayerOne');
+        expect(content).toContain('Started:');
+    });
+
+    it('single member: grace expired', async () => {
+        const interaction = buildInteraction({ memberOption: memberOptionFor(MEMBER_1, 'PlayerOne') });
+        const db = {
+            users: { [MEMBER_1]: { nickname: 'PlayerOne' } },
+            roleNotify: { [MEMBER_1]: { outOfAlliedSince: '2026-08-01T00:00:00.000Z' } }
+        };
+        getOutOfAlliedGraceStatus.mockReturnValue({ started: true, expired: true, hoursLeft: 0 });
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain('Grace EXPIRED');
     });
 });

@@ -68,6 +68,14 @@ export async function registerMir4SlashCommands(guild) {
             },
             { name: 'stats', description: '📊 Show bot statistics (registrations, sync status, allied clans)' },
             {
+                name: 'grace',
+                description: '⏳ [Admin] Show remaining 72h grace time for members outside allied clans.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                options: [
+                    { type: 6, name: 'member', description: 'Check a specific member (optional).', required: false }
+                ]
+            },
+            {
                 name: 'notify',
                 description: '📧 [Admin] Send notifications to server members',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()

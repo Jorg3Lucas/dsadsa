@@ -11,6 +11,8 @@ A Discord bot for managing MIR4 clan member registrations, role assignment, and 
 - **Temporary registration** with 3-day expiry, auto-conversion to permanent when found in an allied clan
 - **24h reminder DM** before temp registration expires
 - **Clan expedition weekend grace period** (Fri 00:01 → Sun 17:00 BRT) — no removals during this window
+- **72h out-of-allied-clan grace (per person)** — members keep their role for 72h after leaving an allied clan (or the ranking), so temporary clan switches for events don't strip roles before they can rejoin
+- **Automatic grace warning DM** — members are DM'd the first time they're detected outside an allied clan, warning that their role will be removed in 72h
 - **Allied Clans system** — configure which clans are allied per world
 - **Anti-impersonation security system**
 - **Auto-backup** of database files
@@ -53,6 +55,7 @@ TOKEN=your_discord_bot_token
 | `/manualremovepilot <owner> <pilot>` | Admin | Manually remove a pilot from an owner |
 | `/cleandb` | Admin | Remove duplicate nickname entries from database |
 | `/manage` | Admin | Bot management panel with user list and actions |
+| `/grace [member]` | Admin | Show remaining 72h grace time for members outside allied clans (all members, or a specific one) |
 | `/sendpanel` | Admin | Send a fixed registration panel to the current channel |
 | `/listunregistered [notify:true/false]` | Admin | List members with role but no registration; optionally DM them with 5s delay |
 
@@ -118,9 +121,9 @@ Runs at **17:00 BRT** daily (configurable in `ranking-events.js`) and on startup
 |------|------|-------------|
 | 1 | **Pilot Auto-Link** | Auto-links members with " - Pilot" nickname to their owner |
 | 2 | **Anti-Impostor** | Detects members impersonating registered nicknames |
-| 2.5 | **Ranking Validation** | *(if enabled)* Removes members not found in any EU ranking |
+| 2.5 | **Ranking Validation** | *(if enabled)* Removes member role after 72h not found in any EU ranking (per-person grace) |
 | 2.75 | **Temp Cleanup** | Converts temps to permanent (if in allied clan) or removes expired temps |
-| 3 | **Nickname Sync + Role** | Syncs nicknames and assigns/removes member role |
+| 3 | **Nickname Sync + Role** | Syncs nicknames and assigns/removes member role (72h per-person grace before removal) |
 
 ---
 
@@ -132,6 +135,8 @@ Configure via `/manage` → **⚙️ Allied Clans**:
 - Add clan names (exactly as they appear in the ranking)
 - Remove clans as needed
 - Members must be in an **allied clan** visible in the EU ranking to maintain permanent status
+- Role removal for leaving an allied clan (or dropping out of the ranking) waits **72h per person** — the countdown starts on the first sync where the member is found outside an allied clan and resets the moment they return (`db.roleNotify[memberId].outOfAlliedSince`)
+- When the 72h countdown starts, the member receives an **automatic DM** warning that their role will be removed unless they rejoin an allied clan in time
 - Used by the temp registration conversion check and admin approval display
 
 ---
