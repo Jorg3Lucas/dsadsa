@@ -31,42 +31,44 @@ export const APPROVER_ROLE_IDS = [
 ];
 
 // ── World group IDs for each region used in the ranking URL ──
-// worldgroupId: 3=EU1, 5=SA1, 2=NA1, 1=ASIA1, 11=ASIA2, 21=ASIA3, 6=INMENA1
+// worldgroupId: 3=EU1, 5=SA1, 2=NA1, 1=ASIA1, 11=ASIA2, 21=ASIA3, 6=INMENA1, 9=BW
 export const WORLD_GROUP_IDS = {
     // EU (worldgroupId=3)
-    611: 3, 612: 3, 613: 3, 614: 3,
-    621: 3, 622: 3, 623: 3, 624: 3,
-    652: 3, 653: 3,
+    611: 3, 612: 3,
+    621: 3, 622: 3, 624: 3,
+    653: 3,
     // SA — South America (worldgroupId=5)
-    711: 5, 712: 5, 713: 5, 714: 5,
+    711: 5, 712: 5, 713: 5,
     721: 5, 722: 5, 723: 5,
-    731: 5, 732: 5, 733: 5,
-    752: 5, 753: 5,
+    731: 5, 732: 5,
+    753: 5,
     // NA — North America (worldgroupId=2)
     511: 2, 512: 2, 513: 2, 514: 2,
     521: 2, 522: 2, 523: 2,
-    531: 2, 532: 2, 533: 2,
-    552: 2, 553: 2,
+    531: 2, 532: 2,
+    553: 2,
     // ASIA1 (worldgroupId=1)
-    811: 1, 812: 1, 813: 1, 814: 1,
-    821: 1, 822: 1, 823: 1, 824: 1,
+    811: 1, 812: 1,
+    821: 1, 822: 1, 823: 1,
     831: 1, 832: 1, 833: 1, 834: 1,
-    312: 1, 313: 1,
+    313: 1,
     // ASIA2 (worldgroupId=11)
     851: 11, 852: 11, 853: 11,
     861: 11, 862: 11, 863: 11,
-    871: 11, 872: 11, 873: 11,
-    881: 11, 882: 11, 883: 11,
-    322: 11, 323: 11,
+    881: 11, 883: 11,
+    323: 11,
     // ASIA3 (worldgroupId=21)
-    911: 21, 912: 21, 913: 21, 914: 21,
-    921: 21, 922: 21, 923: 21, 924: 21,
+    911: 21, 912: 21, 913: 21,
+    921: 21, 922: 21, 923: 21,
     931: 21, 932: 21, 933: 21, 934: 21,
-    332: 21, 333: 21,
+    333: 21,
     // INMENA (worldgroupId=6)
-    221: 6, 222: 6, 223: 6, 224: 6,
-    225: 6, 226: 6, 227: 6, 228: 6,
+    221: 6, 223: 6,
+    225: 6, 227: 6,
     252: 6, 253: 6,
+    // BW — Boosting World (worldgroupId=9)
+    314: 9, 324: 9, 334: 9,
+    554: 9, 654: 9, 754: 9, 254: 9,
 };
 
 // ── Region names for the world selector ──
@@ -77,57 +79,196 @@ export const REGION_NAMES = {
     asia1: '🌏 ASIA1',
     asia2: '🌏 ASIA2',
     asia3: '🌏 ASIA3',
-    inmena: '🌍 INMENA (India/Middle East/North Africa)'
+    inmena: '🌍 INMENA (India/Middle East/North Africa)',
+    bw: '⚡ BW (Boosting World)'
 };
 
 // ── World IDs grouped by region ──
 export const WORLDS_BY_REGION = {
-    eu: [611, 612, 613, 614, 621, 622, 623, 624, 652, 653],
-    na: [511, 512, 513, 514, 521, 522, 523, 531, 532, 533, 552, 553],
-    sa: [711, 712, 713, 714, 721, 722, 723, 731, 732, 733, 752, 753],
-    asia1: [811, 812, 813, 814, 821, 822, 823, 824, 831, 832, 833, 834, 312, 313],
-    asia2: [851, 852, 853, 861, 862, 863, 871, 872, 873, 881, 882, 883, 322, 323],
-    asia3: [911, 912, 913, 914, 921, 922, 923, 924, 931, 932, 933, 934, 332, 333],
-    inmena: [221, 222, 223, 224, 225, 226, 227, 228, 252, 253]
+    eu: [611, 612, 621, 622, 624, 653],
+    na: [511, 512, 513, 514, 521, 522, 523, 531, 532, 553],
+    sa: [711, 712, 713, 721, 722, 723, 731, 732, 753],
+    asia1: [811, 812, 821, 822, 823, 831, 832, 833, 834, 313],
+    asia2: [851, 852, 853, 861, 862, 863, 881, 883, 323],
+    asia3: [911, 912, 913, 921, 922, 923, 931, 932, 933, 934, 333],
+    inmena: [221, 223, 225, 227, 252, 253]
+    // BW (Boosting World) — not scraped (no ranking on the forum)
+    // bw: [314, 324, 334, 554, 654, 754, 254]
 };
 
 // ── World names mapped by ID, across all regions ──
 export const WORLD_IDS = {
     // EU — Europe
-    611: "EU011", 612: "EU012", 613: "EU013", 614: "EU014",
-    621: "EU021", 622: "EU022", 623: "EU023", 624: "EU024",
-    652: "EU031", 653: "EU032",
+    611: "EU011", 612: "EU012",
+    621: "EU021", 622: "EU022", 624: "EU024",
+    653: "EU032",
     // SA — South America
-    711: "SA011", 712: "SA012", 713: "SA013", 714: "SA014",
+    711: "SA011", 712: "SA012", 713: "SA013",
     721: "SA021", 722: "SA022", 723: "SA023",
-    731: "SA031", 732: "SA032", 733: "SA033",
-    752: "SA041", 753: "SA042",
+    731: "SA031", 732: "SA032",
+    753: "SA042",
     // NA — North America
     511: "NA011", 512: "NA012", 513: "NA013", 514: "NA014",
     521: "NA021", 522: "NA022", 523: "NA023",
-    531: "NA031", 532: "NA032", 533: "NA033",
-    552: "NA041", 553: "NA042",
+    531: "NA031", 532: "NA032",
+    553: "NA042",
     // ASIA1
-    811: "ASIA011", 812: "ASIA012", 813: "ASIA013", 814: "ASIA014",
-    821: "ASIA021", 822: "ASIA022", 823: "ASIA023", 824: "ASIA024",
+    811: "ASIA011", 812: "ASIA012",
+    821: "ASIA021", 822: "ASIA022", 823: "ASIA023",
     831: "ASIA031", 832: "ASIA032", 833: "ASIA033", 834: "ASIA034",
-    312: "ASIA041", 313: "ASIA042",
+    313: "ASIA042",
     // ASIA2
     851: "ASIA051", 852: "ASIA052", 853: "ASIA053",
     861: "ASIA061", 862: "ASIA062", 863: "ASIA063",
-    871: "ASIA071", 872: "ASIA072", 873: "ASIA073",
-    881: "ASIA081", 882: "ASIA082", 883: "ASIA083",
-    322: "ASIA091", 323: "ASIA092",
+    881: "ASIA081", 883: "ASIA083",
+    323: "ASIA092",
     // ASIA3
-    911: "ASIA311", 912: "ASIA312", 913: "ASIA313", 914: "ASIA314",
-    921: "ASIA321", 922: "ASIA322", 923: "ASIA323", 924: "ASIA324",
+    911: "ASIA311", 912: "ASIA312", 913: "ASIA313",
+    921: "ASIA321", 922: "ASIA322", 923: "ASIA323",
     931: "ASIA331", 932: "ASIA332", 933: "ASIA333", 934: "ASIA334",
-    332: "ASIA341", 333: "ASIA342",
+    333: "ASIA342",
     // INMENA — India/Middle East/North Africa
-    221: "INMENA011", 222: "INMENA012", 223: "INMENA013", 224: "INMENA014",
-    225: "INMENA021", 226: "INMENA022", 227: "INMENA023", 228: "INMENA024",
+    221: "INMENA011", 223: "INMENA013",
+    225: "INMENA021", 227: "INMENA023",
     252: "INMENA031", 253: "INMENA032",
+    // BW — Boosting World
+    314: "BASIA031", 324: "BASIA032", 334: "BASIA033",
+    554: "BNA031", 654: "BEU041", 754: "BSA031", 254: "BINMENA031",
 };
+
+// ── Server merge map (Aug 18, 2026) ──
+// After the merge, players from absorbed servers appear on the surviving
+// server's ranking. The scraper no longer fetches absorbed worlds.
+// Note: ASIA314, ASIA324, ASIA341 were never mapped in WORLD_IDS.
+export const SERVER_MERGES = {
+    // ASIA1
+    "ASIA013": "ASIA021",
+    "ASIA014": "ASIA022",
+    "ASIA024": "ASIA023",
+    "ASIA041": "ASIA031",
+    // ASIA2
+    "ASIA082": "ASIA051",
+    "ASIA071": "ASIA052",
+    "ASIA072": "ASIA061",
+    "ASIA073": "ASIA062",
+    "ASIA091": "ASIA063",
+    // ASIA3 (servers not in WORLD_IDS)
+    "ASIA314": "ASIA311",
+    "ASIA324": "ASIA313",
+    "ASIA341": "ASIA312",
+    // NA1
+    "NA041": "NA012",
+    "NA033": "NA031",
+    // EU1
+    "EU013": "EU011",
+    "EU023": "EU021",
+    "EU031": "EU022",
+    "EU014": "EU024",
+    // SA1
+    "SA041": "SA013",
+    "SA014": "SA023",
+    "SA033": "SA031",
+    // INMENA1
+    "INMENA012": "INMENA011",
+    "INMENA014": "INMENA013",
+    "INMENA022": "INMENA021",
+    "INMENA024": "INMENA023",
+};
+
+/**
+ * Resolve a possibly-absorbed server name to its surviving server.
+ * Returns the input unchanged if it is not a merged server.
+ */
+export function resolveServerName(name) {
+    return SERVER_MERGES[name] || name;
+}
+
+// ── Absorbed-worldId map (pre-merge worldIds for absorbed servers) ──
+// Used by migrateAlliedClans() to find old allied-clan configs that need
+// to be moved to the surviving server.
+// Note: ASIA314, ASIA324, ASIA341 were never in WORLD_IDS — their configs
+// (if any) cannot be auto-migrated; the admin must re-add them via /manage.
+const ABSORBED_WORLD_IDS = {
+    // ASIA1
+    "ASIA013": 813, "ASIA014": 814, "ASIA024": 824, "ASIA041": 312,
+    // ASIA2
+    "ASIA082": 882, "ASIA071": 871, "ASIA072": 872, "ASIA073": 873, "ASIA091": 322,
+    // NA1
+    "NA041": 552, "NA033": 533,
+    // EU1
+    "EU013": 613, "EU023": 623, "EU031": 652, "EU014": 614,
+    // SA1
+    "SA041": 752, "SA014": 714, "SA033": 733,
+    // INMENA1
+    "INMENA012": 222, "INMENA014": 224, "INMENA022": 226, "INMENA024": 228,
+};
+
+// Reverse lookup: surviving server name → surviving worldId
+const SURVIVING_WORLD_ID = Object.fromEntries(
+    Object.entries(WORLD_IDS).map(([id, name]) => [name, Number(id)])
+);
+
+/**
+ * Migrate allied-clan configs from absorbed servers to their surviving servers.
+ * Safe to call multiple times — once migrated, the absorbed entry is deleted.
+ * Call after ensureConfig(db).
+ *
+ * @param {object} db - The database object
+ * @returns {{ migrated: number, clansMoved: number, warnings: string[] }}
+ */
+export function migrateAlliedClans(db) {
+    ensureConfig(db);
+    const warnings = [];
+    let migrated = 0;
+    let clansMoved = 0;
+
+    for (const [absorbedName, survivingName] of Object.entries(SERVER_MERGES)) {
+        const absorbedWorldId = ABSORBED_WORLD_IDS[absorbedName];
+        if (absorbedWorldId === undefined) {
+            // ASIA314/324/341 never had worldIds — warn but skip
+            warnings.push(
+                `⚠️ ${absorbedName} → ${survivingName}: no worldId mapped, cannot auto-migrate allied clans. Add them manually via /manage.`
+            );
+            continue;
+        }
+
+        const absorbedClans = db.config.alliedClans[absorbedWorldId];
+        if (!absorbedClans || absorbedClans.length === 0) continue;
+
+        const survivingWorldId = SURVIVING_WORLD_ID[survivingName];
+        if (survivingWorldId === undefined) {
+            warnings.push(`⚠️ ${survivingName} (surviving) not found in WORLD_IDS — cannot migrate clans from ${absorbedName}`);
+            continue;
+        }
+
+        // Ensure target array exists
+        if (!db.config.alliedClans[survivingWorldId]) {
+            db.config.alliedClans[survivingWorldId] = [];
+        }
+
+        const target = db.config.alliedClans[survivingWorldId];
+
+        // Merge: add absorbed clans that don't already exist (case-insensitive)
+        for (const clan of absorbedClans) {
+            const exists = target.some(c => c.toLowerCase() === clan.toLowerCase());
+            if (!exists) {
+                target.push(clan);
+                clansMoved++;
+            }
+        }
+
+        // Remove absorbed server's config
+        delete db.config.alliedClans[absorbedWorldId];
+        migrated++;
+        console.log(`🔄 [Merge] ${absorbedName} (${absorbedWorldId}) → ${survivingName} (${survivingWorldId}): ${absorbedClans.length} allied clan(s) migrated`);
+    }
+
+    if (warnings.length > 0) {
+        for (const w of warnings) console.warn(`   ${w}`);
+    }
+
+    return { migrated, clansMoved, warnings };
+}
 
 // ==========================================
 // 🔍 NICKNAME SUGGESTIONS (fuzzy dropdowns)
