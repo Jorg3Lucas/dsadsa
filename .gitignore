@@ -7,21 +7,18 @@ package-lock.json
 .env.local
 .env.*.local
 
-# Bot data files
-database.json
+# Bot runtime data files
 database_ranking.json
-database_gold.json
-daily-logs.json
-punishments.json
-salary-poll-db.json
-google_credentials.json
+database_ranking.tmp
+database_ranking_*.json
+pending_registrations.json
 ranking_cache.json
 ranking_logs.txt
-tickets.json
 
 # Backups & logs
 backups/
 ticket-logs/
+logs/
 
 # OS files
 .DS_Store
@@ -34,4 +31,3 @@ Thumbs.db
 *.swo
 *~
 nul
-logs/error.log
