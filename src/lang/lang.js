@@ -19,7 +19,13 @@ export function getMsg(pathStr, vars = {}) {
     }
     let output = typeof target === 'string' ? target : pathStr;
     for (const [k, v] of Object.entries(vars)) {
-        output = output.replace(new RegExp(`{${k}}`, 'g'), v);
+        // split/join replaces EVERY occurrence without compiling a new RegExp per
+        // call. getMsg is the bot's highest-frequency pure-CPU call (it runs per
+        // member during syncs), and `new RegExp` per variable per call was the
+        // dominant micro-cost in that loop. Placeholders are plain `{key}` with no
+        // regex metacharacters, so split/join is behavior-identical to the old
+        // global-regex replace.
+        output = output.split(`{${k}}`).join(v);
     }
     return output;
 }

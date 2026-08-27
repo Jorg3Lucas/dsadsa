@@ -49,7 +49,13 @@ vi.mock('../src/lang/lang.js', () => ({
 import {
     handleNotifyCommand,
     handleNotifySelect,
-    handleNotifyButton
+    handleNotifyButton,
+    sendDmsToMembers,
+    resetDmBudgetForTests,
+    DM_BATCH_SIZE,
+    DM_BATCH_PAUSE_MS,
+    DM_CAMPAIGN_CAP,
+    DM_DAY_CAP
 } from '../src/handlers/ranking-notify.js';
 
 // ──────────────────────────────────────────
@@ -729,5 +735,126 @@ describe('handleNotifyButton — notify standby', () => {
         const report = adminChSend.mock.calls[0][0].content;
         expect(report).toContain('Standby DM Report');
         expect(report).toContain(ADMIN_TAG);
+    });
+});
+
+// ──────────────────────────────────────────
+// sendDmsToMembers — conservative pacing & caps
+// ──────────────────────────────────────────
+
+describe('sendDmsToMembers — safety caps', () => {
+    let logEvent;
+
+    function makeMember(id, tag) {
+        return {
+            id,
+            user: { id, tag, bot: false, username: tag },
+            send: vi.fn().mockResolvedValue()
+        };
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        logEvent = vi.fn();
+        resetDmBudgetForTests();
+    });
+
+    it('respects the campaign cap and reports skipped', async () => {
+        const members = Array.from({ length: 12 }, (_, i) => makeMember(`10${i}`, `P${i}#0001`));
+
+        const result = await sendDmsToMembers(members, () => 'oi', logEvent, {
+            batchSize: 4,
+            pauseMs: 1,
+            campaignCap: 8,
+            dayCap: 100
+        });
+
+        const attempted = members.filter(m => m.send.mock.calls.length > 0);
+        expect(attempted).toHaveLength(8);
+        expect(result).toEqual({ sent: 8, failed: 0, skipped: 4 });
+    });
+
+    it('respects the daily budget across campaigns', async () => {
+        const first = Array.from({ length: 6 }, (_, i) => makeMember(`20${i}`, `A${i}#0001`));
+        const r1 = await sendDmsToMembers(first, () => 'oi', logEvent, {
+            batchSize: 3,
+            pauseMs: 1,
+            campaignCap: 50,
+            dayCap: 6
+        });
+        expect(r1).toEqual({ sent: 6, failed: 0, skipped: 0 });
+
+        // Second campaign the same day: budget exhausted -> all skipped, zero sends
+        const second = Array.from({ length: 4 }, (_, i) => makeMember(`30${i}`, `B${i}#0001`));
+        const r2 = await sendDmsToMembers(second, () => 'oi', logEvent, {
+            batchSize: 3,
+            pauseMs: 1,
+            campaignCap: 50,
+            dayCap: 6
+        });
+        expect(r2).toEqual({ sent: 0, failed: 0, skipped: 4 });
+        expect(second.every(m => m.send.mock.calls.length === 0)).toBe(true);
+    });
+
+    it('sends everything when no cap is hit', async () => {
+        const members = Array.from({ length: 7 }, (_, i) => makeMember(`40${i}`, `C${i}#0001`));
+
+        const result = await sendDmsToMembers(members, () => 'oi', logEvent, {
+            batchSize: 4,
+            pauseMs: 1,
+            campaignCap: 50,
+            dayCap: 50
+        });
+
+        expect(result).toEqual({ sent: 7, failed: 0, skipped: 0 });
+        expect(members.every(m => m.send.mock.calls.length === 1)).toBe(true);
+    });
+
+    it('uses the exported default campaign cap when no options are given', () => {
+        expect(DM_CAMPAIGN_CAP).toBe(Number.MAX_SAFE_INTEGER);
+    });
+
+    it('documents the admin-chosen pacing policy: 20 members per batch, 3s pause, no caps', () => {
+        // Pacing (20 members every 3s) is the primary anti-spam mitigation;
+        // both volume caps are disabled so a campaign reaches everyone and
+        // several /notify runs per day are allowed.
+        expect(DM_BATCH_SIZE).toBe(20);
+        expect(DM_BATCH_PAUSE_MS).toBe(3000);
+        expect(DM_CAMPAIGN_CAP).toBe(Number.MAX_SAFE_INTEGER);
+        expect(DM_DAY_CAP).toBe(Number.MAX_SAFE_INTEGER);
+    });
+
+    it('never silently drops members when the day budget truncates a batch and the batch fails', async () => {
+        // Regression: dayCap binding truncates batch 2 to 2 members; if those
+        // fail, the truncated tail must still be attempted (not dropped).
+        const members = Array.from({ length: 8 }, (_, i) => makeMember(`50${i}`, `D${i}#0001`));
+        // Members 0-3 succeed; members 4-7 fail
+        members.forEach((m, i) => {
+            if (i >= 4) m.send.mockRejectedValue(new Error('Blocked'));
+        });
+
+        const result = await sendDmsToMembers(members, () => 'oi', logEvent, {
+            batchSize: 4,
+            pauseMs: 1,
+            campaignCap: 100,
+            dayCap: 6
+        });
+
+        // Everyone was attempted: 4 sent + 4 failed, nothing skipped
+        expect(result).toEqual({ sent: 4, failed: 4, skipped: 0 });
+        expect(members.every(m => m.send.mock.calls.length === 1)).toBe(true);
+    });
+
+    it('coerces a zero batch size to 1 instead of infinite-looping', async () => {
+        const members = Array.from({ length: 3 }, (_, i) => makeMember(`60${i}`, `E${i}#0001`));
+
+        const result = await sendDmsToMembers(members, () => 'oi', logEvent, {
+            batchSize: 0,
+            pauseMs: 1,
+            campaignCap: 10,
+            dayCap: 10
+        });
+
+        expect(result).toEqual({ sent: 3, failed: 0, skipped: 0 });
     });
 });

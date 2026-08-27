@@ -24,6 +24,53 @@ import { lookupNickname } from '../core/ranking-service.js';
 // 📋 MANAGE MENU HANDLERS
 // ==========================================
 
+const USER_PAGE_SIZE = 25;
+
+/**
+ * Shared builder for the /manage user-list page (used by the /manage command
+ * and by handleManageNav back/next/prev navigation).
+ * Returns { content, components, totalPages, count }.
+ */
+export function buildUserListPage(db, page = 0, options = {}) {
+    const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
+    const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
+    const totalPages = Math.ceil(sorted.length / USER_PAGE_SIZE);
+    const pageItems = sorted.slice(page * USER_PAGE_SIZE, (page + 1) * USER_PAGE_SIZE);
+
+    const selectOptions = pageItems.map(([id, data]) => ({
+        label: data.nickname.substring(0, 100),
+        description: `${data.tempUntil ? '⏳ Temp' : '✅ Perm'} | ${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
+        value: id
+    }));
+
+    const components = [new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`manage_user_page_${page}`)
+            .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
+            .addOptions(selectOptions)
+    )];
+
+    if (totalPages > 1) {
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`manage_user_prev_${page}`).setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+            new ButtonBuilder().setCustomId(`manage_user_next_${page}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary).setDisabled(page >= totalPages - 1)
+        ));
+    }
+
+    if (options.withAlliedButton) {
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary)
+        ));
+    }
+
+    return {
+        content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),
+        components,
+        totalPages,
+        count: sorted.length
+    };
+}
+
 // ── Manage: User selected from page → show actions ──
 export async function handleManageUserPage(interaction, db, saveLocalStorage, logEvent) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -82,6 +129,9 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
+    
+    // Defer early for heavy operations (status lookup, pilot fetch)
+    try { await interaction.deferUpdate(); } catch (e) { return; }
 
     const [actionType, targetUserId] = interaction.values[0].split('_', 2);
     const userData = db.users[targetUserId];
@@ -126,12 +176,12 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             return interaction.update({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {});
         }
 
-        const pilotOptions = [];
-        for (const pId of userData.pilotIds) {
+        // Fetch all pilots concurrently to build the menu (independent lookups).
+        const pilotOptions = await Promise.all(userData.pilotIds.map(async (pId) => {
             const memberObj = await interaction.guild.members.fetch(pId).catch(() => null);
             const label = memberObj ? memberObj.user.tag : `Unknown (${pId})`;
-            pilotOptions.push({ label: label.substring(0, 100), value: pId });
-        }
+            return { label: label.substring(0, 100), value: pId };
+        }));
 
         const pilotMenu = new StringSelectMenuBuilder()
             .setCustomId(`manage_pilot_${targetUserId}`)
@@ -666,71 +716,27 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
+    
+    // Defer early for heavy operations (user list building)
+    try { await interaction.deferUpdate(); } catch (e) { return; }
 
     if (interaction.customId === 'manage_back' || interaction.customId === 'manage_allied_back') {
-        const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
-        if (userEntries.length === 0) {
+        const { content, components, count } = buildUserListPage(db, 0);
+        if (count === 0) {
             return interaction.update({ content: getMsg('ranking.responses.manage.noUsers'), components: [] }).catch(() => {});
         }
-        const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
-        const PAGE_SIZE = 25;
-        const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
-        const page = 0;
-        const pageItems = sorted.slice(0, PAGE_SIZE);
-        const selectOptions = pageItems.map(([id, data]) => ({
-            label: data.nickname.substring(0, 100),
-            description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
-            value: id
-        }));
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`manage_user_page_0`)
-            .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
-            .addOptions(selectOptions);
-        const components = [new ActionRowBuilder().addComponents(selectMenu)];
-        if (totalPages > 1) {
-            components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('manage_user_prev_0').setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(true),
-                new ButtonBuilder().setCustomId('manage_user_next_0').setLabel('Next ▶️').setStyle(ButtonStyle.Primary)
-            ));
-        }
-        return interaction.update({
-            content: getMsg('ranking.responses.manage.pageInfo', { current: 1, total: totalPages, count: sorted.length }),
-            components
-        }).catch(() => {});
+        return interaction.update({ content, components }).catch(() => {});
     }
 
     const [, , , pageStr] = interaction.customId.split('_');
     const currentPage = parseInt(pageStr, 10);
     const newPage = interaction.customId.includes('next') ? currentPage + 1 : currentPage - 1;
 
-    const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
-    const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
-    const PAGE_SIZE = 25;
-    const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+    const { content, components, totalPages } = buildUserListPage(db, newPage);
 
     if (newPage < 0 || newPage >= totalPages) {
         return interaction.deferUpdate().catch(() => {});
     }
 
-    const pageItems = sorted.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE);
-    const selectOptions = pageItems.map(([id, data]) => ({
-        label: data.nickname.substring(0, 100),
-        description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
-        value: id
-    }));
-
-    const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId(`manage_user_page_${newPage}`)
-        .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
-        .addOptions(selectOptions);
-
-    const navRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`manage_user_prev_${newPage}`).setLabel('◀️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(newPage === 0),
-        new ButtonBuilder().setCustomId(`manage_user_next_${newPage}`).setLabel('Next ▶️').setStyle(ButtonStyle.Primary).setDisabled(newPage >= totalPages - 1)
-    );
-
-    return interaction.update({
-        content: getMsg('ranking.responses.manage.pageInfo', { current: newPage + 1, total: totalPages, count: sorted.length }),
-        components: [new ActionRowBuilder().addComponents(selectMenu), navRow]
-    }).catch(() => {});
+    return interaction.update({ content, components }).catch(() => {});
 }

@@ -139,6 +139,8 @@ vi.mock('../src/lang/lang.js', () => ({
 vi.mock('../src/core/ranking-constants.js', () => ({
     MEMBER_ROLE_ID: '123456',
     WORLD_IDS: { '1': 'World 1', '2': 'World 2' },
+    // ranking-service.js reads MAX_NICKNAME_SUGGESTIONS at module scope (FUZZY_POOL)
+    MAX_NICKNAME_SUGGESTIONS: 5,
     confirmationCache: {},
     ensureConfig: vi.fn((db) => {
         if (!db.config) db.config = {};

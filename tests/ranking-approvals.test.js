@@ -10,9 +10,22 @@ vi.mock('../src/core/ranking-constants.js', () => {
         pendingPilotApprovals: pilotStore,
         pendingRegistrations: regStore,
         APPROVER_ROLE_IDS: ['approver-role-1', 'approver-role-2'],
-        PENDING_MAX_AGE_MS: 86400000
+        PENDING_MAX_AGE_MS: 86400000,
+        WORLD_IDS: {
+            611: 'EU011', 612: 'EU012', 613: 'EU013', 614: 'EU014',
+            621: 'EU021', 622: 'EU022', 623: 'EU023', 624: 'EU024',
+            652: 'EU031', 653: 'EU032'
+        },
+        MAX_NICKNAME_SUGGESTIONS: 6
     };
 });
+
+vi.mock('../src/core/ranking-cache.js', () => ({
+    getLocalRankingCache: vi.fn(() => null),
+    findAllNicknameMatchesInCache: vi.fn(() => []),
+    findTopNicknamesInCache: vi.fn(() => []),
+    cleanNickname: vi.fn((s) => s)
+}));
 
 import * as constants from '../src/core/ranking-constants.js';
 

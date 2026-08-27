@@ -84,11 +84,6 @@ const commands = [
     ]
   },
   {
-    name: 'cleandb',
-    description: '👑 [Admin] Remove all duplicate nickname entries from the database.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
     name: 'manage',
     description: '🛠️ Bot Management Panel'
   },
@@ -118,37 +113,13 @@ const commands = [
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
   {
-    name: 'elderguide',
-    description: '📋 Guide: how to approve/reject owner registrations'
-  },
-  {
     name: 'notify',
     description: '📧 [Admin] Send notifications to server members',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
   {
-    name: 'nuke',
-    description: '💣 [Super Admin] Delete ALL channels and categories from the server (irreversible).',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'checkdb',
-    description: '🔍 [Admin] Check database status, backups, and file health.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
     name: 'restorebackup',
     description: '💾 [Super Admin] List and restore database backups.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'checkintegrity',
-    description: '🔍 [Admin] Full database integrity check with repair options.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'backupnow',
-    description: '💾 [Admin] Force an immediate backup of the database.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
 ];

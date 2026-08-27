@@ -41,6 +41,7 @@ vi.mock('../src/core/ranking-constants.js', () => ({
 }));
 
 import { loadLocalStorageRanking, saveRankingStorage, saveRankingStorageSync } from '../src/core/ranking-storage.js';
+import { pendingRegistrations } from '../src/core/ranking-constants.js';
 
 const DB_FILE = './database_ranking.json';
 
@@ -115,5 +116,97 @@ describe('saveRankingStorage — no-argument calls (regression)', () => {
 
         const saved = JSON.parse(memFs.get(DB_FILE));
         expect(Object.keys(saved.users)).toEqual(['999']);
+    });
+
+    it('coalesces rapid saves — every caller resolves and the latest state is written once', async () => {
+        memFs.set(DB_FILE, validDb());
+        loadLocalStorageRanking();
+
+        // Two saves within the debounce window: neither caller's promise may
+        // hang (regression: the first timer used to be cancelled and never resolve).
+        const [r1, r2] = await Promise.all([saveRankingStorage(), saveRankingStorage()]);
+        expect(r1).toBe(true);
+        expect(r2).toBe(true);
+
+        const saved = JSON.parse(memFs.get(DB_FILE));
+        expect(Object.keys(saved.users)).toHaveLength(1);
+    });
+});
+
+describe('write path — compact JSON + pending backup diff', () => {
+    const PENDING_FILE = './pending_registrations.json';
+
+    function pendingWrites() {
+        return memFsMock.writeFileSync.mock.calls.filter(c => c[0] === PENDING_FILE).length;
+    }
+
+    beforeEach(() => {
+        memFs.clear();
+        vi.clearAllMocks();
+        // Reset module-shared pending state so tests don't leak entries into each other.
+        for (const key of Object.keys(pendingRegistrations)) delete pendingRegistrations[key];
+    });
+
+    it('writes the database in compact JSON (no pretty-print indentation)', async () => {
+        memFs.set(DB_FILE, validDb());
+        loadLocalStorageRanking();
+
+        const ok = await saveRankingStorage();
+        expect(ok).toBe(true);
+
+        const raw = memFs.get(DB_FILE);
+        expect(raw).not.toContain('\n'); // single-line, compact
+        const parsed = JSON.parse(raw);
+        expect(parsed.users['123'].nickname).toBe('TestChar');
+        expect(parsed._metadata).toBeDefined();
+    });
+
+    it('rewrites the pending backup ONLY when pending data actually changes', async () => {
+        memFs.set(DB_FILE, validDb());
+        loadLocalStorageRanking();
+
+        // 1. Change pending → save writes the pending file (first save this test).
+        pendingRegistrations['p1'] = { nickname: 'Pending1', timestamp: Date.now() };
+        await saveRankingStorage();
+        const writesAfterChange = pendingWrites();
+        expect(writesAfterChange).toBeGreaterThanOrEqual(1);
+
+        // 2. Unchanged pending → later saves must NOT rewrite the pending file.
+        await saveRankingStorage();
+        expect(pendingWrites()).toBe(writesAfterChange);
+
+        // 3. Changed again → writes again (increment by exactly 1).
+        pendingRegistrations['p1'].nickname = 'Pending2';
+        await saveRankingStorage();
+        expect(pendingWrites()).toBe(writesAfterChange + 1);
+
+        const savedPending = JSON.parse(memFs.get(PENDING_FILE));
+        expect(savedPending.pendingRegistrations.p1.nickname).toBe('Pending2');
+        expect(savedPending.savedAt).toBeDefined();
+    });
+
+    it('rewrites the pending backup when a pending entry is DELETED', async () => {
+        memFs.set(DB_FILE, validDb());
+        loadLocalStorageRanking();
+
+        pendingRegistrations['p1'] = { nickname: 'ToDelete', timestamp: Date.now() };
+        await saveRankingStorage();
+        const writesAfterAdd = pendingWrites();
+        expect(writesAfterAdd).toBeGreaterThanOrEqual(1);
+
+        delete pendingRegistrations['p1'];
+        await saveRankingStorage();
+        expect(pendingWrites()).toBe(writesAfterAdd + 1);
+    });
+
+    it('writes the pending file in compact JSON as well', async () => {
+        memFs.set(DB_FILE, validDb());
+        loadLocalStorageRanking();
+
+        pendingRegistrations['p2'] = { nickname: 'Pending2', timestamp: Date.now() };
+        await saveRankingStorage();
+
+        const raw = memFs.get(PENDING_FILE);
+        expect(raw).not.toContain('\n');
     });
 });

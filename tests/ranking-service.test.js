@@ -115,6 +115,33 @@ describe('lookupNickname', () => {
         expect(result.found).toBe(false);
     });
 
+    it('exposes the computed fuzzy pool on the exact-miss path (fuzzy found)', () => {
+        const pool = [{ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily', score: 0.85 }];
+        findAllNicknameMatchesInCache.mockReturnValue([]);
+        findTopNicknamesInCache.mockReturnValue(pool);
+        const result = lookupNickname('PlayrOne', mockDb, mockCache);
+        expect(result.found).toBe(true);
+        // Co-located lookupTopNicknames can reuse this instead of re-scanning
+        expect(result.fuzzyCandidates).toBe(pool);
+    });
+
+    it('exposes an empty fuzzy pool on the exact-miss path (not found)', () => {
+        findAllNicknameMatchesInCache.mockReturnValue([]);
+        findTopNicknamesInCache.mockReturnValue([]);
+        const result = lookupNickname('UnknownPlayer', mockDb, mockCache);
+        expect(result.found).toBe(false);
+        expect(result.fuzzyCandidates).toEqual([]);
+    });
+
+    it('does not expose fuzzyCandidates when the exact path hit (no scan needed)', () => {
+        findAllNicknameMatchesInCache.mockReturnValue([{ worldId: '611', nickname: 'PlayerOne', clanName: 'ToxicFamily' }]);
+        const result = lookupNickname('PlayerOne', mockDb, mockCache);
+        expect(result.found).toBe(true);
+        expect(result.exactMatch).toBe(true);
+        expect(result.fuzzyCandidates).toBeUndefined();
+        expect(findTopNicknamesInCache).not.toHaveBeenCalled();
+    });
+
     it('passes pre-loaded cache to findAllNicknameMatchesInCache without calling getLocalRankingCache', () => {
         findAllNicknameMatchesInCache.mockReturnValue([]);
         findTopNicknamesInCache.mockReturnValue([]);
@@ -159,6 +186,44 @@ describe('lookupNickname', () => {
     it('isAlliedClanName: exact clean match wins without calling levenshteinDistance', () => {
         expect(isAlliedClanName('ToxicFamily', ['ToxicFamily', 'GearsofWar'])).toBe(true);
         expect(levenshteinDistance).not.toHaveBeenCalled();
+    });
+
+    it('isAlliedClanName: picks up in-place config mutations (cache invalidation by length)', () => {
+        // The /manage handlers mutate db.config.alliedClans[worldId] in place
+        // (push/splice). The cleaned-name memo cache must not serve stale data.
+        const alliedClans = ['ToxicFamily'];
+        expect(isAlliedClanName('ToxicFamily', alliedClans)).toBe(true);
+        expect(isAlliedClanName('GearsofWar', alliedClans)).toBe(false);
+
+        alliedClans.push('GearsofWar'); // length changes → cache rebuilds
+        expect(isAlliedClanName('GearsofWar', alliedClans)).toBe(true);
+
+        alliedClans.splice(0, 1); // length changes again
+        expect(isAlliedClanName('ToxicFamily', alliedClans)).toBe(false);
+        expect(isAlliedClanName('GearsofWar', alliedClans)).toBe(true);
+    });
+
+    it('isAlliedClanName: tolerant variant matching still works after config mutation', () => {
+        const alliedClans = ['GearsofWar シ'];
+        levenshteinDistance.mockReturnValue(2);
+        // First call caches the cleaned config.
+        expect(isAlliedClanName('GearsofWar战争', alliedClans)).toBe(true);
+        // Second call serves from cache — same result.
+        expect(isAlliedClanName('GearsofWar战争', alliedClans)).toBe(true);
+    });
+
+    it('lookupTopNicknames reuses a precomputed pool without re-scanning', () => {
+        const precomputed = [{ worldId: '611', nickname: 'Dinizメ', clanName: 'GearsofWar战争', score: 1 }];
+        const results = lookupTopNicknames('Dinizメ', mockDb, mockCache, 5, precomputed);
+        expect(results).toHaveLength(1);
+        expect(findTopNicknamesInCache).not.toHaveBeenCalled();
+    });
+
+    it('lookupTopNicknames falls back to scanning when no precomputed pool is given', () => {
+        findTopNicknamesInCache.mockReturnValue([{ worldId: '611', nickname: 'Dinizメ', clanName: 'GearsofWar战争', score: 1 }]);
+        const results = lookupTopNicknames('Dinizメ', mockDb, mockCache, 5);
+        expect(results).toHaveLength(1);
+        expect(findTopNicknamesInCache).toHaveBeenCalledWith('Dinizメ', mockCache, expect.any(Number));
     });
 
     it('lookupTopNicknames uses the same tolerant allied-clan check', () => {

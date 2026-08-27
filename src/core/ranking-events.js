@@ -87,6 +87,11 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
         let restoredCount = 0;
         let expiredCount = 0;
 
+        // ── Phase 1 (serial): filter + check existing admin messages ──
+        // Existing-message lookups stay serial because each registration's
+        // outcome (exists / expired / needs re-send) is decided before the next
+        // one is inspected.
+        const toRestore = [];
         for (const [userId, pending] of pendingEntries) {
             if (!pending.nickname) continue;
 
@@ -133,8 +138,20 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
                 continue;
             }
 
-            // Fetch the user to display their info
-            const user = await client.users.fetch(userId).catch(() => null);
+            toRestore.push({ userId, pending });
+        }
+
+        // ── Phase 2 (parallel): resolve users concurrently (pure reads) ──
+        // users.fetch is read-only and can't be rate-limited — all pending
+        // users resolve in a single round-trip instead of one per registration.
+        const userResults = await Promise.all(toRestore.map(async ({ userId, pending }) => ({
+            userId,
+            pending,
+            user: await client.users.fetch(userId).catch(() => null)
+        })));
+
+        // ── Phase 3 (serial): build + send admin messages (rate-limit safe) ──
+        for (const { userId, pending, user } of userResults) {
             if (!user) {
                 logEvent(`⚠️ [Admin Panel Restore] User ${userId} no longer exists — removing pending registration`);
                 delete pendingRegistrations[userId];
@@ -321,10 +338,13 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             delete db.preRegistrations[member.id];
                             saveLocalStorage();
 
-                            await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                            }
+                            // Nickname + role are independent — run concurrently.
+                            await Promise.all([
+                                member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {}),
+                                !member.roles.cache.has(MEMBER_ROLE_ID)
+                                    ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                                    : Promise.resolve()
+                            ]);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
                         } else {
@@ -342,10 +362,13 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             }
                             saveLocalStorage();
 
-                            await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                            }
+                            // Nickname + role are independent — run concurrently.
+                            await Promise.all([
+                                member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {}),
+                                !member.roles.cache.has(MEMBER_ROLE_ID)
+                                    ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                                    : Promise.resolve()
+                            ]);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — registered as pilot awaiting owner "${preReg.ownerNick}"`);
                         }
@@ -359,10 +382,13 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         delete db.preRegistrations[member.id];
                         saveLocalStorage();
 
-                        await member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
-                        if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                        }
+                        // Nickname + role are independent — run concurrently.
+                        await Promise.all([
+                            member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {}),
+                            !member.roles.cache.has(MEMBER_ROLE_ID)
+                                ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                                : Promise.resolve()
+                        ]);
 
                         logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                     }
@@ -389,14 +415,17 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                     logEvent(getMsg('ranking.logs.memberLeave', { tag: member.user.tag }));
                     
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
-                        for (const pId of userData.pilotIds) {
+                        // Fetch + clean up every linked pilot concurrently.
+                        await Promise.all(userData.pilotIds.map(async (pId) => {
                             const pilotMember = await member.guild.members.fetch(pId).catch(() => null);
                             if (pilotMember) {
-                                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                                await Promise.all([
+                                    pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {}),
+                                    pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+                                ]);
                                 logEvent(getMsg('ranking.logs.pilotCleaned', { tag: pilotMember.user.tag }));
                             }
-                        }
+                        }));
                     }
                     delete db.users[member.id];
                     saveLocalStorage();

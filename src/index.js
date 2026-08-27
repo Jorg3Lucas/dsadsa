@@ -5,6 +5,7 @@ import {
 import 'dotenv/config';
 
 import { registerMir4SlashCommands } from './core/ranking-deploy.js';
+import { destroyRankingScraperAgents } from './core/ranking-scraper.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
@@ -35,6 +36,7 @@ import {
 } from './handlers/ranking-management.js';
 import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
+import { getLocalRankingCache } from './core/ranking-cache.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, getStorageStats } from './core/ranking-storage.js';
 import { isExpiredError } from './core/interaction-utils.js';
@@ -69,7 +71,7 @@ console.log('========================================');
 // ==========================================
 // 🚀 READY EVENT
 // ==========================================
-client.once('clientReady', async () => {
+client.once('ready', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
     // Load database with recovery
@@ -90,14 +92,33 @@ client.once('clientReady', async () => {
     // Ensure db.config and alliedClans are initialized before any system runs
     ensureConfig(rankingDb);
 
+    // Register interaction listeners + kick off the async startup restores
+    // (welcome panel + admin approval messages) FIRST, so their Discord API
+    // calls run CONCURRENTLY with the slash-command registration below — both
+    // are independent REST work and neither blocks the other. (The sync
+    // setAdminChannelId/config step inside runs before any restore fires.)
+    initMir4BotEvents(client, rankingDb, saveRankingStorageWrapped, logRankingEvent);
+
+    // Pre-warm the ranking cache into memory during idle startup. The first
+    // getLocalRankingCache() parses ~76k players (a ~100-300ms blocking read);
+    // doing it here — off the critical path of the +15s sync and any early
+    // interaction — means no command or sync ever pays that parse cost again
+    // (the in-memory reference is reused via the mtime-based cache). The timer
+    // starts BEFORE the slash registration await below, so it fires at ~1s from
+    // ready regardless of how long that network call takes.
+    setTimeout(() => {
+        const cache = getLocalRankingCache();
+        if (cache && Object.keys(cache).length > 0) {
+            console.log(`⚡ [Startup] Ranking cache pre-warmed (${Object.keys(cache).length} worlds)`);
+        }
+    }, 1000);
+
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
     if (guild) {
         await registerMir4SlashCommands(guild);
     } else {
         console.error('❌ Error: Invalid Server ID configuration.');
     }
-
-    initMir4BotEvents(client, rankingDb, saveRankingStorageWrapped, logRankingEvent);
 
     // Start sync after 15 seconds (give time for everything to initialize)
     setTimeout(async () => {
@@ -129,6 +150,10 @@ function handleShutdown(signal) {
     } else {
         console.error('❌ Failed to save database on shutdown!');
     }
+    
+    // Release keep-alive sockets held by the ranking scraper so the process
+    // exits cleanly without lingering idle connections.
+    destroyRankingScraperAgents();
     
     process.exit(0);
 }
@@ -259,27 +284,41 @@ client.on('interactionCreate', async (interaction) => {
                 return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
             }
             const result = await handleRankingCommand(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
-            if (result !== false) return;
-            return await handleMir4Interactions(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
+            // Safety net: if the command was not recognized/acknowledged, reply
+            // so Discord never shows "The application did not respond".
+            if (!interaction.replied && !interaction.deferred) {
+                try {
+                    await interaction.reply({ content: '❌ Comando não reconhecido.', flags: 64 }).catch(() => {});
+                } catch { /* interaction already gone — nothing to do */ }
+            }
+            return result !== false ? result : await handleMir4Interactions(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
         }
 
         // B. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
             const handler = resolveHandler(customId, SELECT_EXACT, SELECT_PREFIX);
             if (handler) return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
+            // Unhandled select — acknowledge so Discord never shows "The application did not respond"
+            try { await interaction.deferUpdate().catch(() => {}); } catch { /* gone */ }
+            return;
         }
 
         // C. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
             const handler = resolveHandler(customId, MODAL_EXACT, MODAL_PREFIX);
             if (handler) return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
-            return; // unhandled modal — acknowledge silently
+            // Unhandled modal — acknowledge so Discord never shows "The application did not respond"
+            try { await interaction.deferUpdate().catch(() => {}); } catch { /* gone */ }
+            return;
         }
 
         // D. BUTTON CLICKS
         if (interaction.isButton()) {
             const handler = resolveHandler(customId, BUTTON_EXACT, BUTTON_PREFIX);
             if (handler) return await handler(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
+            // Unhandled button — acknowledge so Discord never shows "The application did not respond"
+            try { await interaction.deferUpdate().catch(() => {}); } catch { /* gone */ }
+            return;
         }
 
     } catch (error) {
@@ -303,4 +342,51 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);
+// ==========================================
+// 🔌 RESILIENT LOGIN (retry + backoff)
+// ==========================================
+// Discord's /gateway/bot endpoint can briefly return 503 (Service Unavailable)
+// during API outages. Without a catch here, the login promise rejects and falls
+// into the unhandledRejection handler — which only logs — leaving the process
+// alive but disconnected forever (PM2 shows green, but the bot is dead).
+// Retry transient failures with exponential backoff, then exit(1) after the max
+// attempts so PM2 restarts the process cleanly.
+
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_BASE_DELAY_MS = 5000;
+
+const TRANSIENT_NETWORK_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'EPIPE', 'ECONNREFUSED']);
+
+function isTransientLoginError(err) {
+    // 429 + any 5xx (ex.: o 503 do gateway em outage) — transitório
+    if (err.status === 429 || (err.status >= 500 && err.status < 600)) return true;
+    // Falhas de rede puras (sem status HTTP, com code do Node) — transitório
+    if (!err.status && err.code && TRANSIENT_NETWORK_CODES.has(err.code)) return true;
+    // 401/403, TOKEN_MISSING, intents inválidos, etc. — permanente, falha rápido
+    return false;
+}
+
+async function loginWithRetry() {
+    for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt++) {
+        try {
+            await client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);
+            console.log('✅ Bot login successful.');
+            return;
+        } catch (err) {
+            console.error(`❌ Login failed (attempt ${attempt}/${LOGIN_MAX_ATTEMPTS}): ${err.message}`);
+            logRankingEvent(`[ERROR] Login failed (attempt ${attempt}/${LOGIN_MAX_ATTEMPTS}): ${err.message}`);
+
+            if (!isTransientLoginError(err) || attempt === LOGIN_MAX_ATTEMPTS) {
+                console.error('🛑 Giving up on login — exiting so PM2 can restart the process.');
+                try { saveRankingStorageSync(rankingDb); } catch (e) { /* best-effort */ }
+                process.exit(1);
+            }
+
+            const delayMs = LOGIN_BASE_DELAY_MS * 2 ** (attempt - 1); // 5s, 10s, 20s, 40s
+            console.log(`⏳ Retrying login in ${delayMs / 1000}s... (attempt ${attempt + 1}/${LOGIN_MAX_ATTEMPTS})`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+}
+
+loginWithRetry();

@@ -40,11 +40,6 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 6, name: 'pilot', description: 'Select the Discord user acting as pilot.', required: true }
                 ]
             },
-            {
-                name: 'cleandb',
-                description: '👑 [Admin] Remove all duplicate nickname entries from the database.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
             { name: 'manage', description: '🛠️ Bot Management Panel' },
             {
                 name: 'manualremove',
@@ -71,21 +66,10 @@ export async function registerMir4SlashCommands(guild) {
                 description: '⏳ [Admin] List all pending registration requests with time remaining.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
-            { name: 'elderguide', description: '📋 Guide: how to approve/reject owner registrations' },
             { name: 'stats', description: '📊 Show bot statistics (registrations, sync status, allied clans)' },
             {
                 name: 'notify',
                 description: '📧 [Admin] Send notifications to server members',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'scanrebuild',
-                description: '🔄 [Admin] Rebuild database from current Discord members with the member role.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'nuke',
-                description: '💣 [Super Admin] Delete ALL channels and categories from the server (irreversible).',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
         ]);

@@ -158,11 +158,6 @@ export const PRE_REGISTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // Super admin — only this user can use high-risk commands
 export const SUPER_ADMIN_USER_ID = '864108100880171009';
 
-// Channels that must NEVER be deleted by the /nuke command
-export const NUKE_PROTECTED_CHANNEL_IDS = [
-    '1432320163033645136'
-];
-
 // ==========================================
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================
@@ -170,7 +165,7 @@ export const NUKE_PROTECTED_CHANNEL_IDS = [
 export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\n🗑️ **Remove My Registration** — Cancel your own registration.\n✈️ **Remove Pilot** — Remove a pilot linked to your account.\n\nAfter approval by an administrator, you will receive the member role and your in-game nickname.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@864108100880171009>';
 
 // ==========================================
-// 📢 REGISTRATION CHANNEL (for /listunregistered DMs)
+// 📢 REGISTRATION CHANNEL
 // ==========================================
 
 export const REGISTRATION_CHANNEL_ID = '1524296969521070120';

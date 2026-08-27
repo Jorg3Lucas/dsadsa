@@ -4,8 +4,6 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "lint": "eslint . --max-warnings=100",
-    "lint:fix": "eslint . --fix --max-warnings=100",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -22,9 +20,6 @@
     "node-cron": "^4.2.1"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.5.0",
-    "globals": "^17.7.0",
     "vitest": "^4.1.10"
   }
 }

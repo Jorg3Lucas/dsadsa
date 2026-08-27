@@ -269,10 +269,13 @@ export async function handleOwnerRemovePilotDm(interaction, db, saveLocalStorage
             const pilotMember = await guild.members.fetch(pilotUserId).catch(() => null);
             if (pilotMember) {
                 pilotTag = pilotMember.user.tag;
-                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                }
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                // Role removal + nickname reset are independent — run concurrently.
+                await Promise.all([
+                    pilotMember.roles.cache.has(MEMBER_ROLE_ID)
+                        ? pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {})
+                        : Promise.resolve(),
+                    pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+                ]);
             }
         }
     } catch (e) {

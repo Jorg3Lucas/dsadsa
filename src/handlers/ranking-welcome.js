@@ -145,26 +145,25 @@ export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage,
         }
     }
 
-    // If the user is an owner with pilots, unlink + strip roles/nicknames
-    if (userData.pilotIds && userData.pilotIds.length > 0) {
-        for (const pId of userData.pilotIds) {
-            const pilotMember = await guild.members.fetch(pId).catch(() => null);
-            if (pilotMember) {
-                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                }
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
-            }
+    // Fetch + clean up every linked pilot AND the user concurrently — each
+    // member's role removal + nickname reset are independent Discord calls.
+    const pilotCleanups = (userData.pilotIds || []).map(async (pId) => {
+        const pilotMember = await guild.members.fetch(pId).catch(() => null);
+        if (!pilotMember) return;
+        if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+            await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
         }
-    }
-
-    const selfMember = await guild.members.fetch(userId).catch(() => null);
-    if (selfMember) {
+        await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+    });
+    const selfCleanup = (async () => {
+        const selfMember = await guild.members.fetch(userId).catch(() => null);
+        if (!selfMember) return;
         if (selfMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await selfMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
         }
         await selfMember.setNickname(selfMember.user.username).catch(() => {});
-    }
+    })();
+    await Promise.all([...pilotCleanups, selfCleanup]);
 
     delete db.users[userId];
     saveLocalStorage();
@@ -192,16 +191,16 @@ export async function handleWelcomeRemovePilot(interaction, db, saveLocalStorage
         return interaction.editReply('❌ You have no pilots linked to your account.');
     }
 
-    const menuOptions = [];
-    for (const pilotId of userData.pilotIds) {
+    // Fetch all pilots concurrently to build the menu (independent lookups).
+    const menuOptions = await Promise.all(userData.pilotIds.map(async (pilotId) => {
         const memberObj = await interaction.guild.members.fetch(pilotId).catch(() => null);
         const pilotTag = memberObj ? memberObj.user.tag : `Unknown (${pilotId})`;
-        menuOptions.push({
+        return {
             label: pilotTag.substring(0, 100),
             description: 'Click to remove this pilot',
             value: pilotId
-        });
-    }
+        };
+    }));
 
     const pilotMenu = new StringSelectMenuBuilder()
         .setCustomId('select_pilot_to_remove')

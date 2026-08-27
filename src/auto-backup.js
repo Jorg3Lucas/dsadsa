@@ -47,6 +47,23 @@ function safeFileName(filePath) {
 }
 
 /**
+ * List backup files whose name starts with the given prefix (e.g. 'database_ranking_').
+ * Returns [] when the backup directory doesn't exist yet (ENOENT is silent —
+ * the write paths create it via ensureBackupDir when needed).
+ */
+function listBackupFiles(prefix) {
+    try {
+        return fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.startsWith(prefix) && f.endsWith('.json'));
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error('❌ [Backup] Failed to list backups:', err.message);
+        }
+        return [];
+    }
+}
+
+/**
  * Verify JSON file integrity.
  *
  * Two backup schemas are supported:
@@ -151,15 +168,20 @@ export function runBackup(targetFiles, reason = 'scheduled') {
 
 /**
  * Rotate old backups (remove older than retention period).
+ *
+ * Scans the directory ONCE (the old version listed it twice: once for the
+ * age-based pass, then AGAIN for the count-based pass). The count pass now
+ * reuses the in-memory list of surviving files — identical semantics, one
+ * less readdir + filter per backup cycle. Exported for direct unit testing.
  */
-function rotateBackups(baseName) {
+export function rotateBackups(baseName) {
     try {
         const cutoff = Date.now() - BACKUP_RETENTION_MS;
-        const files = fs.readdirSync(BACKUP_DIR)
-            .filter(f => f.startsWith(baseName + '_') && f.endsWith('.json'));
+        const files = listBackupFiles(baseName + '_');
 
         let removed = 0;
-        
+        const surviving = [];
+
         // First: remove by age
         for (const file of files) {
             const filePath = path.join(BACKUP_DIR, file);
@@ -167,17 +189,16 @@ function rotateBackups(baseName) {
             if (stat.mtimeMs < cutoff) {
                 fs.unlinkSync(filePath);
                 removed++;
+            } else {
+                surviving.push(file);
             }
         }
 
-        // Second: remove by count (keep only MAX_BACKUPS)
-        const remaining = fs.readdirSync(BACKUP_DIR)
-            .filter(f => f.startsWith(baseName + '_') && f.endsWith('.json'))
-            .sort()
-            .reverse();
-        
-        if (remaining.length > MAX_BACKUPS) {
-            const toRemove = remaining.slice(MAX_BACKUPS);
+        // Second: remove by count (keep only MAX_BACKUPS, newest first — the
+        // ISO-timestamp filenames sort lexicographically in time order).
+        surviving.sort().reverse();
+        if (surviving.length > MAX_BACKUPS) {
+            const toRemove = surviving.slice(MAX_BACKUPS);
             for (const file of toRemove) {
                 fs.unlinkSync(path.join(BACKUP_DIR, file));
                 removed++;
@@ -231,28 +252,34 @@ export function stopAutoBackup() {
 
 /**
  * Get backup statistics.
+ *
+ * Read-only: no directory creation, no write-path side effects. The stat loop
+ * is kept synchronous and inline deliberately — it's at most ~50 statSync
+ * calls (µs each) on a cold startup path, where parallelizing or deferring
+ * would only add overhead. A file vanishing between readdir and stat is
+ * skipped instead of aborting the whole report.
  */
 export function getBackupStats() {
-    ensureBackupDir();
-    
-    const files = fs.readdirSync(BACKUP_DIR)
-        .filter(f => f.startsWith('database_ranking_') && f.endsWith('.json'));
-    
+    const files = listBackupFiles('database_ranking_');
+
     let totalSize = 0;
     let latestBackup = null;
     let latestTime = 0;
-    
+
     for (const file of files) {
         const filePath = path.join(BACKUP_DIR, file);
-        const stat = fs.statSync(filePath);
-        totalSize += stat.size;
-        
-        if (stat.mtimeMs > latestTime) {
-            latestTime = stat.mtimeMs;
-            latestBackup = file;
+        try {
+            const stat = fs.statSync(filePath);
+            totalSize += stat.size;
+            if (stat.mtimeMs > latestTime) {
+                latestTime = stat.mtimeMs;
+                latestBackup = file;
+            }
+        } catch (e) {
+            // File vanished between readdir and stat — skip it
         }
     }
-    
+
     return {
         count: files.length,
         totalSizeMB: (totalSize / 1024 / 1024).toFixed(2),

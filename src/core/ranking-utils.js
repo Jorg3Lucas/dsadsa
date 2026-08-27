@@ -32,13 +32,18 @@ export async function assignMemberRole(targetMember, logEvent) {
  * @param {string} [suffix=''] - Optional suffix like 'Pilot'
  * @returns {string} The prefixed nickname
  */
-export function buildPrefixedNickname(nickname, db, suffix = '') {
-    const cache = getLocalRankingCache();
-    if (!cache) {
-        return suffix ? `${nickname} - ${suffix}` : nickname;
+export function buildPrefixedNickname(nickname, db, suffix = '', precomputedLookup = null) {
+    // Hot path: the sync engine already resolved this nickname against the ranking
+    // cache for role management. Passing that lookup in avoids a second
+    // getLocalRankingCache() (filesystem stat) + lookupNickname() per member.
+    let lookup = precomputedLookup;
+    if (!lookup) {
+        const cache = getLocalRankingCache();
+        if (!cache) {
+            return suffix ? `${nickname} - ${suffix}` : nickname;
+        }
+        lookup = lookupNickname(nickname, db, cache);
     }
-
-    const lookup = lookupNickname(nickname, db, cache);
     const prefix = lookup.found && lookup.serverName ? `${lookup.serverName} - ` : '';
 
     if (suffix) {

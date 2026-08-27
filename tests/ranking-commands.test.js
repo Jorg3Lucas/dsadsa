@@ -17,6 +17,7 @@ function getPendingRegs() { return constants.pendingRegistrations; }
 
 vi.mock('../src/core/ranking-cache.js', () => ({
     getLocalRankingCache: vi.fn(() => null),
+    getRankingCacheUpdatedAt: vi.fn(() => null),
     cleanNickname: vi.fn(s => (s || '').trim().normalize('NFC').toLowerCase().replace(/[^a-z0-9]/g, '')),
     levenshteinDistance: vi.fn((a, b) => {
         if (a.length === 0) return b.length;
@@ -42,10 +43,6 @@ vi.mock('../src/core/ranking-sync-engine.js', () => ({
     runDailySynchronization: vi.fn()
 }));
 
-vi.mock('../src/handlers/ranking-scan.js', () => ({
-    handleScanImport: vi.fn(),
-    handleScanImportStatus: vi.fn()
-}));
 
 vi.mock('../src/handlers/ranking-welcome.js', () => ({
     buildWelcomePanelComponents: vi.fn(() => [])

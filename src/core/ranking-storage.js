@@ -21,38 +21,28 @@ const PENDING_PATH = './pending_registrations.json';
 const BACKUP_DIR = './backups';
 
 // ==========================================
-// 🔒 WRITE LOCK
+// 🔒 SAVE COALESCING (debounce) + WRITE CHAIN
 // ==========================================
-let writeLock = false;
-let writeQueue = [];
+// Rapid successive save() calls (the sync engine calls save inside loops) used
+// to trigger a full JSON serialize + backup + double file write EVERY time,
+// which blocks the event loop and stalls Discord interactions. Now:
+//  - Debounce: saves within a short window are coalesced into ONE write.
+//  - Pre-save backups are throttled (max once per minute) — the scheduled
+//    auto-backup still covers periodic safety copies.
+//  - Writes are serialized through a promise chain (no 10ms polling lock).
+let debounceTimer = null;
+let queuedDb = null;
+let pendingResolvers = [];
+let saveChain = Promise.resolve();
+let saveInProgress = false;
+let lastBackupTime = 0;
+// Last serialized pending state — savePendingBackup skips the write when the
+// pending data is byte-identical (it runs on EVERY save, but pending entries
+// change rarely, so an unchanged state should not hit the disk).
+let lastPendingBackupJson = null;
 
-/**
- * Acquire write lock. Returns a promise that resolves when lock is acquired.
- */
-function acquireLock() {
-    return new Promise((resolve) => {
-        const tryAcquire = () => {
-            if (!writeLock) {
-                writeLock = true;
-                resolve();
-            } else {
-                setTimeout(tryAcquire, 10);
-            }
-        };
-        tryAcquire();
-    });
-}
-
-/**
- * Release write lock and process queue.
- */
-function releaseLock() {
-    writeLock = false;
-    if (writeQueue.length > 0) {
-        const next = writeQueue.shift();
-        next();
-    }
-}// ==========================================
+const SAVE_DEBOUNCE_MS = 30;
+const BACKUP_THROTTLE_MS = 60 * 1000; // max 1 pre-save backup per minute// ==========================================
 // 💾 PENDING REGISTRATIONS BACKUP
 // ==========================================
 
@@ -61,12 +51,24 @@ function releaseLock() {
  */
 function savePendingBackup() {
     try {
+        // Snapshot only the pending data (NOT the savedAt — it changes every call
+        // and would defeat the change detection). JSON.stringify serializes
+        // synchronously, so the deep clone the old code did was unnecessary.
+        const snapshot = JSON.stringify({
+            pendingRegistrations,
+            pendingPilotApprovals
+        });
+        if (snapshot === lastPendingBackupJson) return; // nothing changed — skip disk write
+
         const pendingData = {
-            pendingRegistrations: JSON.parse(JSON.stringify(pendingRegistrations)),
-            pendingPilotApprovals: JSON.parse(JSON.stringify(pendingPilotApprovals)),
+            pendingRegistrations,
+            pendingPilotApprovals,
             savedAt: new Date().toISOString()
         };
-        fs.writeFileSync(PENDING_PATH, JSON.stringify(pendingData, null, 2), 'utf8');
+        fs.writeFileSync(PENDING_PATH, JSON.stringify(pendingData), 'utf8');
+        // Update AFTER the write succeeded so a failed write is retried on the
+        // next save instead of being recorded as already-backed-up.
+        lastPendingBackupJson = snapshot;
     } catch (e) {
         console.error('⚠️ [Storage] Failed to save pending backup:', e.message);
     }
@@ -115,7 +117,7 @@ export function getStorageStats() {
         lastSaveTime: lastSaveTime ? new Date(lastSaveTime).toISOString() : null,
         lastSaveUserCount,
         saveCount,
-        writeLockActive: writeLock
+        writeLockActive: saveInProgress
     };
 }
 
@@ -138,43 +140,49 @@ export function hasUsers(db) {
 // ==========================================
 
 /**
- * Save ranking database to disk with atomic write.
- * Atomic write: write to temp file first, then rename (prevents corruption on crash).
+ * Resolve the effective database: handlers/events/sync call save() with no args,
+ * so fall back to the last loaded database (which they mutate in place).
  */
-export async function saveRankingStorage(rankingDb) {
-    await acquireLock();
-    
-    try {
-        // Resolve the effective database: handlers/events/sync call save() with no args,
-        // so fall back to the last loaded database (which they mutate in place).
-        const effectiveDb = (rankingDb && typeof rankingDb === 'object') ? rankingDb : currentRankingDb;
-        if (!effectiveDb || typeof effectiveDb !== 'object') {
-            console.error('❌ [Storage] BLOCKED: No database reference available to save.');
-            return false;
-        }
+function resolveEffectiveDb(rankingDb) {
+    return (rankingDb && typeof rankingDb === 'object') ? rankingDb : currentRankingDb;
+}
 
-        // SAFETY: Don't save if database hasn't been loaded yet and has no users
-        if (!databaseLoaded && !hasUsers(effectiveDb)) {
-            console.error('⚠️ [Storage] BLOCKED: Database not loaded and no users — refusing to save empty data!');
-            console.error('💡 [Storage] This prevents accidental data loss. Load the database first.');
-            return false;
-        }
+/**
+ * Core synchronous write. Shared by the async (debounced) and sync (shutdown)
+ * save paths. Returns true on success, false on any failure/safety block.
+ */
+function writeRankingStorage(effectiveDb) {
+    if (!effectiveDb || typeof effectiveDb !== 'object') {
+        console.error('❌ [Storage] BLOCKED: No database reference available to save.');
+        return false;
+    }
 
-        // SAFETY: Don't save if we would decrease user count significantly (data loss detection)
-        const currentUserCount = Object.keys(effectiveDb.users || {}).length;
-        if (databaseLoaded && lastSaveUserCount > 0 && currentUserCount < lastSaveUserCount * 0.5) {
-            console.error(`⚠️ [Storage] DATA LOSS DETECTED! Users dropped from ${lastSaveUserCount} to ${currentUserCount}`);
-            console.error('⚠️ [Storage] Refusing to save. Run /restorebackup to recover.');
-            return false;
-        }
+    // SAFETY: Don't save if database hasn't been loaded yet and has no users
+    if (!databaseLoaded && !hasUsers(effectiveDb)) {
+        console.error('⚠️ [Storage] BLOCKED: Database not loaded and no users — refusing to save empty data!');
+        console.error('💡 [Storage] This prevents accidental data loss. Load the database first.');
+        return false;
+    }
 
-        // Create backup before save
+    // SAFETY: Don't save if we would decrease user count significantly (data loss detection)
+    const currentUserCount = Object.keys(effectiveDb.users || {}).length;
+    if (databaseLoaded && lastSaveUserCount > 0 && currentUserCount < lastSaveUserCount * 0.5) {
+        console.error(`⚠️ [Storage] DATA LOSS DETECTED! Users dropped from ${lastSaveUserCount} to ${currentUserCount}`);
+        console.error('⚠️ [Storage] Refusing to save. Run /restorebackup to recover.');
+        return false;
+    }
+
+    // Create backup before save (throttled — max once per minute)
+    if (Date.now() - lastBackupTime >= BACKUP_THROTTLE_MS) {
         try {
             runBackup(['./database_ranking.json']);
+            lastBackupTime = Date.now();
         } catch (e) {
             console.error('⚠️ [Storage] Pre-save backup failed (non-fatal):', e.message);
         }
+    }
 
+    try {
         // Prepare data to save
         const dbToSave = { ...effectiveDb };
         dbToSave._metadata = {
@@ -182,10 +190,15 @@ export async function saveRankingStorage(rankingDb) {
             userCount: currentUserCount,
             version: '2.0'
         };
-        dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
-        dbToSave._pendingPilotApprovals = JSON.parse(JSON.stringify(pendingPilotApprovals));
+        // Reference directly — JSON.stringify snapshots synchronously below,
+        // so no deep clone is needed (avoids the O(n) clone on every save).
+        dbToSave._pendingRegistrations = pendingRegistrations;
+        dbToSave._pendingPilotApprovals = pendingPilotApprovals;
 
-        const jsonStr = JSON.stringify(dbToSave, null, 2);
+        // Compact JSON (no pretty-print): the database holds hundreds of users,
+        // and pretty-printing roughly doubles the file size, slowing the write
+        // above and every later load/backup.
+        const jsonStr = JSON.stringify(dbToSave);
 
         // Verify JSON is valid before writing
         try {
@@ -227,51 +240,60 @@ export async function saveRankingStorage(rankingDb) {
         console.error('❌ [Storage] Unexpected error during save:', error);
         if (error.stack) console.error('📋 [Stack]:', error.stack);
         return false;
-    } finally {
-        releaseLock();
     }
 }
 
-// Synchronous wrapper for backward compatibility
+/**
+ * Save ranking database to disk with atomic write + debounce.
+ * Rapid successive calls are coalesced into a single write (30ms window),
+ * and the returned promise resolves once the coalesced write actually lands.
+ */
+export function saveRankingStorage(rankingDb) {
+    const effectiveDb = resolveEffectiveDb(rankingDb);
+    if (!effectiveDb || typeof effectiveDb !== 'object') {
+        console.error('❌ [Storage] BLOCKED: No database reference available to save.');
+        return Promise.resolve(false);
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    queuedDb = effectiveDb;
+
+    // Every caller within the debounce window resolves when the single
+    // coalesced write lands — no caller's promise is ever left dangling.
+    return new Promise((resolve) => {
+        pendingResolvers.push(resolve);
+        debounceTimer = setTimeout(() => {
+            debounceTimer = null;
+            const dbToWrite = queuedDb;
+            queuedDb = null;
+            const resolvers = pendingResolvers;
+            pendingResolvers = [];
+            saveChain = saveChain
+                .then(() => {
+                    saveInProgress = true;
+                    const ok = writeRankingStorage(dbToWrite);
+                    saveInProgress = false;
+                    return ok;
+                })
+                .catch((err) => {
+                    console.error('❌ [Storage] Unexpected error in save chain:', err);
+                    return false;
+                })
+                .then((ok) => {
+                    for (const r of resolvers) r(ok);
+                });
+        }, SAVE_DEBOUNCE_MS);
+    });
+}
+
+// Synchronous wrapper for backward compatibility (critical shutdown saves)
 export function saveRankingStorageSync(rankingDb) {
-    // For critical saves (shutdown), use sync version
-    const effectiveDb = (rankingDb && typeof rankingDb === 'object') ? rankingDb : currentRankingDb;
+    const effectiveDb = resolveEffectiveDb(rankingDb);
     if (!effectiveDb || typeof effectiveDb !== 'object') {
         console.error('❌ [Storage] BLOCKED: No database reference available to save.');
         return false;
     }
-    if (!databaseLoaded && !hasUsers(effectiveDb)) {
-        console.error('⚠️ [Storage] BLOCKED: Refusing to save empty data on shutdown!');
-        return false;
-    }
-
-    try {
-        // Create backup
-        try { runBackup(['./database_ranking.json']); } catch (e) {}
-
-        const dbToSave = { ...effectiveDb };
-        dbToSave._metadata = {
-            savedAt: new Date().toISOString(),
-            userCount: Object.keys(effectiveDb.users || {}).length,
-            version: '2.0'
-        };
-        dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
-        dbToSave._pendingPilotApprovals = JSON.parse(JSON.stringify(pendingPilotApprovals));
-
-        fs.writeFileSync(DB_RANKING_PATH, JSON.stringify(dbToSave, null, 2), 'utf8');
-        
-        // Also save pending to separate backup file
-        savePendingBackup();
-        
-        lastSaveTime = Date.now();
-        lastSaveUserCount = Object.keys(effectiveDb.users || {}).length;
-        saveCount++;
-        
-        return true;
-    } catch (error) {
-        console.error('❌ [Storage] Sync save failed:', error);
-        return false;
-    }
+    return writeRankingStorage(effectiveDb);
 }
 
 // ==========================================
@@ -461,7 +483,7 @@ function handleEmptyDatabase(rankingDb) {
     }
     
     console.error('❌ [Storage] No usable backup found!');
-    console.error('💡 [Storage] Run /restorebackup or /scanrebuild to recover data.');
+    console.error('💡 [Storage] Run /restorebackup to recover data.');
     return rankingDb;
 }
 

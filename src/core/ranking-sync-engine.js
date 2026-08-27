@@ -1,4 +1,4 @@
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, ensureConfig, WORLD_IDS } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, ensureConfig } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache, findNicknameInCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
@@ -9,21 +9,54 @@ import { buildPrefixedNickname } from '../core/ranking-utils.js';
 // 🔄 SYNCHRONIZATION ENGINE
 // ==========================================
 
+// Global lock: only one sync may run at a time. Concurrent syncs (startup sync +
+// /forcesync + the 17:00 cron) pile up CPU-heavy member loops and
+// hundreds of Discord API calls, which can stall interaction handling long enough
+// for the 3-second acknowledgement window to expire ("The application did not
+// respond"). Returns true when this call ran the sync, false when skipped because
+// another sync is already in progress.
+let syncInProgress = false;
+
 export async function runDailySynchronization(client, db, saveLocalStorage, logEvent, forceRefresh = false) {
-    ensureConfig(db);
-    logEvent(getMsg('ranking.logs.syncStart'));
+    if (syncInProgress) {
+        logEvent('⏭️ [Sync] Skipped — synchronization already in progress (another sync is running)');
+        return false;
+    }
+    syncInProgress = true;
+    // Conservative Discord-write batching: nickname/role mutations are queued
+    // and drained in small groups (8 concurrent writes, 500ms pause between
+    // groups) so a heavy sync no longer serializes hundreds of API calls one
+    // at a time. flush() is awaited between steps so each step still observes
+    // the members' role/nickname state as it is on the server.
+    const { queueWrite, flush } = createWriteBatcher();
     try {
+        ensureConfig(db);
+        logEvent(getMsg('ranking.logs.syncStart'));
         // Fetch ranking data to populate cache (used by /manualregister)
         await fetchMir4RankingData(forceRefresh);
+        // Load the ranking cache ONCE — all later steps (validation, temp cleanup,
+        // pre-reg conversion, nickname sync) reuse this same object, avoiding
+        // repeated stat/read/parse of the cache file on every step.
+        const rankingCache = getLocalRankingCache();
         const activeGuild = client.guilds.cache.get(DISCORD_SERVER_ID);
-        if (!activeGuild) return;
+        if (!activeGuild) return false;
 
         if (!db.users) db.users = {};
         
         const members = await safelyFetchGuildMembers(activeGuild, logEvent);
         if (!members || members.size === 0) {
             logEvent(getMsg('ranking.logs.syncAbort'));
-            return;
+            return false;
+        }
+
+        // Precompute nickname → owner once. The per-member passes below otherwise
+        // rescan all users for every member (O(members × users)), which can block
+        // the event loop for seconds on a large guild — stalling every interaction.
+        const ownerByNick = new Map();
+        for (const [id, data] of Object.entries(db.users)) {
+            if (!data || !data.nickname) continue;
+            const cleanKey = data.nickname.trim().normalize('NFC').toLowerCase();
+            if (!ownerByNick.has(cleanKey)) ownerByNick.set(cleanKey, { id, data });
         }
 
         for (const id in db.users) {
@@ -40,9 +73,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
             if (currentNick.endsWith(' - Pilot')) {
                 const ownerBaseNick = currentNick.replace(' - Pilot', '').trim();
-                const ownerEntry = Object.entries(db.users).find(([id, data]) => data.nickname.trim().normalize('NFC').toLowerCase() === ownerBaseNick.toLowerCase());
+                const ownerEntry = ownerByNick.get(ownerBaseNick.toLowerCase());
                 if (ownerEntry) {
-                    const [ownerId, ownerData] = ownerEntry;
+                    const ownerData = ownerEntry.data;
                     if (!ownerData.pilotIds.includes(memberId) && ownerData.pilotIds.length < 4) {
                         ownerData.pilotIds.push(memberId);
                         logEvent(getMsg('ranking.logs.autoLink', { username: member.user.username, count: ownerData.pilotIds.length, baseNick: ownerBaseNick }));
@@ -56,23 +89,25 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             if (member.user.bot) continue;
             const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
             const cleanNick = currentNick.replace(' - Pilot', '').trim();
-            const ownerEntry = Object.entries(db.users).find(([id, data]) => data.nickname.trim().normalize('NFC').toLowerCase() === cleanNick.toLowerCase());
+            const ownerEntry = ownerByNick.get(cleanNick.toLowerCase());
 
             if (ownerEntry) {
-                const [registeredOwnerId, ownerData] = ownerEntry;
+                const registeredOwnerId = ownerEntry.id;
+                const ownerData = ownerEntry.data;
                 if (memberId !== registeredOwnerId && (!ownerData.pilotIds || !ownerData.pilotIds.includes(memberId))) {
                     logEvent(getMsg('ranking.logs.imposterDetected', { username: member.user.username, nickname: ownerData.nickname }));
-                    await member.setNickname(member.user.username).catch(() => {});
-                    if (member.roles.cache.has(MEMBER_ROLE_ID)) await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                    queueWrite(() => member.setNickname(member.user.username));
+                    if (member.roles.cache.has(MEMBER_ROLE_ID)) queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                     continue; 
                 }
             }
         }
 
+        await flush();
+
         // 2.5. RANKING VALIDATION — remove ROLE (not registration) if nickname not in any world's ranking
         const rankingValidationEnabled = db.config?.rankingValidationEnabled === true;
-        const rankingCache = rankingValidationEnabled ? getLocalRankingCache() : null;
-        if (rankingCache) {
+        if (rankingValidationEnabled && rankingCache) {
             let removedRoleCount = 0;
             const cache = rankingCache;
 
@@ -94,20 +129,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         logEvent(`⚠️ [Ranking Validation] ${member.user.tag} (${displayName}) not found in any EU ranking — removing role (keeping registration)`);
 
                         if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-
-                            // Notify once when the role is removed by ranking validation
-                            if (false && !getRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt')) {
-                                // DISABLED: Ranking-validation DMs removed at user request
-                                setRoleNotifyFlag(db, memberId, 'rankingValidationNotifiedAt');
-                                setRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
-                                try {
-                                    await sendRankingValidationDm(member, userData.nickname, db);
-                                    logEvent(`📧 [DM] Ranking-validation notice sent to ${member.user.tag} (${userData.nickname})`);
-                                } catch (e) {
-                                    logEvent(`⚠️ [DM] Failed to send ranking-validation notice to ${member.user.tag}: ${e.message}`);
-                                }
-                            }
+                            queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                         }
 
                         // Keep the nickname — only remove the role
@@ -119,20 +141,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         for (const pId of userData.pilotIds) {
                             const pilotMember = members.get(pId);
                             if (pilotMember && pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-
-                                if (false && !getRoleNotifyFlag(db, pId, 'rankingValidationNotifiedAt')) {
-                                    // DISABLED: Ranking-validation DMs removed at user request
-                                    setRoleNotifyFlag(db, pId, 'rankingValidationNotifiedAt');
-                                    setRoleNotifyFlag(db, pId, 'noRoleReminderSent');
-                                    try {
-                                        const pilotNick = db.users[pId]?.nickname || pilotMember.nickname || pilotMember.user.username;
-                                        await sendRankingValidationDm(pilotMember, pilotNick, db);
-                                        logEvent(`📧 [DM] Ranking-validation notice sent to ${pilotMember.user.tag} (${pilotNick})`);
-                                    } catch (e) {
-                                        logEvent(`⚠️ [DM] Failed to send ranking-validation notice to ${pilotMember.user.tag}: ${e.message}`);
-                                    }
-                                }
+                                queueWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
                             }
                         }
                     }
@@ -145,9 +154,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             }
         }
 
+        await flush();
+
         // 2.75. TEMP REGISTRATION CLEANUP — convert to permanent or remove on expiry
-        const tempCache = getLocalRankingCache();
-        if (tempCache) {
+        if (rankingCache) {
             // Check if we're in the clan expedition grace period (Fri 00:01 BRT → Sun 17:00 BRT)
             // During this window, don't remove temp users for not being in an allied clan
             const brtDay = new Date().toLocaleDateString('en-US', { timeZone: 'America/Sao_Paulo', weekday: 'short' });
@@ -162,7 +172,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 const now = new Date();
 
                 // Look up in ranking cache using centralized service
-                const lookup = lookupNickname(userData.nickname, db, tempCache);
+                const lookup = lookupNickname(userData.nickname, db, rankingCache);
                 const inAlliedClan = lookup.found && lookup.inAlliedClan;
 
                 if (inAlliedClan) {
@@ -178,6 +188,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     if (hoursLeft > 0 && hoursLeft <= 30 && !userData.tempNotified24h) {
                         const guildMember = members.get(memberId);
                         if (guildMember) {
+                            // Deliberately NOT batched: opening a DM channel has its
+                            // own strict per-user rate limit, and this path runs at
+                            // most once per temp user per sync.
                             try {
                                 await guildMember.user.send('⏳ **Reminder:** Your temporary registration expires in less than 24 hours.\n\nMake sure you are in an **allied clan** that appears in the EU ranking to keep your role permanently!\n\nIf you need more time, contact an administrator.');
                                 userData.tempNotified24h = true;
@@ -190,112 +203,122 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     }
 
                     if (now >= tempUntil) {
-                    // Expired and not in allied clan — check expedition grace period
-                    if (isGracePeriod) {
-                        logEvent(`⏸️ [Temp Grace] ${memberId} (${userData.nickname}) expired but in expedition grace period (${brtDay} ${brtHour}h BRT) — deferring removal`);
-                        continue;
-                    }
-
-                    // Remove role only — keep nickname
-                    const member = members.get(memberId);
-                    if (member) {
-                        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                            await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        // Expired and not in allied clan — check expedition grace period
+                        if (isGracePeriod) {
+                            logEvent(`⏸️ [Temp Grace] ${memberId} (${userData.nickname}) expired but in expedition grace period (${brtDay} ${brtHour}h BRT) — deferring removal`);
+                            continue;
                         }
-                    }
 
-                    // Also remove any pilots linked to this owner — just remove role, keep nickname
-                    if (userData.pilotIds && userData.pilotIds.length > 0) {
-                        for (const pId of userData.pilotIds) {
-                            const pilotMember = members.get(pId);
-                            if (pilotMember) {
-                                if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                    await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                                }
+                        // Remove role only — keep nickname
+                        const member = members.get(memberId);
+                        if (member) {
+                            if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+                                queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                             }
-                            delete db.users[pId];
                         }
-                    }
 
-                    logEvent(`⏳ [Temp Expired] ${memberId} (${userData.nickname}) temp registration expired — removing role and registration`);
-                    delete db.users[memberId];
-                    saveLocalStorage();
+                        // Also remove any pilots linked to this owner — just remove role, keep nickname
+                        if (userData.pilotIds && userData.pilotIds.length > 0) {
+                            for (const pId of userData.pilotIds) {
+                                const pilotMember = members.get(pId);
+                                if (pilotMember) {
+                                    if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                                        queueWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
+                                    }
+                                }
+                                delete db.users[pId];
+                            }
+                        }
+
+                        logEvent(`⏳ [Temp Expired] ${memberId} (${userData.nickname}) temp registration expired — removing role and registration`);
+                        delete db.users[memberId];
+                        saveLocalStorage();
+                    }
                 }
             }
         }
-        }
+
+        await flush();
 
         // 2.85. PRE-REGISTRATION AUTO-CONVERSION — convert pre-registered users who are now in allied clans
-        if (db.preRegistrations && Object.keys(db.preRegistrations).length > 0) {
-            const preRegCache = getLocalRankingCache();
-            if (preRegCache) {
-                let converted = 0;
-                let expired = 0;
+        if (db.preRegistrations && Object.keys(db.preRegistrations).length > 0 && rankingCache) {
+            let converted = 0;
+            let expired = 0;
 
-                for (const [memberId, preReg] of Object.entries(db.preRegistrations)) {
-                    // Check expiry
-                    if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < Date.now()) {
-                        delete db.preRegistrations[memberId];
-                        expired++;
-                        logEvent(`🧹 [PreReg Sync] Removed expired pre-registration for "${preReg.nickname}" (${memberId})`);
-                        continue;
-                    }
-
-                    // Check if user is in the production server
-                    const prodMember = members.get(memberId);
-                    if (!prodMember) continue;
-
-                    // Check ranking + allied clan via centralized service
-                    const lookup = lookupNickname(preReg.nickname, db, preRegCache);
-                    if (!lookup.found || !lookup.inAlliedClan) continue;
-
-                    // Auto-convert!
-                    if (preReg.ownerNick && preReg.ownerId && db.users[preReg.ownerId]) {
-                        // Pilot
-                        if (!db.users[preReg.ownerId].pilotIds) db.users[preReg.ownerId].pilotIds = [];
-                        if (!db.users[preReg.ownerId].pilotIds.includes(memberId)) {
-                            db.users[preReg.ownerId].pilotIds.push(memberId);
-                        }
-                        db.users[memberId] = {
-                            nickname: preReg.nickname,
-                            registeredAt: new Date().toISOString(),
-                            pilotIds: []
-                        };
-                        await prodMember.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                        logEvent(`✅ [PreReg Sync] Auto-converted pilot "${preReg.nickname}" (${memberId}) → pilot of "${preReg.ownerNick}"`);
-                    } else {
-                        // Owner
-                        db.users[memberId] = {
-                            nickname: preReg.nickname,
-                            registeredAt: new Date().toISOString(),
-                            pilotIds: preReg.pilotIds || []
-                        };
-                        await prodMember.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
-                        logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${lookup.clanName}`);
-                    }
-
-                    if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                        await prodMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                    }
-
+            for (const [memberId, preReg] of Object.entries(db.preRegistrations)) {
+                // Check expiry
+                if (preReg.expiresAt && new Date(preReg.expiresAt).getTime() < Date.now()) {
                     delete db.preRegistrations[memberId];
-                    converted++;
+                    expired++;
+                    logEvent(`🧹 [PreReg Sync] Removed expired pre-registration for "${preReg.nickname}" (${memberId})`);
+                    continue;
                 }
 
-                if (converted > 0 || expired > 0) {
-                    saveLocalStorage();
-                    logEvent(`🧹 [PreReg Sync] ${converted} auto-converted, ${expired} expired pre-registrations cleaned up`);
+                // Check if user is in the production server
+                const prodMember = members.get(memberId);
+                if (!prodMember) continue;
+
+                // Check ranking + allied clan via centralized service
+                const lookup = lookupNickname(preReg.nickname, db, rankingCache);
+                if (!lookup.found || !lookup.inAlliedClan) continue;
+
+                // Auto-convert!
+                if (preReg.ownerNick && preReg.ownerId && db.users[preReg.ownerId]) {
+                    // Pilot
+                    if (!db.users[preReg.ownerId].pilotIds) db.users[preReg.ownerId].pilotIds = [];
+                    if (!db.users[preReg.ownerId].pilotIds.includes(memberId)) {
+                        db.users[preReg.ownerId].pilotIds.push(memberId);
+                    }
+                    db.users[memberId] = {
+                        nickname: preReg.nickname,
+                        registeredAt: new Date().toISOString(),
+                        pilotIds: []
+                    };
+                    queueWrite(() => prodMember.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')));
+                    logEvent(`✅ [PreReg Sync] Auto-converted pilot "${preReg.nickname}" (${memberId}) → pilot of "${preReg.ownerNick}"`);
+                } else {
+                    // Owner
+                    db.users[memberId] = {
+                        nickname: preReg.nickname,
+                        registeredAt: new Date().toISOString(),
+                        pilotIds: preReg.pilotIds || []
+                    };
+                    queueWrite(() => prodMember.setNickname(buildPrefixedNickname(preReg.nickname, db)));
+                    logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${lookup.clanName}`);
                 }
+
+                if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                    queueWrite(() => prodMember.roles.add(MEMBER_ROLE_ID));
+                }
+
+                delete db.preRegistrations[memberId];
+                converted++;
+            }
+
+            if (converted > 0 || expired > 0) {
+                saveLocalStorage();
+                logEvent(`🧹 [PreReg Sync] ${converted} auto-converted, ${expired} expired pre-registrations cleaned up`);
             }
         }
 
+        await flush();
+
         // 3. NICKNAME SYNCHRONIZATION + MEMBER ROLE (allied clan aware)
-        const syncCache = getLocalRankingCache();
+        const syncCache = rankingCache;
+
+        // Reverse map pilotId → ownerId built after the pre-registration auto-conversion
+        // above, so newly linked pilots are included too.
+        const ownerIdByPilot = new Map();
+        for (const [id, data] of Object.entries(db.users)) {
+            if (data.pilotIds) {
+                for (const pid of data.pilotIds) ownerIdByPilot.set(pid, id);
+            }
+        }
 
         for (const [memberId, member] of members) {
             if (member.user.bot) continue;
 
-            const ownerIdOfThisPilot = Object.keys(db.users).find(id => db.users[id].pilotIds && db.users[id].pilotIds.includes(memberId));
+            const ownerIdOfThisPilot = ownerIdByPilot.get(memberId);
             const isPilot = !!ownerIdOfThisPilot;
             
             const effectiveOwnerId = isPilot ? ownerIdOfThisPilot : memberId;
@@ -320,19 +343,19 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (ownerData?.manualPermanent) {
                     // 👑 ManualForce user — always ensure role is present, never remove
                     if (!hasMemberRole) {
-                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
                         logEvent(`[Sync] Restored role for manualforce user ${member.user.username}`);
                     }
                 } else if (ownerData?.tempUntil) {
                     // ⏳ Temporary registration — keep role until expiry (handled in step 2.75)
                     if (!hasMemberRole) {
-                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
                         logEvent(`[Sync] Restored role for temp user ${member.user.username} (expires ${new Date(ownerData.tempUntil).toLocaleDateString()})`);
                     }
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure role is present
                     if (!hasMemberRole) {
-                        await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                        queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
                         logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
                     }
                     // Role restored — allow future notifications
@@ -359,35 +382,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             logEvent(`[Sync] Kept role for ${member.user.username} — ranking match is fuzzy only (${lookup.serverName}/${lookup.clanName}), skipping removal`);
                         }
                     } else if (hasMemberRole) {
-                        await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                        queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                         logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan (registration kept)`);
-
-                        // Notify once when the role is removed for not being in an allied clan
-                        if (false && !getRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt')) {
-                            // DISABLED: Role-removed DMs removed at user request
-                            setRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt');
-                            try {
-                                await sendRoleRemovedDm(member, ownerData, lookup, db);
-                                logEvent(`📧 [DM] Role-removed notice sent to ${member.user.tag} (${ownerData.nickname})`);
-                            } catch (e) {
-                                logEvent(`⚠️ [DM] Failed to send role-removed notice to ${member.user.tag}: ${e.message}`);
-                            }
-                        }
-                    } else if (false && !getRoleNotifyFlag(db, memberId, 'noRoleReminderSent')) {
-                        // DISABLED: No-role reminder DMs removed at user request
-                        // Registered but already without role — remind once that they need an allied clan
-                        setRoleNotifyFlag(db, memberId, 'noRoleReminderSent');
-                        try {
-                            await sendNoRoleReminderDm(member, ownerData, lookup, db);
-                            logEvent(`📧 [DM] No-role reminder sent to ${member.user.tag} (${ownerData.nickname})`);
-                        } catch (e) {
-                            logEvent(`⚠️ [DM] Failed to send no-role reminder to ${member.user.tag}: ${e.message}`);
-                        }
                     }
                 }
             } else if (!isRegistered && hasMemberRole && rankingValidationEnabled) {
                 // Non-registered user — remove role if validation enabled
-                await member.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+                queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                 logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
             }
 
@@ -401,116 +402,119 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 let desiredNickname = "";
                 if (isPilot) {
                     const ownerNick = db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC');
-                    desiredNickname = buildPrefixedNickname(ownerNick, db, 'Pilot');
+                    // Reuse the allied-clan lookup already computed above — it resolves
+                    // the SAME owner nickname, so no second ranking lookup is needed.
+                    desiredNickname = buildPrefixedNickname(ownerNick, db, 'Pilot', lookup);
                 } else if (ownerData?.nickname) {
                     const nick = ownerData.nickname.trim().normalize('NFC');
-                    desiredNickname = buildPrefixedNickname(nick, db);
+                    desiredNickname = buildPrefixedNickname(nick, db, '', lookup);
                 }
 
                 if (desiredNickname && (member.nickname || '').normalize('NFC') !== desiredNickname) {
-                    await member.setNickname(desiredNickname).catch(() => {});
+                    queueWrite(() => member.setNickname(desiredNickname));
                 }
             }
         }
 
+        await flush();
         saveLocalStorage();
         logEvent(getMsg('ranking.logs.syncComplete'));
+        return true;
     } catch (error) { 
         logEvent(getMsg('ranking.logs.syncError', { error: error.message }));
+        return false;
+    } finally {
+        // Flush any writes queued before an error/early exit so a mid-step
+        // exception never silently drops pending role/nickname corrections
+        // (no-op when the queue is already empty).
+        if (flush) await flush();
+        syncInProgress = false;
     }
 }
 
 // ==========================================
-// 📧 ROLE STATUS DM HELPERS
+// 📧 ROLE STATUS HELPERS
 // ==========================================
 
 /**
- * Per-member notification flags (db.roleNotify[memberId][flag])
+ * Delete a per-member notification flag (db.roleNotify[memberId][flag]).
  * Kept per-member so owners and their pilots never share the same flag
- * (a pilot being processed first must not suppress the owner's DM).
+ * (a pilot being processed first must not suppress the owner's flag).
  */
-function getRoleNotifyFlag(db, memberId, flag) {
-    if (!db.roleNotify) db.roleNotify = {};
-    if (!db.roleNotify[memberId]) return false;
-    return !!db.roleNotify[memberId][flag];
-}
-
-function setRoleNotifyFlag(db, memberId, flag) {
-    if (!db.roleNotify) db.roleNotify = {};
-    if (!db.roleNotify[memberId]) db.roleNotify[memberId] = {};
-    db.roleNotify[memberId][flag] = Date.now();
-}
-
 function deleteRoleNotifyFlag(db, memberId, flag) {
     if (!db.roleNotify || !db.roleNotify[memberId]) return;
     delete db.roleNotify[memberId][flag];
 }
 
+// ==========================================
+// ⚡ CONSERVATIVE DISCORD-WRITE BATCHING
+// ==========================================
+
+export const WRITE_BATCH_SIZE = 8;
+export const WRITE_BATCH_PAUSE_MS = 500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
- * Build a readable list of all allied clans across configured worlds.
+ * Batches Discord mutations (setNickname / roles.add / roles.remove) into
+ * conservative groups: up to WRITE_BATCH_SIZE concurrent writes, then a
+ * WRITE_BATCH_PAUSE_MS pause before the next group. This is the middle ground
+ * between one-at-a-time serial writes (slow on heavy syncs) and unbounded
+ * parallelism (rate-limit risk).
+ *
+ * Per-op errors are swallowed (same semantics as the old `await x.catch(() => {})`),
+ * so one failing write never breaks the rest of the batch.
+ *
+ * `queueWrite` is fire-and-forget; `flush()` must be awaited before the caller
+ * relies on all writes having completed.
  */
-function formatAlliedClansList(db) {
-    const allied = db.config?.alliedClans || {};
-    const lines = [];
-    for (const [worldId, clans] of Object.entries(allied)) {
-        if (!clans || clans.length === 0) continue;
-        const serverName = WORLD_IDS[worldId] || `World ${worldId}`;
-        lines.push(`**${serverName}:** ${clans.map(c => `\`${c}\``).join(', ')}`);
+export function createWriteBatcher() {
+    const queue = [];
+    let flushing = false;
+    let startScheduled = false;
+    let currentFlush = Promise.resolve();
+
+    function startFlush() {
+        flushing = true;
+        currentFlush = (async () => {
+            while (queue.length > 0) {
+                const batch = queue.splice(0, WRITE_BATCH_SIZE);
+                await Promise.all(batch.map((op) => op().catch(() => {})));
+                if (queue.length > 0) await sleep(WRITE_BATCH_PAUSE_MS);
+            }
+            flushing = false;
+        })();
+        return currentFlush;
     }
-    return lines.length > 0 ? lines.join('\n') : '*(nenhum configurado)*';
+
+    // Defer the first drain to the next tick so a synchronous burst of
+    // queueWrite() calls (the sync engine's per-member loops) all land in the
+    // queue before the first group is spliced — clean batches of 8 instead of
+    // a ragged 1-item first group that costs an extra inter-group pause.
+    function scheduleStart() {
+        if (flushing || startScheduled) return;
+        startScheduled = true;
+        queueMicrotask(() => {
+            startScheduled = false;
+            if (flushing || queue.length === 0) return;
+            startFlush();
+        });
+    }
+
+    return {
+        /** Queue one write (fire-and-forget; await flush() before relying on it). */
+        queueWrite(op) {
+            queue.push(op);
+            scheduleStart();
+            return currentFlush;
+        },
+        /** Wait until every queued write has completed. No-op on an empty queue. */
+        async flush() {
+            if (!flushing && queue.length > 0) startFlush();
+            while (flushing) {
+                await currentFlush;
+            }
+        }
+    };
 }
 
-/**
- * DM the member when their role is removed by ranking validation (step 2.5):
- * the nickname was not found in any world's game-forum ranking. Explains that
- * the role is restored automatically once the account appears in the forum
- * ranking inside an allied clan.
- */
-async function sendRankingValidationDm(member, nickname, db) {
-    const alliedList = formatAlliedClansList(db);
-    await member.send(
-        `⚠️ **Cargo de membro removido**\n\n` +
-        `Sua conta **${nickname}** não foi encontrada no **ranking do fórum do jogo**, então o cargo de membro foi removido.\n\n` +
-        `Para ter acesso ao Discord durante o **reset do servidor**, sua conta precisa aparecer no ranking do fórum dentro de um dos **clãs aliados principais**:\n\n` +
-        `${alliedList}\n\n` +
-        `📌 Assim que sua conta voltar a aparecer no ranking em um clã aliado, seu cargo será **restaurado automaticamente** no próximo sync.`
-    );
-}
-
-/**
- * DM the member when their role is removed because they left the allied clans.
- * Explains the current clan, that they must be in an allied clan for server-reset
- * access, that info is based on the game forum ranking, and that the role is
- * restored automatically once they return to an allied clan.
- */
-async function sendRoleRemovedDm(member, userData, lookup, db) {
-    const clanLine = lookup && lookup.found
-        ? `🏰 **Clã atual:** ${lookup.clanName} (${lookup.serverName})`
-        : '❌ **Não encontrado no ranking do fórum do jogo.**';
-    const alliedList = formatAlliedClansList(db);
-    await member.send(
-        `⚠️ **Cargo de membro removido**\n\n` +
-        `Sua conta **${userData.nickname}** perdeu o cargo de membro porque você **saiu dos clãs aliados**.\n\n` +
-        `${clanLine}\n\n` +
-        `Para ter acesso ao Discord durante o **reset do servidor**, você precisa estar em um dos **clãs aliados principais**:\n\n` +
-        `${alliedList}\n\n` +
-        `📌 As informações são baseadas no **ranking do fórum do jogo**. Assim que sua conta voltar para um clã aliado, seu cargo será **restaurado automaticamente** no próximo sync.`
-    );
-}
-
-/**
- * DM a registered member who currently has no member role,
- * explaining they need to be in an allied clan in the game forum.
- */
-async function sendNoRoleReminderDm(member, userData, lookup, db) {
-    const alliedList = formatAlliedClansList(db);
-    const clanLine = lookup && lookup.found
-        ? `\n🏰 **Clã atual:** ${lookup.clanName} (${lookup.serverName})\n`
-        : '\n';
-    await member.send(
-        `ℹ️ **Registro ativo — cargo pendente**\n\n` +
-        `Sua conta **${userData.nickname}** está registrada, mas você ainda **não tem o cargo de membro**.${clanLine}\n` +
-        `Para recuperar o cargo, você precisa estar em um **clã aliado** no fórum do jogo. Quando sua conta aparecer lá, o cargo será **restaurado automaticamente**.\n\n` +
-        `🏰 **Clãs aliados:**\n${alliedList}`
-    );
-}

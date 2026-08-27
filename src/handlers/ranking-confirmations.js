@@ -2,14 +2,12 @@ import fs from 'node:fs';
 import {
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle,
-    ChannelType
+    ButtonStyle
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     SUPER_ADMIN_USER_ID,
-    NUKE_PROTECTED_CHANNEL_IDS,
     confirmationCache
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
@@ -183,21 +181,23 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
 
         const userData = db.users[cached.targetId];
-        if (userData.pilotIds && userData.pilotIds.length > 0) {
-            for (const pId of userData.pilotIds) {
-                const pilotMember = await guild.members.fetch(pId).catch(() => null);
-                if (pilotMember) {
-                    if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                        await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-                    }
-                    await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
-                }
+        // Fetch + clean up the target AND every linked pilot concurrently —
+        // each member's role removal + nickname reset are independent calls.
+        const pilotCleanups = (userData.pilotIds || []).map(async (pId) => {
+            const pilotMember = await guild.members.fetch(pId).catch(() => null);
+            if (!pilotMember) return;
+            if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
             }
-        }
-        if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-        }
-        await targetMember.setNickname(targetMember.user.username).catch(() => {});
+            await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+        });
+        const targetCleanup = (async () => {
+            if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+                await targetMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
+            }
+            await targetMember.setNickname(targetMember.user.username).catch(() => {});
+        })();
+        await Promise.all([...pilotCleanups, targetCleanup]);
         delete db.users[cached.targetId];
         saveLocalStorage();
 
@@ -211,8 +211,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
     // ── manualremovepilot: Remove a specific pilot from an owner ──
     if (action === 'manualremovepilot') {
         const guild = interaction.guild;
-        const ownerMember = await guild.members.fetch(cached.ownerId).catch(() => null);
-        const pilotMember = await guild.members.fetch(cached.pilotId).catch(() => null);
+        // Fetch owner + pilot concurrently (independent member lookups).
+        const [ownerMember, pilotMember] = await Promise.all([
+            guild.members.fetch(cached.ownerId).catch(() => null),
+            guild.members.fetch(cached.pilotId).catch(() => null)
+        ]);
 
         if (!ownerMember || !db.users[cached.ownerId]) {
             return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
@@ -226,10 +229,12 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         if (pilotMember) {
-            if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
-            }
-            await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+            await Promise.all([
+                pilotMember.roles.cache.has(MEMBER_ROLE_ID)
+                    ? pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {})
+                    : Promise.resolve(),
+                pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+            ]);
         }
 
         logEvent(`Admin ${interaction.user.tag} removed pilot ${cached.pilotName} from ${cached.ownerName}`);
@@ -242,8 +247,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
     // ── manualpilot: Link a pilot to an owner ──
     if (action === 'manualpilot') {
         const guild = interaction.guild;
-        const ownerMember = await guild.members.fetch(cached.ownerId).catch(() => null);
-        const pilotMember = await guild.members.fetch(cached.pilotId).catch(() => null);
+        // Fetch owner + pilot concurrently (independent member lookups).
+        const [ownerMember, pilotMember] = await Promise.all([
+            guild.members.fetch(cached.ownerId).catch(() => null),
+            guild.members.fetch(cached.pilotId).catch(() => null)
+        ]);
 
         if (!ownerMember || !db.users[cached.ownerId]) {
             return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
@@ -255,14 +263,20 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
         saveLocalStorage();
 
+        // Nickname + role are independent — run them concurrently. Capture the role
+        // state BEFORE the add: discord.js updates roles.cache when roles.add resolves,
+        // so re-checking after Promise.all would wrongly suppress the log below.
         if (pilotMember) {
-            await pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {});
-        }
-
-        // Apply member role
-        if (pilotMember && !pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-            logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
+            const hadMemberRole = pilotMember.roles.cache.has(MEMBER_ROLE_ID);
+            await Promise.all([
+                pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {}),
+                !hadMemberRole
+                    ? pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                    : Promise.resolve()
+            ]);
+            if (!hadMemberRole) {
+                logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
+            }
         }
 
         logEvent(`Admin ${interaction.user.tag} manually linked pilot ${cached.pilotName} to ${cached.ownerName}`);
@@ -299,10 +313,13 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
         saveLocalStorage();
 
-        await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-        }
+        // Nickname + role are independent — run them concurrently.
+        await Promise.all([
+            targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {}),
+            !targetMember.roles.cache.has(MEMBER_ROLE_ID)
+                ? targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                : Promise.resolve()
+        ]);
 
         const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
         logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${finalNickname} in ${cached.clan}${tempLabel}`);
@@ -315,80 +332,6 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             content: responseMsg,
             components: []
         }).catch(() => {});
-    }
-
-    // ── nuke: Delete ALL channels and categories (super admin only) ──
-    if (action === 'nuke') {
-        const guild = interaction.guild;
-
-        // Safety: re-check super admin before executing the nuke
-        if (interaction.user.id !== SUPER_ADMIN_USER_ID) {
-            return interaction.update({
-                content: '❌ **Access denied.** Only the super admin can confirm this action.',
-                components: []
-            }).catch(() => {});
-        }
-
-        // Acknowledge before channels start disappearing
-        await interaction.update({
-            content: '💣 **NUKE INITIATED** — deleting all channels and categories...',
-            components: []
-        }).catch(() => {});
-
-        // Delete regular channels first, then categories (avoids double-delete errors).
-        // Protected channels are never deleted, and neither are categories that
-        // contain a protected channel (Discord cascade-deletes a category's children).
-        const allChannels = [...guild.channels.cache.values()];
-        const isProtected = c => NUKE_PROTECTED_CHANNEL_IDS.includes(c.id);
-        const protectedChannels = allChannels.filter(isProtected);
-        const categoriesToKeep = allChannels.filter(c =>
-            c.type === ChannelType.GuildCategory &&
-            protectedChannels.some(p => p.parentId === c.id)
-        );
-
-        const deletable = allChannels.filter(c =>
-            !isProtected(c) && !categoriesToKeep.includes(c)
-        );
-        const categories = deletable.filter(c => c.type === ChannelType.GuildCategory);
-        const regular = deletable.filter(c => c.type !== ChannelType.GuildCategory);
-
-        let deleted = 0;
-        let deletedCategories = 0;
-        for (const ch of regular) {
-            await ch.delete('💣 Nuke by super admin').then(() => deleted++).catch(() => {});
-        }
-        for (const ch of categories) {
-            await ch.delete('💣 Nuke by super admin').then(() => { deleted++; deletedCategories++; }).catch(() => {});
-        }
-
-        // Clean up bot config references to now-deleted channels (avoids errors during daily sync)
-        if (db.config) {
-            if (db.config.panelChannelId) delete db.config.panelChannelId;
-            if (db.config.panelMessageId) delete db.config.panelMessageId;
-            saveLocalStorage();
-        }
-
-        // Create a default channel and post the operation summary
-        try {
-            const geral = await guild.channels.create({
-                name: 'geral',
-                reason: '💣 Post-nuke default channel'
-            });
-            let summary = `💣 **NUKE COMPLETED!**\n\n🗑️ **${deletedCategories}** categor(ies) deleted\n📢 **${deleted - deletedCategories}** channel(s) deleted`;
-            const kept = allChannels.length - deleted;
-            if (kept > 0) {
-                summary += `\n🛡️ **${kept}** channel(s)/categor(ies) kept (protected)`;
-            }
-            summary += `\n👤 Executed by: ${interaction.user.tag}\n🕐 ${new Date().toLocaleString('en-US')}`;
-            await geral.send(summary);
-        } catch (e) {
-            console.error('❌ Failed to create #geral after nuke:', e);
-        }
-
-        logEvent(`💣 SUPER ADMIN ${interaction.user.tag} (${interaction.user.id}) NUKE — deleted ${deleted} channels (${deletedCategories} categories), kept ${allChannels.length - deleted}`);
-
-        // Nothing left to update — all channels (including this one) are gone
-        return null;
     }
 
     // ── manualforce: Force-register a user as permanent (no ranking check) ──
@@ -416,10 +359,13 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
         saveLocalStorage();
 
-        await targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {});
-        if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-            await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-        }
+        // Nickname + role are independent — run them concurrently.
+        await Promise.all([
+            targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {}),
+            !targetMember.roles.cache.has(MEMBER_ROLE_ID)
+                ? targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+                : Promise.resolve()
+        ]);
 
         logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)`);
 

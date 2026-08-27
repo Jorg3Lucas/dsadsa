@@ -118,10 +118,13 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     if (!db.users[userId].pilotIds) db.users[userId].pilotIds = [];
     saveLocalStorage();
 
-    await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-    if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-    }
+    // Nickname + role are independent Discord calls — run them concurrently.
+    await Promise.all([
+        targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {}),
+        !targetMember.roles.cache.has(MEMBER_ROLE_ID)
+            ? targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+            : Promise.resolve()
+    ]);
 
     const approvalLabel = isTempApproval ? '⏳ TEMPORARILY APPROVED (3 days)' : '✅ APPROVED';
     const dmMsg = isTempApproval
@@ -130,12 +133,14 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
 
     logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${finalNickname}`);
 
-    await interaction.editReply({
-        content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${finalNickname}\n✅ **Approved by:** ${interaction.user.tag}`,
-        components: []
-    });
-
-    try { await targetMember.send(dmMsg); } catch (e) {}
+    // Reply + DM are independent — send them concurrently (DM failure is swallowed).
+    await Promise.all([
+        interaction.editReply({
+            content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${finalNickname}\n✅ **Approved by:** ${interaction.user.tag}`,
+            components: []
+        }),
+        targetMember.send(dmMsg).catch(() => {})
+    ]);
     return;
 }
 
@@ -227,8 +232,11 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
         return interaction.editReply({ content: '❌ Error finding the server.', components: [] });
     }
 
-    const pilotMember = await guild.members.fetch(pilotUserId).catch(() => null);
-    const ownerMember = await guild.members.fetch(pending.ownerId).catch(() => null);
+    // Fetch owner + pilot concurrently (independent member lookups).
+    const [pilotMember, ownerMember] = await Promise.all([
+        guild.members.fetch(pilotUserId).catch(() => null),
+        guild.members.fetch(pending.ownerId).catch(() => null)
+    ]);
 
     if (!pilotMember || !ownerMember) {
         logEvent(`❌ Pilot approval failed: owner ${pending.ownerId} or pilot ${pilotUserId} no longer in server`);
@@ -241,18 +249,29 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
     }
     saveLocalStorage();
 
-    await pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {});
-    // Apply member role
-    if (!pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+    // Nickname + role are independent — run them concurrently. Capture the role
+    // state BEFORE the add: discord.js updates roles.cache when roles.add resolves,
+    // so re-checking after Promise.all would wrongly suppress the log below.
+    const hadMemberRole = pilotMember.roles.cache.has(MEMBER_ROLE_ID);
+    await Promise.all([
+        pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {}),
+        !hadMemberRole
+            ? pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+            : Promise.resolve()
+    ]);
+    if (!hadMemberRole) {
         logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
     }
 
     logEvent(`${interaction.user.tag} approved pilot ${pilotUserId} for ${pending.ownerNick}`);
 
-    await interaction.editReply({ content: `✅ **Pilot approved!** <@${pilotUserId}> is now your pilot.`, components: [] });
-
-    try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('✅ **Registration approved!** The owner accepted your pilot request.'); } catch (e) {}
+    // Reply + pilot DM are independent — run them concurrently.
+    await Promise.all([
+        interaction.editReply({ content: `✅ **Pilot approved!** <@${pilotUserId}> is now your pilot.`, components: [] }),
+        interaction.client.users.fetch(pilotUserId)
+            .then(u => u.send('✅ **Registration approved!** The owner accepted your pilot request.'))
+            .catch(() => {})
+    ]);
     return;
 }
 
@@ -303,8 +322,11 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
         return interaction.editReply({ content: '❌ Error finding the server.', components: [] });
     }
 
-    const pilotMember = await guild.members.fetch(pilotUserId).catch(() => null);
-    const ownerMember = await guild.members.fetch(pending.ownerId).catch(() => null);
+    // Fetch owner + pilot concurrently (independent member lookups).
+    const [pilotMember, ownerMember] = await Promise.all([
+        guild.members.fetch(pilotUserId).catch(() => null),
+        guild.members.fetch(pending.ownerId).catch(() => null)
+    ]);
 
     if (!pilotMember || !ownerMember) {
         logEvent(`❌ Admin pilot approval failed: owner or pilot no longer in server`);
@@ -317,43 +339,49 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
     }
     saveLocalStorage();
 
-    await pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {});
-    if (!pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
+    // Nickname + role are independent — run them concurrently. Capture the role
+    // state BEFORE the add (see note in handleApprovePilot).
+    const hadMemberRole = pilotMember.roles.cache.has(MEMBER_ROLE_ID);
+    await Promise.all([
+        pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {}),
+        !hadMemberRole
+            ? pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
+            : Promise.resolve()
+    ]);
+    if (!hadMemberRole) {
         logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
     }
 
     logEvent(`✅ Admin ${interaction.user.tag} approved pilot ${pilotUserId} (${pending.pilotTag}) for owner ${pending.ownerNick}`);
 
-    await interaction.editReply({
-        content: `✅ **Pilot Approved by Admin**\n\n✈️ **Pilot:** ${pending.pilotTag}\n👑 **Owner:** ${pending.ownerNick}\n✅ **Approved by:** ${interaction.user.tag}`,
-        components: []
-    });
+    // Reply + both DMs are independent — run them concurrently (failures swallowed per-DM).
+    const pilotDm = interaction.client.users.fetch(pilotUserId)
+        .then(u => u.send('✅ **Your pilot registration was approved by an administrator!**'))
+        .catch(() => {});
+    const ownerDm = interaction.client.users.fetch(pending.ownerId)
+        .then((ownerUser) => {
+            const removeButton = new ButtonBuilder()
+                .setCustomId(`owner_remove_pilot_${pilotUserId}`)
+                .setLabel('❌ Remove this pilot')
+                .setStyle(ButtonStyle.Danger);
+            return ownerUser.send({
+                content: `✈️ **Pilot Registered by Admin**\n\nAn administrator approved **${pending.pilotTag}** as your pilot.\n\nIf you do not recognize this pilot, click the button below to remove them immediately.\n\nYou can also use **/removepilot** anytime to manage your pilots.`,
+                components: [
+                    new ActionRowBuilder().addComponents(removeButton)
+                ]
+            });
+        })
+        .then(() => logEvent(`📬 DM sent to owner ${pending.ownerNick} (${pending.ownerId}) about admin-approved pilot ${pending.pilotTag}`))
+        .catch((e) => logEvent(`⚠️ Could not DM owner ${pending.ownerNick} about admin-approved pilot: ${e.message}`));
 
-    // Notify the pilot
-    try {
-        const pilotUser = await interaction.client.users.fetch(pilotUserId);
-        await pilotUser.send('✅ **Your pilot registration was approved by an administrator!**');
-    } catch (e) {}
-
-    // DM the owner with explanation and a button to remove if it's not their pilot
-    try {
-        const ownerUser = await interaction.client.users.fetch(pending.ownerId);
-        const removeButton = new ButtonBuilder()
-            .setCustomId(`owner_remove_pilot_${pilotUserId}`)
-            .setLabel('❌ Remove this pilot')
-            .setStyle(ButtonStyle.Danger);
-
-        await ownerUser.send({
-            content: `✈️ **Pilot Registered by Admin**\n\nAn administrator approved **${pending.pilotTag}** as your pilot.\n\nIf you do not recognize this pilot, click the button below to remove them immediately.\n\nYou can also use **/removepilot** anytime to manage your pilots.`,
-            components: [
-                new ActionRowBuilder().addComponents(removeButton)
-            ]
-        });
-        logEvent(`📬 DM sent to owner ${pending.ownerNick} (${pending.ownerId}) about admin-approved pilot ${pending.pilotTag}`);
-    } catch (e) {
-        logEvent(`⚠️ Could not DM owner ${pending.ownerNick} about admin-approved pilot: ${e.message}`);
-    }
+    await Promise.all([
+        interaction.editReply({
+            content: `✅ **Pilot Approved by Admin**\n\n✈️ **Pilot:** ${pending.pilotTag}\n👑 **Owner:** ${pending.ownerNick}\n✅ **Approved by:** ${interaction.user.tag}`,
+            components: []
+        }),
+        pilotDm,
+        ownerDm
+    ]);
 
     return;
 }
