@@ -253,8 +253,22 @@ export function findAllNicknameMatchesInCache(nickname, cache) {
 // Clean helper: strips formatting characters for comparison
 function cleanNickname(s) {
     return s.trim().normalize('NFKC').toLowerCase()
-        // Strip visible decorative/formatting characters
-        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,•·●○.,«»‹›★☆♡♥▪▫・҉]/g, '')
+        // Strip visible decorative/formatting characters (punctuation, symbols used as decoration)
+        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,•·●○.,«»‹›★☆♡♥▪▫・҉§¶†‡※◆◇■□▲△▼▽♠♣♥♦✧✦🎵]/g, '')
+        // Strip circled/enclosed alphanumerics (Ⓤ Ⓐ Ⓡ etc. — common in MIR4 names)
+        .replace(/[\u2460-\u24FF]/g, '')
+        // Strip geometric shapes (⬛ ◄ ► ▶ etc.)
+        .replace(/[\u25A0-\u25FF]/g, '')
+        // Strip miscellaneous symbols (★ ☆ ♠ ♣ ♡ ♥ ♦ etc.)
+        .replace(/[\u2600-\u26FF]/g, '')
+        // Strip dingbats (✂ ✈ ✉ etc.)
+        .replace(/[\u2700-\u27BF]/g, '')
+        // Strip misc symbols and arrows (⬛ ◀ ▶ etc.)
+        .replace(/[\u2B00-\u2BFF]/g, '')
+        // Strip enclosing marks (combining circles around characters)
+        .replace(/[\u20DD-\u20E3]/g, '')
+        // Strip variation selectors (emoji/text style toggles)
+        .replace(/[\uFE00-\uFE0F]/g, '')
         // Strip all invisible Unicode format chars (zero-width spaces, BOM, joiners, soft hyphen, etc.)
         .replace(/\p{Cf}+/gu, '')
         // Strip all whitespace
