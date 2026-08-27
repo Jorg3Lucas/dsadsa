@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/deploy-commands.cjs && node src/index.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

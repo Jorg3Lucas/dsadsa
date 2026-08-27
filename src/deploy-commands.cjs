@@ -57,6 +57,11 @@ const commands = [
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
   {
+    name: 'resetgrace',
+    description: '🔄 [Admin] Reset all 72h grace timers and remove the member role from everyone.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
+  {
     name: 'manualregister',
     description: '👑 [Admin] Register a player via cache lookup.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString(),
@@ -116,6 +121,10 @@ const commands = [
     name: 'notify',
     description: '📧 [Admin] Send notifications to server members',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
+  },
+  {
+    name: 'stats',
+    description: '📊 Show bot statistics (registrations, sync status, allied clans)'
   },
   {
     name: 'grace',

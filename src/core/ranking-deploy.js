@@ -3,6 +3,9 @@ import { PermissionFlagsBits } from 'discord.js';
 // ==========================================
 // 🚀 SLASH COMMAND REGISTRATION
 // ==========================================
+// NOTE: Keep this list in sync with src/deploy-commands.cjs.
+// Both files use set()/put() which REPLACES all guild commands, so any
+// command missing here will be removed when the bot starts.
 
 export async function registerMir4SlashCommands(guild) {
     try {
@@ -11,6 +14,11 @@ export async function registerMir4SlashCommands(guild) {
             {
                 name: 'forcesync',
                 description: '⚡ [Admin] Force an immediate synchronization with the official ranking portal.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
+            {
+                name: 'resetgrace',
+                description: '🔄 [Admin] Reset all 72h grace timers and remove the member role from everyone.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
             {
@@ -78,6 +86,11 @@ export async function registerMir4SlashCommands(guild) {
             {
                 name: 'notify',
                 description: '📧 [Admin] Send notifications to server members',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
+            {
+                name: 'restorebackup',
+                description: '💾 [Super Admin] List and restore database backups.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
         ]);

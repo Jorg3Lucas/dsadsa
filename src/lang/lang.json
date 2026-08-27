@@ -7,6 +7,9 @@
             "forcesync": {
                 "description": "⚡ [Admin] Force an immediate synchronization with the official ranking portal."
             },
+            "resetgrace": {
+                "description": "🔄 [Admin] Reset all 72h grace timers and remove the member role from everyone."
+            },
             "manualregister": {
                 "description": "👑 [Admin] Register a player via cache lookup.",
                 "options": {

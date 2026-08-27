@@ -15,6 +15,8 @@ import {
     WELCOME_PANEL_MESSAGE,
     SUPER_ADMIN_USER_ID,
     MAX_NICKNAME_SUGGESTIONS,
+    MEMBER_ROLE_ID,
+    DISCORD_SERVER_ID,
     ensureConfig
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, getRankingCacheUpdatedAt } from '../core/ranking-cache.js';
@@ -163,6 +165,62 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         let responseMsg = getMsg('ranking.responses.forcesync.success') || '✅ **Force sync completed!**';
 
         return interaction.editReply(responseMsg);
+    }
+
+    // ── resetgrace ──
+    if (commandName === 'resetgrace') {
+        if (!await deferReplySafe(interaction)) return;
+
+        const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
+        if (!guild) {
+            return interaction.editReply('❌ Servidor não encontrado.');
+        }
+
+        // 1. Force-expire all grace timers by setting outOfAlliedSince to >72h ago.
+        //    This makes getOutOfAlliedGraceStatus() return { expired: true } so the
+        //    next sync removes the role from everyone in grace.
+        const EXPIRED_TIME = new Date(Date.now() - 73 * 60 * 60 * 1000).toISOString();
+        let graceTimersExpired = 0;
+        if (db.roleNotify) {
+            for (const [memberId, flags] of Object.entries(db.roleNotify)) {
+                if (flags && flags.outOfAlliedSince) {
+                    flags.outOfAlliedSince = EXPIRED_TIME;
+                    graceTimersExpired++;
+                }
+            }
+        }
+        saveLocalStorage();
+
+        // 2. Immediately remove MEMBER_ROLE from members who have an active grace timer
+        //    (they are outside an allied clan, so the role should go)
+        let rolesRemoved = 0;
+        let rolesFailed = 0;
+        await guild.members.fetch();
+        const graceMemberIds = new Set();
+        for (const [memberId, flags] of Object.entries(db.roleNotify || {})) {
+            if (flags && flags.outOfAlliedSince) graceMemberIds.add(memberId);
+        }
+        for (const [memberId, member] of guild.members.cache) {
+            if (member.user.bot) continue;
+            if (member.roles.cache.has(MEMBER_ROLE_ID) && graceMemberIds.has(memberId)) {
+                try {
+                    await member.roles.remove(MEMBER_ROLE_ID);
+                    rolesRemoved++;
+                } catch {
+                    rolesFailed++;
+                }
+            }
+        }
+
+        logEvent(`🔄 [ResetGrace] Admin ${user.tag} force-expired ${graceTimersExpired} grace timer(s) and removed role from ${rolesRemoved} member(s) (${rolesFailed} failed)`);
+
+        return interaction.editReply(
+            `🔄 **Grace Reset + Role Removal**\n\n` +
+            `⏱️ **${graceTimersExpired}** timer(s) de grace expirados\n` +
+            `🚫 **${rolesRemoved}** membro(s) perderam o cargo` +
+            (rolesFailed > 0 ? `\n⚠️ **${rolesFailed}** falha(s) ao remover cargo` : '') +
+            `\n\nO sync vai limpar os registros de grace expirados automaticamente.`
+        );
     }
 
     // ── manualregister ──
