@@ -175,11 +175,9 @@ export async function searchRankingForum(nickname) {
 }
 
 /**
- * Find which worldId a player belongs to by checking the ranking cache
- * for the clan name. Uses decoration-tolerant comparison (cleanNickname)
- * so that forum variants like "GearsofWar ③" match cache entries like
- * "GearsofWar シ" — the forum search returns worldId=null, and this
- * function resolves it by finding the clan in the local cache.
+ * Find which worldId a player belongs to by scanning the ranking cache
+ * for the clan name. Used as a fallback when the clan is not in the
+ * allied-clans config (e.g. non-allied or unknown clan).
  */
 function findWorldForClan(clanName, cache) {
     if (!cache) return null;
@@ -187,6 +185,25 @@ function findWorldForClan(clanName, cache) {
     for (const [worldId, players] of Object.entries(cache)) {
         for (const [, playerClan] of Object.entries(players)) {
             if (cleanNickname(playerClan) === cleanedClan) return worldId;
+        }
+    }
+    return null;
+}
+
+/**
+ * Find which worldId a clan belongs to by checking the allied-clans config
+ * in the database. This is the authoritative source — the forum search returns
+ * worldId=null, and this function resolves it by matching the clan name
+ * (with decoration tolerance) against each world's allied-clans list.
+ *
+ * Returns { worldId, inAlliedClan: true } or null when not found.
+ */
+function findWorldFromAlliedClans(clanName, db) {
+    const alliedClans = db.config?.alliedClans;
+    if (!alliedClans || !clanName) return null;
+    for (const [worldId, clans] of Object.entries(alliedClans)) {
+        if (isAlliedClanName(clanName, clans)) {
+            return { worldId, inAlliedClan: true };
         }
     }
     return null;
@@ -278,9 +295,18 @@ export async function lookupNicknameWithSearch(nickname, db, cache) {
     const forumResults = await searchRankingForum(nickname);
     if (forumResults.length > 0) {
         const match = forumResults[0];
-        // Try to determine worldId from the cache by clan name
+
+        // Try to determine worldId + allied status from the clan name.
+        // Priority: check allied-clans config (authoritative) first,
+        // then fall back to scanning the ranking cache.
         if (!match.worldId && match.clanName) {
-            match.worldId = findWorldForClan(match.clanName, cache);
+            const alliedLookup = findWorldFromAlliedClans(match.clanName, db);
+            if (alliedLookup) {
+                match.worldId = alliedLookup.worldId;
+            } else {
+                // Clan not in allied config — try cache as last resort
+                match.worldId = findWorldForClan(match.clanName, cache);
+            }
         }
 
         const serverName = match.worldId
