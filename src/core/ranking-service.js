@@ -222,44 +222,88 @@ export function lookupNickname(nickname, db, cache) {
 }
 
 /**
- * Async version of lookupNickname that falls back to a live forum search
- * when the name is not in the local cache. Use this in slash-command handlers
- * (which run async) instead of the sync lookupNickname.
+ * Exact match only (no fuzzy). Used by lookupNicknameWithSearch as the first
+ * priority step — the user typed the name and we must find it EXACTLY before
+ * trying anything else.
  */
+function lookupExactInCache(nickname, db, cache) {
+    if (!cache) {
+        cache = getLocalRankingCache();
+    }
+    if (!cache) return { found: false };
+
+    const exactMatches = findAllNicknameMatchesInCache(nickname, cache);
+    if (exactMatches.length > 0) {
+        const preferred = pickPreferredMatch(exactMatches, db);
+        return buildResult(preferred.match, db, { exactMatch: true, fuzzySuggestion: null }, preferred.inAlliedClan);
+    }
+    return { found: false };
+}
+
+/**
+ * Fuzzy match only (no exact). Used by lookupNicknameWithSearch as the last
+ * resort — after exact cache hit and forum search both failed.
+ */
+function lookupFuzzyInCache(nickname, db, cache) {
+    if (!cache) {
+        cache = getLocalRankingCache();
+    }
+    if (!cache) return { found: false, fuzzyCandidates: [] };
+
+    const fuzzyCandidates = findTopNicknamesInCache(nickname, cache, FUZZY_POOL);
+    if (fuzzyCandidates.length > 0) {
+        const preferred = pickPreferredMatch(fuzzyCandidates, db);
+        const chosen = preferred.match;
+        if (chosen.nickname.toLowerCase() !== nickname.toLowerCase()) {
+            return buildResult(chosen, db, {
+                exactMatch: false,
+                fuzzySuggestion: chosen.nickname,
+                fuzzyCandidates
+            }, preferred.inAlliedClan);
+        }
+    }
+    return { found: false, fuzzyCandidates };
+}
+
 export async function lookupNicknameWithSearch(nickname, db, cache) {
-    // Try the local cache first (sync, fast)
-    const localResult = lookupNickname(nickname, db, cache);
-    if (localResult.found) return localResult;
+    // Priority 1: exact match in local cache (fast, sync)
+    const exactResult = lookupExactInCache(nickname, db, cache);
+    if (exactResult.found) return exactResult;
 
-    // Cache miss — try the forum search
+    // Priority 2: forum search (live, async)
     const forumResults = await searchRankingForum(nickname);
-    if (forumResults.length === 0) return { found: false };
+    if (forumResults.length > 0) {
+        const match = forumResults[0];
+        // Try to determine worldId from the cache by clan name
+        if (!match.worldId && match.clanName) {
+            match.worldId = findWorldForClan(match.clanName, cache);
+        }
 
-    // Use the first match
-    const match = forumResults[0];
-    // Try to determine worldId from the cache by clan name
-    if (!match.worldId && match.clanName) {
-        match.worldId = findWorldForClan(match.clanName, cache);
+        const serverName = match.worldId
+            ? (WORLD_IDS[match.worldId] || `World ${match.worldId}`)
+            : 'Unknown';
+        const inAlliedClan = match.worldId
+            ? isAlliedClanName(match.clanName, db.config?.alliedClans?.[match.worldId])
+            : false;
+
+        return {
+            found: true,
+            nickname: match.nickname,
+            clanName: match.clanName,
+            serverName,
+            worldId: match.worldId,
+            inAlliedClan,
+            exactMatch: true,
+            fuzzySuggestion: null,
+            fromForumSearch: true
+        };
     }
 
-    const serverName = match.worldId
-        ? (WORLD_IDS[match.worldId] || `World ${match.worldId}`)
-        : 'Unknown';
-    const inAlliedClan = match.worldId
-        ? isAlliedClanName(match.clanName, db.config?.alliedClans?.[match.worldId])
-        : false;
+    // Priority 3: fuzzy match in local cache (last resort)
+    const fuzzyResult = lookupFuzzyInCache(nickname, db, cache);
+    if (fuzzyResult.found) return fuzzyResult;
 
-    return {
-        found: true,
-        nickname: match.nickname,
-        clanName: match.clanName,
-        serverName,
-        worldId: match.worldId,
-        inAlliedClan,
-        exactMatch: true,
-        fuzzySuggestion: null,
-        fromForumSearch: true
-    };
+    return { found: false, fuzzyCandidates: fuzzyResult.fuzzyCandidates };
 }
 
 // ── Top N fuzzy matches (for suggestion dropdowns) ──
