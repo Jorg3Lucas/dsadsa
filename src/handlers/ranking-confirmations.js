@@ -300,7 +300,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         db.users[cached.targetId] = {
             ...db.users[cached.targetId],
             nickname: finalNickname,
-            registeredAt: new Date().toISOString()
+            registeredAt: new Date().toISOString(),
+            ...(cached.fromForumSearch ? { fromForumSearch: true } : {})
         };
 
         if (cached.needsTempApproval) {

@@ -18,10 +18,11 @@ import {
     MAX_NICKNAME_SUGGESTIONS,
     MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
-    ensureConfig
+    ensureConfig,
+    resolveServerName
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, getRankingCacheUpdatedAt, findAllNicknameMatchesInCache } from '../core/ranking-cache.js';
-import { lookupNickname, lookupTopNicknames, isAlliedClanName, lookupNicknameWithSearch } from '../core/ranking-service.js';
+import { lookupNickname, lookupTopNicknames, isAlliedClanName, lookupNicknameWithSearch, searchRankingForum } from '../core/ranking-service.js';
 import { runDailySynchronization, getOutOfAlliedGraceStatus } from '../core/ranking-sync-engine.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
@@ -232,11 +233,42 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const targetMember = options.getMember('member');
         const nickname = options.getString('nickname').trim().normalize('NFC');
 
-        const lookup = lookupNickname(nickname, db);
+        const lookup = await lookupNicknameWithSearch(nickname, db);
         // Reuse the fuzzy pool lookupNickname already computed (exact-miss path)
         // so the suggestion dropdown doesn't re-scan the ranking.
-        const topSuggestions = lookupTopNicknames(nickname, db, null, MAX_NICKNAME_SUGGESTIONS, lookup.fuzzyCandidates);
-        const hasSuggestions = topSuggestions.some(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
+        const cacheSuggestions = lookupTopNicknames(nickname, db, null, MAX_NICKNAME_SUGGESTIONS, lookup.fuzzyCandidates);
+
+        // Also search the forum for exact matches (players outside top-1000)
+        const forumResults = await searchRankingForum(nickname);
+        const cache = getLocalRankingCache();
+        const forumSuggestions = forumResults
+            .filter(r => r.nickname.toLowerCase() !== nickname.toLowerCase())
+            .map(r => {
+                // Find worldId from cache by clan name
+                let worldId = r.worldId;
+                if (!worldId && r.clanName && cache) {
+                    for (const [wId, players] of Object.entries(cache)) {
+                        for (const [, playerClan] of Object.entries(players)) {
+                            if (playerClan === r.clanName) { worldId = wId; break; }
+                        }
+                        if (worldId) break;
+                    }
+                }
+                const serverName = worldId ? resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`) : 'Unknown';
+                const inAlliedClan = worldId ? isAlliedClanName(r.clanName, db.config?.alliedClans?.[worldId]) : false;
+                return { worldId, nickname: r.nickname, clanName: r.clanName, serverName, inAlliedClan, score: 1.0 };
+            });
+
+        // Merge: forum exact hits first, then cache fuzzy matches, dedup by nickname
+        const seen = new Set(nickname.toLowerCase());
+        const topSuggestions = [];
+        for (const s of [...forumSuggestions, ...cacheSuggestions]) {
+            if (!seen.has(s.nickname.toLowerCase())) {
+                seen.add(s.nickname.toLowerCase());
+                topSuggestions.push(s);
+            }
+        }
+        const hasSuggestions = topSuggestions.length > 0;
 
         if (lookup.found) {
             const statusLine = lookup.inAlliedClan
@@ -260,7 +292,8 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 clan: lookup.clanName,
                 worldId: lookup.worldId,
                 needsTempApproval: !lookup.inAlliedClan,
-                selectedNickname: nickname
+                selectedNickname: nickname,
+                fromForumSearch: !!lookup.fromForumSearch
             };
 
             return interaction.editReply({
@@ -1025,7 +1058,8 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                         serverName: lookup.serverName,
                         clanName: lookup.clanName,
                         worldId: lookup.worldId,
-                        pilotIds: []
+                        pilotIds: [],
+                        ...(lookup.fromForumSearch ? { fromForumSearch: true } : {})
                     };
                     await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
                     saveLocalStorage(db);

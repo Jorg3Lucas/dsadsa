@@ -1,7 +1,7 @@
 import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, OUT_OF_ALLIED_GRACE_MS, ensureConfig } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache } from './ranking-cache.js';
-import { lookupNickname } from './ranking-service.js';
+import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 
@@ -126,7 +126,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 const now = new Date();
 
                 // Look up in ranking cache using centralized service
-                const lookup = lookupNickname(userData.nickname, db, rankingCache);
+                // Players registered via forum search need live forum lookup
+                const lookup = userData.fromForumSearch
+                    ? await lookupNicknameWithSearch(userData.nickname, db, rankingCache)
+                    : lookupNickname(userData.nickname, db, rankingCache);
                 const inAlliedClan = lookup.found && lookup.inAlliedClan;
 
                 if (inAlliedClan) {
@@ -284,7 +287,11 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             let lookup = null;
 
             if (isRegistered && ownerData && ownerData.nickname && syncCache) {
-                lookup = lookupNickname(ownerData.nickname, db, syncCache);
+                // Players registered via forum search need live forum lookup
+                // (they're below top-1000 and won't appear in the ranking cache)
+                lookup = ownerData.fromForumSearch
+                    ? await lookupNicknameWithSearch(ownerData.nickname, db, syncCache)
+                    : lookupNickname(ownerData.nickname, db, syncCache);
                 if (lookup.found) {
                     inAlliedClan = lookup.inAlliedClan;
                 }

@@ -130,7 +130,7 @@ const FORUM_REQUEST_TIMEOUT_MS = 15000;
  * (e.g. player is outside the top 1000 scraped per world).
  * Returns an array of { nickname, clanName, worldId } or [].
  */
-async function searchRankingForum(nickname) {
+export async function searchRankingForum(nickname) {
     try {
         const url = FORUM_RANK_URL + encodeURIComponent(nickname);
         const { data } = await axios.get(url, {
