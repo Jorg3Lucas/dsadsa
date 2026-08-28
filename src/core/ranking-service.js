@@ -176,13 +176,17 @@ export async function searchRankingForum(nickname) {
 
 /**
  * Find which worldId a player belongs to by checking the ranking cache
- * for the clan name. Falls back to scanning all worlds if needed.
+ * for the clan name. Uses decoration-tolerant comparison (cleanNickname)
+ * so that forum variants like "GearsofWar ③" match cache entries like
+ * "GearsofWar シ" — the forum search returns worldId=null, and this
+ * function resolves it by finding the clan in the local cache.
  */
 function findWorldForClan(clanName, cache) {
     if (!cache) return null;
+    const cleanedClan = cleanNickname(clanName);
     for (const [worldId, players] of Object.entries(cache)) {
         for (const [, playerClan] of Object.entries(players)) {
-            if (playerClan === clanName) return worldId;
+            if (cleanNickname(playerClan) === cleanedClan) return worldId;
         }
     }
     return null;
