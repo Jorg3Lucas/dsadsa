@@ -78,6 +78,9 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
 
 /** Claim a fixed-type event (Fury/Frenzy). Calculates the 1-hour window based on the current/next schedule slot. Checks 5-min pre-window. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
+    // ⚠️ TEMPORARIAMENTE DESATIVADO localmente
+    return await interaction.reply({ content: "⚠️ Claim desativado temporariamente. Aguarde o anúncio do staff.", flags: 64 }).catch(noop);
+
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
     if (hasActiveClaim(uid)) {
@@ -157,6 +160,9 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
 
 /** Claim a normal/peak floor. Sets a 30-minute claim window. Verifies no active queue reservation. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleGeneralClaim(interaction, uid, uName, targetObj, panelKey) {
+    // ⚠️ TEMPORARIAMENTE DESATIVADO localmente
+    return await interaction.reply({ content: "⚠️ Claim desativado temporariamente. Aguarde o anúncio do staff.", flags: 64 }).catch(noop);
+
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
     if (hasActiveClaim(uid)) {
@@ -221,6 +227,9 @@ export async function handleGeneralClaim(interaction, uid, uName, targetObj, pan
 
 /** Join the queue for a normal/peak floor. Peak floors are excluded from queuing. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleGeneralNext(interaction, uid, uName, targetObj, panelKey) {
+    // ⚠️ TEMPORARIAMENTE DESATIVADO localmente
+    return await interaction.reply({ content: "⚠️ Fila desativada temporariamente. Aguarde o anúncio do staff.", flags: 64 }).catch(noop);
+
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
     if ("peak" === targetObj.type) {return await interaction.reply({ content: getMsg("rooms.alreadyOwner"), flags: 64 }).catch(noop);}

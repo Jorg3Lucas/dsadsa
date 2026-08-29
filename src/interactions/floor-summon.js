@@ -29,6 +29,9 @@ import { noop } from "../core/config.js";
 
 /** Show summon room selection menu for claiming. Defaults to available locations; shows priority queue slots first. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleSummonClaim(interaction, uid, uName, targetObj, panelKey) {
+    // ⚠️ TEMPORARIAMENTE DESATIVADO localmente
+    return await interaction.reply({ content: "⚠️ Claim desativado temporariamente. Aguarde o anúncio do staff.", flags: 64 }).catch(noop);
+
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
     if (hasActiveClaim(uid)) {
@@ -67,6 +70,9 @@ export async function handleSummonClaim(interaction, uid, uName, targetObj, pane
 
 /** Show summon location queue selection menu. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleSummonNext(interaction, uid, uName, targetObj, panelKey) {
+    // ⚠️ TEMPORARIAMENTE DESATIVADO localmente
+    return await interaction.reply({ content: "⚠️ Fila desativada temporariamente. Aguarde o anúncio do staff.", flags: 64 }).catch(noop);
+
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
     if (hasActiveClaim(uid)) {

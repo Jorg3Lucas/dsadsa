@@ -32,6 +32,9 @@ import { noop } from "../core/config.js";
 
 /** Show antidemon room selection menu for claiming. For expanded panels (9/10) shows a version picker first (2-level menu). @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleAntiClaim(interaction, uid, uName, targetObj, panelKey) {
+    // ⚠️ TEMPORARIAMENTE DESATIVADO localmente
+    return await interaction.reply({ content: "⚠️ Claim desativado temporariamente. Aguarde o anúncio do staff.", flags: 64 }).catch(noop);
+
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
     if (hasActiveClaim(uid)) {
@@ -83,6 +86,9 @@ export async function handleAntiClaim(interaction, uid, uName, targetObj, panelK
 
 /** Show antidemon room queue selection menu. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleAntiNext(interaction, uid, uName, targetObj, panelKey) {
+    // ⚠️ TEMPORARIAMENTE DESATIVADO localmente
+    return await interaction.reply({ content: "⚠️ Fila desativada temporariamente. Aguarde o anúncio do staff.", flags: 64 }).catch(noop);
+
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
     if (hasActiveClaim(uid)) {
