@@ -32,6 +32,12 @@ export const DISCORD_SERVER_ID = getServerId();
 export const RANKING_ENABLED = String(process.env.RANKING_ENABLED ?? 'false').toLowerCase() === 'true';
 
 /**
+ * Feature flag — claim website (browser claim site + JSON API).
+ * Disabled by default; set WEB_ENABLED=true in .env to serve it again.
+ */
+export const WEB_ENABLED = String(process.env.WEB_ENABLED ?? 'false').toLowerCase() === 'true';
+
+/**
  * Returns the bot token from environment variables.
  * Supports both TOKEN and DISCORD_TOKEN env vars.
  * @returns {string}

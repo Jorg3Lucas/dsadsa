@@ -11,6 +11,8 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { URL } from "node:url";
 
+import { WEB_ENABLED } from "../core/config.js";
+
 import {
     loadAccounts,
     saveAccounts,
@@ -399,10 +401,10 @@ function publicUser(account) {
 
 // ── Server entry ───────────────────────────
 
-/** Start the web server. No-op when WEB_ENABLED=false. @param {object} [opts] - {log} */
+/** Start the web server. Disabled unless WEB_ENABLED=true. @param {object} [opts] - {log} */
 export function startWebServer(opts = {}) {
-    if (process.env.WEB_ENABLED === "false") {
-        opts.log && opts.log("[Web] Disabled (WEB_ENABLED=false).");
+    if (!WEB_ENABLED) {
+        opts.log && opts.log("[Web] Disabled (WEB_ENABLED is not true).");
         return null;
     }
 

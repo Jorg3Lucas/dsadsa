@@ -63,10 +63,12 @@ Claim confirmations, boss respawn reminders, and warnings are sent via **DM**. E
 
 The bot also serves a **local claim website** for members who can't use Discord. It runs **inside the bot process** and drives the **exact same claim handlers** — punishments, queues, cooldowns, daily logs and panel refreshes behave identically to Discord. The bot remains the **only writer** of the JSON databases.
 
+> 🔌 **Disabled by default** (`WEB_ENABLED=false`) — set `WEB_ENABLED=true` in `.env` to serve the site again. The code stays in the repo.
+
 ### Env vars (`.env`)
 ```
 # Optional — defaults shown
-WEB_ENABLED=true        # set false to disable the website
+WEB_ENABLED=false       # set true to enable the website
 WEB_HOST=0.0.0.0        # bind address (0.0.0.0 to expose on a VPS)
 WEB_PORT=3000           # port
 WEB_HTTPS=true          # set true ONLY behind an HTTPS reverse proxy (secure cookies)
