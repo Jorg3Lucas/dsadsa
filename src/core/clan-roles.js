@@ -16,7 +16,7 @@
 
 import { ChannelType } from 'discord.js';
 import { DISCORD_SERVER_ID, ensureConfig } from './ranking-constants.js';
-import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildEldersOverwrites, buildMemberOverwrites, buildMemberViewOverwrites, findTextChannel } from './server-structure.js';
+import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildEldersOverwrites, buildMemberOverwrites, buildMemberViewOverwrites, findTextChannel, findClaimCategory } from './server-structure.js';
 import { getLocalRankingCache, cleanNickname } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 
@@ -80,18 +80,6 @@ function stripRoleEmoji(roleName) {
 }
 
 /**
- * Find a claim category by name (fallback to legacy ID).
- * @param {import('discord.js').Guild} guild
- * @param {{ name: string, legacyId?: string }} catDef
- */
-function findCategory(guild, catDef) {
-    const byName = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === catDef.name);
-    if (byName) return byName;
-    if (catDef.legacyId) return guild.channels.cache.get(catDef.legacyId);
-    return null;
-}
-
-/**
  * Apply restrictive permissions to a claim category and its channels:
  * @everyone cannot view (or send), the bot and every clan role (+ the temp
  * role) can view, only the bot can send (panels).
@@ -105,10 +93,11 @@ async function applyClaimPermissions(guild, botId, clanRoleIds, tempRoleId) {
     const overwrites = buildClaimOverwrites(everyone.id, botId, [...clanRoleIds, ...(tempRoleId ? [tempRoleId] : [])]);
 
     for (const catDef of CLAIM_CATEGORIES) {
-        const category = findCategory(guild, catDef);
+        const category = findClaimCategory(guild, catDef);
         if (!category) continue;
-        // Keep the category name pretty too (old legacy-named categories get upgraded here)
-        if (category.name !== catDef.name) {
+        // Keep the category name pretty too — except when it was matched by its
+        // explicit ID, in which case the current name is left untouched.
+        if (!catDef.id && category.name !== catDef.name) {
             await category.setName(catDef.name, '🤝 /syncroles renamed category').catch(() => {});
         }
         try {
@@ -250,7 +239,7 @@ async function applyMemberChannelPermissions(guild, botId, memberRoleIds) {
         memberRoleIds,
         guild.roles.cache.has(ELDER_ROLE_ID) ? ELDER_ROLE_ID : null
     );
-    const category = findCategory(guild, GENERAL_CATEGORY);
+    const category = findClaimCategory(guild, GENERAL_CATEGORY);
     if (!category) return;
     for (const chanDef of GENERAL_CATEGORY.channels) {
         if (chanDef.mode !== 'member' && chanDef.mode !== 'member-view' && chanDef.mode !== 'elders') continue;

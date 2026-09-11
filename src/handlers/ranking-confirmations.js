@@ -18,7 +18,7 @@ import {
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
-import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildEldersOverwrites, buildMemberOverwrites, buildMemberViewOverwrites, LEGACY_DELETED_CHANNELS, findTextChannel } from '../core/server-structure.js';
+import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildEldersOverwrites, buildMemberOverwrites, buildMemberViewOverwrites, LEGACY_DELETED_CHANNELS, findTextChannel, findClaimCategory } from '../core/server-structure.js';
 import { renderEmbed, renderButtons } from './panel-render.js';
 import { saveDailyLogs } from '../core/daily-logs.js';
 import {
@@ -338,14 +338,6 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             ];
         };
 
-        // Find a category by name (fallback to legacy ID)
-        const findCategory = (def) => {
-            const byName = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === def.name);
-            if (byName) return byName;
-            if (def.legacyId) return guild.channels.cache.get(def.legacyId);
-            return null;
-        };
-
         // Rename a channel to its pretty name if it was found under a legacy name
         const renameToPretty = async (channel, chanDef) => {
             if (channel && channel.name !== chanDef.name) {
@@ -368,7 +360,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
         // ── 1. Claim categories (members view-only, bot sends panels) ──
         for (const catDef of CLAIM_CATEGORIES) {
-            let category = findCategory(catDef);
+            let category = findClaimCategory(guild, catDef);
             if (!category) {
                 try {
                     category = await guild.channels.create({
@@ -431,7 +423,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
 
         // ── 2. General category with all general channels ──
-        let generalCategory = findCategory(GENERAL_CATEGORY);
+        let generalCategory = findClaimCategory(guild, GENERAL_CATEGORY);
         if (!generalCategory) {
             try {
                 generalCategory = await guild.channels.create({
@@ -494,7 +486,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         ];
         const claimOverwrites = buildClaimOverwrites(everyoneRole.id, botId, claimRoleIds);
         for (const catDef of CLAIM_CATEGORIES) {
-            const category = findCategory(catDef);
+            const category = findClaimCategory(guild, catDef);
             if (!category) continue;
             await category.permissionOverwrites.set(claimOverwrites, '🏗️ /setup claim access').catch(() => {});
             for (const chanDef of catDef.channels) {

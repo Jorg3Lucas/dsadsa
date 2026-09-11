@@ -2,8 +2,9 @@
 // 🏗️ SERVER STRUCTURE (used by /setup)
 // ==========================================
 // Single source of truth for the Discord structure the /setup command creates.
-// Categories are looked up by NAME (no hardcoded IDs in the bot) — legacyId is
-// kept only as a boot fallback for servers that still have the old categories.
+// Claim categories are matched by their explicit `id` first (they win over
+// name/legacy lookups), then by NAME, then by legacyId — which is kept only as
+// an upgrade fallback for servers that still have the old categories.
 //
 // Channel defs carry:
 //   name       — the display name (with emoji) actually used on Discord
@@ -17,61 +18,35 @@ import { PermissionFlagsBits, ChannelType } from 'discord.js';
 export const ELDER_ROLE_ID = '1503934006431973488';
 
 // ── Claim categories (members view-only, bot sends panels) ──
-// Each channel lists the panel keys that the bot posts into it.
+// Only TWO categories are used:
+//   • SP & Summons → every Secret Peak floor + the summon panel
+//   • MS           → every Magic Square floor
+// `id` is the explicit Discord category ID — it wins over name/legacy lookups,
+// and a category matched by id keeps its current name (no rename).
 export const CLAIM_CATEGORIES = [
     {
-        name: '🗼 7F',
-        legacyId: '1499858717456334878',
+        id: '1548033121012813905',
+        name: '🔸 SP & Summons',
         channels: [
             { name: '🔸 SP-7F', key: 'sp7', legacyName: '🔸┃sp7', panels: ['7peak'] },
-            { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squarenormal', '7squareantidemon'] }
-        ]
-    },
-    {
-        name: '🗼 8F',
-        legacyId: '1499858702814150758',
-        channels: [
             { name: '🔸 SP-8F', key: 'sp8', legacyName: '🔸┃sp8', panels: ['8peak'] },
-            { name: '🔹 MS-8F', key: 'ms8', legacyName: '🔹┃ms8', panels: ['8squarenormal', '8squareantidemon'] }
-        ]
-    },
-    {
-        name: '🗼 9F',
-        legacyId: '1499858660678041753',
-        channels: [
             { name: '🔸 SP-9F', key: 'sp9', legacyName: '🔸┃sp9', panels: ['9peak'] },
-            { name: '🔹 MS-9F', key: 'ms9', legacyName: '🔹┃ms9', panels: ['9squarenormal', '9squareantidemon'] }
-        ]
-    },
-    {
-        name: '🗼 10F',
-        legacyId: '1499857572453421159',
-        channels: [
             { name: '🔸 SP-10F', key: 'sp10', legacyName: '🔸┃sp10', panels: ['10peak'] },
-            { name: '🔹 MS-10F', key: 'ms10', legacyName: '🔹┃ms10', panels: ['10squarenormal', '10squareantidemon'] }
-        ]
-    },
-    {
-        name: '🗼 11F',
-        legacyId: '1511063558224613396',
-        channels: [
             { name: '🔸 SP-11F', key: 'sp11', legacyName: '🔸┃sp11', panels: ['11peak', '11goblin'] },
-            { name: '🔹 MS-11F', key: 'ms11', legacyName: '🔹┃ms11', panels: ['11squareleaders', '11squareevents', '11squareantidemon', '11msgoblin'] }
-        ]
-    },
-    {
-        name: '🗼 12F',
-        legacyId: '1511063661458751708',
-        channels: [
             { name: '🔸 SP-12F', key: 'sp12', legacyName: '🔸┃sp12', panels: ['12peak', '12randomevent', '12goblin'] },
-            { name: '🔹 MS-12F', key: 'ms12', legacyName: '🔹┃ms12', panels: ['12squareleaders', '12squareevents', '12squareantidemon', '12msgoblin'] }
+            { name: '🌀 Summons', key: 'summons', legacyName: '🌀┃summons', panels: ['summon'] }
         ]
     },
     {
-        name: '🌀 Summons',
-        legacyId: '1512360620127817898',
+        id: '1548033184619438162',
+        name: '🔹 MS',
         channels: [
-            { name: '🌀 Summons', key: 'summons', legacyName: '🌀┃summons', panels: ['summon'] }
+            { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squarenormal', '7squareantidemon'] },
+            { name: '🔹 MS-8F', key: 'ms8', legacyName: '🔹┃ms8', panels: ['8squarenormal', '8squareantidemon'] },
+            { name: '🔹 MS-9F', key: 'ms9', legacyName: '🔹┃ms9', panels: ['9squarenormal', '9squareantidemon'] },
+            { name: '🔹 MS-10F', key: 'ms10', legacyName: '🔹┃ms10', panels: ['10squarenormal', '10squareantidemon'] },
+            { name: '🔹 MS-11F', key: 'ms11', legacyName: '🔹┃ms11', panels: ['11squareleaders', '11squareevents', '11squareantidemon', '11msgoblin'] },
+            { name: '🔹 MS-12F', key: 'ms12', legacyName: '🔹┃ms12', panels: ['12squareleaders', '12squareevents', '12squareantidemon', '12msgoblin'] }
         ]
     }
 ];
@@ -146,6 +121,28 @@ export function findTextChannel(guild, categoryId, chanDef) {
         if (byKey) return byKey;
     }
     return undefined;
+}
+
+/**
+ * Find a claim/general category by its explicit ID, then by name, then by legacy ID.
+ * A configured `id` wins, so renamed categories are never lost. Returns null when
+ * nothing matches.
+ * @param {import('discord.js').Guild} guild
+ * @param {{ id?: string, name: string, legacyId?: string }} catDef
+ * @returns {import('discord.js').CategoryChannel|null}
+ */
+export function findClaimCategory(guild, catDef) {
+    if (catDef.id) {
+        const byId = guild.channels.cache.get(catDef.id);
+        if (byId && byId.type === ChannelType.GuildCategory) return byId;
+    }
+    const byName = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === catDef.name);
+    if (byName) return byName;
+    if (catDef.legacyId) {
+        const byLegacy = guild.channels.cache.get(catDef.legacyId);
+        if (byLegacy && byLegacy.type === ChannelType.GuildCategory) return byLegacy;
+    }
+    return null;
 }
 
 /**

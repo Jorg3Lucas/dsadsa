@@ -153,17 +153,17 @@ Text commands (require **Manage Messages**):
 
 ## 🏗️ Auto Channel Setup
 
-On boot, `auto-channel-setup.js` **deletes all text channels** in the configured categories and recreates them:
+On boot, `auto-channel-setup.js` **deletes all text channels** in the **two configured categories** and recreates them:
 
 ```
-7F:  🔸┃sp7  🔹┃ms7
-8F:  🔸┃sp8  🔹┃ms8
-9F:  🔸┃sp9  🔹┃ms9
-10F: 🔸┃sp10 🔹┃ms10
-11F: 🔸┃sp11 🔹┃ms11
-12F: 🔸┃sp12 🔹┃ms12
-Summons: 🌀┃summons
+🔸 SP & Summons  (category 1548033121012813905)
+  SP-7F … SP-12F  +  🌀 Summons
+
+🔹 MS            (category 1548033184619438162)
+  MS-7F … MS-12F
 ```
+
+The two categories are matched by their explicit **ID** (defined in `src/core/server-structure.js`), so they can be renamed freely — a category matched by ID keeps its current name. Their existing permission overwrites are inherited by the created channels.
 
 Each channel gets its panel embeds + buttons posted automatically.
 

@@ -2,26 +2,13 @@
 // 🏗️ AUTO CHANNEL SETUP
 // Deletes all channels in floor categories and
 // recreates them with panel embeds on boot.
-// Categories are looked up by NAME (legacy IDs
-// are only a fallback — no hardcoded IDs needed).
+// Categories are matched by explicit ID first, then by
+// name, then by legacy ID (upgrade fallback).
 // ==========================================
 
 import { db, lastMessages, saveLocalStorage } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
-import { CLAIM_CATEGORIES } from "../core/server-structure.js";
-
-/**
- * Find a category by name, falling back to a legacy ID if present.
- * @param {import('discord.js').Guild} guild
- * @param {{ name: string, legacyId?: string }} catDef
- * @returns {import('discord.js').CategoryChannel|undefined}
- */
-function findCategory(guild, catDef) {
-    const byName = guild.channels.cache.find(ch => ch.type === 4 && ch.name === catDef.name);
-    if (byName) return byName;
-    if (catDef.legacyId) return guild.channels.cache.get(catDef.legacyId);
-    return undefined;
-}
+import { CLAIM_CATEGORIES, findClaimCategory } from "../core/server-structure.js";
 
 let _setupDone = false;
 
@@ -48,7 +35,7 @@ export async function setupAllChannels(client, guildId) {
     for (const key in lastMessages) delete lastMessages[key];
 
     for (const catDef of CLAIM_CATEGORIES) {
-        const category = findCategory(guild, catDef);
+        const category = findClaimCategory(guild, catDef);
         if (!category) {
             console.error(`❌ [Auto Setup] Category ${catDef.name} not found.`);
             continue;
@@ -58,8 +45,9 @@ export async function setupAllChannels(client, guildId) {
             console.error(`❌ [Auto Setup] ${catDef.name} is not a category (type=${category.type}). Use a valid category ID.`);
             continue;
         }
-        // Rename the category to the pretty name if it was found via legacy ID
-        if (category.name !== catDef.name) {
+        // Rename the category to the pretty name only when it was NOT matched by
+        // its explicit ID (a category matched by id keeps its current name).
+        if (!catDef.id && category.name !== catDef.name) {
             await category.setName(catDef.name, "🏗️ [Auto Setup] renamed category").catch(() => {});
         }
 
