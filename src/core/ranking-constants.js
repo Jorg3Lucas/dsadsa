@@ -2,6 +2,10 @@
 // 🔧 CONSTANTS
 // ==========================================
 
+import { DISCORD_SERVER_ID } from './config.js';
+
+export { DISCORD_SERVER_ID };
+
 export const confirmationCache = {};
 
 // Pending owner registrations awaiting admin approval
@@ -17,8 +21,6 @@ export let adminChannelId = null;
 export function setAdminChannelId(id) {
     adminChannelId = id;
 }
-
-export const DISCORD_SERVER_ID = '1432320162278670440';
 
 // ⚠️ LEGACY — the fixed member role was removed from the server. Clan roles
 // (db.config.clanRoles) + the GoW Kids temp role are now the member markers.
@@ -52,7 +54,7 @@ export const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 // ==========================================
 // The only Discord server this bot operates on (claim server).
 // /scanimport harvests registrations from here.
-export const SCAN_SERVER_ID = '1432320162278670440';
+export const SCAN_SERVER_ID = DISCORD_SERVER_ID;
 
 // Pre-registrations no longer expire by time — they are validated against the
 // EU11 ranking on every sync. Not found in the ranking → removed immediately.

@@ -11,7 +11,7 @@ import {
     handleClaimInteractions
 } from './handlers/bot.js';
 import { initEarlyClaimCommands } from './handlers/early-claim.js';
-import { noop, getBotToken, DISCORD_SERVER_ID } from './core/config.js';
+import { noop, getBotToken, DISCORD_SERVER_ID, RANKING_ENABLED } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
 // ═══ RANKING / REGISTRATION SYSTEM (imported from main branch) ═══
@@ -128,7 +128,11 @@ client.once('clientReady', async () => {
     logger.info('Boot', `Bot connected successfully as ${client.user.tag}`);
 
     // ═══ RANKING / REGISTRATION SYSTEM BOOT ═══
-    try {
+    // Feature flag — desligado por padrão (RANKING_ENABLED=false) enquanto o
+    // ranking/registro não é usado. Defina RANKING_ENABLED=true no .env para reativar.
+    if (!RANKING_ENABLED) {
+        console.log('🚫 [Ranking] Desabilitado (RANKING_ENABLED=false) — boot do ranking/registro ignorado.');
+    } else try {
         rankingDb = loadLocalStorageRanking();
         rankingDbLoaded = true;
         logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
@@ -184,7 +188,9 @@ client.once('clientReady', async () => {
     // Aplica as permissões dos canais de claim a partir dos cargos de clã salvos
     // no banco (db.config.clanRoles + tempRoleId) — roda após a recriação dos
     // canais para que a restrição de acesso seja reaplicada a cada boot.
-    try {
+    if (!RANKING_ENABLED) {
+        console.log('🚫 [Ranking] Permissões de canal por cargo de clã desativadas (RANKING_ENABLED=false).');
+    } else try {
         const result = await applyClaimChannelPermissions(client, rankingDb, logRankingEvent, (db) => saveRankingStorage(db || rankingDb));
         if (!result.applied && result.reason === 'no-roles') {
             console.log('ℹ️ [Ranking] No clan/temp roles found in the DB or on the server — run /syncroles after adding allied clans to restrict claim channels.');
@@ -216,10 +222,10 @@ client.once('clientReady', async () => {
 // before clientReady cannot overwrite the on-disk data with empty state.
 function handleShutdown(signal) {
     console.log(`\n🛑 [${signal}] Shutting down gracefully...`);
-    if (rankingDbLoaded) {
+    if (RANKING_ENABLED && rankingDbLoaded) {
         try { saveRankingStorage(rankingDb); } catch (e) { /* ignore */ }
     }
-    logRankingEvent(`[Ranking Bot] Shutting down (${signal})`);
+    if (RANKING_ENABLED) logRankingEvent(`[Ranking Bot] Shutting down (${signal})`);
     process.exit(0);
 }
 
@@ -236,6 +242,9 @@ client.on('interactionCreate', async (interaction) => {
     try {
         // A. SLASH COMMANDS — ranking system only
         if (interaction.isCommand()) {
+            if (!RANKING_ENABLED) {
+                return await interaction.reply({ content: '⚠️ Ranking/registro temporariamente desativado.', flags: 64 }).catch(noop);
+            }
             // Notify command
             if (interaction.commandName === 'notify') {
                 return await handleNotifyCommand(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
@@ -250,6 +259,9 @@ client.on('interactionCreate', async (interaction) => {
         // B. CLAIM ROUTER FIRST (has canHandle* guards; returns undefined/false when not matched)
         const claimResult = await handleClaimInteractions(interaction);
         if (claimResult !== undefined && claimResult !== false) return;
+
+        // RANKING DISABLED — nenhum handler de ranking é executado; não-claim é ignorado.
+        if (!RANKING_ENABLED) return;
 
         // C. RANKING ROUTER — string select menus, modals, buttons
         // C1. STRING SELECT MENUS

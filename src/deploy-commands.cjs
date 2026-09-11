@@ -26,14 +26,26 @@ try {
 }
 
 const TOKEN = process.env.TOKEN || process.env.DISCORD_TOKEN;
-const GUILD_ID = process.env.DISCORD_SERVER_ID || '1432320162278670440';
+const GUILD_ID = process.env.DISCORD_SERVER_ID;
 const CLIENT_ID = process.env.CLIENT_ID;
+const RANKING_ENABLED = String(process.env.RANKING_ENABLED ?? 'false').toLowerCase() === 'true';
+
+// Todos os comandos deste script pertencem ao sistema de ranking/registro.
+if (!RANKING_ENABLED) {
+  console.log('🚫 Ranking desabilitado (RANKING_ENABLED=false) — nenhum comando de ranking será publicado.');
+  process.exit(0);
+}
 
 if (!TOKEN) {
   console.error('❌ No token found. Create a .env file with:');
   console.error('   TOKEN=your_bot_token');
   console.error('   CLIENT_ID=your_client_id');
   console.error('   DISCORD_SERVER_ID=your_guild_id');
+  process.exit(1);
+}
+
+if (!GUILD_ID) {
+  console.error('❌ No DISCORD_SERVER_ID found. Set it in .env or pass it inline.');
   process.exit(1);
 }
 

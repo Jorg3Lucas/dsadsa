@@ -185,13 +185,24 @@ All are gitignored.
 ## ⚙️ Setup
 
 ### 1. Environment
-Create a `.env` file:
+Create a `.env` file (gitignored) — the bot reads **all** of these from the environment, nothing is hardcoded:
 ```
 TOKEN=your-bot-token
+CLIENT_ID=your-application-client-id
+DISCORD_SERVER_ID=your-guild-id
 ```
 
+`DISCORD_SERVER_ID` is defined once in `src/core/config.js` (from `.env`) and re-used by the ranking/registration system (`src/core/ranking-constants.js`), the claim bot, the web server and `deploy-commands.cjs`. Changing guild only requires editing `.env`.
+
+### 🔌 Ranking / registro (feature flag)
+The whole ranking/registration system (scraper, sync, registration panels, clan roles, slash commands and claim-channel permissions) is controlled by one flag:
+```
+RANKING_ENABLED=false   # default — ranking desligado (fórum do jogo indisponível)
+RANKING_ENABLED=true    # reativa o sistema completo
+```
+With the flag off, the bot skips the ranking boot, does not register/answer slash commands (claim uses buttons only) and does not apply clan-role permissions to claim channels. All ranking files stay in the repo, so re-enabling is just the flag.
+
 ### 2. Configuration
-- **`src/core/config.js`** — `DISCORD_SERVER_ID` (the guild the bot operates on)
 - **`src/handlers/auto-channel-setup.js`** — category IDs + channel/panel definitions
 - **Daily logs / boss alerts / event alerts** — configured **manually in `daily-logs.json`**: set `configChannelId` (daily claim report), `bossSpawnChannelId` (boss spawn alerts), and `scheduledEventChannelId` (event alerts) to the target channel IDs before boot
 
