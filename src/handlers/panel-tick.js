@@ -1,5 +1,5 @@
 import { getLocalTime, parseStringToDate, usesScheduleRespawn, redBossSchedules, leader3Schedules } from "../core/time-utils.js";
-import { sendBossSpawnAlerts, sendScheduledEventAlerts, sendCustomWorldBossAlerts, resetScheduledEventAlertCache, getUpcomingSpawnAlerts } from "./boss-spawn-scheduler.js";
+import { sendBossSpawnAlerts, sendScheduledEventAlerts, sendCustomWorldBossAlerts, resetScheduledEventAlertCache } from "./boss-spawn-scheduler.js";
 import { getGeneralChannelName } from "../core/server-structure.js";
 import { getMsg, reloadLanguage } from "../core/lang.js";
 import { db, alertCache, bossSpawnAlertCache, saveLocalStorage } from "../core/state.js";
