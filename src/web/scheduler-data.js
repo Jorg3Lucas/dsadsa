@@ -98,10 +98,6 @@ export const bossSpawns = [
   { world: "W3", layer: "1", map: "Underground Jail", boss: "Molgrash",
     times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
 
-  // ═══ LAYER 1 — W3 (level 158+) ═══
-  { world: "W3", layer: "1", map: "Underground Jail", boss: "Molgrash",
-    times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
-
   { world: "W3", layer: "1", map: "Nine Dragon Palace", boss: "Wi Gwangryeong",
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
   { world: "W3", layer: "1", map: "Primal Nefariox Ruins", boss: "Krog",
