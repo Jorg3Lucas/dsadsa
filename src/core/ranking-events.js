@@ -1,11 +1,12 @@
 import cron from 'node-cron';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType } from 'discord.js';
 import { adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig, loadChannelIdsFromConfig } from './ranking-constants.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { buildPrefixedNickname } from './ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
+import { dailyLogs, saveDailyLogs } from './daily-logs.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
@@ -27,6 +28,36 @@ async function handleTextCommands(message, db, saveLocalStorage) {
         saveLocalStorage();
         setAdminChannelId(message.channel.id);
         return message.reply(`✅ Admin approval channel set to ${message.channel.toString()}.`);
+    }
+
+    if (command === 'setreminders') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply('❌ You must be an Administrator to use this command.');
+        }
+        ensureConfig(db);
+        dailyLogs.bossSpawnChannelId = message.channel.id;
+        saveDailyLogs();
+        return message.reply(`✅ Boss spawn alerts will be sent to ${message.channel.toString()}.`);
+    }
+
+    if (command === 'setevents') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply('❌ You must be an Administrator to use this command.');
+        }
+        ensureConfig(db);
+        dailyLogs.scheduledEventChannelId = message.channel.id;
+        saveDailyLogs();
+        return message.reply(`✅ Event alerts will be sent to ${message.channel.toString()}.`);
+    }
+
+    if (command === 'setlogs') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply('❌ You must be an Administrator to use this command.');
+        }
+        ensureConfig(db);
+        dailyLogs.configChannelId = message.channel.id;
+        saveDailyLogs();
+        return message.reply(`✅ Daily claim reports will be sent to ${message.channel.toString()}.`);
     }
 
     if (command === 'enablevalidation') {

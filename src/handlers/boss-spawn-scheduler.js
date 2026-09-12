@@ -4,7 +4,7 @@
 // ==========================================
 
 import { EmbedBuilder } from "discord.js";
-import { dailyLogs, bossSpawnAlertCache } from "../core/state.js";
+import { dailyLogs, bossSpawnAlertCache, client } from "../core/state.js";
 import { getLocalTime, redBossSchedules, leader3Schedules } from "../core/time-utils.js";
 import { resolveAlertChannel } from "../core/daily-logs.js";
 import { getGeneralChannelName } from "../core/server-structure.js";
