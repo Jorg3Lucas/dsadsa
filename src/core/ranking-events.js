@@ -6,7 +6,8 @@ import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { buildPrefixedNickname } from './ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
-import { dailyLogs, saveDailyLogs } from './daily-logs.js';
+import { dailyLogs } from './state.js';
+import { saveDailyLogs } from './daily-logs.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
