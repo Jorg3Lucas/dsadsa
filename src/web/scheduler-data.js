@@ -10,6 +10,14 @@
 // Each entry: { world, layer, map, boss, times }
 // times: array of { h, m } in 24h format (Server Time)
 export const bossSpawns = [
+  // ═══ Custom arena world boss alert (10-min @everyone + join link) ═══
+  // Labyrinth (10h, 20h) + Valley (12h, 22h) + Mirage (0h, 22h)
+  { world: "CUSTOM", layer: "1", map: "Join Discord", boss: "World Boss Arena",
+    times: [0, 10, 12, 20, 22].map(h => ({ h, m: 0 })),
+    channelId: "1407236253836902462",
+    mention: "@everyone",
+    joinMessage: "Lets go guys, world boss join discord\nhttps://discord.com/channels/1359548384809062480/1359549331509739722" },
+
   // ═══ LAYER 3 — W1 ═══
   { world: "W1", layer: "3", map: "Bullface Forest", boss: "Matha",
     times: [2,4,6,8,10,12,14,16,18,20,22,0].map(h => ({ h, m: 0 })) },
@@ -89,6 +97,11 @@ export const bossSpawns = [
   // ═══ LAYER 1 — W3 (level 158+) ═══
   { world: "W3", layer: "1", map: "Underground Jail", boss: "Molgrash",
     times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
+
+  // ═══ LAYER 1 — W3 (level 158+) ═══
+  { world: "W3", layer: "1", map: "Underground Jail", boss: "Molgrash",
+    times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
+
   { world: "W3", layer: "1", map: "Nine Dragon Palace", boss: "Wi Gwangryeong",
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
   { world: "W3", layer: "1", map: "Primal Nefariox Ruins", boss: "Krog",
@@ -133,3 +146,4 @@ export const weeklyScheduledEvents = [
   { name: "Mirage Living Wraiths", day: 4, hour: 23 },
   { name: "Heist", day: 5, hour: 22 },
 ];
+

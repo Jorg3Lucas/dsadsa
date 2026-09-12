@@ -35,6 +35,12 @@ export async function resolveAlertChannel(configuredId, fallbackName) {
     return null;
 }
 
+/** Resolve a channel by hardcoded ID (for custom boss alert channels) */
+export async function resolveChannelById(channelId) {
+    if (!channelId) return null;
+    return client.channels.fetch(channelId).catch(() => null);
+}
+
 
 // ==========================================
 // 📝 DAILY LOGS SYSTEM

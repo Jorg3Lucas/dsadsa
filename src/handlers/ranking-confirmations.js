@@ -543,6 +543,14 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             dailyLogs.configChannelId = createdChannelIds['events'];
             dailyLogsChanged = true;
         }
+
+        // Custom arena world boss alert channel (#arena-alerts) → wire as the boss spawn alert channel
+        const customArenaChannelId = createdChannelIds['arena-alerts'];
+        if (customArenaChannelId && shouldRewireDailyLogs('arena-alerts', dailyLogs.bossSpawnChannelId)) {
+            dailyLogs.bossSpawnChannelId = customArenaChannelId;
+            dailyLogsChanged = true;
+        }
+
         if (dailyLogsChanged) saveDailyLogs();
 
         saveLocalStorage();      // ranking db (config.channelIds / panel refs)

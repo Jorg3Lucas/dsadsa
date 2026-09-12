@@ -14,6 +14,14 @@ import { getGeneralChannelName } from "../core/server-structure.js";
 // times: array of { h, m } in 24h format (Server Time)
 
 const bossSpawns = [
+  // ═══ Custom arena world boss alert (10-min @everyone + join link) ═══
+  // Labyrinth (10h, 20h) + Valley (12h, 22h) + Mirage (0h, 22h)
+  { world: "CUSTOM", layer: "1", map: "Join Discord", boss: "World Boss Arena",
+    times: [0, 10, 12, 20, 22].map(h => ({ h, m: 0 })),
+    channelId: "1407236253836902462",
+    mention: "@everyone",
+    joinMessage: "Lets go guys, world boss join discord\nhttps://discord.com/channels/1359548384809062480/1359549331509739722" },
+
   // ═══ LAYER 3 — W1 ═══
   { world: "W1", layer: "3", map: "Bullface Forest", boss: "Matha",
     times: [2,4,6,8,10,12,14,16,18,20,22,0].map(h => ({ h, m: 0 })) },
@@ -120,17 +128,17 @@ function spawnKey(bossIndex, hour, minute) {
 
 // ─── Check for upcoming spawns ───────────────────────────
 
-function getUpcomingSpawnAlerts() {
-  const now = getLocalTime();
+function getUpcomingSpawnAlerts(nowArg) {
+  const now = nowArg || getLocalTime();
   const results = [];
 
   for (let i = 0; i < bossSpawns.length; i++) {
     const entry = bossSpawns[i];
 
     for (const time of entry.times) {
-      // Calculate the "5 minutes before" time
+      // Calculate the alert time: 5 min before for standard bosses, 10 min before for custom @everyone bosses
       let alertH = time.h;
-      let alertM = time.m - 5;
+      let alertM = entry.joinMessage ? 0 - 10 : time.m - 5;
       if (alertM < 0) {
         alertM += 60;
         alertH = (alertH - 1 + 24) % 24;
@@ -162,17 +170,41 @@ export async function sendBossSpawnAlerts() {
   for (const alert of alerts) {
     const { entry, spawnTime, cacheKey } = alert;
 
+    // Custom arena-style world boss: post @everyone message with join link 10 min before (uses spawnTime for keying only)
+    if (entry.channelId && entry.joinMessage) {
+      const targetChannel = await client.channels.cache.get(entry.channelId) || await client.channels.fetch(entry.channelId).catch(() => null);
+      if (!targetChannel) {
+        console.warn(`⚠️ [Custom Boss Alert] Channel ${entry.channelId} not found for ${entry.boss}`);
+        continue;
+      }
+      const now = getLocalTime();
+      const spawnDate = new Date(now);
+      spawnDate.setHours(spawnTime.h, spawnTime.m, 0, 0);
+      if (spawnDate <= now) spawnDate.setDate(spawnDate.getDate() + 1);
+      const minutesToSpawn = Math.max(0, Math.floor((spawnDate.getTime() - now.getTime()) / 6e4));
+
+      try {
+        // Discord requires the mention + message in a single send to actually ping @everyone
+        await targetChannel.send({ content: `${entry.mention}\n${entry.joinMessage.replace(/\r\n/g, "\n")}` });
+        bossSpawnAlertCache[cacheKey] = true;
+        console.log(`✅ [Custom Boss Alert] Sent to #${targetChannel.name} (${entry.boss}) — ${minutesToSpawn}min to spawn`);
+      } catch (err) {
+        console.error(`❌ [Custom Boss Alert] Failed to send: ${err.message}`);
+      }
+      continue;
+    }
+
     const spawnHour12 = spawnTime.h % 12 || 12;
     const amPm = spawnTime.h < 12 ? "AM" : "PM";
     const timeStr = `${spawnHour12}:${String(spawnTime.m).padStart(2, "0")} ${amPm}`;
 
     const embed = new EmbedBuilder()
-      .setTitle("🛡️ Boss Spawning Soon! ⚔️")
+      .setTitle("\u2721\ufe0f Boss Spawning Soon! \u2694\ufe0f")
       .setColor("#ff4444")
       .setDescription(
         `**${entry.boss}** at **${entry.map}** (${entry.world} Layer ${entry.layer})\n\n` +
         `⏰ **Spawning in 5 minutes** — ${timeStr} (Server Time)\n\n` +
-        `Prepare yourselves and **don't forget to do the mission!** 💪`
+        `Prepare yourselves and **don't forget to do the mission!** \uD83D\uDCAA`
       )
       .setTimestamp();
 
@@ -269,7 +301,22 @@ function getUpcomingScheduledAlerts() {
   return results;
 }
 
-export async function sendScheduledEventAlerts() {
+export async function sendCustomWorldBossAlerts(now = getLocalTime()) {
+  // Run custom world boss alerts independently on each tick so we catch the minute window reliably.
+  const alerts = getUpcomingSpawnAlerts(now);
+  if (alerts.length === 0) return;
+
+  for (const alert of alerts) {
+    const { entry, spawnTime, cacheKey } = alert;
+    if (!entry.channelId || !entry.joinMessage) continue;
+
+    const resolved = await client.channels.cache.get(entry.channelId) || await client.channels.fetch(entry.channelId).catch(() => null);
+    if (!resolved) continue;
+    await resolved.send({ content: `${entry.mention}\n${entry.joinMessage.replace(/\r\n/g, "\n")}` }).catch(err => console.error(`❌ [Custom Boss Alert] Failed: ${err.message}`));
+    bossSpawnAlertCache[cacheKey] = true;
+  }
+}
+export async function sendScheduledEventAlerts() {
   // Uses the configured channel, or falls back to #events (created by /setup)
   const channel = await resolveAlertChannel(dailyLogs.scheduledEventChannelId, getGeneralChannelName("events"));
   if (!channel) return;
