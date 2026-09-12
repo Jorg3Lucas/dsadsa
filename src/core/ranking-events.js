@@ -6,11 +6,13 @@ import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
 import { buildPrefixedNickname } from './ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
-import { dailyLogs } from './state.js';
-import { saveDailyLogs } from './daily-logs.js';
 
 // ==========================================
-// 💬 TEXT COMMANDS (!setadminchannel)
+// 💬 RANKING TEXT COMMANDS (!setadminchannel, !enablevalidation, !disablevalidation)
+// Only active when the ranking system is enabled (registered from
+// initMir4BotEvents, which index.js calls only with RANKING_ENABLED=true).
+// Claim-related commands (!setreminders/!setevents/!setlogs) moved to
+// src/handlers/text-commands.js — always registered regardless of the flag.
 // ==========================================
 
 async function handleTextCommands(message, db, saveLocalStorage) {
@@ -29,36 +31,6 @@ async function handleTextCommands(message, db, saveLocalStorage) {
         saveLocalStorage();
         setAdminChannelId(message.channel.id);
         return message.reply(`✅ Admin approval channel set to ${message.channel.toString()}.`);
-    }
-
-    if (command === 'setreminders') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You must be an Administrator to use this command.');
-        }
-        ensureConfig(db);
-        dailyLogs.bossSpawnChannelId = message.channel.id;
-        saveDailyLogs();
-        return message.reply(`✅ Boss spawn alerts will be sent to ${message.channel.toString()}.`);
-    }
-
-    if (command === 'setevents') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You must be an Administrator to use this command.');
-        }
-        ensureConfig(db);
-        dailyLogs.scheduledEventChannelId = message.channel.id;
-        saveDailyLogs();
-        return message.reply(`✅ Event alerts will be sent to ${message.channel.toString()}.`);
-    }
-
-    if (command === 'setlogs') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You must be an Administrator to use this command.');
-        }
-        ensureConfig(db);
-        dailyLogs.configChannelId = message.channel.id;
-        saveDailyLogs();
-        return message.reply(`✅ Daily claim reports will be sent to ${message.channel.toString()}.`);
     }
 
     if (command === 'enablevalidation') {

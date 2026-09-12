@@ -138,6 +138,17 @@ Text commands (require **Manage Messages**):
 | `!earlyclaim remove @user` | Remove that permission |
 | `!earlyclaim list` | Show all users with early-claim permission |
 
+### 📢 Channel Setup (`!setreminders` / `!setevents` / `!setlogs`)
+Text commands (require **Administrator**) — run them in the channel you want the bot to use. They configure the claim system's alert channels and are **always available**, independent of the ranking flag:
+
+| Command | Description |
+|---------|-------------|
+| `!setreminders` | Boss spawn alerts will be sent to the current channel |
+| `!setevents` | Scheduled event alerts (@everyone) will be sent to the current channel |
+| `!setlogs` | Daily claim reports (18:00 `.txt` dispatch) will be sent to the current channel |
+
+> ℹ️ `!setadminchannel`, `!enablevalidation` and `!disablevalidation` belong to the ranking/registration system and only work with `RANKING_ENABLED=true`.
+
 ---
 
 ## ⏰ Automatic Schedules

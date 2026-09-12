@@ -11,6 +11,7 @@ import {
     handleClaimInteractions
 } from './handlers/bot.js';
 import { initEarlyClaimCommands } from './handlers/early-claim.js';
+import { initTextCommands } from './handlers/text-commands.js';
 import { noop, getBotToken, DISCORD_SERVER_ID, RANKING_ENABLED } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
@@ -215,6 +216,10 @@ client.once('clientReady', async () => {
 
     // Early claim admin commands (!earlyclaim add/remove/list)
     initEarlyClaimCommands(client);
+
+    // Claim text commands (!setreminders / !setevents / !setlogs) — always on,
+    // independent of the ranking feature flag.
+    initTextCommands(client);
 });
 
 // Graceful shutdown handlers — save ranking db on exit
