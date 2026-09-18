@@ -178,6 +178,15 @@ client.once('clientReady', async () => {
     // Inicializa os dados dos painéis (o recovery é feito logo abaixo)
     initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, true);
 
+    // Remove painéis que não pertencem mais a nenhum comando de andar (ex:
+    // goblin/antidemon/leaders da 11F) ANTES do recovery, para não reenviá-los.
+    try {
+        const { cleanOrphanPanels } = await import('./handlers/text-commands.js');
+        await cleanOrphanPanels('boot');
+    } catch (err) {
+        logger.error('PanelCleanup', 'Failed to clean orphan panels', err);
+    }
+
     // Restaura os painéis nos canais em que cada andar foi vinculado com os
     // comandos !sp7/!ms7/… (nenhum canal é criado ou apagado pelo bot)
     try {

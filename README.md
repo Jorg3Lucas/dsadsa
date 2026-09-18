@@ -173,12 +173,13 @@ Claim panels are **not** tied to fixed categories or channel names anymore. Run 
 | `!sp12` | Secret Peak + Random Event + Goblin |
 | `!summons` | Summon locations |
 | `!ms7` … `!ms10` | Normal floor + Antidemon |
-| `!ms11` | Leaders + Events + Antidemon + Goblin |
+| `!ms11` | Events |
 | `!ms12` | Leaders + Events + Antidemon + Goblin |
 
 - Requires **Administrator**.
 - Re-running a command moves that floor's panels to the new channel (the old copies are deleted).
 - The binding is saved (`database.json`) and restored on every boot — **the bot never creates, deletes or renames channels** (see `src/handlers/text-commands.js`).
+- **Orphan cleanup** — runs on every boot (before panel recovery, so stale panels are never re-posted) and on demand with `!cleanpanels` (requires **Administrator**): deletes the messages of panels that no longer belong to any floor command (e.g. the old 11F Leaders/Antidemon/Goblin after `!ms11` was trimmed) and forgets their saved channel.
 
 ---
 

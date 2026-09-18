@@ -8,7 +8,7 @@
 // ==========================================
 
 import { PermissionFlagsBits } from 'discord.js';
-import { dailyLogs, db, lastMessages, saveLocalStorage, logEvent } from '../core/state.js';
+import { dailyLogs, db, lastMessages, saveLocalStorage, logEvent, client } from '../core/state.js';
 import { saveDailyLogs } from '../core/daily-logs.js';
 import { renderEmbed, renderButtons } from './panel-render.js';
 import { noop } from '../core/config.js';
@@ -32,7 +32,7 @@ export const FLOOR_PANELS = {
     ms8: ['8squarenormal', '8squareantidemon'],
     ms9: ['9squarenormal', '9squareantidemon'],
     ms10: ['10squarenormal', '10squareantidemon'],
-    ms11: ['11squareleaders', '11squareevents', '11squareantidemon', '11msgoblin'],
+    ms11: ['11squareevents'],
     ms12: ['12squareleaders', '12squareevents', '12squareantidemon', '12msgoblin']
 };
 
@@ -87,6 +87,59 @@ async function deployPanels(message, panelKeys) {
     return sent;
 }
 
+/**
+ * Delete the messages of every panel that is no longer part of any floor
+ * binding (e.g. 11F goblin/antidemon/leaders after `!ms11` was trimmed) and
+ * forget their saved message reference, so they stop being refreshed.
+ *
+ * Safe to call at boot (before panel recovery), so orphan panels are never
+ * re-posted, and from the `!cleanpanels` command.
+ * @param {string} [source] - label used in the log entry (e.g. the author tag)
+ * @returns {Promise<string[]>} keys that were removed
+ */
+export async function cleanOrphanPanels(source = 'boot') {
+    // Panels still reachable through a `!` command — everything else is orphan.
+    const active = new Set(Object.values(FLOOR_PANELS).flat());
+    if (!db._panelMapping) db._panelMapping = {};
+    const mapping = db._panelMapping;
+
+    // Consider both saved references (database) and live messages (this session).
+    const keys = new Set([
+        ...Object.keys(mapping),
+        ...(lastMessages ? Object.keys(lastMessages) : [])
+    ]);
+
+    const removed = [];
+    for (const key of keys) {
+        if (key.startsWith('_') || active.has(key)) continue;
+
+        const saved = mapping[key];
+        const live = lastMessages ? lastMessages[key] : null;
+        const channelId = saved?.channelId || live?.channelId;
+        const messageId = saved?.messageId || live?.id || live?.messageId;
+
+        if (channelId && messageId && client) {
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (channel) {
+                const oldMsg = await channel.messages.fetch(messageId).catch(() => null);
+                if (oldMsg) await oldMsg.delete().catch(noop);
+            }
+        }
+
+        delete mapping[key];
+        if (lastMessages) delete lastMessages[key];
+        removed.push(key);
+    }
+
+    if (removed.length > 0) {
+        if (typeof saveLocalStorage === 'function') saveLocalStorage();
+        if (typeof logEvent === 'function') {
+            logEvent(`🧹 [${source}] Removed ${removed.length} orphan panel(s): ${removed.join(', ')}`);
+        }
+    }
+    return removed;
+}
+
 /** Registers the claim text-command listener. @param {import('discord.js').Client} client */
 export function initTextCommands(client) {
     client.on('messageCreate', async (message) => {
@@ -132,6 +185,21 @@ export function initTextCommands(client) {
             if (sent === 0) return;
             return message.reply(
                 `✅ ${sent} panel(s) posted here — this channel is now the **${command.toUpperCase()}** channel.`
+            );
+        }
+
+        // ── Remove panels that are no longer bound to any floor command ──
+        if (command === 'cleanpanels') {
+            if (!isAdmin(message)) {
+                return message.reply('❌ You must be an Administrator to use this command.');
+            }
+            const removed = await cleanOrphanPanels(message.author.tag);
+            if (removed.length === 0) {
+                return message.reply('✅ No orphan panels found — every saved panel belongs to a floor command.');
+            }
+            return message.reply(
+                `🧹 Removed **${removed.length}** orphan panel(s) and forgot their channels:\n` +
+                removed.map(k => `• \`${k}\``).join('\n')
             );
         }
     });
