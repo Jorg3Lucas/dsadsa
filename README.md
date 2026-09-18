@@ -8,7 +8,7 @@ Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** —
 
 ## 📋 Overview
 
-On every boot, the bot **deletes and recreates all floor channels** and deploys fresh claim panels (see [Auto Channel Setup](#-auto-channel-setup)). All claiming is done via **buttons on the panels** — no slash commands needed.
+Claim panels are **bound to the channel you choose**: run the floor's `!` command (`!sp7` … `!ms12`, `!summons`) in the channel you want and the bot posts (and keeps refreshing) its panels there (see [Claim Panel Channels](#-claim-panel-channels)). All claiming is done via **buttons on the panels** — no slash commands needed. The bot never creates, deletes or renames channels.
 
 ---
 
@@ -162,21 +162,23 @@ Text commands (require **Administrator**) — run them in the channel you want t
 
 ---
 
-## 🏗️ Auto Channel Setup
+## 📋 Claim Panel Channels
 
-On boot, `auto-channel-setup.js` **deletes all text channels** in the **two configured categories** and recreates them:
+Claim panels are **not** tied to fixed categories or channel names anymore. Run the command for a floor in the channel you want — the bot posts that floor's panels and buttons there and keeps them updated:
 
-```
-🔸 SP & Summons  (category 1548033121012813905)
-  SP-7F … SP-12F  +  🌀 Summons
+| Command | Panels posted |
+|---------|---------------|
+| `!sp7` … `!sp10` | Secret Peak floor |
+| `!sp11` | Secret Peak + Goblin |
+| `!sp12` | Secret Peak + Random Event + Goblin |
+| `!summons` | Summon locations |
+| `!ms7` … `!ms10` | Normal floor + Antidemon |
+| `!ms11` | Leaders + Events + Antidemon + Goblin |
+| `!ms12` | Leaders + Events + Antidemon + Goblin |
 
-🔹 MS            (category 1548033184619438162)
-  MS-7F … MS-12F
-```
-
-The two categories are matched by their explicit **ID** (defined in `src/core/server-structure.js`), so they can be renamed freely — a category matched by ID keeps its current name. Their existing permission overwrites are inherited by the created channels.
-
-Each channel gets its panel embeds + buttons posted automatically.
+- Requires **Administrator**.
+- Re-running a command moves that floor's panels to the new channel (the old copies are deleted).
+- The binding is saved (`database.json`) and restored on every boot — **the bot never creates, deletes or renames channels** (see `src/handlers/text-commands.js`).
 
 ---
 
@@ -208,22 +210,22 @@ DISCORD_SERVER_ID=your-guild-id
 `DISCORD_SERVER_ID` is defined once in `src/core/config.js` (from `.env`) and re-used by the ranking/registration system (`src/core/ranking-constants.js`), the claim bot, the web server and `deploy-commands.cjs`. Changing guild only requires editing `.env`.
 
 ### 🔌 Ranking / registro (feature flag)
-The whole ranking/registration system (scraper, sync, registration panels, clan roles, slash commands and claim-channel permissions) is controlled by one flag:
+The whole ranking/registration system (scraper, sync, registration panels, clan roles, slash commands) is controlled by one flag:
 ```
 RANKING_ENABLED=false   # default — ranking desligado (fórum do jogo indisponível)
 RANKING_ENABLED=true    # reativa o sistema completo
 ```
-With the flag off, the bot skips the ranking boot, does not register/answer slash commands (claim uses buttons only) and does not apply clan-role permissions to claim channels. All ranking files stay in the repo, so re-enabling is just the flag.
+With the flag off, the bot skips the ranking boot and does not register/answer slash commands (claim uses buttons only). All ranking files stay in the repo, so re-enabling is just the flag. The bot never creates or manages channels in either mode — panels are bound with `!sp7` … `!ms12` and alerts with `!setreminders` / `!setevents` / `!setlogs`.
 
 ### 2. Configuration
-- **`src/handlers/auto-channel-setup.js`** — category IDs + channel/panel definitions
-- **Daily logs / boss alerts / event alerts** — configured **manually in `daily-logs.json`**: set `configChannelId` (daily claim report), `bossSpawnChannelId` (boss spawn alerts), and `scheduledEventChannelId` (event alerts) to the target channel IDs before boot
+- **Claim panels** — bound to channels with the `!sp7` … `!ms12` / `!summons` commands ([Claim Panel Channels](#-claim-panel-channels)); no channel IDs to edit
+- **Daily logs / boss alerts / event alerts** — set with `!setlogs` / `!setreminders` / `!setevents`, or manually in `daily-logs.json` (`configChannelId`, `bossSpawnChannelId`, `scheduledEventChannelId`)
 
 ### 3. Permissions
 | Permission | Required For |
 |-----------|-------------|
 | **Manage Messages** | `!earlyclaim`, reset/kick/reset-logs admin actions |
-| **Manage Channels** | Auto channel setup (delete/recreate channels on boot) |
+| **Administrator** | `!sp7` … `!ms12` / `!summons` panel binding, `!setreminders` / `!setevents` / `!setlogs` |
 
 ### 4. Run
 ```
@@ -239,7 +241,7 @@ The claim website starts automatically (see [Claim Website](#-claim-website)).
 
 ```
 src/
-├── index.js                        # Entry point — boots claim, auto-setup, tick
+├── index.js                        # Entry point — boots claim, panel recovery, tick
 ├── core/
 │   ├── config.js                   # DISCORD_SERVER_ID, token helpers
 │   ├── constants.js                # Status strings, embed colors
@@ -261,7 +263,7 @@ src/
 │   ├── panel-utils.js              # Panel refresh helpers + DM notifications
 │   ├── panel-dm.js                 # DM message handling
 │   ├── panel-migrations.js         # Data migrations
-│   ├── auto-channel-setup.js       # Channel recreation + panel deployment on boot
+│   ├── text-commands.js            # !sp7…!ms12 panel binding + !set* alert channels
 │   ├── boss-spawn-scheduler.js     # Boss + scheduled event alerts
 │   └── early-claim.js              # !earlyclaim admin commands
 └── interactions/
@@ -280,7 +282,8 @@ src/
 
 After any changes, verify:
 
-- [ ] Boot → all floor channels recreated + panels deployed (auto-setup)
+- [ ] Boot → every bound panel re-posted in its channel (recovery)
+- [ ] **Panel binding** — `!ms7` / `!sp7` / `!summons` in a channel post + move the floor panels there
 - [ ] **Floor claim** — claim, leave, queue promotion, grace period
 - [ ] **Boss killed** → cooldown → auto-respawn → DM reminder
 - [ ] **Antidemon rooms** — left/mid/right, combo rooms, password modal

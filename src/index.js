@@ -12,7 +12,7 @@ import {
 } from './handlers/bot.js';
 import { initEarlyClaimCommands } from './handlers/early-claim.js';
 import { initTextCommands } from './handlers/text-commands.js';
-import { noop, getBotToken, DISCORD_SERVER_ID, RANKING_ENABLED } from './core/config.js';
+import { noop, getBotToken, RANKING_ENABLED } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
 // ═══ RANKING / REGISTRATION SYSTEM (imported from main branch) ═══
@@ -46,7 +46,7 @@ import {
 import { startAutoBackup } from './auto-backup.js';
 import { startWebServer } from './web/server.js';
 import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
-import { TEMP_ROLE_NAME, applyClaimChannelPermissions } from './core/clan-roles.js';
+import { TEMP_ROLE_NAME } from './core/clan-roles.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
@@ -175,31 +175,16 @@ client.once('clientReady', async () => {
     }
 
     // ═══ CLAIM SYSTEM BOOT ═══
-    // Inicializa dados dos painéis sem recovery (não envia para canais antigos)
+    // Inicializa os dados dos painéis (o recovery é feito logo abaixo)
     initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, true);
 
-    // Recria canais e envia painéis frescos para os canais novos
+    // Restaura os painéis nos canais em que cada andar foi vinculado com os
+    // comandos !sp7/!ms7/… (nenhum canal é criado ou apagado pelo bot)
     try {
-        const { setupAllChannels } = await import('./handlers/auto-channel-setup.js');
-        await setupAllChannels(client, DISCORD_SERVER_ID);
+        const { processAutoRecoveryOnBoot } = await import('./handlers/panel-utils.js');
+        await processAutoRecoveryOnBoot();
     } catch (err) {
-        logger.error('AutoSetup', 'Failed to auto-setup channels', err);
-    }
-
-    // Aplica as permissões dos canais de claim a partir dos cargos de clã salvos
-    // no banco (db.config.clanRoles + tempRoleId) — roda após a recriação dos
-    // canais para que a restrição de acesso seja reaplicada a cada boot.
-    if (!RANKING_ENABLED) {
-        console.log('🚫 [Ranking] Permissões de canal por cargo de clã desativadas (RANKING_ENABLED=false).');
-    } else try {
-        const result = await applyClaimChannelPermissions(client, rankingDb, logRankingEvent, (db) => saveRankingStorage(db || rankingDb));
-        if (!result.applied && result.reason === 'no-roles') {
-            console.log('ℹ️ [Ranking] No clan/temp roles found in the DB or on the server — run /syncroles after adding allied clans to restrict claim channels.');
-        } else if (result.discovered > 0) {
-            console.log(`🔒 [Ranking] Discovered ${result.discovered} clan role(s) by name — permissions applied and saved.`);
-        }
-    } catch (err) {
-        logger.error('ClanPerms', 'Failed to apply claim-channel permissions at boot', err);
+        logger.error('PanelRecovery', 'Failed to restore panels', err);
     }
 
     // Inicia o tick AFTER os canais/painéis existirem

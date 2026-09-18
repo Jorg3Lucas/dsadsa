@@ -102,18 +102,8 @@ export async function registerMir4SlashCommands(guild) {
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
             {
-                name: 'setup',
-                description: '🏗️ [Super Admin] Create the full server structure (claim categories + General channels).',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
                 name: 'syncroles',
-                description: '🤝 [Super Admin] Create one role per allied clan, assign to members and restrict claim channels.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'syncperms',
-                description: '🔒 [Super Admin] Re-apply claim channel permissions from the clan roles stored in the DB.',
+                description: '🤝 [Super Admin] Create one role per allied clan, assign to members and apply the general channel permissions.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
         ]);

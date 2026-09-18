@@ -26,7 +26,7 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
-import { syncClanRoles, hasMemberRole, applyClaimChannelPermissions } from '../core/clan-roles.js';
+import { syncClanRoles, hasMemberRole } from '../core/clan-roles.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -1141,60 +1141,6 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         await interaction.deferReply({ flags: 64 });
         const report = await syncClanRoles(interaction.client, db, saveLocalStorage, logEvent);
         return interaction.editReply(report);
-    }
-
-    // ── syncperms: re-apply claim channel permissions from the roles stored in the DB ──
-    if (commandName === 'syncperms') {
-        // High-risk-ish command: only the super admin may use it
-        if (user.id !== SUPER_ADMIN_USER_ID) {
-            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
-        }
-
-        await interaction.deferReply({ flags: 64 });
-        logEvent(`🔒 Admin ${user.tag} ran /syncperms`);
-
-        const result = await applyClaimChannelPermissions(interaction.client, db, logEvent, saveLocalStorage);
-
-        let report;
-        if (result.applied) {
-            report = `🔒 **Permissions Synced!**\n\n` +
-                `🏰 Clan roles applied: **${result.clanRoles}**\n` +
-                `⏳ GoW Kids temp role: ${result.tempRoleApplied ? '✅ included' : '❌ not found'}\n` +
-                (result.discovered > 0 ? `🔍 Roles discovered by name: **${result.discovered}** (saved to DB)\n` : '') +
-                `\nClaim channels (7F–12F, Summons): view-only for clan-role holders (+ GoW Kids).` +
-                `\nmarket/main-chat: open to registered members only (they can view and send).` +
-                `\nevents/reminders: view-only for members (only the bot posts alerts).` +
-                `\ntower-rules/announcements/allied-list: view-only for members (only the Elder role posts).`;
-        } else if (result.reason === 'no-roles') {
-            report = `⚠️ **No clan roles stored in the DB yet.**\n\nAdd allied clans and run **/syncroles** first — it creates the roles and applies the channel permissions.`;
-        } else {
-            report = `❌ **Could not apply permissions.** Reason: ${result.reason || 'unknown'}`;
-        }
-
-        return interaction.editReply(report);
-    }
-
-    // ── setup ──
-    if (commandName === 'setup') {
-        // High-risk command: only the super admin may use it
-        if (user.id !== SUPER_ADMIN_USER_ID) {
-            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
-        }
-
-        confirmationCache[`${user.id}-setup`] = {
-            timestamp: Date.now()
-        };
-
-        return interaction.reply({
-            content: `🏗️ **⚠️ SERVER SETUP ⚠️**\n\nThis will **create** the full server structure if missing, **rename** existing channels to the pretty names and **re-sync permissions**:\n\n📁 **Claim categories** (view restricted to clan roles + GoW Kids, bot sends panels):\n   🗼 **7F, 8F, 9F, 10F, 11F, 12F** and 🌀 **Summons** with their SP/MS channels\n\n📁 **General category** (🏠):\n   🛒 **market**, 💬 **main-chat** — everyone can chat\n   📜 **tower-rules**, 📢 **announcements**, 🤝 **allied-list** — elders only\n   ⏰ **reminders**, 📅 **events** — bot-managed (alerts)\n   📝 **registration** — welcome/registration panel (public)\n   📨 **approvals** — registration approval panels (staff only)\n\n🗑️ The legacy **domination/standby** channels (removed feature) will be **deleted**.\n\n✅ Idempotent: only missing channels are created.\n\nClick **✅ YES, CREATE EVERYTHING** to proceed or **❌ Cancel**.`,
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('confirm-setup-yes').setLabel('✅ YES, CREATE EVERYTHING').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId('confirm-setup-no').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
-                )
-            ],
-            flags: 64
-        });
     }
 
     return false;

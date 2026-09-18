@@ -255,7 +255,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         setAdminChannelId(db.config.adminChannelId);
     }
 
-    // Load persisted channel IDs saved by /setup (registration channel)
+    // Load persisted channel IDs (registration channel)
     loadChannelIdsFromConfig(db.config);
 
     // Pre-registrations no longer expire by time — they are validated against the

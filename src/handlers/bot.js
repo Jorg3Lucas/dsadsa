@@ -56,7 +56,7 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     }
 
     if (skipRecovery) {
-        logEvent("Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).");
+        logEvent("Sub-system initialized (panel recovery deferred to the caller).");
         return;
     }
 

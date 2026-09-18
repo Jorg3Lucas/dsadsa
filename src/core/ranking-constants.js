@@ -77,15 +77,15 @@ export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠�
 // ==========================================
 // 📢 REGISTRATION CHANNEL (for /listunregistered DMs)
 // ==========================================
-// Dynamic — the /setup command updates these when it (re)creates the channels.
-// Defaults are kept as fallbacks until a /setup run persists new IDs.
+// Dynamic — persisted in db.config.channelIds. The defaults below are fallbacks
+// used until an admin sets the channels.
 
 export let REGISTRATION_CHANNEL_ID = '1524296969521070120';
 
 export function setRegistrationChannelId(id) { REGISTRATION_CHANNEL_ID = id; }
 
 /**
- * Load persisted channel IDs from db.config (saved by /setup).
+ * Load persisted channel IDs from db.config.
  * Call this at boot after ensureConfig.
  */
 export function loadChannelIdsFromConfig(config) {

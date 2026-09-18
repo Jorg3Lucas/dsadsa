@@ -1,12 +1,11 @@
-import { EmbedBuilder, ChannelType } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { getLocalTime } from "./time-utils.js";
 import { getMsg } from "./lang.js";
 import { dailyLogs, dailyLogsPath, client } from "./state.js";
 import fs from "fs";
 import { sendFileWithEmbed } from "./discord-utils.js";
-import { noop, DISCORD_SERVER_ID } from "./config.js";
+import { noop } from "./config.js";
 import { logger } from "./logger.js";
-import { getGeneralChannelName } from "./server-structure.js";
 
 // ==========================================
 // 📡 ALERT CHANNEL RESOLVER
@@ -14,25 +13,14 @@ import { getGeneralChannelName } from "./server-structure.js";
 
 /**
  * Resolve the channel where a bot alert should be posted.
- * 1. Uses the configured channel ID if it still exists.
- * 2. Otherwise falls back to the bot-managed channel by NAME
- *    (e.g. "reminders", "events" — created by /setup).
- * This lets the alert systems automatically use the /setup channels.
+ * Uses the configured channel ID — set it with `!setreminders` / `!setevents` /
+ * `!setlogs` (run in the target channel).
  * @param {string|null|undefined} configuredId - ID from daily-logs config
- * @param {string} fallbackName - Channel name to look up if the ID is missing/stale
  * @returns {Promise<import('discord.js').TextChannel|null>}
  */
-export async function resolveAlertChannel(configuredId, fallbackName) {
-    if (configuredId) {
-        const ch = await client.channels.fetch(configuredId).catch(() => null);
-        if (ch) return ch;
-    }
-    const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
-    if (guild) {
-        const byName = guild.channels.cache.find(c => c.name === fallbackName && c.type === ChannelType.GuildText);
-        if (byName) return byName;
-    }
-    return null;
+export async function resolveAlertChannel(configuredId) {
+    if (!configuredId) return null;
+    return client.channels.fetch(configuredId).catch(() => null);
 }
 
 /** Resolve a channel by hardcoded ID (for custom boss alert channels) */
@@ -223,7 +211,7 @@ function buildReportText(queueData, dateStr, isForced) {
  * @returns {Promise<boolean>}
  */
 export async function dispatchDailyLogs(isForced = false) {
-    const channel = await resolveAlertChannel(dailyLogs.configChannelId, getGeneralChannelName("events"));
+    const channel = await resolveAlertChannel(dailyLogs.configChannelId);
     if (!channel) return false;
 
     let queueData = dailyLogs.queue || [];
