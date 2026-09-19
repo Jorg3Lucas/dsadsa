@@ -32,6 +32,7 @@ import {
     parseAlliedList,
     splitListLine,
     nameCandidates,
+    detectPilot,
     buildListIndex,
     matchMemberToList,
     chooseResolution
@@ -47,6 +48,7 @@ function createMember({ id, username, nickname = null, globalName = null, roles 
         id,
         user: { id, username, globalName, displayName: globalName || username, tag: `${username}#0001`, bot },
         nickname,
+        setNickname: vi.fn(async () => {}),
         roles: {
             cache: { has: roleId => roleSet.has(roleId) },
             add: vi.fn(async () => { roleSet.add(MEMBER_ROLE_ID); })
@@ -147,6 +149,56 @@ describe('nameCandidates', () => {
 
     it('handles names without decorations', () => {
         expect(nameCandidates('MooN')[0]).toBe('MooN');
+    });
+});
+
+// ──────────────────────────────────────────
+// Pilot detection
+// ──────────────────────────────────────────
+
+describe('detectPilot', () => {
+    it('detects the "(P)" marker and the owner written after it', () => {
+        expect(detectPilot('St • Adi (P) Zay')).toMatchObject({
+            isPilot: true,
+            characterName: 'St • Adi',
+            ownerName: 'Zay'
+        });
+    });
+
+    it('detects the "(P-owner)" form', () => {
+        expect(detectPilot('St • JAY (P-cecilia)')).toMatchObject({
+            isPilot: true,
+            characterName: 'St • JAY',
+            ownerName: 'cecilia'
+        });
+    });
+
+    it('detects the "Name Pilot Owner" form', () => {
+        expect(detectPilot('St • mєjєrє Pilot OGUN')).toMatchObject({
+            isPilot: true,
+            characterName: 'St • mєjєrє',
+            ownerName: 'OGUN'
+        });
+    });
+
+    it('detects markers without an owner', () => {
+        expect(detectPilot('Serious King (P)')).toMatchObject({ isPilot: true, ownerName: null });
+        expect(detectPilot('ᴊᴀᴍᴍʏᴋᴏɪ |ᴍᴇᴊᴇʀᴇ&ᴀʀᴇꜱ [ᴘ]')).toMatchObject({ isPilot: true });
+        expect(detectPilot('Scânteiere-Garfil Ⓖ Pilot')).toMatchObject({ isPilot: true, ownerName: null });
+    });
+
+    it('detects the " - Pilot" suffix this bot assigns', () => {
+        expect(detectPilot('EU031 - Owner - Pilot')).toMatchObject({
+            isPilot: true,
+            characterName: 'EU031 - Owner',
+            ownerName: null
+        });
+    });
+
+    it('leaves regular names alone', () => {
+        expect(detectPilot('MooN')).toMatchObject({ isPilot: false, ownerName: null });
+        expect(detectPilot('[EU11] Powder ツ')).toMatchObject({ isPilot: false });
+        expect(detectPilot('PilotPro')).toMatchObject({ isPilot: false });
     });
 });
 
@@ -314,6 +366,82 @@ describe('handleScanAllied', () => {
         expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('No usable lines'));
     });
 
+    it('links a pilot to an owner registered in the same run', async () => {
+        const list = [
+            'Nickname,Username',
+            '"St • Yuki","soraao"',
+            '"St • Adi (P) Yuki","zayleigh"'
+        ].join('\n');
+        axios.get.mockResolvedValue({ data: list });
+        lookupNickname.mockImplementation(name => {
+            if (name === 'Yuki') {
+                return { found: true, inAlliedClan: true, exactMatch: true, nickname: 'Yuki', clanName: 'St', serverName: 'EU031', worldId: 731 };
+            }
+            return { found: false };
+        });
+
+        const owner = createMember({ id: '4', username: 'soraao' });
+        const pilot = createMember({ id: '5', username: 'zayleigh' });
+        const db = { users: {}, config: { alliedClans: {} } };
+        const interaction = createInteraction({ listText: list, apply: true, members: [owner, pilot] });
+
+        await handleScanAllied(interaction, db, vi.fn(async () => {}), vi.fn());
+
+        // Owner registered normally, pilot linked through the owner's pilotIds
+        expect(db.users['4']).toMatchObject({ nickname: 'Yuki', clanName: 'St' });
+        expect(db.users['4'].pilotIds).toEqual(['5']);
+        expect(pilot.roles.add).toHaveBeenCalledWith(MEMBER_ROLE_ID);
+        expect(db.users['5']).toBeUndefined();
+        expect(interaction.replies[0].content).toContain('piloto');
+    });
+
+    it('does not link pilots in dry run', async () => {
+        const list = ['"St • Yuki","soraao"', '"St • Adi (P) Yuki","zayleigh"'].join('\n');
+        axios.get.mockResolvedValue({ data: list });
+        lookupNickname.mockImplementation(name => {
+            if (name === 'Yuki') {
+                return { found: true, inAlliedClan: true, exactMatch: true, nickname: 'Yuki', clanName: 'St', serverName: 'EU031', worldId: 731 };
+            }
+            return { found: false };
+        });
+
+        const owner = createMember({ id: '4', username: 'soraao' });
+        const pilot = createMember({ id: '5', username: 'zayleigh' });
+        const db = { users: {}, config: { alliedClans: {} } };
+        const interaction = createInteraction({ listText: list, apply: false, members: [owner, pilot] });
+
+        await handleScanAllied(interaction, db, vi.fn(async () => {}), vi.fn());
+
+        expect(db.users['4']).toBeUndefined();
+        expect(pilot.roles.add).not.toHaveBeenCalled();
+        expect(pilot.setNickname).not.toHaveBeenCalled();
+        expect(interaction.replies[0].content).toContain('Seriam vinculados como piloto');
+    });
+
+    it('registers a pilot as a regular member when the owner is not in the server', async () => {
+        const list = '"St • JAY (P-cecilia)","jay.fj"';
+        axios.get.mockResolvedValue({ data: list });
+        lookupNickname.mockImplementation(name => {
+            if (name === 'JAY') {
+                return { found: true, inAlliedClan: true, exactMatch: true, nickname: 'JAY', clanName: 'St', serverName: 'EU031', worldId: 731 };
+            }
+            return { found: false };
+        });
+
+        const pilot = createMember({ id: '5', username: 'jay.fj' });
+        const db = { users: {}, config: { alliedClans: {} } };
+        const interaction = createInteraction({ listText: list, apply: true, members: [pilot] });
+
+        await handleScanAllied(interaction, db, vi.fn(async () => {}), vi.fn());
+
+        expect(db.users['5']).toMatchObject({ nickname: 'JAY', clanName: 'St' });
+        expect(pilot.roles.add).toHaveBeenCalledWith(MEMBER_ROLE_ID);
+        expect(pilot.setNickname).not.toHaveBeenCalled();
+        // Report explains the owner could not be identified
+        expect(interaction.replies[0].files).toHaveLength(1);
+        expect(db.users['5'].pilotIds).toEqual([]);
+    });
+
     it('skips bots and members without a list match', async () => {
         axios.get.mockResolvedValue({ data: '"MooN","moon4167"' });
         const bot = createMember({ id: '9', username: 'moon4167', bot: true });
@@ -325,5 +453,25 @@ describe('handleScanAllied', () => {
 
         expect(db.users['9']).toBeUndefined();
         expect(db.users['8']).toBeUndefined();
+    });
+
+    it('does not touch a member that is already registered as a pilot', async () => {
+        const list = '"St • JAY (P-cecilia)","jay.fj"';
+        axios.get.mockResolvedValue({ data: list });
+        const pilot = createMember({ id: '5', username: 'jay.fj' });
+        const db = {
+            users: {
+                4: { nickname: 'cecilia', registeredAt: '2026-01-01T00:00:00.000Z', pilotIds: ['5'] },
+                5: { nickname: 'JAY', registeredAt: '2026-01-01T00:00:00.000Z', pilotIds: [] }
+            },
+            config: { alliedClans: {} }
+        };
+        const interaction = createInteraction({ listText: list, apply: true, members: [pilot] });
+
+        await handleScanAllied(interaction, db, vi.fn(async () => {}), vi.fn());
+
+        expect(db.users['4'].pilotIds).toEqual(['5']);
+        expect(pilot.roles.add).not.toHaveBeenCalled();
+        expect(pilot.setNickname).not.toHaveBeenCalled();
     });
 });

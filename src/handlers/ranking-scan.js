@@ -11,6 +11,12 @@
 // granted when the clan is one of the allied clans configured in
 // /manage → Allied Clans. Registration follows the normal (non-manual) flow.
 //
+// Pilot markers in the copied nicknames ("Name (P)", "Name (P) Owner",
+// "Name (P-owner)", "Name [ᴘ]", "Name Pilot Owner") are detected: when the owner
+// can be identified in this guild the member is linked as that owner's pilot
+// (same data model as the normal pilot approval); otherwise they are registered
+// as a regular member and flagged in the report.
+//
 // The command is a dry run unless `apply: true` is passed.
 
 import { AttachmentBuilder } from 'discord.js';
@@ -18,6 +24,7 @@ import axios from 'axios';
 import { MEMBER_ROLE_ID, ensureConfig } from '../core/ranking-constants.js';
 import { cleanNickname, getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from '../core/ranking-service.js';
+import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { deferReplySafe } from '../core/interaction-utils.js';
 
 const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
@@ -25,6 +32,8 @@ const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 // live forum search (cache lookups are free, forum requests are not).
 const MAX_CANDIDATES = 6;
 const MAX_FORUM_SEARCH_CANDIDATES = 2;
+// Same cap the pilot approval flow enforces per owner.
+const MAX_PILOTS_PER_OWNER = 4;
 
 const HEADER_WORDS = new Set(['nickname', 'nicknames', 'username', 'user', 'nome', 'apelido', 'player', 'name', 'nick']);
 
@@ -166,6 +175,76 @@ export function nameCandidates(rawNickname) {
     return out;
 }
 
+// ==========================================
+// ✈️ PILOT DETECTION
+// ==========================================
+
+/**
+ * Detect a pilot marker in a nickname copied from another server.
+ *
+ * Returns { isPilot, characterName, ownerName, marker } where characterName is
+ * the name BEFORE the marker (the character shown in the list) and ownerName is
+ * the name AFTER it when the entry carries one:
+ *
+ *   "St • JAY (P-cecilia)"   → character "St • JAY",     owner "cecilia"
+ *   "St • Adi (P) Zay"       → character "St • Adi",     owner "Zay"
+ *   "mєjєrє Pilot OGUN"      → character "mєjєrє",       owner "OGUN"
+ *   "Serious King (P)"       → character "Serious King", owner null
+ *   "[EU11] MooN [ᴘ]"        → character "[EU11] MooN",  owner null
+ *   "EU021 - Owner - Pilot"  → character "EU021 - Owner", owner null
+ */
+export function detectPilot(rawNickname) {
+    const raw = String(rawNickname ?? '').trim();
+    if (!raw) return { isPilot: false, characterName: raw, ownerName: null, marker: null };
+
+    // "… - Pilot" — the suffix this bot itself assigns to registered pilots
+    if (PILOT_SUFFIX.test(raw)) {
+        return {
+            isPilot: true,
+            characterName: raw.replace(PILOT_SUFFIX, '').trim(),
+            ownerName: null,
+            marker: 'pilot-suffix'
+        };
+    }
+
+    // "(P-owner)" / "[P-owner]"
+    let match = raw.match(/[([\s]*[pᴘ]\s*[-–—]\s*([^)\]]+)\s*[)\]]/iu);
+    if (match) {
+        return {
+            isPilot: true,
+            characterName: raw.slice(0, match.index).trim(),
+            ownerName: match[1].trim() || null,
+            marker: match[0].trim()
+        };
+    }
+
+    // "(P)" / "(Pilot)" / "[ᴘ]" — the owner may follow the marker
+    match = raw.match(/[([]\s*(?:p|pilot|ᴘ)\s*[)\]]/iu);
+    if (match) {
+        const after = raw.slice(match.index + match[0].length).replace(/^[\s\-–—/|:]+/, '').trim();
+        return {
+            isPilot: true,
+            characterName: raw.slice(0, match.index).trim(),
+            ownerName: after || null,
+            marker: match[0].trim()
+        };
+    }
+
+    // "Name Pilot Owner" / "Name Pilot"
+    match = raw.match(/\s+pilot\b\s*(.*)$/i);
+    if (match) {
+        const after = match[1].replace(/^[\s\-–—/|:]+/, '').trim();
+        return {
+            isPilot: true,
+            characterName: raw.slice(0, match.index).trim(),
+            ownerName: after || null,
+            marker: 'Pilot'
+        };
+    }
+
+    return { isPilot: false, characterName: raw, ownerName: null, marker: null };
+}
+
 /**
  * Index the parsed list for lookups: by Discord username and by cleaned
  * game-name variation.
@@ -214,6 +293,40 @@ export function matchMemberToList(member, index) {
     return null;
 }
 
+/** Member ids that are already registered as someone's pilot. */
+function buildPilotIdSet(db) {
+    const ids = new Set();
+    for (const data of Object.values(db?.users || {})) {
+        for (const pilotId of data?.pilotIds || []) ids.add(pilotId);
+    }
+    return ids;
+}
+
+/**
+ * Map cleaned nickname → guild member id for everyone that can act as an owner:
+ * registered members (minus those already flagged as pilots) and the owners
+ * matched in this run.
+ */
+function buildOwnerIndex(db, guild) {
+    const map = new Map();
+    const pilotIds = buildPilotIdSet(db);
+
+    const add = (name, memberId) => {
+        for (const candidate of nameCandidates(name)) {
+            const key = cleanNickname(candidate);
+            if (key && key.length >= 2 && !map.has(key)) map.set(key, memberId);
+        }
+    };
+
+    for (const [id, data] of Object.entries(db?.users || {})) {
+        if (!data?.nickname || pilotIds.has(id)) continue;
+        if (!guild.members.cache.has(id)) continue;
+        add(data.nickname, id);
+    }
+
+    return map;
+}
+
 // ==========================================
 // 🔍 RANKING RESOLUTION
 // ==========================================
@@ -246,6 +359,34 @@ export function resolveInCache(candidates, db, cache) {
         if (lookup.found) resolutions.push({ candidate, lookup });
     }
     return resolutions;
+}
+
+/**
+ * Cache first, then a live forum search with the two most likely names only
+ * (each request is a live HTTP call).
+ */
+async function resolveAllied(candidates, db, cache) {
+    const limited = (candidates || []).slice(0, MAX_CANDIDATES);
+    const cached = chooseResolution(resolveInCache(limited, db, cache));
+    if (cached) return cached;
+
+    const forumResolutions = [];
+    for (const candidate of limited.slice(0, MAX_FORUM_SEARCH_CANDIDATES)) {
+        const lookup = await lookupNicknameWithSearch(candidate, db, cache);
+        if (lookup.found) forumResolutions.push({ candidate, lookup });
+    }
+    return chooseResolution(forumResolutions);
+}
+
+/** Name variations to look up for a list entry / member pair. */
+function candidatesFor(entryNickname, member, extraNames = []) {
+    const out = [];
+    for (const source of [entryNickname, member.nickname, member.user?.globalName, ...extraNames]) {
+        for (const candidate of nameCandidates(source)) {
+            if (!out.includes(candidate)) out.push(candidate);
+        }
+    }
+    return out;
 }
 
 // ==========================================
@@ -300,17 +441,25 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
     const index = buildListIndex(entries);
     const matchedEntries = new Set();
 
-    const applied = [];
+    const registered = [];       // registered as a regular member (or role restored)
+    const linkedPilots = [];     // linked to a registered owner
+    const unlinkedPilots = [];   // pilot marker found, owner not identified
     const alreadyOk = [];
     const notAllied = [];
     const notFound = [];
     const details = [];
 
+    // ── 1st pass: match members to list entries and classify them ──
+    // Pilots are processed after the regular entries so an owner that is only in
+    // the list gets registered first and can be linked in the same run.
+    const owners = [];
+    const pilots = [];
+
     for (const [, member] of guild.members.cache) {
         if (member.user?.bot) continue;
 
-        const registered = db.users?.[member.id];
-        const isRegistered = !!(registered && (registered.nickname || registered.registeredAt || registered.manual));
+        const registeredUser = db.users?.[member.id];
+        const isRegistered = !!(registeredUser && (registeredUser.nickname || registeredUser.registeredAt || registeredUser.manual));
         const hasRole = member.roles.cache.has(MEMBER_ROLE_ID);
 
         const match = matchMemberToList(member, index);
@@ -330,47 +479,34 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
             continue;
         }
 
-        const candidates = [];
-        for (const source of [match.entry.nickname, member.nickname, member.user.globalName]) {
-            for (const candidate of nameCandidates(source)) {
-                if (!candidates.includes(candidate)) candidates.push(candidate);
-            }
-        }
-        const limited = candidates.slice(0, MAX_CANDIDATES);
+        const entryPilot = detectPilot(match.entry.nickname);
+        const memberPilot = detectPilot(member.nickname || '');
+        const item = {
+            member,
+            entry: match.entry,
+            via: match.via,
+            isRegistered,
+            hasRole,
+            isPilot: entryPilot.isPilot || memberPilot.isPilot,
+            ownerName: entryPilot.ownerName || memberPilot.ownerName || null,
+            characterName: (entryPilot.isPilot ? entryPilot.characterName : '') || (memberPilot.isPilot ? memberPilot.characterName : '') || match.entry.nickname
+        };
 
-        let chosen = chooseResolution(resolveInCache(limited, db, cache));
+        if (item.isPilot) pilots.push(item);
+        else owners.push(item);
+    }
 
-        // Nothing usable in the cache — fall back to the live forum search with
-        // the two most likely names only (each request is a live HTTP call).
-        if (!chosen) {
-            const forumResolutions = [];
-            for (const candidate of limited.slice(0, MAX_FORUM_SEARCH_CANDIDATES)) {
-                const lookup = await lookupNicknameWithSearch(candidate, db, cache);
-                if (lookup.found) forumResolutions.push({ candidate, lookup });
-            }
-            chosen = chooseResolution(forumResolutions);
-        }
+    const ownerIndex = buildOwnerIndex(db, guild);
+    const existingPilotIds = buildPilotIdSet(db);
 
-        const entryLabel = `"${match.entry.nickname}"${match.entry.username ? ` (@${match.entry.username})` : ''}`;
-        const viaLabel = match.via === 'username' ? 'username' : 'apelido/nickname';
+    const entryLabelOf = item => `"${item.entry.nickname}"${item.entry.username ? ` (@${item.entry.username})` : ''}`;
+    const viaLabelOf = item => (item.via === 'username' ? 'username' : 'apelido/nickname');
 
-        if (!chosen) {
-            notFound.push({ member, entry: match.entry });
-            details.push(`❌ ${member.user.username} ← ${entryLabel} [${viaLabel}] — não encontrado no ranking`);
-            continue;
-        }
-
-        if (!chosen.lookup.inAlliedClan) {
-            notAllied.push({ member, entry: match.entry, lookup: chosen.lookup });
-            details.push(`⏳ ${member.user.username} ← ${entryLabel} [${viaLabel}] → "${chosen.lookup.nickname}" (${chosen.lookup.clanName} @ ${chosen.lookup.serverName}) — clã NÃO aliado`);
-            continue;
-        }
-
-        const lookup = chosen.lookup;
-        const wasRegistered = isRegistered;
-
+    /** Store a normal (non-manual) registration for an allied lookup. */
+    const registerMember = (item, lookup, note = '') => {
+        const { member } = item;
         if (apply) {
-            if (!wasRegistered) {
+            if (!item.isRegistered) {
                 db.users[member.id] = {
                     nickname: lookup.nickname,
                     registeredAt: new Date().toISOString(),
@@ -381,28 +517,126 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                     ...(lookup.fromForumSearch ? { fromForumSearch: true } : {})
                 };
             }
-            if (!hasRole) {
-                await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+            if (!item.hasRole) {
+                member.roles.add(MEMBER_ROLE_ID).catch(() => {});
             }
         }
 
-        applied.push({ member, entry: match.entry, lookup, via: match.via, wasRegistered, hasRole });
-        details.push(`✅ ${member.user.username} ← ${entryLabel} [${viaLabel}] → "${lookup.nickname}" (${lookup.clanName} @ ${lookup.serverName}) — ${wasRegistered ? 'registro mantido, ' : ''}${apply ? (hasRole ? 'cargo já estava' : 'cargo concedido') : 'seria registrado + cargo'}${wasRegistered ? '' : ' (novo registro)'}`);
-        logEvent(`🎯 [ScanAllied] ${apply ? 'Applied' : 'DRY RUN'} — ${member.user.tag} ← ${entryLabel} → ${lookup.nickname} (${lookup.clanName} @ ${lookup.serverName})`);
+        registered.push({ member, entry: item.entry, lookup, via: item.via });
+        details.push(`✅ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → "${lookup.nickname}" (${lookup.clanName} @ ${lookup.serverName}) — ${item.isRegistered ? 'registro mantido, ' : ''}${apply ? (item.hasRole ? 'cargo já estava' : 'cargo concedido') : 'seria registrado + cargo'}${note}`);
+        logEvent(`🎯 [ScanAllied] ${apply ? 'Applied' : 'DRY RUN'} — ${member.user.tag} ← ${entryLabelOf(item)} → ${lookup.nickname} (${lookup.clanName} @ ${lookup.serverName})${note}`);
+
+        // A newly registered owner becomes linkable for the pilot pass
+        if (!item.isPilot) {
+            for (const candidate of nameCandidates(lookup.nickname)) {
+                const key = cleanNickname(candidate);
+                if (key && key.length >= 2 && !ownerIndex.has(key)) ownerIndex.set(key, member.id);
+            }
+        }
+    };
+
+    // ── Regular members ──
+    for (const item of owners) {
+        const chosen = await resolveAllied(candidatesFor(item.entry.nickname, item.member), db, cache);
+
+        if (!chosen) {
+            notFound.push({ member: item.member, entry: item.entry });
+            details.push(`❌ ${item.member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] — não encontrado no ranking`);
+            continue;
+        }
+        if (!chosen.lookup.inAlliedClan) {
+            notAllied.push({ member: item.member, entry: item.entry, lookup: chosen.lookup });
+            details.push(`⏳ ${item.member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → "${chosen.lookup.nickname}" (${chosen.lookup.clanName} @ ${chosen.lookup.serverName}) — clã NÃO aliado`);
+            continue;
+        }
+
+        registerMember(item, chosen.lookup);
+    }
+
+    // ── Pilots ──
+    for (const item of pilots) {
+        const { member } = item;
+
+        // Already someone's pilot — the bot manages that link, leave it alone.
+        if (existingPilotIds.has(member.id)) {
+            alreadyOk.push({ member, entry: item.entry, via: item.via });
+            details.push(`🙋 ${member.user.username} — já registrado como piloto (não mexido)`);
+            continue;
+        }
+
+        const ownerId = item.ownerName ? ownerIndex.get(cleanNickname(item.ownerName)) : null;
+        const ownerMember = ownerId ? guild.members.cache.get(ownerId) : null;
+        const ownerData = ownerId ? db.users?.[ownerId] : null;
+
+        // Preferred path: the pilot is validated through their owner, exactly like
+        // the normal pilot approval (owner holds the pilotIds entry + nickname).
+        if (ownerMember && ownerData) {
+            const ownerResolution = await resolveAllied(candidatesFor(item.ownerName, ownerMember), db, cache);
+
+            if (ownerResolution && ownerResolution.lookup.inAlliedClan) {
+                const ownerPilots = ownerData.pilotIds || (ownerData.pilotIds = []);
+                if (ownerPilots.includes(member.id)) {
+                    alreadyOk.push({ member, entry: item.entry, via: item.via });
+                    details.push(`🙋 ${member.user.username} — já era piloto de "${ownerData.nickname}" (não mexido)`);
+                    continue;
+                }
+                if (ownerPilots.length >= MAX_PILOTS_PER_OWNER) {
+                    unlinkedPilots.push({ member, entry: item.entry, ownerNickname: ownerData.nickname, reason: 'owner cheio' });
+                    details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} — piloto de "${ownerData.nickname}", mas o dono já tem ${MAX_PILOTS_PER_OWNER} pilotos — NÃO vinculado`);
+                    continue;
+                }
+
+                const desiredNickname = buildPrefixedNickname(ownerData.nickname, db, 'Pilot', ownerResolution.lookup);
+                if (apply) {
+                    ownerPilots.push(member.id);
+                    if (!item.hasRole) member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                    member.setNickname(desiredNickname).catch(() => {});
+                }
+
+                linkedPilots.push({ member, entry: item.entry, ownerNickname: ownerData.nickname, via: item.via });
+                details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → piloto de "${ownerData.nickname}" (${ownerResolution.lookup.clanName} @ ${ownerResolution.lookup.serverName}) — ${apply ? `vinculado, apelido "${desiredNickname}"` : `seria vinculado, apelido "${desiredNickname}"`}`);
+                logEvent(`🎯 [ScanAllied] ${apply ? 'Applied' : 'DRY RUN'} — pilot ${member.user.tag} linked to owner ${ownerData.nickname}`);
+                continue;
+            }
+        }
+
+        // Fallback: owner unknown here — register the pilot in their own right and
+        // flag it so an admin can link them with /manualpilot.
+        const ownResolution = await resolveAllied(candidatesFor(item.characterName, member, [item.entry.nickname]), db, cache);
+
+        if (!ownResolution) {
+            notFound.push({ member, entry: item.entry });
+            details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] — piloto${item.ownerName ? ` (dono "${item.ownerName}" não identificado no servidor)` : ''} e não encontrado no ranking`);
+            continue;
+        }
+        if (!ownResolution.lookup.inAlliedClan) {
+            notAllied.push({ member, entry: item.entry, lookup: ownResolution.lookup });
+            details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} → "${ownResolution.lookup.nickname}" (${ownResolution.lookup.clanName} @ ${ownResolution.lookup.serverName}) — piloto, clã NÃO aliado`);
+            continue;
+        }
+
+        const ownerNote = item.ownerName
+            ? ` (piloto detectado — dono "${item.ownerName}" não identificado, use /manualpilot)`
+            : ' (piloto detectado — sem dono na lista, use /manualpilot)';
+        unlinkedPilots.push({ member, entry: item.entry, ownerNickname: item.ownerName, reason: 'dono não identificado' });
+        registerMember(item, ownResolution.lookup, ownerNote);
     }
 
     const listOnly = entries.filter(e => !matchedEntries.has(e));
+    const listOnlyPilots = listOnly.filter(e => detectPilot(e.nickname).isPilot);
 
-    if (apply && applied.length > 0) {
+    if (apply && (registered.length > 0 || linkedPilots.length > 0)) {
         await saveLocalStorage(db);
     }
 
     const counts = [
-        `${apply ? '✅ Aplicado (registro + cargo)' : '✅ Seriam registrados/cargo'}: **${applied.length}**`,
+        `${apply ? '✅ Aplicado (registro + cargo)' : '✅ Seriam registrados/cargo'}: **${registered.length}**`,
+        `✈️ ${apply ? 'Vinculados como piloto' : 'Seriam vinculados como piloto'}: **${linkedPilots.length}**`,
+        `✈️ Pilotos detectados sem dono identificado: **${unlinkedPilots.length}**`,
         `🙋 Já tinham registro + cargo: **${alreadyOk.length}**`,
         `⏳ Achados fora de clã aliado: **${notAllied.length}**`,
         `❌ Não encontrados no ranking: **${notFound.length}**`,
-        `📄 Entradas da lista sem membro no servidor: **${listOnly.length}**`
+        `📄 Entradas da lista sem membro no servidor: **${listOnly.length}**${listOnlyPilots.length ? ` (${listOnlyPilots.length} com marca de piloto)` : ''}`
     ].join('\n');
 
     const header = [
@@ -413,13 +647,17 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         counts
     ].join('\n');
 
-    const preview = applied.slice(0, 15).map(a =>
-        `• ${a.member.user.username} → **${a.lookup.nickname}** (${a.lookup.clanName} @ ${a.lookup.serverName})`
-    );
+    const preview = [
+        ...linkedPilots.map(p => `✈️ ${p.member.user.username} → piloto de **${p.ownerNickname}**`),
+        ...registered.slice(0, 15 - Math.min(linkedPilots.length, 15)).map(r =>
+            `• ${r.member.user.username} → **${r.lookup.nickname}** (${r.lookup.clanName} @ ${r.lookup.serverName})`
+        )
+    ].slice(0, 15);
 
+    const totalApplied = registered.length + linkedPilots.length;
     const content = [
         header,
-        preview.length ? `\n**${apply ? 'Registrados' : 'Alvos'} (${applied.length}${applied.length > preview.length ? `, mostrando ${preview.length}` : ''}):**\n${preview.join('\n')}` : '',
+        preview.length ? `\n**${apply ? 'Aplicados' : 'Alvos'} (${totalApplied}${totalApplied > preview.length ? `, mostrando ${preview.length}` : ''}):**\n${preview.join('\n')}` : '',
         '\n📎 Relatório completo no arquivo anexado.'
     ].filter(Boolean).join('\n');
 
@@ -438,14 +676,14 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         '',
         '## Entradas da lista sem membro encontrado no servidor',
         ...(listOnly.length
-            ? listOnly.map(e => `- ${e.nickname}${e.username ? ` (@${e.username})` : ''}`)
+            ? listOnly.map(e => `- ${e.nickname}${e.username ? ` (@${e.username})` : ''}${detectPilot(e.nickname).isPilot ? ' ✈️ piloto' : ''}`)
             : ['- (nenhuma)'])
     ].join('\n');
 
     const file = new AttachmentBuilder(Buffer.from(report, 'utf8'), { name: `allied-scan-${Date.now()}.txt` });
 
     await interaction.editReply({ content: content.substring(0, 1990), files: [file] });
-    logEvent(`🎯 [ScanAllied] ${apply ? 'applied' : 'dry run'} by ${interaction.user?.tag || 'unknown'} — ${applied.length} matches, ${notAllied.length} non-allied, ${notFound.length} not in ranking`);
+    logEvent(`🎯 [ScanAllied] ${apply ? 'applied' : 'dry run'} by ${interaction.user?.tag || 'unknown'} — ${registered.length} registered, ${linkedPilots.length} pilots linked, ${notAllied.length} non-allied, ${notFound.length} not in ranking`);
 
     return true;
 }
