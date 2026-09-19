@@ -1,6 +1,43 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createWriteBatcher, WRITE_BATCH_SIZE, WRITE_BATCH_PAUSE_MS, startOutOfAlliedGrace, getOutOfAlliedGraceStatus } from '../src/core/ranking-sync-engine.js';
+
+// Keep the nickname helpers deterministic (no ranking_cache.json on disk).
+vi.mock('../src/core/ranking-cache.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    getLocalRankingCache: vi.fn(() => null)
+}));
+
+import {
+    createWriteBatcher,
+    WRITE_BATCH_SIZE,
+    WRITE_BATCH_PAUSE_MS,
+    startOutOfAlliedGrace,
+    getOutOfAlliedGraceStatus,
+    isPendingPilot,
+    pendingPilotNickname
+} from '../src/core/ranking-sync-engine.js';
 import { OUT_OF_ALLIED_GRACE_MS } from '../src/core/ranking-constants.js';
+
+describe('pilots queued by /scanallied', () => {
+    it('recognises a queued pilot', () => {
+        const db = { scanPilotPending: { 5: { ownerName: 'cecilia' } } };
+        expect(isPendingPilot(db, '5')).toBe(true);
+        expect(isPendingPilot(db, '6')).toBe(false);
+        expect(isPendingPilot({}, '5')).toBe(false);
+        expect(isPendingPilot(undefined, '5')).toBe(false);
+    });
+
+    it('builds the "<Owner> - Pilot" nickname from the queue', () => {
+        const db = { scanPilotPending: { 5: { ownerName: 'cecilia' } } };
+        expect(pendingPilotNickname(db, '5')).toBe('cecilia - Pilot');
+    });
+
+    it('returns null when the queue has no owner name for the member', () => {
+        expect(pendingPilotNickname({ scanPilotPending: { 5: { ownerName: null } } }, '5')).toBeNull();
+        expect(pendingPilotNickname({ scanPilotPending: {} }, '5')).toBeNull();
+        expect(pendingPilotNickname({}, '5')).toBeNull();
+        expect(pendingPilotNickname(undefined, '5')).toBeNull();
+    });
+});
 
 describe('createWriteBatcher (conservative Discord-write batching)', () => {
     afterEach(() => {

@@ -29,6 +29,8 @@ import { buildWelcomePanelComponents } from './ranking-welcome.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 import { buildUserListPage } from './ranking-management.js';
 import { handleScanAllied } from './ranking-scan.js';
+import { handlePilotBulk } from './ranking-pilot-bulk.js';
+import { handlePilotMarkers } from './ranking-pilot-patterns.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -1124,6 +1126,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     // ── scanallied ──
     if (commandName === 'scanallied') {
         return handleScanAllied(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── pilotbulk ──
+    if (commandName === 'pilotbulk') {
+        return handlePilotBulk(interaction, db, saveLocalStorage, logEvent);
+    }
+
+    // ── pilotmarkers ──
+    if (commandName === 'pilotmarkers') {
+        return handlePilotMarkers(interaction, db, saveLocalStorage, logEvent);
     }
 
 

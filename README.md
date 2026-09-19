@@ -58,6 +58,8 @@ TOKEN=your_discord_bot_token
 | `/sendpanel` | Admin | Send a fixed registration panel to the current channel |
 | `/listunregistered [notify:true/false]` | Admin | List members with role but no registration; optionally DM them with 5s delay |
 | `/scanallied <list> [apply]` | Admin | Scan a `Nickname,Username` list copied from an allied server and register the members found in allied clans (dry run unless `apply:true`) |
+| `/pilotbulk [owner] [apply]` | Admin | Link the pilots queued by `/scanallied` to their owners (bulk `/manualpilot`); `owner` forces one owner for the whole queue. Ambiguous pilots get an owner picker right in the reply |
+| `/pilotmarkers <action> [name] [regex] [owner_group] [position]` | Admin | List, add, remove or reset the pilot markers used by `/scanallied` |
 
 ### Manage Panel Actions (`/manage`)
 
@@ -157,8 +159,27 @@ How each line is matched and validated:
 - **Already registered + role** — left completely untouched.
 - **Registered but without the role** — only the role is re-assigned; the stored nickname is never changed.
 - New registrations follow the **normal** flow (no `manualPermanent`), so the daily sync keeps validating them.
+- **Resolving the queue** — `/pilotbulk` shows every queued pilot and links those whose owner is unambiguous (exact name, or a single fuzzy candidate ≥ 75%). Ambiguous ones come with a **owner select menu** in the same message: pick the owner and the pair is linked (pilotIds + nickname + role) on the spot; `apply:true` links the unambiguous ones, and `owner:@X` forces a single owner for the whole queue (cap of 4 pilots per owner).
 
-Both runs reply with a summary plus a full per-member report attached as a `.txt` file (including the list entries that have no member in this server).
+### Pilot markers
+
+The list also tells whether a line belongs to a **pilot** — pilot status is not in the ranking, it is read from the nickname text:
+
+| Marker form | Example | Detected as |
+|---|---|---|
+| `(P-owner)` / `[P-owner]` | `St • JAY (P-cecilia)` | pilot `St • JAY`, owner `cecilia` |
+| `(P)` / `(Pilot)` / `[ᴘ]` (+ owner after it) | `St • Adi (P) Zay` | pilot `St • Adi`, owner `Zay` |
+| `Name Pilot Owner` | `St • mєjєrє Pilot OGUN` | pilot `St • mєjєrє`, owner `OGUN` |
+| `… - Pilot` (suffix this bot assigns) | `EU031 - Owner - Pilot` | pilot `EU031 - Owner`, owner unknown |
+
+- The name **before** the marker is the character of the line; the name **after** it is the owner.
+- **Owner identified** (registered member, allied clan) → the pilot is linked to the owner (`pilotIds` + `<Owner> - Pilot` nickname + member role), capped at 4 pilots per owner.
+- **Owner not identified** → the pilot is **renamed right away** to `<Dono sugerido> - Pilot` (server-prefixed when the owner name is in the ranking), registered as a regular member and queued in `db.scanPilotPending`. While the entry is in the queue the daily sync keeps that nickname (and never treats it as impersonation), so it survives until the pair is resolved with `/pilotbulk` or `/manualpilot` — or until the owner registers and the sync auto-links them. Pilots whose list line has no owner name keep their own nickname.
+- Markers are configurable per server with `/pilotmarkers`: `add` (optional `owner_group`, `position:first/last`), `remove`, `reset`. Patterns are regexes tried in order — the first one that matches wins. Defaults: `pilot-suffix`, `p-dash`, `p-bracket`, `pilot-word`.
+
+### Reports
+
+Both runs reply with a summary plus a full per-member report attached as a `.txt` file, which includes the **pilot marker found on every list line** (pattern name, matched text, character and owner) and the list entries that have no member in this server.
 
 ---
 
@@ -214,6 +235,8 @@ Both runs reply with a summary plus a full per-member report attached as a `.txt
 ├── lang.json                 # String translations
 ├── auto-backup.js            # Automatic database backup
 ├── ranking-scan.js           # /scanallied — allied list scan + bulk registration
+├── ranking-pilot-bulk.js     # /pilotbulk — link the queued pilots to their owners
+├── ranking-pilot-patterns.js # /pilotmarkers — configure the pilot markers
 └── package.json
 ```
 

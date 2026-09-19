@@ -32,11 +32,11 @@ import {
     parseAlliedList,
     splitListLine,
     nameCandidates,
-    detectPilot,
     buildListIndex,
     matchMemberToList,
     chooseResolution
 } from '../src/handlers/ranking-scan.js';
+import { detectPilot } from '../src/core/pilot-patterns.js';
 
 // ──────────────────────────────────────────
 // Helpers
@@ -436,10 +436,97 @@ describe('handleScanAllied', () => {
 
         expect(db.users['5']).toMatchObject({ nickname: 'JAY', clanName: 'St' });
         expect(pilot.roles.add).toHaveBeenCalledWith(MEMBER_ROLE_ID);
-        expect(pilot.setNickname).not.toHaveBeenCalled();
+        // The owner suggested by the list is applied right away
+        expect(pilot.setNickname).toHaveBeenCalledWith('cecilia - Pilot');
         // Report explains the owner could not be identified
         expect(interaction.replies[0].files).toHaveLength(1);
         expect(db.users['5'].pilotIds).toEqual([]);
+        // …and the pilot is queued for /pilotbulk with everything it needs
+        expect(db.scanPilotPending['5']).toMatchObject({
+            characterName: 'St • JAY',
+            ownerName: 'cecilia',
+            marker: '(P-cecilia)',
+            patternName: 'p-dash',
+            pendingNickname: 'cecilia - Pilot'
+        });
+        expect(interaction.replies[0].content).toContain('Renomeados');
+    });
+
+    it('does not rename pilots whose list line has no owner name', async () => {
+        const list = '"St • JAY (P)","jay.fj"';
+        axios.get.mockResolvedValue({ data: list });
+        lookupNickname.mockImplementation(name => {
+            if (name === 'JAY') {
+                return { found: true, inAlliedClan: true, exactMatch: true, nickname: 'JAY', clanName: 'St', serverName: 'EU031', worldId: 731 };
+            }
+            return { found: false };
+        });
+
+        const pilot = createMember({ id: '5', username: 'jay.fj' });
+        const db = { users: {}, config: { alliedClans: {} } };
+        const interaction = createInteraction({ listText: list, apply: true, members: [pilot] });
+
+        await handleScanAllied(interaction, db, vi.fn(async () => {}), vi.fn());
+
+        expect(pilot.setNickname).not.toHaveBeenCalled();
+        expect(db.scanPilotPending['5']).toMatchObject({ ownerName: null, pendingNickname: null });
+    });
+
+    it('lists the pilot marker detected on every list line', async () => {
+        const list = [
+            'Nickname,Username',
+            '"[EU11] MooN","moon4167"',
+            '"[SA31] St • JAY (P-cecilia)","jay.fj"'
+        ].join('\n');
+        axios.get.mockResolvedValue({ data: list });
+        lookupNickname.mockImplementation(name => {
+            if (name === 'MooN') return ALLIED_MOON;
+            if (name === 'JAY') {
+                return { found: true, inAlliedClan: true, exactMatch: true, nickname: 'JAY', clanName: 'St', serverName: 'EU031', worldId: 731 };
+            }
+            return { found: false };
+        });
+
+        const members = [createMember({ id: '1', username: 'moon4167' }), createMember({ id: '5', username: 'jay.fj' })];
+        const interaction = createInteraction({ listText: list, apply: false, members });
+
+        await handleScanAllied(interaction, { users: {}, config: {} }, vi.fn(async () => {}), vi.fn());
+
+        const report = interaction.replies[0].files[0].attachment.toString('utf8');
+        expect(report).toContain('Marcações de piloto encontradas na lista');
+        expect(report).toContain('Padrões em uso: pilot-suffix, p-dash, p-bracket, pilot-word');
+        expect(report).toContain('marcador "(P-cecilia)"');
+        expect(report).toContain('padrão p-dash');
+        expect(report).toContain('dono "cecilia"');
+        expect(report).toContain('sem marcação');
+    });
+
+    it('honours custom pilot patterns configured in the database', async () => {
+        const list = '"St • Yuki [PILOT]","soraao"';
+        axios.get.mockResolvedValue({ data: list });
+        lookupNickname.mockImplementation(name => {
+            if (name === 'Yuki') {
+                return { found: true, inAlliedClan: true, exactMatch: true, nickname: 'Yuki', clanName: 'St', serverName: 'EU031', worldId: 731 };
+            }
+            return { found: false };
+        });
+
+        const member = createMember({ id: '4', username: 'soraao' });
+        const db = {
+            users: {},
+            config: { pilotPatterns: [{ name: 'bracket-word', regex: '\\[\\s*pilot\\s*\\]', ownerGroup: 0 }] }
+        };
+        const interaction = createInteraction({ listText: list, apply: true, members: [member] });
+
+        await handleScanAllied(interaction, db, vi.fn(async () => {}), vi.fn());
+
+        // The custom pattern identifies the pilot, so the character is registered
+        // (owner unknown) and queued for /pilotbulk
+        expect(db.users['4']).toMatchObject({ nickname: 'Yuki' });
+        expect(db.scanPilotPending['4']).toMatchObject({ patternName: 'bracket-word', marker: '[PILOT]' });
+        const report = interaction.replies[0].files[0].attachment.toString('utf8');
+        expect(report).toContain('Padrões em uso: bracket-word');
+        expect(report).toContain('padrão bracket-word');
     });
 
     it('skips bots and members without a list match', async () => {

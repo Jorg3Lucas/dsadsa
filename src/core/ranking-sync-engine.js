@@ -9,6 +9,31 @@ import { buildPrefixedNickname } from '../core/ranking-utils.js';
 // 🔄 SYNCHRONIZATION ENGINE
 // ==========================================
 
+// ==========================================
+// ✈️ PILOTS QUEUED BY /scanallied
+// ==========================================
+// When the copied list names an owner that the scan cannot match to a member,
+// the pilot is registered as a regular member and queued in db.scanPilotPending
+// while wearing "<Owner> - Pilot". Until an admin resolves the pair (/pilotbulk
+// or /manualpilot) — or the owner registers and step 1 auto-links them — the
+// sync must leave that nickname alone and must not flag the member as an
+// impostor using the owner's name.
+
+/** True when the member is a pilot queued by /scanallied, still without an owner. */
+export function isPendingPilot(db, memberId) {
+    return !!(db?.scanPilotPending?.[memberId]);
+}
+
+/**
+ * Nickname a queued pilot should wear ("<Owner> - Pilot", server-prefixed when
+ * the owner name is in the ranking), or null when the queue has no owner for them.
+ */
+export function pendingPilotNickname(db, memberId) {
+    const pending = db?.scanPilotPending?.[memberId];
+    if (!pending?.ownerName) return null;
+    return buildPrefixedNickname(pending.ownerName, db, 'Pilot');
+}
+
 // Global lock: only one sync may run at a time. Concurrent syncs (startup sync +
 // /forcesync + the 20:00 cron) pile up CPU-heavy member loops and
 // hundreds of Discord API calls, which can stall interaction handling long enough
@@ -87,6 +112,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         // 2. ANTI-IMPOSTOR SECURITY SYSTEM
         for (const [memberId, member] of members) {
             if (member.user.bot) continue;
+            // A queued pilot wears "<Owner> - Pilot" on purpose before the link
+            // exists — never treat that as impersonation.
+            if (isPendingPilot(db, memberId)) continue;
             const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
             const cleanNick = currentNick.replace(' - Pilot', '').trim();
             const ownerEntry = ownerByNick.get(cleanNick.toLowerCase());
@@ -392,7 +420,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     desiredNickname = buildPrefixedNickname(ownerNick, db, 'Pilot', lookup);
                 } else if (ownerData?.nickname) {
                     const nick = ownerData.nickname.trim().normalize('NFC');
-                    desiredNickname = buildPrefixedNickname(nick, db, '', lookup);
+                    // Queued pilot (owner not identified yet) keeps the nickname
+                    // taken from the list instead of their own registered one.
+                    desiredNickname = pendingPilotNickname(db, memberId)
+                        || buildPrefixedNickname(nick, db, '', lookup);
                 }
 
                 if (desiredNickname && (member.nickname || '').normalize('NFC') !== desiredNickname) {

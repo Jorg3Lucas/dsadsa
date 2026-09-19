@@ -161,6 +161,38 @@ const commands = [
       { type: 5, name: 'apply', description: 'Register and assign the role (default: false = dry run).', required: false }
     ]
   },
+  {
+    name: 'pilotbulk',
+    description: '✈️ [Admin] Link the pilots queued by /scanallied to their owners (bulk /manualpilot).',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    options: [
+      { type: 6, name: 'owner', description: 'Link every queued pilot to this owner (optional).', required: false },
+      { type: 5, name: 'apply', description: 'Actually link the pilots (default: false = dry run).', required: false }
+    ]
+  },
+  {
+    name: 'pilotmarkers',
+    description: '✈️ [Admin] List/add/remove the pilot markers used by /scanallied.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    options: [
+      {
+        type: 3, name: 'action', description: 'What to do with the pilot patterns.', required: true,
+        choices: [
+          { name: 'list', value: 'list' },
+          { name: 'add', value: 'add' },
+          { name: 'remove', value: 'remove' },
+          { name: 'reset', value: 'reset' }
+        ]
+      },
+      { type: 3, name: 'name', description: 'Label of the pattern (add/remove).', required: false },
+      { type: 3, name: 'regex', description: 'Regular expression that matches the marker (add).', required: false },
+      { type: 4, name: 'owner_group', description: '0 = owner is the text after the marker; N = capture group N.', required: false, min_value: 0, max_value: 9 },
+      {
+        type: 3, name: 'position', description: 'Where to place the pattern (add).', required: false,
+        choices: [{ name: 'last', value: 'last' }, { name: 'first', value: 'first' }]
+      }
+    ]
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
