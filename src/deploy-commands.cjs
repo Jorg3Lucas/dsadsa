@@ -152,6 +152,15 @@ const commands = [
       { type: 7, name: 'channel', description: 'Channel to scan for members.', required: true }
     ]
   },
+  {
+    name: 'scanallied',
+    description: '🎯 [Admin] Scan a "Nickname,Username" list and register members found in allied clans.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    options: [
+      { type: 11, name: 'list', description: 'File (CSV/TXT) with "Nickname,Username" lines copied from the allied server.', required: true },
+      { type: 5, name: 'apply', description: 'Register and assign the role (default: false = dry run).', required: false }
+    ]
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

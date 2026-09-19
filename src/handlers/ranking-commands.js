@@ -28,6 +28,7 @@ import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 import { buildUserListPage } from './ranking-management.js';
+import { handleScanAllied } from './ranking-scan.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -1118,6 +1119,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         }
 
         return interaction.editReply({ content: response.substring(0, 2000) });
+    }
+
+    // ── scanallied ──
+    if (commandName === 'scanallied') {
+        return handleScanAllied(interaction, db, saveLocalStorage, logEvent);
     }
 
 

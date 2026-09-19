@@ -57,6 +57,7 @@ TOKEN=your_discord_bot_token
 | `/grace [member]` | Admin | Show remaining 72h grace time for members outside allied clans (all members, or a specific one) |
 | `/sendpanel` | Admin | Send a fixed registration panel to the current channel |
 | `/listunregistered [notify:true/false]` | Admin | List members with role but no registration; optionally DM them with 5s delay |
+| `/scanallied <list> [apply]` | Admin | Scan a `Nickname,Username` list copied from an allied server and register the members found in allied clans (dry run unless `apply:true`) |
 
 ### Manage Panel Actions (`/manage`)
 
@@ -140,6 +141,27 @@ Configure via `/manage` → **⚙️ Allied Clans**:
 
 ---
 
+## Allied List Scan (`/scanallied`)
+
+Bulk registration from a member list copied from another (allied) server — e.g. via the browser table copy.
+
+1. Attach the list as a file (`.csv`/`.txt`, one `Nickname,Username` per line, header optional; quotes, commas, tabs and `;` are handled).
+2. Run `/scanallied list:<file>` — **dry run**: it only reports what it would do.
+3. Run `/scanallied list:<file> apply:true` to actually register and hand out the member role.
+
+How each line is matched and validated:
+
+- **Match to a member** — by Discord username first (usernames are global, so this is the strongest key; case-insensitive), then by game name (the nickname column with the `[EU11]` tag, clan separators like `•`, pilot markers `(P)` and the `EU021 - ` prefix stripped).
+- **Ranking lookup** — the matched name is resolved in the local ranking cache, and by a live forum search when the cache has nothing.
+- **Allied check** — the member role is only granted when the resolved clan is one of the allied clans configured in `/manage` → ⚙️ Allied Clans.
+- **Already registered + role** — left completely untouched.
+- **Registered but without the role** — only the role is re-assigned; the stored nickname is never changed.
+- New registrations follow the **normal** flow (no `manualPermanent`), so the daily sync keeps validating them.
+
+Both runs reply with a summary plus a full per-member report attached as a `.txt` file (including the list entries that have no member in this server).
+
+---
+
 ## Data Files
 
 | File | Description |
@@ -191,6 +213,7 @@ Configure via `/manage` → **⚙️ Allied Clans**:
 ├── lang.js                   # i18n helper
 ├── lang.json                 # String translations
 ├── auto-backup.js            # Automatic database backup
+├── ranking-scan.js           # /scanallied — allied list scan + bulk registration
 └── package.json
 ```
 
