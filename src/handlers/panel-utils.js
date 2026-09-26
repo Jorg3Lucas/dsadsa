@@ -1,5 +1,6 @@
 import { db, client, saveLocalStorage, logEvent, lastMessages } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
+import { markPanelHealthy } from "./panel-dm.js";
 import { noop } from "../core/config.js";
 import { STATUS_AVAILABLE } from "../core/constants.js";
 import { logger } from "../core/logger.js";
@@ -244,6 +245,7 @@ export async function processAutoRecoveryOnBoot() {
             }).catch(() => null);
             if (newMsg) {
                 lastMessages[key] = newMsg;
+                markPanelHealthy(key);
                 db._panelMapping[key] = {
                     channelId: channel.id,
                     messageId: newMsg.id

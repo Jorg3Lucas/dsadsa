@@ -194,6 +194,12 @@ client.once('clientReady', async () => {
     const { startTickInterval } = await import('./handlers/panel-tick.js');
     startTickInterval();
 
+    // 🩺 Watchdog dos painéis de claim: heartbeat a cada 5m e recuperação
+    // automática escalonada (reexpede a mensagem; se falhar, recria o canal)
+    // quando um painel fica > 1h sem atualizar com sucesso.
+    const { startPanelWatchdog } = await import('./handlers/panel-recovery.js');
+    startPanelWatchdog(DISCORD_SERVER_ID);
+
     // 🌐 Claim website (local/API) — runs inside the bot process, reuses the
     // same claim handlers; the bot stays the only writer of the JSON databases.
     try {
