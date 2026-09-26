@@ -27,7 +27,7 @@ export function getLocalRankingCache() {
                 console.log('⚠️ [Ranking Cache] Old flat format detected. Re-fetching with multi-world format...');
                 return null;
             }
-            // Restrict to configured sync worlds (EU11 only) — ignore stale worlds
+            // Restrict to configured sync worlds (EU21 only) — ignore stale worlds
             // from other servers that may remain in the cache file.
             const filtered = {};
             for (const [worldId, players] of Object.entries(data)) {
@@ -40,7 +40,7 @@ export function getLocalRankingCache() {
 }
 
 // Find which world a nickname belongs to across all worlds
-// Returns { worldId: "611", clanName: "GearsofWar シ" } or null
+// Returns { worldId: "621", clanName: "GearsofWar ①" } or null
 // If cache is provided (pre-loaded from getLocalRankingCache()), uses it instead of reading from disk
 export function findNicknameInCache(nickname, cache) {
     if (!cache) {

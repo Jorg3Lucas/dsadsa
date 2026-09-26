@@ -9,8 +9,8 @@ import { getMsg } from '../lang/lang.js';
 // ==========================================
 
 /**
- * Fetch ranking data for the configured sync worlds (currently EU11 only).
- * Returns an object: { "611": { "PlayerName": "ClanName", ... } }
+ * Fetch ranking data for the configured sync worlds (currently EU21 only).
+ * Returns an object: { "621": { "PlayerName": "ClanName", ... } }
  */
 export async function fetchMir4RankingData(forceRefresh = false) {
     if (!forceRefresh) {

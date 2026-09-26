@@ -156,10 +156,10 @@ Text commands (require **Manage Messages**):
 On boot, `auto-channel-setup.js` **deletes all text channels** in the **two configured categories** and recreates them:
 
 ```
-🔸 SP & Summons  (category 1548033121012813905)
+🔸 SP & Summons  (category 1539144586297999400)
   SP-7F … SP-12F  +  🌀 Summons
 
-🔹 MS            (category 1548033184619438162)
+🔹 MS            (category 1539144926464446484)
   MS-7F … MS-12F
 ```
 

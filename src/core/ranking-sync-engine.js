@@ -71,7 +71,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         }
 
         // 2.5. RANKING VALIDATION — remove the member ROLE (keep nickname + registration)
-        // for users whose account name is NOT found in the EU11 ranking.
+        // for users whose account name is NOT found in the EU21 ranking.
         // The nickname and the database registration are kept — only the role is removed.
         // Exempt: manualforce users (manualPermanent) and temporary users (handled in 2.75).
         const rankingValidationEnabled = db.config?.rankingValidationEnabled === true;
@@ -92,10 +92,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const nickname = userData.nickname.trim().normalize('NFC');
                     const lookup = lookupNickname(nickname, db, rankingCache);
 
-                    // ✅ Found in the EU11 ranking — keep everything
+                    // ✅ Found in the EU21 ranking — keep everything
                     if (lookup.found) continue;
 
-                    // ❌ Not found in the EU11 ranking — remove the role, keep the name
+                    // ❌ Not found in the EU21 ranking — remove the role, keep the name
                     const member = members.get(memberId);
                     const displayName = userData.nickname || member?.user.username || memberId;
 
@@ -104,7 +104,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         await removeMemberRoles(member, db);
                         if (hadRole) {
                             removedRoleCount++;
-                            logEvent(`🧹 [Ranking Validation] ${member.user.tag} (${displayName}) not found in the EU11 ranking — removed roles (nickname kept)`);
+                            logEvent(`🧹 [Ranking Validation] ${member.user.tag} (${displayName}) not found in the EU21 ranking — removed roles (nickname kept)`);
                         }
                     }
 
@@ -123,7 +123,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
                 if (removedRoleCount > 0) {
                     saveLocalStorage();
-                    logEvent(`🧹 [Ranking Validation] Removed member role from ${removedRoleCount} member(s) not found in the EU11 ranking (nicknames and registrations kept)`);
+                    logEvent(`🧹 [Ranking Validation] Removed member role from ${removedRoleCount} member(s) not found in the EU21 ranking (nicknames and registrations kept)`);
                 }
             }
         }
@@ -205,7 +205,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         }
 
         // 2.85. PRE-REGISTRATION AUTO-CONVERSION — convert pre-registered users who are now in allied clans,
-        // and remove pre-registrations (e.g. from scanimport) whose nickname is not in the EU11 ranking
+        // and remove pre-registrations (imported earlier) whose nickname is not in the EU21 ranking
         if (db.preRegistrations && Object.keys(db.preRegistrations).length > 0) {
             const preRegCache = getLocalRankingCache();
             if (preRegCache) {
@@ -223,12 +223,12 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     // Check ranking via centralized service
                     const lookup = lookupNickname(preReg.nickname, db, preRegCache);
 
-                    // Not found in the EU11 ranking — remove immediately (no time-based expiry).
-                    // Covers scanimport pre-registrations.
+                    // Not found in the EU21 ranking — remove immediately (no time-based expiry).
+                    // Covers imported pre-registrations.
                     if (preRegTotalPlayers > 0 && !lookup.found) {
                         delete db.preRegistrations[memberId];
                         removed++;
-                        logEvent(`🧹 [PreReg Sync] Removed pre-registration "${preReg.nickname}" (${memberId}) — not in the EU11 ranking`);
+                        logEvent(`🧹 [PreReg Sync] Removed pre-registration "${preReg.nickname}" (${memberId}) — not in the EU21 ranking`);
                         continue;
                     }
 
@@ -297,7 +297,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             const hasAnyRole = hasAnyMemberRoles(member, db);
 
-            // ── ROLE MANAGEMENT (clan roles are the member marker; GoW Kids = temp) ──
+            // ── ROLE MANAGEMENT (single fixed member role — never created by the bot) ──
             if (isRegistered) {
                 if (ownerData?.manualPermanent) {
                     // 👑 ManualForce user — always ensure access, never remove
@@ -306,7 +306,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         await assignTempRole(member, db, saveLocalStorage, logEvent);
                     }
                 } else if (ownerData?.tempUntil) {
-                    // ⏳ Temporary registration — keep the GoW Kids temp role until expiry (step 2.75)
+                    // ⏳ Temporary registration — hold the member role until expiry (step 2.75)
                     await assignTempRole(member, db, saveLocalStorage, logEvent);
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure the clan role is present

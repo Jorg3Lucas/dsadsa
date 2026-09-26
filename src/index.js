@@ -26,11 +26,6 @@ import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemov
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
 import {
-    handleNotifyCommand,
-    handleNotifySelect,
-    handleNotifyButton
-} from './handlers/ranking-notify.js';
-import {
     handleManageUserPage,
     handleManageAction,
     handleManagePilotRemove,
@@ -44,8 +39,8 @@ import {
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
 import { startWebServer } from './web/server.js';
-import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig } from './core/ranking-constants.js';
-import { TEMP_ROLE_NAME, applyClaimChannelPermissions } from './core/clan-roles.js';
+import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig, MEMBER_ROLE_ID } from './core/ranking-constants.js';
+import { applyClaimChannelPermissions } from './core/clan-roles.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
@@ -144,17 +139,13 @@ client.once('clientReady', async () => {
         if (guild) {
             await registerMir4SlashCommands(guild);
 
-            // Clan roles are now the member marker (the old fixed member role was
-            // removed from the server). Surface a warning if no clan/temp role
-            // exists yet so role management is not silently broken.
-            const clanRoleCount = Object.keys(rankingDb.config?.clanRoles || {}).length;
-            const tempRole = guild.roles.cache.find(r => r.name === TEMP_ROLE_NAME);
-            if (clanRoleCount > 0) {
-                console.log(`✅ [Ranking] ${clanRoleCount} clan role(s) configured.`);
-            } else if (tempRole) {
-                console.log(`✅ [Ranking] No clan roles yet — temp role "${TEMP_ROLE_NAME}" found (${tempRole.id}). Run /syncroles after adding allied clans.`);
+            // O bot gerencia UM único cargo fixo de membro (MEMBER_ROLE_ID) e
+            // nunca cria cargos — só reaproveita o que já existe no servidor.
+            const memberRole = guild.roles.cache.get(MEMBER_ROLE_ID);
+            if (memberRole) {
+                console.log(`✅ [Ranking] Member role "${memberRole.name}" (${MEMBER_ROLE_ID}) found.`);
             } else {
-                console.warn(`⚠️ [Ranking] No clan roles and no "${TEMP_ROLE_NAME}" temp role in guild ${RANKING_SERVER_ID} — /syncroles will create them.`);
+                console.warn(`⚠️ [Ranking] Member role ${MEMBER_ROLE_ID} not found on the server — create it manually (the bot never creates roles).`);
             }
         } else {
             console.error('❌ Error: Invalid Server ID configuration.');
@@ -186,16 +177,14 @@ client.once('clientReady', async () => {
     }
 
     // Aplica as permissões dos canais de claim a partir dos cargos de clã salvos
-    // no banco (db.config.clanRoles + tempRoleId) — roda após a recriação dos
+    // no banco (cargo fixo MEMBER_ROLE_ID) — roda após a recriação dos
     // canais para que a restrição de acesso seja reaplicada a cada boot.
     if (!RANKING_ENABLED) {
         console.log('🚫 [Ranking] Permissões de canal por cargo de clã desativadas (RANKING_ENABLED=false).');
     } else try {
         const result = await applyClaimChannelPermissions(client, rankingDb, logRankingEvent, (db) => saveRankingStorage(db || rankingDb));
-        if (!result.applied && result.reason === 'no-roles') {
-            console.log('ℹ️ [Ranking] No clan/temp roles found in the DB or on the server — run /syncroles after adding allied clans to restrict claim channels.');
-        } else if (result.discovered > 0) {
-            console.log(`🔒 [Ranking] Discovered ${result.discovered} clan role(s) by name — permissions applied and saved.`);
+        if (result.applied) {
+            console.log(`🔒 [Ranking] Claim channels restricted to the member role (${MEMBER_ROLE_ID}).`);
         }
     } catch (err) {
         logger.error('ClanPerms', 'Failed to apply claim-channel permissions at boot', err);
@@ -245,11 +234,6 @@ client.on('interactionCreate', async (interaction) => {
             if (!RANKING_ENABLED) {
                 return await interaction.reply({ content: '⚠️ Ranking/registro temporariamente desativado.', flags: 64 }).catch(noop);
             }
-            // Notify command
-            if (interaction.commandName === 'notify') {
-                return await handleNotifyCommand(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
-            }
-
             const result = await handleRankingCommand(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             // Fallback: if command wasn't handled by new module, try legacy dispatcher
             if (result !== false) return;
@@ -266,9 +250,6 @@ client.on('interactionCreate', async (interaction) => {
         // C. RANKING ROUTER — string select menus, modals, buttons
         // C1. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
-            if (interaction.customId === 'notify_select_action') {
-                return await handleNotifySelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
-            }
             if (interaction.customId === 'select_pilot_to_remove') {
                 return await handlePilotRemoveSelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
@@ -315,9 +296,6 @@ client.on('interactionCreate', async (interaction) => {
 
         // C3. BUTTON CLICKS
         if (interaction.isButton()) {
-            if (interaction.customId.startsWith('notify_')) {
-                return await handleNotifyButton(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
-            }
             if (interaction.customId === 'welcome_register_owner') {
                 return handleWelcomeRegisterOwner(interaction);
             }

@@ -8,15 +8,15 @@ import { assignClanRole, assignTempRole } from './clan-roles.js';
 
 /**
  * Assign the membership role to a verified player.
- * The fixed member role was removed from the server — clan roles are now the
- * member marker, with the GoW Kids role as fallback for temp/unresolved users.
+ * The bot manages a single fixed member role (MEMBER_ROLE_ID) and never
+ * creates roles — registering users just get that role granted.
  */
 export async function assignMemberRole(targetMember, db, logEvent) {
     const assigned = await assignClanRole(targetMember, db, logEvent);
     if (!assigned) {
         await assignTempRole(targetMember, db, null, logEvent);
     }
-    logEvent(getMsg('ranking.logs.roleAdded', { clan: assigned ? 'Clan' : 'GoW Kids', username: targetMember.user.username }));
+    logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
 }
 
 /**
@@ -25,8 +25,8 @@ export async function assignMemberRole(targetMember, db, logEvent) {
  * then prefixes the nickname with the server name.
  *
  * Examples:
- *   buildPrefixedNickname('PlayerOne', db)          → 'EU011 - PlayerOne'
- *   buildPrefixedNickname('PlayerOne', db, 'Pilot') → 'EU011 - PlayerOne - Pilot'
+ *   buildPrefixedNickname('PlayerOne', db)          → 'EU021 - PlayerOne'
+ *   buildPrefixedNickname('PlayerOne', db, 'Pilot') → 'EU021 - PlayerOne - Pilot'
  *
  * If the player is not found in the ranking cache, returns the nickname without prefix.
  *

@@ -16,8 +16,8 @@ import { getGeneralChannelName } from "./server-structure.js";
  * Resolve the channel where a bot alert should be posted.
  * 1. Uses the configured channel ID if it still exists.
  * 2. Otherwise falls back to the bot-managed channel by NAME
- *    (e.g. "reminders", "events" — created by /setup).
- * This lets the alert systems automatically use the /setup channels.
+ *    (e.g. "reminders", "events" — created manually on the server).
+ * This lets the alert systems automatically use those channels.
  * @param {string|null|undefined} configuredId - ID from daily-logs config
  * @param {string} fallbackName - Channel name to look up if the ID is missing/stale
  * @returns {Promise<import('discord.js').TextChannel|null>}

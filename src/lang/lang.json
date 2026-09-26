@@ -234,27 +234,9 @@
                     "member": "Discord member to register.",
                     "nickname": "In-game character name (exact as typed)."
                 }
-            },
-            "notify": {
-                "description": "📧 [Admin] Send notifications to server members"
             }
         },
         "responses": {
-            "notify": {
-                "prompt": "📧 **Select the type of notification to send:**",
-                "placeholder": "Choose an option...",
-                "optionNoRole": {
-                    "label": "📧 No Role",
-                    "description": "Notify members with no roles via DM to register"
-                },
-                "confirmBtn": "✅ Yes, notify",
-                "cancelBtn": "❌ Cancel",
-                "noRoleConfirm": "⚠️ **Are you sure you want to DM ALL members with no roles?**\n\nThis may take a few minutes depending on the number of members.",
-                "sendingDms": "📧 **Sending DMs to {count} members...**\nPlease wait, this may take a few minutes.",
-                "cancelled": "❌ **Notification cancelled.**",
-                "noRoleDm": "👋 Hey **{displayName}**, you don't have any roles on the server yet!\n\nPlease go to <#{channelId}> and click:\n👑 **Register as Owner** — if this is your main account\n✈️ **Register as Pilot** — if you play for someone else\n\nGet your roles and join the fun! 🚀",
-                "noRoleResult": "📧 **Notification complete!**\n\n✉️ Sent: **{sent}** ✅\n❌ Failed: **{failed}**"
-            },
             "removepilot": {
                 "noPilots": "❌ You don't have any active pilots on your account.",
                 "menuContent": "👇 **Pilot Management:** Select which pilot to remove from your account:",
@@ -304,8 +286,8 @@
                 "actionRemoveDesc": "Permanently delete this user's profile",
                 "actionPilot": "✈️ Remove pilot",
                 "actionPilotDesc": "Unlink a pilot from this user",
-                "actionClan": "🔁 Assign clan role",
-                "actionClanDesc": "Assign this user's clan role (GoW Kids if not in an allied clan)",
+                "actionClan": "🔁 Assign member role",
+                "actionClanDesc": "Grant the fixed member role (only users in an allied clan)",
                 "pilotSelectPlaceholder": "Select a pilot to remove...",
                 "noPilots": "❌ **{username}** has no registered pilots.",
                 "actionRemoveConfirm": "⚠️ Permanently remove **{username}**'s registration?",
@@ -313,8 +295,8 @@
                 "back": "🔙 Back"
             },
             "manualforce": {
-                "confirm": "⚠️ Force-register **{username}** as **{nickname}**? This sets nickname + clan role immediately — no ranking check.",
-                "success": "✅ **{nickname}** has been force-registered as permanent! Nickname + clan role applied."
+                "confirm": "⚠️ Force-register **{username}** as **{nickname}**? This sets nickname + member role immediately — no ranking check.",
+                "success": "✅ **{nickname}** has been force-registered as permanent! Nickname + member role applied."
             }
         },
         "logs": {

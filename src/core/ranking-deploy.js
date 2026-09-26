@@ -71,51 +71,7 @@ export async function registerMir4SlashCommands(guild) {
                 description: '⏳ [Admin] List all pending registration requests with time remaining.',
                 default_member_permissions: PermissionFlagsBits.Administrator.toString()
             },
-            { name: 'elderguide', description: '📋 Guide: how to approve/reject owner registrations' },
             { name: 'stats', description: '📊 Show bot statistics (registrations, sync status, allied clans)' },
-            {
-                name: 'notify',
-                description: '📧 [Admin] Send notifications to server members',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'scanrebuild',
-                description: '🔄 [Admin] Rebuild database from current Discord members with the member role.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'scanimport',
-                description: '📥 [Super Admin] Scan servers with custom nicknames and import registrations.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 5, name: 'reset', description: 'Clear existing registrations from scan servers before re-importing.', required: false }
-                ]
-            },
-            {
-                name: 'scanimport_status',
-                description: '📊 [Admin] Check pre-registration status across scan servers.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'nuke',
-                description: '💣 [Super Admin] Delete ALL channels and categories from the server (irreversible).',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'setup',
-                description: '🏗️ [Super Admin] Create the full server structure (claim categories + General channels).',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'syncroles',
-                description: '🤝 [Super Admin] Create one role per allied clan, assign to members and restrict claim channels.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'syncperms',
-                description: '🔒 [Super Admin] Re-apply claim channel permissions from the clan roles stored in the DB.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
         ]);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {

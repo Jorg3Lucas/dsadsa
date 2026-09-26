@@ -33,6 +33,16 @@ const KNOWN_ORPHANS = new Set([
   "manage",
   "manualremove",
   "manualremovepilot",
+  // Removed by request (member-role-only bot)
+  "syncroles",
+  "syncperms",
+  "nuke",
+  "notify",
+  "setup",
+  "scanrebuild",
+  "scanimport",
+  "scanimport_status",
+  "elderguide",
   // Older version (may still linger if never cleaned)
   "register",
   "pilot",

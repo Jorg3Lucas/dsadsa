@@ -118,10 +118,9 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     saveLocalStorage();
 
     await targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {});
-    // Clan role is now the member marker — permanent approvals get their clan
-    // role, temporary approvals get the GoW Kids temp role. If the clan role
-    // can't be resolved right now (stale/empty cache), fall back to GoW Kids so
-    // the new member never ends up with no access.
+    // The fixed member role is the only marker the bot manages: permanent and
+    // temporary approvals both get it, so a new member never ends up with no
+    // access (the bot never creates roles — MEMBER_ROLE_ID must exist).
     if (isTempApproval) {
         await assignTempRole(targetMember, db, saveLocalStorage, logEvent);
     } else {
