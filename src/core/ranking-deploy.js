@@ -40,11 +40,6 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 6, name: 'pilot', description: 'Select the Discord user acting as pilot.', required: true }
                 ]
             },
-            {
-                name: 'cleandb',
-                description: '👑 [Admin] Remove all duplicate nickname entries from the database.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
             { name: 'manage', description: '🛠️ Bot Management Panel' },
             {
                 name: 'manualremove',

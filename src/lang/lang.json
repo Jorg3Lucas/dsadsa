@@ -196,9 +196,6 @@
                     "pilot": "Select the Discord user acting as pilot."
                 }
             },
-            "cleandb": {
-                "description": "👑 [Admin] Remove all duplicate nickname entries from the database."
-            },
             "manualremove": {
                 "description": "👑 [Admin] Completely remove a player's registration and profile.",
                 "options": {
@@ -267,10 +264,6 @@
                 "ownerNotRegistered": "❌ **{displayName}** does not have an active profile.",
                 "notLinked": "❌ **{pilotDisplay}** is not linked as a pilot to this owner.",
                 "success": "✅ **Success!** Pilot **{pilotDisplay}** removed from **{ownerDisplay}**."
-            },
-            "cleandb": {
-                "noDuplicates": "✨ **No duplicate entries found.**",
-                "success": "✅ **Database Cleanup complete!**\n\nDuplicate profiles removed:\n{list}"
             },
             "manualremove": {
                 "noRegistration": "❌ This user has no valid registration records.",

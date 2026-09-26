@@ -43,6 +43,7 @@ const KNOWN_ORPHANS = new Set([
   "scanimport",
   "scanimport_status",
   "elderguide",
+  "autoregister",
   // Older version (may still linger if never cleaned)
   "register",
   "pilot",

@@ -330,47 +330,6 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         });
     }
 
-    // ── cleandb ──
-    if (commandName === 'cleandb') {
-        if (!await deferReplySafe(interaction)) return;
-        const seenNicknames = {};
-        const duplicatesRemoved = [];
-
-        for (const [memberId, userData] of Object.entries(db.users)) {
-            const cleanNick = userData.nickname.trim().normalize('NFC').toLowerCase();
-            if (!seenNicknames[cleanNick]) seenNicknames[cleanNick] = [];
-            seenNicknames[cleanNick].push({ id: memberId, ...userData });
-        }
-
-        for (const [cleanNick, userList] of Object.entries(seenNicknames)) {
-            if (userList.length > 1) {
-                let realOwnerId = null;
-                for (const u of userList) {
-                    const member = await guild.members.fetch(u.id).catch(() => null);
-                    if (member) {
-                        const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
-                        if (!currentNick.endsWith(' - Pilot')) { realOwnerId = u.id; break; }
-                    }
-                }
-                if (!realOwnerId) {
-                    userList.sort((a, b) => new Date(a.registeredAt) - new Date(b.registeredAt));
-                    realOwnerId = userList[0].id;
-                }
-                for (const u of userList) {
-                    if (u.id !== realOwnerId) {
-                        duplicatesRemoved.push(`${u.nickname} (ID: ${u.id})`);
-                        delete db.users[u.id];
-                    }
-                }
-            }
-        }
-
-        saveLocalStorage();
-        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
-        if (duplicatesRemoved.length === 0) return interaction.editReply(getMsg('ranking.responses.cleandb.noDuplicates'));
-        return interaction.editReply(getMsg('ranking.responses.cleandb.success', { list: duplicatesRemoved.map(d => `• ${d}`).join('\n') }));
-    }
-
     // ── manage (/manage slash command) ──
     if (commandName === 'manage') {
         const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
