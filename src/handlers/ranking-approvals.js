@@ -17,6 +17,7 @@ import {
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { assignClanRole, assignTempRole } from '../core/clan-roles.js';
+import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS
@@ -48,7 +49,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
             interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
         if (!canApprove) {
-            await interaction.deferUpdate();
+            if (!await deferUpdateSafe(interaction)) return;
             return interaction.followUp({ content: '❌ You do not have permission to reject registrations.', flags: 64 });
         }
 
@@ -69,7 +70,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         return interaction.showModal(modal);
     }
 
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
         interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
@@ -152,7 +153,7 @@ export async function handleRejectOwner(interaction, db, saveLocalStorage, logEv
         return interaction.reply({ content: '❌ You do not have permission to reject registrations.', flags: 64 });
     }
 
-    await interaction.deferReply({ flags: 64 });
+    if (!await deferReplySafe(interaction)) return;
 
     const userId = interaction.customId.replace('reject_owner_', '');
     const reason = interaction.fields.getTextInputValue('reject_reason').trim();
@@ -192,7 +193,7 @@ export async function handleRejectOwner(interaction, db, saveLocalStorage, logEv
 
 // ── Owner DM Approval: Pilot Registration ──
 export async function handleApprovePilot(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const rest = interaction.customId.replace('approve_pilot_', '');
     const [pilotUserId, result] = rest.split('-');
@@ -251,7 +252,7 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
 // ── Admin Approval: Pilot Registration ──
 // When an admin approves a pilot, the owner gets a DM with info and a button to remove if not theirs.
 export async function handleAdminApprovePilot(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const rest = interaction.customId.replace('admin_approve_pilot_', '');
     const [pilotUserId, result] = rest.split('-');

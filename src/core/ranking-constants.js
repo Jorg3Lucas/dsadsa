@@ -54,6 +54,62 @@ export const WORLD_IDS = {
 export const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ==========================================
+// 🔍 NICKNAME SUGGESTIONS (fuzzy dropdowns)
+// ==========================================
+// How many fuzzy nickname suggestions to show when registering / correcting a
+// registration. Allied-clan candidates are ranked first (see lookupTopNicknames),
+// so a larger list means the correct character is much less likely to be missed.
+export const MAX_NICKNAME_SUGGESTIONS = 6;
+
+// ==========================================
+// 🔀 SERVER MERGE MAP
+// ==========================================
+// After a merge, players from absorbed servers appear on the surviving server's
+// ranking. resolveServerName() maps the old server code to the surviving one.
+export const SERVER_MERGES = {
+    // ASIA1
+    "ASIA013": "ASIA021",
+    "ASIA014": "ASIA022",
+    "ASIA024": "ASIA023",
+    "ASIA041": "ASIA031",
+    // ASIA2
+    "ASIA082": "ASIA051",
+    "ASIA071": "ASIA052",
+    "ASIA072": "ASIA061",
+    "ASIA073": "ASIA062",
+    "ASIA091": "ASIA063",
+    // ASIA3
+    "ASIA314": "ASIA311",
+    "ASIA324": "ASIA313",
+    "ASIA341": "ASIA312",
+    // NA1
+    "NA041": "NA012",
+    "NA033": "NA031",
+    // EU1
+    "EU013": "EU011",
+    "EU023": "EU021",
+    "EU031": "EU022",
+    "EU014": "EU024",
+    // SA1
+    "SA041": "SA013",
+    "SA014": "SA023",
+    "SA033": "SA031",
+    // INMENA1
+    "INMENA012": "INMENA011",
+    "INMENA014": "INMENA013",
+    "INMENA022": "INMENA021",
+    "INMENA024": "INMENA023",
+};
+
+/**
+ * Resolve a possibly-absorbed server name to its surviving server.
+ * Returns the input unchanged if it is not a merged server.
+ */
+export function resolveServerName(name) {
+    return SERVER_MERGES[name] || name;
+}
+
+// ==========================================
 // 📥 SCAN SOURCE SERVER
 // ==========================================
 // The only Discord server this bot operates on (claim server).

@@ -4,9 +4,7 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
-    ButtonStyle,
-    PermissionFlagsBits,
-    ChannelType
+    ButtonStyle
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
@@ -18,13 +16,16 @@ import {
     WELCOME_PANEL_MESSAGE,
     REGISTRATION_CHANNEL_ID,
     SUPER_ADMIN_USER_ID,
+    MAX_NICKNAME_SUGGESTIONS,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
+import { getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { hasMemberRole } from '../core/clan-roles.js';
+import { findOwnerCandidates } from './ranking-pilot.js';
+import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -55,6 +56,57 @@ function buildManualNicknameSelect(userId, typedNick, topSuggestions, hasSuggest
         new StringSelectMenuBuilder()
             .setCustomId(`select_manual_nickname_${userId}`)
             .setPlaceholder('Select which nickname to save (optional)')
+            .addOptions(selectOptions)
+    );
+}
+
+// Helper: build a nickname correction dropdown for /pending (owner registrations)
+function buildPendingNicknameSelect(userId, typedNick, topSuggestions, defaultNick) {
+    const selectOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel(`📝 Keep as typed: ${typedNick.substring(0, 80)}`)
+            .setValue(typedNick)
+            .setDescription('Use the nickname exactly as submitted')
+            .setDefault(!defaultNick || defaultNick === typedNick),
+        ...topSuggestions
+            .filter(s => s.nickname.toLowerCase() !== typedNick.toLowerCase())
+            .slice(0, MAX_NICKNAME_SUGGESTIONS)
+            .map(s => new StringSelectMenuOptionBuilder()
+                .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
+                .setValue(s.nickname)
+                .setDescription(s.inAlliedClan ? `✅ Allied clan - ${s.clanName}` : `❌ Not allied - ${s.clanName}`)
+                .setDefault(!!defaultNick && s.nickname === defaultNick)
+            )
+    ];
+
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`select_pending_nickname_${userId}`)
+            .setPlaceholder('🔍 Choose the correct nickname')
+            .addOptions(selectOptions)
+    );
+}
+
+// Helper: build an owner-correction dropdown for /pending (pilot approvals)
+function buildPendingPilotOwnerSelect(pilotId, typedOwnerNick, candidates, currentOwnerId) {
+    const selectOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel(`📝 Keep as typed: ${typedOwnerNick.substring(0, 80)}`)
+            .setValue('keep')
+            .setDescription('Keep the owner as currently registered')
+            .setDefault(!candidates.some(c => c.id === currentOwnerId)),
+        ...candidates.slice(0, MAX_NICKNAME_SUGGESTIONS).map(c => new StringSelectMenuOptionBuilder()
+            .setLabel(`🔍 ${c.nickname.substring(0, 80)}`)
+            .setValue(c.id)
+            .setDescription(`Similarity ${Math.round(c.score * 100)}%`)
+            .setDefault(c.id === currentOwnerId)
+        )
+    ];
+
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`select_pending_pilot_owner_${pilotId}`)
+            .setPlaceholder('🔍 Choose the correct owner')
             .addOptions(selectOptions)
     );
 }
@@ -100,7 +152,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── forcesync ──
     if (commandName === 'forcesync') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
         logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
         await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
 
@@ -280,7 +332,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── cleandb ──
     if (commandName === 'cleandb') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
         const seenNicknames = {};
         const duplicatesRemoved = [];
 
@@ -412,7 +464,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── sendpanel ──
     if (commandName === 'sendpanel') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -442,7 +494,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── listunregistered ──
     if (commandName === 'listunregistered') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const doNotify = options.getBoolean('notify') || false;
 
@@ -524,7 +576,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── pending ──
     if (commandName === 'pending') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const ownerEntries = Object.entries(pendingRegistrations);
         const pilotEntries = Object.entries(pendingPilotApprovals);
@@ -536,6 +588,8 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         let report = `⏳ **Pending Registrations**\n\n`;
         const rankingCache = getLocalRankingCache();
         let panelsRestored = 0;
+        // Dropdowns to correct nicknames via fuzzy suggestions (Discord allows max 5 action rows)
+        const fuzzySelectRows = [];
 
         // ── Owner registrations ──
         if (ownerEntries.length > 0) {
@@ -553,12 +607,25 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 let line = `\n${userTag} — **${pending.nickname}**\n`;
                 line += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
 
+                if (pending.selectedNickname && pending.selectedNickname !== pending.nickname) {
+                    line += `   ✅ **Selected:** "${pending.selectedNickname}"\n`;
+                }
+
                 const lookup = lookupNickname(pending.nickname, db, rankingCache);
                 if (lookup.fuzzySuggestion) {
                     line += `   🔍 **Fuzzy suggestion:** "${pending.nickname}" → "${lookup.fuzzySuggestion}" (${lookup.serverName})\n`;
                 }
 
                 report += line;
+
+                // Offer a dropdown to correct the nickname when fuzzy suggestions exist
+                if (fuzzySelectRows.length < 5) {
+                    const topSuggestions = lookupTopNicknames(pending.nickname, db, rankingCache, MAX_NICKNAME_SUGGESTIONS, lookup.fuzzyCandidates);
+                    const hasFuzzyOptions = topSuggestions.some(s => s.nickname.toLowerCase() !== pending.nickname.toLowerCase());
+                    if (hasFuzzyOptions) {
+                        fuzzySelectRows.push(buildPendingNicknameSelect(userId, pending.nickname, topSuggestions, pending.selectedNickname));
+                    }
+                }
 
                 // Re-send admin panel
                 if (adminChannelId) {
@@ -580,6 +647,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                         const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
 
+                        const displayNick = pending.selectedNickname || pending.nickname;
+                        const selectedNote = pending.selectedNickname && pending.selectedNickname !== pending.nickname
+                            ? ` (corrected from "${pending.nickname}")`
+                            : '';
+
                         const approveButtons = [
                             new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
                         ];
@@ -596,7 +668,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                         try {
                             const adminMsg = await adminChannel.send({
-                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${pending.nickname}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${displayNick}${selectedNote}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
                                 components: [
                                     new ActionRowBuilder().addComponents(approveButtons)
                                 ]
@@ -620,15 +692,6 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             if (ownerEntries.length > 0) report += '\n';
             report += `✈️ **Pilot Approvals (${pilotEntries.length})**\n`;
 
-            const pilotIdSet = new Set();
-            for (const [, data] of Object.entries(db.users || {})) {
-                if (data.pilotIds && data.pilotIds.length > 0) {
-                    for (const pid of data.pilotIds) {
-                        pilotIdSet.add(pid);
-                    }
-                }
-            }
-
             for (const [pilotId, pending] of pilotEntries) {
                 const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
                 const pilotTag = pilotMember ? pilotMember.toString() : `<@${pilotId}>`;
@@ -646,44 +709,21 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 let line = `\n${pilotTag} → Owner **${pending.ownerNick}**\n`;
                 line += `   ⏰ Expires in: ${expiresIn}\n`;
 
-                if (!ownerMatch) {
-                    const cleanedInput = cleanNickname(pending.ownerNick);
-                    if (cleanedInput.length >= 2) {
-                        let bestMatch = null;
-                        let bestScore = 0;
+                if (pending.originalOwnerNick && pending.originalOwnerNick !== pending.ownerNick) {
+                    line += `   ✅ **Owner corrected:** "${pending.originalOwnerNick}" → "${pending.ownerNick}"\n`;
+                }
 
-                        for (const [id, data] of Object.entries(db.users || {})) {
-                            if (!data.nickname) continue;
-                            if (pilotIdSet.has(id)) continue;
-                            const cleanedNick = cleanNickname(data.nickname);
-                            if (cleanedNick.length < 2) continue;
-
-                            const inputChars = new Set(cleanedInput);
-                            const nickChars = new Set(cleanedNick);
-                            let commonChars = 0;
-                            for (const c of inputChars) {
-                                if (nickChars.has(c)) commonChars++;
-                            }
-                            const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
-                            if (overlap < 0.3) continue;
-
-                            const distance = levenshteinDistance(cleanedInput, cleanedNick);
-                            const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
-                            const similarity = 1 - (distance / maxLen);
-
-                            if (similarity > bestScore && similarity >= 0.55) {
-                                bestScore = similarity;
-                                bestMatch = data.nickname;
-                            }
-                        }
-
-                        if (bestMatch) {
-                            line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${bestMatch}"\n`;
-                        }
-                    }
+                const ownerCandidates = !ownerMatch ? findOwnerCandidates(pending.ownerNick, db, MAX_NICKNAME_SUGGESTIONS) : [];
+                if (!ownerMatch && ownerCandidates.length > 0) {
+                    line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${ownerCandidates[0].nickname}"\n`;
                 }
 
                 report += line;
+
+                // Offer a dropdown to correct the owner when they aren't found (max 5 rows total)
+                if (!ownerMatch && ownerCandidates.length > 0 && fuzzySelectRows.length < 5) {
+                    fuzzySelectRows.push(buildPendingPilotOwnerSelect(pilotId, pending.ownerNick, ownerCandidates, pending.ownerId));
+                }
             }
         }
 
@@ -696,13 +736,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         }
 
         logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots, ${panelsRestored} panels restored)`);
-        return interaction.editReply(report);
+        return interaction.editReply({
+            content: report,
+            components: fuzzySelectRows
+        });
     }
 
 
     // ── stats ──
     if (commandName === 'stats') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         // Count owners (registered users who are not pilots of someone else)
         const pilotIdSet = new Set();
@@ -817,7 +860,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── refreshnames ──
     if (commandName === 'refreshnames') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const allMembers = await guild.members.fetch().catch(() => null);
         if (!allMembers || allMembers.size === 0) {
@@ -896,7 +939,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
 // ── Select Menu: Admin chooses nickname for manualregister ──
 export async function handleSelectManualNickname(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const userId = interaction.customId.replace('select_manual_nickname_', '');
     const selectedNick = interaction.values[0];
@@ -921,4 +964,144 @@ export async function handleSelectManualNickname(interaction, db, saveLocalStora
     }).catch(() => {});
 
     logEvent(`📌 Admin selected nickname "${selectedNick}" for manualregister (was "${cached.nickname}")`);
+}
+
+// ── Select Menu: Admin corrects the nickname of a pending owner registration ──
+export async function handleSelectPendingNickname(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
+    const userId = interaction.customId.replace('select_pending_nickname_', '');
+    const selectedNick = interaction.values[0];
+    const pending = pendingRegistrations[userId];
+
+    if (!pending) {
+        await interaction.followUp({ content: '⌛ This pending registration no longer exists. Run /pending again.', flags: 64 }).catch(() => {});
+        return;
+    }
+
+    const previousNick = pending.selectedNickname || pending.nickname;
+    pending.selectedNickname = selectedNick;
+    saveLocalStorage();
+
+    // Update the /pending report: replace this user's fuzzy line with the selection (anchored per-entry)
+    let updatedContent = interaction.message.content;
+    const anchor = `<@${userId}> — **`;
+    const anchorIdx = updatedContent.indexOf(anchor);
+    if (anchorIdx !== -1) {
+        const blockEnd = updatedContent.indexOf('\n<@', anchorIdx + anchor.length);
+        const block = blockEnd === -1 ? updatedContent.slice(anchorIdx) : updatedContent.slice(anchorIdx, blockEnd);
+        const selectionLine = `   ✅ **Selected:** "${selectedNick}" (instead of "${previousNick}")\n`;
+        let newBlock = block.replace(/\n {3}✅ \*\*Selected:\*\* .*\n?/, '\n');
+        if (/ {3}🔍 \*\*Fuzzy suggestion:\*\* .*\n?/.test(newBlock)) {
+            newBlock = newBlock.replace(/ {3}🔍 \*\*Fuzzy suggestion:\*\* .*\n?/, selectionLine);
+        } else {
+            newBlock = `${newBlock.replace(/\n+$/, '')}\n${selectionLine}`;
+        }
+        updatedContent = updatedContent.slice(0, anchorIdx) + newBlock + (blockEnd === -1 ? '' : updatedContent.slice(blockEnd));
+    } else {
+        updatedContent = `${updatedContent.replace(/\n+$/, '')}\n📌 **Selected for <@${userId}>:** "${selectedNick}"`;
+    }
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    // Keep the admin panel in sync so approval uses the corrected nickname
+    if (pending.channelId && pending.messageId) {
+        try {
+            const channel = interaction.guild.channels.cache.get(pending.channelId);
+            if (channel) {
+                const panelMsg = await channel.messages.fetch(pending.messageId).catch(() => null);
+                if (panelMsg) {
+                    const correctedNote = previousNick !== selectedNick ? ` (corrected from "${previousNick}")` : '';
+                    const panelContent = panelMsg.content
+                        .replace(/📝 \*\*Nickname:\*\* [^\n]*/, `📝 **Nickname:** ${selectedNick}${correctedNote}`)
+                        .replace(/\n✅ \*\*Corrected by admin:\*\* [^\n]*/, '');
+                    await panelMsg.edit({ content: panelContent.substring(0, 1900), components: panelMsg.components }).catch(() => {});
+                }
+            }
+        } catch {
+            // best-effort: never let a panel sync failure break the selection
+        }
+    }
+
+    logEvent(`✅ Admin ${interaction.user.tag} corrected pending nickname for <@${userId}>: "${previousNick}" → "${selectedNick}"`);
+}
+
+// ── Select Menu: Admin corrects the owner of a pending pilot approval ──
+export async function handleSelectPendingPilotOwner(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
+    const pilotId = interaction.customId.replace('select_pending_pilot_owner_', '');
+    const selected = interaction.values[0];
+    const pending = pendingPilotApprovals[pilotId];
+
+    if (!pending) {
+        await interaction.followUp({ content: '⌛ This pilot request no longer exists. Run /pending again.', flags: 64 }).catch(() => {});
+        return;
+    }
+
+    const previousNick = pending.ownerNick;
+    const previousOwnerId = pending.ownerId;
+
+    if (selected !== 'keep') {
+        const ownerData = db.users[selected];
+        if (!ownerData) {
+            await interaction.followUp({ content: '❌ That owner is no longer registered.', flags: 64 }).catch(() => {});
+            return;
+        }
+        if (!pending.originalOwnerNick) pending.originalOwnerNick = pending.ownerNick;
+        pending.ownerId = selected;
+        pending.ownerNick = ownerData.nickname;
+    }
+    saveLocalStorage();
+
+    // Update the /pending report: replace this pilot's fuzzy line with the correction note (anchored per-entry)
+    let updatedContent = interaction.message.content;
+    const anchor = `<@${pilotId}> → Owner **`;
+    const anchorIdx = updatedContent.indexOf(anchor);
+    if (anchorIdx !== -1) {
+        const blockEnd = updatedContent.indexOf('\n<@', anchorIdx + anchor.length);
+        const block = blockEnd === -1 ? updatedContent.slice(anchorIdx) : updatedContent.slice(anchorIdx, blockEnd);
+        const note = selected === 'keep'
+            ? `   ✅ **Owner kept as typed:** "${pending.ownerNick}"\n`
+            : `   ✅ **Owner corrected:** "${pending.originalOwnerNick}" → "${pending.ownerNick}"\n`;
+        let newBlock = block.replace(/\n {3}✅ \*\*Owner (corrected|kept as typed):\*\* .*\n?/, '\n');
+        if (/ {3}🔍 \*\*Fuzzy suggestion:\*\* owner .*\n?/.test(newBlock)) {
+            newBlock = newBlock.replace(/ {3}🔍 \*\*Fuzzy suggestion:\*\* owner .*\n?/, note);
+        } else {
+            newBlock = `${newBlock.replace(/\n+$/, '')}\n${note}`;
+        }
+        updatedContent = updatedContent.slice(0, anchorIdx) + newBlock + (blockEnd === -1 ? '' : updatedContent.slice(blockEnd));
+    } else {
+        updatedContent = `${updatedContent.replace(/\n+$/, '')}\n📌 **Owner corrected for <@${pilotId}>:** "${pending.ownerNick}"`;
+    }
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    // Notify the corrected owner so they can approve (best-effort)
+    if (selected !== 'keep' && pending.ownerId !== previousOwnerId) {
+        try {
+            const ownerMember = await interaction.guild.members.fetch(pending.ownerId);
+            const dmChannel = await ownerMember.createDM();
+            await dmChannel.send({
+                content: `✈️ **Aprovação de Piloto**\n\n👤 **${pending.pilotTag}** quer se registrar como seu piloto.\n📝 **Nickname do dono:** ${pending.ownerNick}\n\nVocê aprova este piloto?`,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+                    )
+                ]
+            });
+            logEvent(`✈️ Pilot owner corrected for ${pilotId} → ${pending.ownerNick}; owner notified`);
+        } catch (e) {
+            logEvent(`⚠️ Could not notify corrected owner for pilot ${pilotId}: ${e.message}`);
+        }
+    }
+
+    logEvent(`✅ Admin ${interaction.user.tag} corrected pending pilot owner for <@${pilotId}>: "${previousNick}" → "${pending.ownerNick}"`);
 }

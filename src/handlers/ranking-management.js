@@ -16,6 +16,7 @@ import {
 } from '../core/ranking-constants.js';
 import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
+import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
@@ -367,7 +368,7 @@ export async function handleManageAlliedAddModal(interaction, db, saveLocalStora
         return interaction.reply({ content: '❌ Permission denied.', flags: 64 }).catch(() => {});
     }
 
-    await interaction.deferReply({ flags: 64 });
+    if (!await deferReplySafe(interaction)) return;
 
     const clanName = interaction.fields.getTextInputValue('clan_name').trim();
     const worldId = interaction.fields.getTextInputValue('world_id').trim();
@@ -492,7 +493,7 @@ export async function handleAddClanSuggestion(interaction, db, saveLocalStorage,
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const customId = interaction.customId;
     const cacheKey = `${interaction.user.id}-addclan`;

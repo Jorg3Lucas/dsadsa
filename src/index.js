@@ -19,12 +19,12 @@ import { registerMir4SlashCommands } from './core/ranking-deploy.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
-import { handleOwnerRegistrationModal, handleSelectRegistrationNickname } from './handlers/ranking-registration.js';
+import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from './handlers/ranking-registration.js';
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm } from './handlers/ranking-pilot.js';
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
-import { handleRankingCommand, handleSelectManualNickname } from './handlers/ranking-commands.js';
+import { handleRankingCommand, handleSelectManualNickname, handleSelectPendingNickname, handleSelectPendingPilotOwner } from './handlers/ranking-commands.js';
 import {
     handleManageUserPage,
     handleManageAction,
@@ -253,8 +253,14 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId === 'select_pilot_to_remove') {
                 return await handlePilotRemoveSelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
-            if (interaction.customId.startsWith('select_reg_nickname_')) {
-                return await handleSelectRegistrationNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            if (interaction.customId.startsWith('user_select_reg_nickname_')) {
+                return await handleUserSelectRegistrationNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('select_pending_nickname_')) {
+                return await handleSelectPendingNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('select_pending_pilot_owner_')) {
+                return await handleSelectPendingPilotOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
             }
             if (interaction.customId.startsWith('select_manual_nickname_')) {
                 return await handleSelectManualNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
