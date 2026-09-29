@@ -16,6 +16,7 @@ A Discord bot for managing MIR4 clan member registrations, role assignment, and 
 - **Anti-impersonation security system**
 - **Auto-backup** of database files
 - **Bulk DM** unregistered members who have the role
+- **Gateway watchdog** — logs every Discord connection event and auto-restarts the process when the session dies, so the bot can never be stuck as "process online, bot offline"
 
 ---
 
@@ -242,6 +243,22 @@ Both runs reply with a summary plus a full per-member report attached as a `.txt
 
 ---
 
+## Diagnosing an "offline bot"
+
+The bot runs under PM2, so a dead Discord session used to leave the process alive (green in PM2) with the bot offline and **no logs at all**. The gateway watchdog (`src/core/ranking-gateway-watchdog.js`) closes that gap:
+
+| Log line | Meaning |
+|----------|---------|
+| `🛰️ [Watchdog] Started` | Watchdog armed right after a successful login |
+| `💓 [Watchdog] alive \| uptime … \| gateway OK` | Heartbeat written every 15 min — proof the process is alive (and its memory usage) |
+| `⚠️ [Gateway] Shard 0 disconnected — code …` | Why the connection dropped, and whether discord.js will auto-reconnect |
+| `⚠️ [Watchdog] Gateway unhealthy: …` | Connection is down; a restart is scheduled in 3 minutes |
+| `🛑 [Watchdog] Gateway down for …` | No recovery — DB is saved and the process exits so PM2 restarts it |
+
+Health is evaluated every 60s from the shard statuses and the last acknowledged heartbeat (not from `client.isReady()`, which keeps reporting `Ready` after an unrecoverable close such as 4004/4013/4014). The first 2 minutes after login are a grace period so startup work is never mistaken for an outage.
+
+---
+
 ## Running
 
 ```bash
@@ -249,3 +266,41 @@ npm start
 ```
 
 Requires Node.js 18+ with `--experimental-specifier-resolution=node` or ESM support.
+
+### PM2
+
+Production runs under PM2 with `ecosystem.config.cjs` in the repo root:
+
+```bash
+# apply / re-apply the config (short restart of the bot)
+pm2 delete gear && pm2 start ecosystem.config.cjs && pm2 save
+
+pm2 logs gear          # gateway + watchdog lines
+pm2 describe gear      # memory in use vs max_memory_restart
+```
+
+- The app name must stay **`gear`** — the `/update` command runs `pm2 restart gear` internally.
+- `pm2 save` keeps the process alive across reboots (`pm2 startup` must have been run once).
+- Editing the config requires `pm2 delete gear && pm2 start ecosystem.config.cjs && pm2 save` again (`pm2 restart` does **not** reload it).
+
+#### Memory guard (shared VPS — 5 bots)
+
+The box runs several bots, so the limits are **computed from the machine's real RAM** when `ecosystem.config.cjs` is loaded — no hand-tuning after a resize:
+
+| Setting | Formula | What it catches |
+|---------|---------|-----------------|
+| `NODE_OPTIONS=--max-old-space-size=<heap>` | RSS cap − 64MB (min 192) | Heap leaks — Node dies with `FATAL ERROR: Reached heap limit` *before* the Linux OOM killer can SIGKILL the process (that error is not catchable, so PM2 does the restart) |
+| `max_memory_restart: '<RSS>M'` | 30% of total RAM, clamped 256M–512M | Memory V8 does not count as heap (buffers, external, native leaks) — PM2 restarts the app |
+| `restart_delay: 5000`, `max_restarts: 50`, `min_uptime: 10s` | restart policy | Crash loops without hammering the machine or flagging the app as errored on one bad boot |
+| `kill_timeout: 5000` | stop grace | SIGINT → DB saved + log buffer flushed before SIGKILL |
+
+Examples: 1 GB box → `307M` RSS / `243M` heap · 1.8–2 GB box → `512M` RSS / `448M` heap. The config prints the values it picked when you run `pm2 start ecosystem.config.cjs`.
+
+Measured baseline: the 76k-player ranking cache is only ~3.3 MB of JSON (~31 MB of heap for two copies), RSS ≈ 200 MB steady and ≈ 250-350 MB during the 20:00 scrape — so neither limit should ever fire in a healthy run. If one does, read the real peak from the `💓 [Watchdog] alive | … | rss …` line in `ranking_logs.txt` and retune the percentages in `ecosystem.config.cjs`.
+
+The **other bots** should get the same treatment — in each of their PM2 configs add:
+
+```js
+max_memory_restart: '256M',          // ~90-120MB typical for a small bot
+env: { NODE_OPTIONS: '--max-old-space-size=192' },
+```

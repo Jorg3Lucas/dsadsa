@@ -45,6 +45,7 @@ import { DISCORD_SERVER_ID, ensureConfig, migrateAlliedClans } from './core/rank
 import { getLocalRankingCache } from './core/ranking-cache.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, getStorageStats } from './core/ranking-storage.js';
+import { startGatewayWatchdog } from './core/ranking-gateway-watchdog.js';
 import { isExpiredError } from './core/interaction-utils.js';
 
 const client = new Client({
@@ -431,6 +432,26 @@ async function loginWithRetry() {
         try {
             await client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);
             console.log('✅ Bot login successful.');
+
+            // 🛰️ Once logged in, keep watching the gateway. discord.js never
+            // reconnects after some failures (e.g. unrecoverable close codes),
+            // which used to leave the process alive with the bot silently
+            // offline. The watchdog logs every gateway event and, if the
+            // connection stays down, saves the DB and exits so PM2 restarts us
+            // with a fresh session.
+            startGatewayWatchdog(client, {
+                logEvent: logRankingEvent,
+                onUnhealthy: (reason) => {
+                    console.error(`🛑 [Watchdog] Gateway offline (${reason}) — restarting process.`);
+                    try {
+                        saveRankingStorageSync(rankingDb);
+                    } catch (e) {
+                        console.error('❌ Emergency save failed:', e.message);
+                    }
+                    destroyRankingScraperAgents();
+                    process.exit(1);
+                }
+            });
             return;
         } catch (err) {
             console.error(`❌ Login failed (attempt ${attempt}/${LOGIN_MAX_ATTEMPTS}): ${err.message}`);
