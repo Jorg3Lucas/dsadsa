@@ -8,6 +8,7 @@ import { refreshVisualPanel, notifyUserDM } from "./panel-utils.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys } from "./claim-core.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX } from "../core/constants.js";
 import { noop } from "../core/config.js";
+import { logger } from "../core/logger.js";
 
 // Sub-module handlers
 import { handlePeakNormal } from "./tick-peak-normal.js";
@@ -20,9 +21,22 @@ import { handleFloor } from "./tick-floor.js";
 // ⏱ TICK INTERVAL (15s refresh)
 // ==========================================
 
+let tickRunning = false;
+let tickInterval = null;
+
 /** Start the 15-second tick interval that handles daily log dispatch, boss alerts, panel auto-respawn, claim timeouts, and force-refresh. */
 export function startTickInterval() {
-    setInterval(async () => {
+    // Guard against a double call — a second interval would run passes
+    // concurrently with the first one.
+    if (tickInterval) {
+        console.warn('⚠️ [Panel] startTickInterval() called twice — ignoring duplicate.');
+        return;
+    }
+
+    // One full tick pass. Extracted so the interval below can skip a pass while
+    // the previous one is still awaiting Discord API calls (rate limits, slow
+    // edits) — otherwise two passes could mutate db/alerts concurrently.
+    async function runTickPass() {
         let updateNeeded = false;
             const now = getLocalTime();
         reloadLanguage();
@@ -184,5 +198,13 @@ export function startTickInterval() {
             if (panelUpdate) await refreshVisualPanel(key);
         }
         if (updateNeeded) saveLocalStorage();
+    }
+
+    tickInterval = setInterval(() => {
+        if (tickRunning) return; // previous pass still running — skip this tick
+        tickRunning = true;
+        runTickPass()
+            .catch(err => logger.error('Panel', 'Tick pass failed', err))
+            .finally(() => { tickRunning = false; });
     }, 1.5e4);
 }

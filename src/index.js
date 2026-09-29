@@ -167,7 +167,7 @@ client.once('clientReady', async () => {
 
     // ═══ CLAIM SYSTEM BOOT ═══
     // Inicializa dados dos painéis sem recovery (não envia para canais antigos)
-    initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, true);
+    await initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, true);
 
     // Recria canais e envia painéis frescos para os canais novos
     try {

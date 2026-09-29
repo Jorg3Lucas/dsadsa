@@ -8,7 +8,7 @@ import { startTickInterval } from "./panel-tick.js";
 // 🚀 INITIALIZATION
 // ==========================================
 
-export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, skipRecovery = false) {
+export async function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, skipRecovery = false) {
     initState({ client: botClient, db: database, saveLocalStorage: saveStorageFn, logEvent: logEventFn, lastMessages: messagesTracker });
 
     // Build all known panel keys and initialize if missing
@@ -49,21 +49,31 @@ export function initClaimSystem(botClient, database, saveStorageFn, logEventFn, 
     migrateMS1112();
     migrateSPLegacyToUnified();
 
-    // Force-refresh all panels to fix any incorrect respawn timers on existing displays
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        refreshVisualPanel(key);
-    }
-
     if (skipRecovery) {
+        // The channel auto-setup runs right after this call: it clears the panel
+        // mappings and RE-SENDS every panel. Force-refreshing here would race
+        // with the channel deletion — an edit that fails on a channel being
+        // removed could trigger a recovery that re-sends the panel into a
+        // different (old) channel, leaving a duplicate panel behind.
         logEvent("Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).");
         return;
     }
 
-    return processAutoRecoveryOnBoot().then(() => {
-        startTickInterval();
-        logEvent("Sub-system initialized and panels auto-refreshed inside global Client.");
-    });
+    // Force-refresh all panels to fix any incorrect respawn timers on existing
+    // displays. Awaited (and isolated per panel) so the edits finish before the
+    // recovery pass and the tick start touching the same panels.
+    for (const key in db) {
+        if (!db[key] || key.startsWith("_")) continue;
+        try {
+            await refreshVisualPanel(key);
+        } catch (err) {
+            logEvent(`Failed to refresh panel ${key}: ${err.message}`);
+        }
+    }
+
+    await processAutoRecoveryOnBoot();
+    startTickInterval();
+    logEvent("Sub-system initialized and panels auto-refreshed inside global Client.");
 }
 
 // ==========================================
