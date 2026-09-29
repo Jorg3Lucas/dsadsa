@@ -3,14 +3,15 @@
 // Lists and optionally deletes guild slash commands that are
 // no longer registered by the bot.
 //
-// The claim-only bot registers NO slash commands anymore, so
-// EVERY command still present on the guild is orphaned.
+// Commands the bot STILL registers are read from the registration
+// sources (src/core/ranking-deploy.js + src/deploy-commands.cjs)
+// and are NEVER deleted — only the leftovers are offered.
 //
 // USAGE:
 //   node cleanup-orphan-commands.mjs                # dry-run: list commands
 //   node cleanup-orphan-commands.mjs --delete       # delete orphans (asks confirmation)
 //   node cleanup-orphan-commands.mjs --delete --yes # delete without confirmation
-//   node cleanup-orphan-commands.mjs --only-known   # restrict to names recovered from git history
+//   node cleanup-orphan-commands.mjs --only-known   # restrict to names confirmed removed from the bot
 //
 // ENV (from .env or shell):
 //   CLIENT_ID         — bot application (client) ID
@@ -19,20 +20,19 @@
 // ============================================================
 
 import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const API = "https://discord.com/api/v10";
 
-// ─── Command names confirmed removed via git history ─────────
-// Recovered from the deleted commands-definitions.js.
+// ─── Command names confirmed REMOVED from the bot ─────────
+// Kept only to label orphans as "known" vs "legacy". Safety does NOT rely on
+// this list: anything the bot still registers is protected automatically from
+// the registration sources below. Never add a live command here.
 const KNOWN_ORPHANS = new Set([
-  // Latest version (active before removal)
-  "forcesync",
-  "manualregister",
-  "manualpilot",
+  // Removed with the old admin commands
   "cleandb",
-  "manage",
-  "manualremove",
-  "manualremovepilot",
   // Removed by request (member-role-only bot)
   "syncroles",
   "syncperms",
@@ -121,6 +121,34 @@ async function api(path, options = {}, retries = 0) {
   return res.status === 204 ? null : res.json();
 }
 
+// ─── Registered commands (still deployed by the bot) ─────────
+
+const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+// Files that define the slash commands the bot registers. Every name found here
+// is treated as live and is never deleted. Options objects
+// (`{ type: 6, name: 'member' }`) start with `type:` and are skipped, so only
+// top-level command definitions are collected.
+const REGISTRATION_SOURCES = [
+  "src/core/ranking-deploy.js",
+  "src/deploy-commands.cjs",
+];
+
+function loadRegisteredCommandNames() {
+  const names = new Set();
+  const objectRe = /\{\s*(type:\s*\d+\s*,\s*)?name:\s*['"]([^'"]+)['"]/g;
+  for (const rel of REGISTRATION_SOURCES) {
+    const file = path.join(ROOT_DIR, rel);
+    if (!fs.existsSync(file)) continue;
+    const source = fs.readFileSync(file, "utf8");
+    for (const match of source.matchAll(objectRe)) {
+      if (match[1]) continue; // option object ({ type: N, name: '...' })
+      names.add(match[2]);
+    }
+  }
+  return names;
+}
+
 // ─── Main ────────────────────────────────────────────────────
 
 async function main() {
@@ -133,14 +161,30 @@ async function main() {
     return;
   }
 
-  // The claim-only bot registers NO slash commands, so every
-  // command present on the guild is orphaned. Distinguish the
-  // ones we know from git history vs. any legacy leftovers.
+  // Commands the bot still registers are NEVER orphans. Fail closed when the
+  // registration sources cannot be read, so live commands are never wiped.
+  const registered = loadRegisteredCommandNames();
+  if (registered.size === 0) {
+    console.error(`❌ No registered command found in: ${REGISTRATION_SOURCES.join(", ")}`);
+    console.error("   Refusing to delete anything (fail-safe). Run this from the project root.");
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`🔒 ${registered.size} command(s) still registered by the bot — always kept:`);
+  console.log("   " + [...registered].sort().map((n) => `/${n}`).join(", ") + "\n");
+
   const orphans = [];
+  let liveCount = 0;
   console.log(`Found ${commands.length} guild slash command(s):\n`);
   console.log("  " + "─".repeat(66));
 
   for (const cmd of commands) {
+    if (registered.has(cmd.name)) {
+      liveCount++;
+      console.log(`  ${"🔒 LIVE (kept)".padEnd(22)} /${cmd.name}  (id: ${cmd.id})`);
+      continue;
+    }
     const known = KNOWN_ORPHANS.has(cmd.name);
     const tag = known ? "🗑️  ORPHAN (known)" : "⚠️  ORPHAN (legacy)";
     console.log(`  ${tag.padEnd(22)} /${cmd.name}  (id: ${cmd.id})`);
@@ -148,7 +192,7 @@ async function main() {
   }
 
   console.log("  " + "─".repeat(66));
-  console.log(`\n📊 Summary: ${commands.length} total, ALL orphaned (bot registers none).`);
+  console.log(`\n📊 Summary: ${commands.length} total, ${liveCount} live (kept), ${orphans.length} orphaned.`);
 
   // Filter for deletion
   let toDelete = orphans;
@@ -184,6 +228,11 @@ async function main() {
   let deleted = 0;
   let failed = 0;
   for (const cmd of toDelete) {
+    // Belt and braces: never delete a command the bot still registers.
+    if (registered.has(cmd.name)) {
+      console.log(`⏭️  Skipped /${cmd.name} — still registered by the bot.`);
+      continue;
+    }
     try {
       await api(`/applications/${clientId}/guilds/${guildId}/commands/${cmd.id}`, { method: "DELETE" });
       console.log(`🗑️  Deleted /${cmd.name}`);
