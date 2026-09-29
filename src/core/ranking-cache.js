@@ -336,10 +336,12 @@ export function findClosestNicknameInCache(displayName, cache) {
     // Also try matching with just the first/last parts (in case of combined names)
     if (!bestMatch || bestScore < threshold) {
         const parts = cleanedInput.split(/[\s_]+/).filter(p => p.length > 2);
-        // Parts-pass pool: the candidates already contain every entry that holds
-        // a part substring (a part ≥3 chars shares ≥2 bigrams with the query),
-        // so scoring candidates here is complete; full pool only as a safety net.
-        const partsPool = candidates !== index.entries && bestScore >= threshold ? candidates : index.entries;
+        // Parts-pass pool: an entry that CONTAINS a part inherits every bigram of
+        // that part, so it always passes the prefilter and is already present in
+        // `candidates` (which is the full pool when the prefilter bailed out).
+        // Scoring `candidates` is therefore complete — re-scanning the whole
+        // pool here would be a redundant full pass over every player.
+        const partsPool = candidates;
         for (const part of parts) {
             for (const entry of partsPool) {
                 const cleanedNick = entry.cleaned;

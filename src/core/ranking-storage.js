@@ -7,6 +7,7 @@ import { runBackup } from '../auto-backup.js';
 import { pendingRegistrations, pendingPilotApprovals, WORLD_IDS } from './ranking-constants.js';
 
 const DB_RANKING_PATH = './database_ranking.json';
+const DB_RANKING_TMP_PATH = `${DB_RANKING_PATH}.tmp`;
 
 export function saveRankingStorage(rankingDb) {
     try {
@@ -17,7 +18,23 @@ export function saveRankingStorage(rankingDb) {
         const dbToSave = { ...rankingDb };
         dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
         dbToSave._pendingPilotApprovals = JSON.parse(JSON.stringify(pendingPilotApprovals));
-        fs.writeFileSync(DB_RANKING_PATH, JSON.stringify(dbToSave, null, 2), 'utf8');
+        const json = JSON.stringify(dbToSave, null, 2);
+
+        // Atomic write: serialise to a temp file NEXT TO the database and swap it
+        // in with rename, so a crash (or a kill) mid-write can never leave a
+        // truncated database_ranking.json — either the previous or the new file
+        // is always complete on disk.
+        try {
+            fs.writeFileSync(DB_RANKING_TMP_PATH, json, 'utf8');
+            fs.renameSync(DB_RANKING_TMP_PATH, DB_RANKING_PATH);
+        } catch (swapErr) {
+            // Some Windows setups refuse the swap while the destination is held
+            // open (editor/antivirus). Fall back to a direct write so the save
+            // still happens, then drop the leftover temp file.
+            console.error('⚠️ [Save] Atomic write failed — falling back to direct write:', swapErr.message);
+            fs.writeFileSync(DB_RANKING_PATH, json, 'utf8');
+            try { fs.unlinkSync(DB_RANKING_TMP_PATH); } catch (e) { /* nothing left to clean up */ }
+        }
 
         const pendCount = Object.keys(dbToSave._pendingRegistrations).length;
         const pilotCount = Object.keys(dbToSave._pendingPilotApprovals).length;
