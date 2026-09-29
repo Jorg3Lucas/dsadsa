@@ -23,12 +23,13 @@ export function setAdminChannelId(id) {
 }
 
 // 👤 MEMBER ROLE — the ONLY role the bot manages for membership.
-// Registered members validated against the EU21 ranking hold it; anyone who
+// Registered members validated against the EU11 ranking hold it; anyone who
 // fails validation loses it. The bot NEVER creates / renames / deletes roles,
 // so this role must already exist on the server (created by an admin).
 // Clan roles (db.config.clanRoles) and the old "GoW Kids" temp role are no
 // longer managed — they are ignored by lookups, sync and channel permissions.
-export const MEMBER_ROLE_ID = '1539146461718122608';
+// Override per deployment with the MEMBER_ROLE_ID env var (.env).
+export const MEMBER_ROLE_ID = process.env.MEMBER_ROLE_ID?.trim() || '1503933709756141620';
 
 // Roles that can approve/reject member registrations (in addition to Administrator)
 export const APPROVER_ROLE_IDS = [
@@ -38,13 +39,13 @@ export const APPROVER_ROLE_IDS = [
     '1481568065081573467'
 ];
 
-// 🌍 WORLDS TO SYNC — only EU21 (world 621)
+// 🌍 WORLDS TO SYNC — only EU11 (world 611)
 // The scraper, lookups, allied-clan management and server display
 // all derive from this map, so restricting it here limits the whole
-// sync pipeline to the EU21 world only. Members are searched ONLY in
-// this world's ranking — not found in EU21 → role/pre-reg removed.
+// sync pipeline to the EU11 world only. Members are searched ONLY in
+// this world's ranking — not found in EU11 → role/pre-reg removed.
 export const WORLD_IDS = {
-    621: "EU021"
+    611: "EU011"
 };
 
 // ==========================================
@@ -117,7 +118,7 @@ export function resolveServerName(name) {
 export const SCAN_SERVER_ID = DISCORD_SERVER_ID;
 
 // Pre-registrations no longer expire by time — they are validated against the
-// EU21 ranking on every sync. Not found in the ranking → removed immediately.
+// EU11 ranking on every sync. Not found in the ranking → removed immediately.
 // (PRE_REGISTER_MAX_AGE_MS removed)
 
 // Super admin — only this user can use high-risk commands

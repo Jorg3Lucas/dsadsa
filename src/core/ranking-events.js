@@ -259,7 +259,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
     loadChannelIdsFromConfig(db.config);
 
     // Pre-registrations no longer expire by time — they are validated against the
-    // EU21 ranking on every sync (not found in the ranking → removed immediately).
+    // EU11 ranking on every sync (not found in the ranking → removed immediately).
 
     // Restore the welcome/fixed panel on startup if it was deleted
     restoreWelcomePanel(client, db, saveLocalStorage, logEvent).catch(err => {
@@ -289,7 +289,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                 const preReg = db.preRegistrations[member.id];
 
                 // Pre-registration is always applied on join — no time-based expiry.
-                // Ranking validity is enforced by the sync engine (not in the EU21
+                // Ranking validity is enforced by the sync engine (not in the EU11
                 // ranking → removed immediately).
                 {
                     // Check if pilot (has ownerNick)

@@ -50,7 +50,7 @@ export function loadLocalStorageRanking() {
             }
 
             // Migration: prune allied clans configured for worlds outside the sync
-            // scope (EU21 only). Leftover entries from the main-branch deployment
+            // scope (EU11 only). Leftover entries from the main-branch deployment
             // are dead data — they are never consulted since lookups only return
             // worlds present in WORLD_IDS.
             let prunedWorlds = 0;
@@ -63,13 +63,13 @@ export function loadLocalStorageRanking() {
                 }
                 if (prunedWorlds > 0) {
                     saveRankingStorage(rankingDb);
-                    console.log(`\ud83e\uddf9 Pruned allied clans for ${prunedWorlds} world(s) outside sync scope (EU21 only)`);
+                    console.log(`\ud83e\uddf9 Pruned allied clans for ${prunedWorlds} world(s) outside sync scope (EU11 only)`);
                 }
             }
 
             // Migration: pre-registrations no longer expire by time (7-day expiry
             // removed). Strip stale expiresAt fields from the current database —
-            // validity is now enforced only by the EU21 ranking sync, which removes
+            // validity is now enforced only by the EU11 ranking sync, which removes
             // pre-regs not found in the ranking immediately.
             let prunedPreRegs = 0;
             if (rankingDb.preRegistrations) {

@@ -28,7 +28,7 @@ export const ELDER_ROLE_ID = '1503934006431973488';
 // of truth for who can see the panels.
 export const CLAIM_CATEGORIES = [
     {
-        id: '1539144586297999400',
+        id: '1548033121012813905',
         name: '🔸 SP & Summons',
         channels: [
             { name: '🔸 SP-7F', key: 'sp7', legacyName: '🔸┃sp7', panels: ['7peak'] },
@@ -41,7 +41,7 @@ export const CLAIM_CATEGORIES = [
         ]
     },
     {
-        id: '1539144926464446484',
+        id: '1548033184619438162',
         name: '🔹 MS',
         channels: [
             { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squarenormal', '7squareantidemon'] },

@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: "new21",
+      name: "mir4-bot",
       script: "src/index.js",
       node_args: "--env-file=.env",
       watch: false,

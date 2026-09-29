@@ -25,8 +25,8 @@ export async function assignMemberRole(targetMember, db, logEvent) {
  * then prefixes the nickname with the server name.
  *
  * Examples:
- *   buildPrefixedNickname('PlayerOne', db)          → 'EU021 - PlayerOne'
- *   buildPrefixedNickname('PlayerOne', db, 'Pilot') → 'EU021 - PlayerOne - Pilot'
+ *   buildPrefixedNickname('PlayerOne', db)          → 'EU011 - PlayerOne'
+ *   buildPrefixedNickname('PlayerOne', db, 'Pilot') → 'EU011 - PlayerOne - Pilot'
  *
  * If the player is not found in the ranking cache, returns the nickname without prefix.
  *

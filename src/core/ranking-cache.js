@@ -19,7 +19,7 @@ let cacheLastModified = 0;
 // report freshness without re-reading the whole file from disk.
 let cacheUpdatedAt = null;
 
-// The bot only syncs the worlds configured in WORLD_IDS (EU21). Any other world
+// The bot only syncs the worlds configured in WORLD_IDS (EU11). Any other world
 // left over in the cache file is stale and must be ignored, otherwise lookups
 // could resolve a member to a server we no longer manage. When nothing needs to
 // be stripped we return the SAME object reference, so the WeakMap index below
@@ -93,7 +93,7 @@ export function getLocalRankingCache() {
             cacheUpdatedAt = null;
             return null;
         }
-        // Restrict to configured sync worlds (EU21 only) — ignore stale worlds.
+        // Restrict to configured sync worlds (EU11 only) — ignore stale worlds.
         const data = filterToConfiguredWorlds(raw);
         // Update cache
         cachedRankingData = data;
@@ -110,7 +110,7 @@ export function getLocalRankingCache() {
 }
 
 // Find which world a nickname belongs to across all worlds
-// Returns { worldId: "621", clanName: "GearsofWar ①" } or null
+// Returns { worldId: "611", clanName: "GearsofWar ①" } or null
 // If cache is provided (pre-loaded from getLocalRankingCache()), uses it instead of reading from disk
 export function findNicknameInCache(nickname, cache) {
     if (!cache) {

@@ -4,7 +4,7 @@
 // The bot manages EXACTLY ONE role for membership: the fixed member role
 // (MEMBER_ROLE_ID, defined in ranking-constants.js).
 //
-//   • It is granted to registered members validated against the EU21 ranking
+//   • It is granted to registered members validated against the EU11 ranking
 //     (allied clan, temp window or manualforce) and removed from members that
 //     fail validation.
 //   • The bot NEVER creates, renames or deletes roles — the member role must
