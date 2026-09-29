@@ -12,10 +12,8 @@ import {
     pendingRegistrations,
     pendingPilotApprovals,
     adminChannelId,
-    APPROVER_ROLE_IDS,
     WELCOME_PANEL_MESSAGE,
     REGISTRATION_CHANNEL_ID,
-    SUPER_ADMIN_USER_ID,
     MAX_NICKNAME_SUGGESTIONS,
     ensureConfig
 } from '../core/ranking-constants.js';

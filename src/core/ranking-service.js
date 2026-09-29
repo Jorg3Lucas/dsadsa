@@ -147,14 +147,11 @@ export async function searchRankingForum(nickname) {
 
             // Search results have 5 columns: Rank, Character, Server(empty), Clan, Power
             // Normal ranking has 4 columns: Rank, Character, Clan, Power
-            let clan, serverText;
-            if (cells.length === 5) {
-                serverText = cells.eq(2).text().replace(/[\n\t\r]/g, '').trim();
-                clan = cells.eq(3).text().replace(/[\n\t\r]/g, '').trim();
-            } else {
-                clan = cells.eq(2).text().replace(/[\n\t\r]/g, '').trim();
-                serverText = '';
-            }
+            // The 5-column search layout inserts an (empty) server cell between
+            // the character and the clan; the 4-column layout has the clan right
+            // after the character.
+            const clanCell = cells.length === 5 ? cells.eq(3) : cells.eq(2);
+            let clan = clanCell.text().replace(/[\n\t\r]/g, '').trim();
             if (!clan || clan === '-' || clan === '—') clan = 'No Clan';
 
             results.push({ nickname: nick, clanName: clan, worldId: null });

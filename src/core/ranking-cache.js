@@ -273,8 +273,11 @@ export function findAllNicknameMatchesInCache(nickname, cache) {
 // Clean helper: strips formatting characters for comparison
 function cleanNickname(s) {
     return s.trim().normalize('NFKC').toLowerCase()
-        // Strip visible decorative/formatting characters (punctuation, symbols used as decoration)
-        .replace(/[|\[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,•·●○.,«»‹›★☆♡♥▪▫・҉§¶†‡※◆◇■□▲△▼▽♠♣♥♦✧✦🎵]/g, '')
+        // Strip visible decorative/formatting characters (punctuation, symbols used as decoration).
+        // The combining mark \u0489 leads the class on purpose: after a base character it
+        // renders as one misleading glyph (no-misleading-character-class); position inside
+        // a class is irrelevant, so it is kept away from its neighbours.
+        .replace(/[\u0489|[\](){}#\-–—:;"'`~!@$%^&*_+=<>?/\\,•·●○.,«»‹›★☆♡♥▪▫・§¶†‡※◆◇■□▲△▼▽♠♣♥♦✧✦🎵]/gu, '')
         // Strip circled/enclosed alphanumerics (Ⓤ Ⓐ Ⓡ etc. — common in MIR4 names)
         .replace(/[\u2460-\u24FF]/g, '')
         // Strip geometric shapes (⬛ ◄ ► ▶ etc.)
@@ -297,69 +300,6 @@ function cleanNickname(s) {
 
 export { cleanNickname };
 
-export function findClosestNicknameInCache(displayName, cache) {
-    if (!cache) return null;
-
-    const cleanedInput = cleanNickname(displayName);
-    if (cleanedInput.length < 2) return null;
-
-    const index = getCleanedNameIndex(cache);
-    const inputChars = new Set(cleanedInput);
-    const candidates = gatherFuzzyCandidates(index, cleanedInput);
-    const threshold = 0.55;
-
-    // Fast path: score only bigram-related candidates. If nothing passes the
-    // threshold, fall back to the full pool so genuinely similar names that
-    // happen to share few bigrams are never missed (old full-scan recall).
-    const pool = candidates;
-    let bestMatch = null;
-    let bestScore = 0;
-
-    for (const entry of pool) {
-        const similarity = scoreFuzzyCandidate(cleanedInput, inputChars, entry);
-        if (similarity !== null && similarity > bestScore) {
-            bestScore = similarity;
-            bestMatch = { worldId: entry.worldId, nickname: entry.nickname, clanName: entry.clanName, score: similarity };
-        }
-    }
-
-    if ((!bestMatch || bestScore < threshold) && candidates !== index.entries) {
-        for (const entry of index.entries) {
-            const similarity = scoreFuzzyCandidate(cleanedInput, inputChars, entry);
-            if (similarity !== null && similarity > bestScore) {
-                bestScore = similarity;
-                bestMatch = { worldId: entry.worldId, nickname: entry.nickname, clanName: entry.clanName, score: similarity };
-            }
-        }
-    }
-
-    // Also try matching with just the first/last parts (in case of combined names)
-    if (!bestMatch || bestScore < threshold) {
-        const parts = cleanedInput.split(/[\s_]+/).filter(p => p.length > 2);
-        // Parts-pass pool: an entry that CONTAINS a part inherits every bigram of
-        // that part, so it always passes the prefilter and is already present in
-        // `candidates` (which is the full pool when the prefilter bailed out).
-        // Scoring `candidates` is therefore complete — re-scanning the whole
-        // pool here would be a redundant full pass over every player.
-        const partsPool = candidates;
-        for (const part of parts) {
-            for (const entry of partsPool) {
-                const cleanedNick = entry.cleaned;
-                if (cleanedNick.length < 2) continue;
-                if (cleanedNick.includes(part) && cleanedNick.length > part.length) {
-                    const score = part.length / cleanedNick.length;
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestMatch = { worldId: entry.worldId, nickname: entry.nickname, clanName: entry.clanName, score };
-                    }
-                }
-            }
-        }
-    }
-
-    return bestMatch && bestScore >= threshold ? bestMatch : null;
-}
-
 // ── Top N fuzzy matches ──
 // Returns up to `limit` closest matches above threshold, sorted by score (best first).
 export function findTopNicknamesInCache(displayName, cache, limit = 3) {
@@ -380,7 +320,13 @@ export function findTopNicknamesInCache(displayName, cache, limit = 3) {
         matches = scorePool(cleanedInput, inputChars, index.entries, threshold);
     }
 
-    // Also try matching with just the first/last parts
+    // Substring pass. cleanNickname strips whitespace and underscores, so the
+    // split below yields the whole cleaned query — the loop therefore matches
+    // nicknames that CONTAIN the query (e.g. "dinizpilot" for a "diniz"
+    // lookup), scoring by how much of the nickname the query covers. It stays
+    // generic in case cleaning is ever relaxed. Any such entry shares all of the
+    // query's bigrams, so it is always present in `candidates`; the full pool is
+    // only a safety net when the similarity pass found nothing at all.
     const parts = cleanedInput.split(/[\s_]+/).filter(p => p.length > 2);
     const partsPool = candidates !== index.entries && matches.length > 0 ? candidates : index.entries;
     for (const part of parts) {

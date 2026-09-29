@@ -570,7 +570,6 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
         const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
         const PAGE_SIZE = 25;
         const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
-        const page = 0;
         const pageItems = sorted.slice(0, PAGE_SIZE);
         const selectOptions = pageItems.map(([id, data]) => ({
             label: data.nickname.substring(0, 100),

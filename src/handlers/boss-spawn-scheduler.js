@@ -307,7 +307,7 @@ export async function sendCustomWorldBossAlerts(now = getLocalTime()) {
   if (alerts.length === 0) return;
 
   for (const alert of alerts) {
-    const { entry, spawnTime, cacheKey } = alert;
+    const { entry, cacheKey } = alert;
     if (!entry.channelId || !entry.joinMessage) continue;
 
     const resolved = await client.channels.cache.get(entry.channelId) || await client.channels.fetch(entry.channelId).catch(() => null);

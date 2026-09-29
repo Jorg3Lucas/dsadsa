@@ -4,7 +4,7 @@ import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
+import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles, hasAnyMemberRoles } from './clan-roles.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -43,7 +43,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 const ownerBaseNick = currentNick.replace(' - Pilot', '').trim();
                 const ownerEntry = Object.entries(db.users).find(([id, data]) => data.nickname.trim().normalize('NFC').toLowerCase() === ownerBaseNick.toLowerCase());
                 if (ownerEntry) {
-                    const [ownerId, ownerData] = ownerEntry;
+                    const [, ownerData] = ownerEntry;
                     if (!ownerData.pilotIds.includes(memberId) && ownerData.pilotIds.length < 4) {
                         ownerData.pilotIds.push(memberId);
                         logEvent(getMsg('ranking.logs.autoLink', { username: member.user.username, count: ownerData.pilotIds.length, baseNick: ownerBaseNick }));

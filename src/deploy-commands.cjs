@@ -22,7 +22,7 @@ try {
         }
       });
     }
-  } catch (e2) {}
+  } catch { /* .env is optional — ignore */ }
 }
 
 const TOKEN = process.env.TOKEN || process.env.DISCORD_TOKEN;

@@ -7,7 +7,6 @@ import {
     TextInputStyle,
     PermissionFlagsBits
 } from 'discord.js';
-import { getMsg } from '../lang/lang.js';
 import {
     DISCORD_SERVER_ID,
     pendingRegistrations,
@@ -141,7 +140,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         components: []
     });
 
-    try { await targetMember.send(dmMsg); } catch (e) {}
+    try { await targetMember.send(dmMsg); } catch { /* DM best effort */ }
     return;
 }
 
@@ -213,7 +212,7 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
     if (result === 'no') {
         logEvent(`❌ ${pending.ownerNick} REJECTED pilot ${pilotUserId} (${pending.pilotTag})`);
         await interaction.editReply({ content: '❌ **Request rejected.**', components: [] });
-        try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('❌ The owner rejected your pilot registration.'); } catch (e) {}
+        try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('❌ The owner rejected your pilot registration.'); } catch { /* DM best effort */ }
         return;
     }
 
@@ -245,7 +244,7 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
 
     await interaction.editReply({ content: `✅ **Pilot approved!** <@${pilotUserId}> is now your pilot.`, components: [] });
 
-    try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('✅ **Registration approved!** The owner accepted your pilot request.'); } catch (e) {}
+    try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('✅ **Registration approved!** The owner accepted your pilot request.'); } catch { /* DM best effort */ }
     return;
 }
 
@@ -280,7 +279,7 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
         try {
             const pilotUser = await interaction.client.users.fetch(pilotUserId);
             await pilotUser.send('❌ Your pilot registration was rejected by an administrator.');
-        } catch (e) {}
+        } catch { /* best effort */ }
         return;
     }
 
@@ -320,7 +319,7 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
     try {
         const pilotUser = await interaction.client.users.fetch(pilotUserId);
         await pilotUser.send('✅ **Your pilot registration was approved by an administrator!**');
-    } catch (e) {}
+    } catch { /* best effort */ }
 
     // DM the owner with explanation and a button to remove if it's not their pilot
     try {
