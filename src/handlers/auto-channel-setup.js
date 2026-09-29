@@ -8,6 +8,7 @@
 
 import { db, lastMessages, saveLocalStorage } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
+import { markPanelHealthy } from "./panel-dm.js";
 import { CLAIM_CATEGORIES, findClaimCategory } from "../core/server-structure.js";
 
 let _setupDone = false;
@@ -93,6 +94,7 @@ export async function setupAllChannels(client, guildId) {
                         components: renderButtons(panelKey)
                     });
                     lastMessages[panelKey] = sent;
+                    markPanelHealthy(panelKey);
                     if (!db._panelMapping) db._panelMapping = {};
                     db._panelMapping[panelKey] = {
                         channelId: newChannel.id,

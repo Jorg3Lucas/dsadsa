@@ -96,11 +96,6 @@ const commands = [
     ]
   },
   {
-    name: 'cleandb',
-    description: '👑 [Admin] Remove all duplicate nickname entries from the database.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
     name: 'manage',
     description: '🛠️ Bot Management Panel'
   },
@@ -127,35 +122,6 @@ const commands = [
   {
     name: 'pending',
     description: '⏳ [Admin] List all pending registration requests with time remaining.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'elderguide',
-    description: '📋 Guide: how to approve/reject owner registrations'
-  },
-  {
-    name: 'notify',
-    description: '📧 [Admin] Send notifications to server members',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'nuke',
-    description: '💣 [Super Admin] Delete ALL channels and categories from the server (irreversible).',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'setup',
-    description: '🏗️ [Super Admin] Create the full server structure (claim categories + General channels).',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'syncroles',
-    description: '🤝 [Super Admin] Create one role per allied clan, assign to members and restrict claim channels.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'syncperms',
-    description: '🔒 [Super Admin] Re-apply claim channel permissions from the clan roles stored in the DB.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
 ];

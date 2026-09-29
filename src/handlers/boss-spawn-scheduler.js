@@ -160,7 +160,7 @@ function getUpcomingSpawnAlerts(nowArg) {
 // ─── Send notification ───────────────────────────────────
 
 export async function sendBossSpawnAlerts() {
-  // Uses the configured channel, or falls back to #reminders (created by /setup)
+  // Uses the configured channel, or falls back to #reminders
   const channel = await resolveAlertChannel(dailyLogs.bossSpawnChannelId, getGeneralChannelName("reminders"));
   if (!channel) return;
 
@@ -317,7 +317,7 @@ export async function sendCustomWorldBossAlerts(now = getLocalTime()) {
   }
 }
 export async function sendScheduledEventAlerts() {
-  // Uses the configured channel, or falls back to #events (created by /setup)
+  // Uses the configured channel, or falls back to #events
   const channel = await resolveAlertChannel(dailyLogs.scheduledEventChannelId, getGeneralChannelName("events"));
   if (!channel) return;
 

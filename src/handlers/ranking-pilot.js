@@ -11,15 +11,60 @@ import {
 } from '../core/ranking-constants.js';
 import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 import { removeMemberRoles } from '../core/clan-roles.js';
+import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // ✈️ PILOT REGISTRATION & REMOVAL HANDLERS
 // ==========================================
 // Extracted from ranking-handlers.js
 
+// ── Fuzzy owner candidates (shared with modal + /pending corrections) ──
+// Returns up to `limit` registered owners sorted by similarity to the typed nickname.
+export function findOwnerCandidates(ownerNick, db, limit = 3) {
+    const cleanedInput = cleanNickname(ownerNick);
+    if (cleanedInput.length < 2) return [];
+
+    const pilotIds = new Set();
+    for (const [, data] of Object.entries(db.users || {})) {
+        if (data.pilotIds && data.pilotIds.length > 0) {
+            for (const pid of data.pilotIds) {
+                pilotIds.add(pid);
+            }
+        }
+    }
+
+    const candidates = [];
+    for (const [id, data] of Object.entries(db.users || {})) {
+        if (!data.nickname) continue;
+        if (pilotIds.has(id)) continue;
+        const cleanedNick = cleanNickname(data.nickname);
+        if (cleanedNick.length < 2) continue;
+
+        const inputChars = new Set(cleanedInput);
+        const nickChars = new Set(cleanedNick);
+        let commonChars = 0;
+        for (const c of inputChars) {
+            if (nickChars.has(c)) commonChars++;
+        }
+        const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
+        if (overlap < 0.3) continue;
+
+        const distance = levenshteinDistance(cleanedInput, cleanedNick);
+        const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
+        const similarity = 1 - (distance / maxLen);
+
+        if (similarity >= 0.55) {
+            candidates.push({ id, nickname: data.nickname, score: similarity });
+        }
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates.slice(0, limit);
+}
+
 // ── Pilot Registration Modal ──
 export async function handlePilotRegistrationModal(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferReply({ flags: 64 });
+    if (!await deferReplySafe(interaction)) return;
 
     const ownerNick = interaction.fields.getTextInputValue('owner_nickname').trim().normalize('NFC');
 
@@ -152,7 +197,7 @@ export async function handlePilotRegistrationModal(interaction, db, saveLocalSto
 
 // ── Pilot Removal (user removing their own pilot) ──
 export async function handlePilotRemoveSelect(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const pilotToRemoveId = interaction.values[0];
     const userProfile = db.users[interaction.user.id];
@@ -182,7 +227,7 @@ export async function handlePilotRemoveSelect(interaction, db, saveLocalStorage,
 
 // ── Owner removes pilot via DM button (after admin approval) ──
 export async function handleOwnerRemovePilotDm(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const pilotUserId = interaction.customId.replace('owner_remove_pilot_', '');
     const ownerId = interaction.user.id;

@@ -4,9 +4,7 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
-    ButtonStyle,
-    PermissionFlagsBits,
-    ChannelType
+    ButtonStyle
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
@@ -18,15 +16,16 @@ import {
     WELCOME_PANEL_MESSAGE,
     REGISTRATION_CHANNEL_ID,
     SUPER_ADMIN_USER_ID,
-    NUKE_PROTECTED_CHANNEL_IDS,
+    MAX_NICKNAME_SUGGESTIONS,
     ensureConfig
 } from '../core/ranking-constants.js';
-import { getLocalRankingCache, cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
+import { getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { handleScanImport, handleScanImportStatus } from './ranking-scan.js';
-import { syncClanRoles, hasMemberRole, applyClaimChannelPermissions } from '../core/clan-roles.js';
+import { hasMemberRole } from '../core/clan-roles.js';
+import { findOwnerCandidates } from './ranking-pilot.js';
+import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // 🎯 SLASH COMMAND HANDLERS
@@ -57,6 +56,57 @@ function buildManualNicknameSelect(userId, typedNick, topSuggestions, hasSuggest
         new StringSelectMenuBuilder()
             .setCustomId(`select_manual_nickname_${userId}`)
             .setPlaceholder('Select which nickname to save (optional)')
+            .addOptions(selectOptions)
+    );
+}
+
+// Helper: build a nickname correction dropdown for /pending (owner registrations)
+function buildPendingNicknameSelect(userId, typedNick, topSuggestions, defaultNick) {
+    const selectOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel(`📝 Keep as typed: ${typedNick.substring(0, 80)}`)
+            .setValue(typedNick)
+            .setDescription('Use the nickname exactly as submitted')
+            .setDefault(!defaultNick || defaultNick === typedNick),
+        ...topSuggestions
+            .filter(s => s.nickname.toLowerCase() !== typedNick.toLowerCase())
+            .slice(0, MAX_NICKNAME_SUGGESTIONS)
+            .map(s => new StringSelectMenuOptionBuilder()
+                .setLabel(`🔍 ${s.nickname.substring(0, 80)} (${s.serverName})`)
+                .setValue(s.nickname)
+                .setDescription(s.inAlliedClan ? `✅ Allied clan - ${s.clanName}` : `❌ Not allied - ${s.clanName}`)
+                .setDefault(!!defaultNick && s.nickname === defaultNick)
+            )
+    ];
+
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`select_pending_nickname_${userId}`)
+            .setPlaceholder('🔍 Choose the correct nickname')
+            .addOptions(selectOptions)
+    );
+}
+
+// Helper: build an owner-correction dropdown for /pending (pilot approvals)
+function buildPendingPilotOwnerSelect(pilotId, typedOwnerNick, candidates, currentOwnerId) {
+    const selectOptions = [
+        new StringSelectMenuOptionBuilder()
+            .setLabel(`📝 Keep as typed: ${typedOwnerNick.substring(0, 80)}`)
+            .setValue('keep')
+            .setDescription('Keep the owner as currently registered')
+            .setDefault(!candidates.some(c => c.id === currentOwnerId)),
+        ...candidates.slice(0, MAX_NICKNAME_SUGGESTIONS).map(c => new StringSelectMenuOptionBuilder()
+            .setLabel(`🔍 ${c.nickname.substring(0, 80)}`)
+            .setValue(c.id)
+            .setDescription(`Similarity ${Math.round(c.score * 100)}%`)
+            .setDefault(c.id === currentOwnerId)
+        )
+    ];
+
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(`select_pending_pilot_owner_${pilotId}`)
+            .setPlaceholder('🔍 Choose the correct owner')
             .addOptions(selectOptions)
     );
 }
@@ -102,7 +152,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── forcesync ──
     if (commandName === 'forcesync') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
         logEvent(getMsg('ranking.responses.forcesync.log', { tag: user.tag }));
         await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
 
@@ -280,47 +330,6 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         });
     }
 
-    // ── cleandb ──
-    if (commandName === 'cleandb') {
-        await interaction.deferReply({ flags: 64 });
-        const seenNicknames = {};
-        const duplicatesRemoved = [];
-
-        for (const [memberId, userData] of Object.entries(db.users)) {
-            const cleanNick = userData.nickname.trim().normalize('NFC').toLowerCase();
-            if (!seenNicknames[cleanNick]) seenNicknames[cleanNick] = [];
-            seenNicknames[cleanNick].push({ id: memberId, ...userData });
-        }
-
-        for (const [cleanNick, userList] of Object.entries(seenNicknames)) {
-            if (userList.length > 1) {
-                let realOwnerId = null;
-                for (const u of userList) {
-                    const member = await guild.members.fetch(u.id).catch(() => null);
-                    if (member) {
-                        const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
-                        if (!currentNick.endsWith(' - Pilot')) { realOwnerId = u.id; break; }
-                    }
-                }
-                if (!realOwnerId) {
-                    userList.sort((a, b) => new Date(a.registeredAt) - new Date(b.registeredAt));
-                    realOwnerId = userList[0].id;
-                }
-                for (const u of userList) {
-                    if (u.id !== realOwnerId) {
-                        duplicatesRemoved.push(`${u.nickname} (ID: ${u.id})`);
-                        delete db.users[u.id];
-                    }
-                }
-            }
-        }
-
-        saveLocalStorage();
-        await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
-        if (duplicatesRemoved.length === 0) return interaction.editReply(getMsg('ranking.responses.cleandb.noDuplicates'));
-        return interaction.editReply(getMsg('ranking.responses.cleandb.success', { list: duplicatesRemoved.map(d => `• ${d}`).join('\n') }));
-    }
-
     // ── manage (/manage slash command) ──
     if (commandName === 'manage') {
         const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
@@ -414,7 +423,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── sendpanel ──
     if (commandName === 'sendpanel') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -444,7 +453,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── listunregistered ──
     if (commandName === 'listunregistered') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const doNotify = options.getBoolean('notify') || false;
 
@@ -526,7 +535,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── pending ──
     if (commandName === 'pending') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const ownerEntries = Object.entries(pendingRegistrations);
         const pilotEntries = Object.entries(pendingPilotApprovals);
@@ -538,6 +547,8 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         let report = `⏳ **Pending Registrations**\n\n`;
         const rankingCache = getLocalRankingCache();
         let panelsRestored = 0;
+        // Dropdowns to correct nicknames via fuzzy suggestions (Discord allows max 5 action rows)
+        const fuzzySelectRows = [];
 
         // ── Owner registrations ──
         if (ownerEntries.length > 0) {
@@ -555,12 +566,25 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 let line = `\n${userTag} — **${pending.nickname}**\n`;
                 line += `   ⏰ Expires in: ${expiresIn} | Panel: ${hasMessage}\n`;
 
+                if (pending.selectedNickname && pending.selectedNickname !== pending.nickname) {
+                    line += `   ✅ **Selected:** "${pending.selectedNickname}"\n`;
+                }
+
                 const lookup = lookupNickname(pending.nickname, db, rankingCache);
                 if (lookup.fuzzySuggestion) {
                     line += `   🔍 **Fuzzy suggestion:** "${pending.nickname}" → "${lookup.fuzzySuggestion}" (${lookup.serverName})\n`;
                 }
 
                 report += line;
+
+                // Offer a dropdown to correct the nickname when fuzzy suggestions exist
+                if (fuzzySelectRows.length < 5) {
+                    const topSuggestions = lookupTopNicknames(pending.nickname, db, rankingCache, MAX_NICKNAME_SUGGESTIONS, lookup.fuzzyCandidates);
+                    const hasFuzzyOptions = topSuggestions.some(s => s.nickname.toLowerCase() !== pending.nickname.toLowerCase());
+                    if (hasFuzzyOptions) {
+                        fuzzySelectRows.push(buildPendingNicknameSelect(userId, pending.nickname, topSuggestions, pending.selectedNickname));
+                    }
+                }
 
                 // Re-send admin panel
                 if (adminChannelId) {
@@ -582,6 +606,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                         const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
 
+                        const displayNick = pending.selectedNickname || pending.nickname;
+                        const selectedNote = pending.selectedNickname && pending.selectedNickname !== pending.nickname
+                            ? ` (corrected from "${pending.nickname}")`
+                            : '';
+
                         const approveButtons = [
                             new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
                         ];
@@ -598,7 +627,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
                         try {
                             const adminMsg = await adminChannel.send({
-                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${pending.nickname}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+                                content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${displayNick}${selectedNote}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
                                 components: [
                                     new ActionRowBuilder().addComponents(approveButtons)
                                 ]
@@ -622,15 +651,6 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             if (ownerEntries.length > 0) report += '\n';
             report += `✈️ **Pilot Approvals (${pilotEntries.length})**\n`;
 
-            const pilotIdSet = new Set();
-            for (const [, data] of Object.entries(db.users || {})) {
-                if (data.pilotIds && data.pilotIds.length > 0) {
-                    for (const pid of data.pilotIds) {
-                        pilotIdSet.add(pid);
-                    }
-                }
-            }
-
             for (const [pilotId, pending] of pilotEntries) {
                 const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
                 const pilotTag = pilotMember ? pilotMember.toString() : `<@${pilotId}>`;
@@ -648,44 +668,21 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 let line = `\n${pilotTag} → Owner **${pending.ownerNick}**\n`;
                 line += `   ⏰ Expires in: ${expiresIn}\n`;
 
-                if (!ownerMatch) {
-                    const cleanedInput = cleanNickname(pending.ownerNick);
-                    if (cleanedInput.length >= 2) {
-                        let bestMatch = null;
-                        let bestScore = 0;
+                if (pending.originalOwnerNick && pending.originalOwnerNick !== pending.ownerNick) {
+                    line += `   ✅ **Owner corrected:** "${pending.originalOwnerNick}" → "${pending.ownerNick}"\n`;
+                }
 
-                        for (const [id, data] of Object.entries(db.users || {})) {
-                            if (!data.nickname) continue;
-                            if (pilotIdSet.has(id)) continue;
-                            const cleanedNick = cleanNickname(data.nickname);
-                            if (cleanedNick.length < 2) continue;
-
-                            const inputChars = new Set(cleanedInput);
-                            const nickChars = new Set(cleanedNick);
-                            let commonChars = 0;
-                            for (const c of inputChars) {
-                                if (nickChars.has(c)) commonChars++;
-                            }
-                            const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
-                            if (overlap < 0.3) continue;
-
-                            const distance = levenshteinDistance(cleanedInput, cleanedNick);
-                            const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
-                            const similarity = 1 - (distance / maxLen);
-
-                            if (similarity > bestScore && similarity >= 0.55) {
-                                bestScore = similarity;
-                                bestMatch = data.nickname;
-                            }
-                        }
-
-                        if (bestMatch) {
-                            line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${bestMatch}"\n`;
-                        }
-                    }
+                const ownerCandidates = !ownerMatch ? findOwnerCandidates(pending.ownerNick, db, MAX_NICKNAME_SUGGESTIONS) : [];
+                if (!ownerMatch && ownerCandidates.length > 0) {
+                    line += `   🔍 **Fuzzy suggestion:** owner "${pending.ownerNick}" → "${ownerCandidates[0].nickname}"\n`;
                 }
 
                 report += line;
+
+                // Offer a dropdown to correct the owner when they aren't found (max 5 rows total)
+                if (!ownerMatch && ownerCandidates.length > 0 && fuzzySelectRows.length < 5) {
+                    fuzzySelectRows.push(buildPendingPilotOwnerSelect(pilotId, pending.ownerNick, ownerCandidates, pending.ownerId));
+                }
             }
         }
 
@@ -698,56 +695,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         }
 
         logEvent(`📋 Admin ${interaction.user.tag} checked pending requests (${ownerEntries.length} owners, ${pilotEntries.length} pilots, ${panelsRestored} panels restored)`);
-        return interaction.editReply(report);
+        return interaction.editReply({
+            content: report,
+            components: fuzzySelectRows
+        });
     }
 
-    // ── elderguide ──
-    if (commandName === 'elderguide') {
-        const isApprover = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
-            interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
-
-        if (!isApprover) {
-            return interaction.reply({ content: '❌ You do not have permission to view this guide.', flags: 64 });
-        }
-
-        const guide = `📋 **Elder Guide**\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `📩 **1. How approvals appear**\n\n` +
-            `When someone clicks **👑 Register as Owner**, a message appears in the admin channel with the user info, ranking status, and allied clan status.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `✅ **2. Approve (permanent)**\n\n` +
-            `Click **✅ Approve** when the nickname is in the ranking AND in an allied clan. → Permanent role + nickname set automatically.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `⏳ **3. Approve Temporarily (3 days)**\n\n` +
-            `Click **⏳ Approve Temporarily** when NOT in ranking or NOT in allied clan yet. → Temporary role (3 days). Auto-converts to permanent once found in an allied clan during daily sync.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `❌ **4. Reject with reason**\n\n` +
-            `Click **❌ Reject** → write the reason. The user gets a DM explaining why. Always write a clear reason so the user can fix it.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `✈️ **5. Pilot Registration**\n\n` +
-            `When someone clicks **✈️ Register as Pilot**, the bot DMs the owner to approve/reject directly. Elders do NOT approve pilots.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `⏰ **6. Expiration**\n\n` +
-            `Pending approvals expire after **24h**. The message updates showing "expired". User must re-submit.\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `❓ Need help? Contact an Administrator.`;
-
-        return interaction.reply({ content: guide });
-    }
-
-    // ── scanimport ──
-    if (commandName === 'scanimport') {
-        return handleScanImport(interaction, db, saveLocalStorage, logEvent);
-    }
-
-    // ── scanimport_status ──
-    if (commandName === 'scanimport_status') {
-        return handleScanImportStatus(interaction, db, saveLocalStorage, logEvent);
-    }
 
     // ── stats ──
     if (commandName === 'stats') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         // Count owners (registered users who are not pilots of someone else)
         const pilotIdSet = new Set();
@@ -862,7 +819,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── refreshnames ──
     if (commandName === 'refreshnames') {
-        await interaction.deferReply({ flags: 64 });
+        if (!await deferReplySafe(interaction)) return;
 
         const allMembers = await guild.members.fetch().catch(() => null);
         if (!allMembers || allMembers.size === 0) {
@@ -932,277 +889,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         return interaction.editReply(report);
     }
 
-    // ── scanrebuild ──
-    if (commandName === 'scanrebuild') {
-        await interaction.deferReply({ flags: 64 });
-
-        const allMembers = await guild.members.fetch().catch(() => null);
-        if (!allMembers || allMembers.size === 0) {
-            return interaction.editReply('❌ Could not fetch guild members.');
-        }
-
-        // Reset only the users that were in DB (backup was lost)
-        const previousCount = Object.keys(db.users || {}).length;
-        db.users = {};
-
-        let registered = 0;
-        let pilots = 0;
-        let fuzzyLinked = 0;
-        const errors = [];
-        const fuzzyInfos = [];
-        const now = new Date().toISOString();
-
-        // Build a map: nickname → memberId for owner lookups
-        const nicknameToId = {};
-
-        // First pass: collect all members with a clan role (or the GoW Kids temp role)
-        const eligible = [];
-        for (const [memberId, member] of allMembers) {
-            if (member.user.bot) continue;
-            if (!hasMemberRole(member, db)) continue;
-            eligible.push(member);
-        }
-
-        // Detect pilots and extract owner nicknames
-        const pilotLinks = []; // { pilotId, ownerNick }
-
-        for (const member of eligible) {
-            const currentNick = (member.nickname || member.user.username).trim();
-
-            // Detect pilot: nickname ends with " - Pilot"
-            if (currentNick.endsWith(' - Pilot')) {
-                // Remove suffix and prefix to get owner base name
-                let ownerNick = currentNick.replace(/ - Pilot$/, '').trim();
-                // Remove known server prefix if present (e.g. "ASIA1 - Name" → "Name")
-                // Only strip uppercase server codes (ASIA1, EU2, SA1, etc.)
-                const prefixMatch = ownerNick.match(/^[A-Z0-9]+ - (.+)$/);
-                if (prefixMatch) {
-                    ownerNick = prefixMatch[1].trim();
-                }
-                pilotLinks.push({ pilotId: member.id, ownerNick, displayName: currentNick });
-            } else {
-                // Owner: strip server prefix if present
-                let baseName = currentNick;
-                const prefixMatch = baseName.match(/^[A-Z0-9]+ - (.+)$/);
-                if (prefixMatch) {
-                    baseName = prefixMatch[1].trim();
-                }
-
-                // Register as owner
-                db.users[member.id] = {
-                    nickname: baseName,
-                    registeredAt: now,
-                    pilotIds: []
-                };
-                nicknameToId[baseName.toLowerCase()] = member.id;
-                registered++;
-            }
-        }
-
-        // Second pass: link pilots to owners
-        for (const { pilotId, ownerNick, displayName } of pilotLinks) {
-            // Try exact cleanNickname match first
-            let ownerId = Object.entries(db.users).find(([id, data]) =>
-                data.nickname && cleanNickname(data.nickname) === cleanNickname(ownerNick)
-            )?.[0];
-
-            // If exact match fails, try fuzzy matching fallback
-            if (!ownerId) {
-                const cleanedInput = cleanNickname(ownerNick);
-                if (cleanedInput.length >= 2) {
-                    let bestScore = 0;
-                    let bestId = null;
-                    let bestNick = null;
-
-                    for (const [id, data] of Object.entries(db.users)) {
-                        if (!data.nickname) continue;
-                        const cleanedNick = cleanNickname(data.nickname);
-                        if (cleanedNick.length < 2) continue;
-
-                        const inputChars = new Set(cleanedInput);
-                        const nickChars = new Set(cleanedNick);
-                        let commonChars = 0;
-                        for (const c of inputChars) {
-                            if (nickChars.has(c)) commonChars++;
-                        }
-                        const overlap = (2 * commonChars) / (inputChars.size + nickChars.size);
-                        if (overlap < 0.3) continue;
-
-                        const distance = levenshteinDistance(cleanedInput, cleanedNick);
-                        const maxLen = Math.max(cleanedInput.length, cleanedNick.length);
-                        const similarity = 1 - (distance / maxLen);
-
-                        if (similarity > bestScore && similarity >= 0.55) {
-                            bestScore = similarity;
-                            bestId = id;
-                            bestNick = data.nickname;
-                        }
-                    }
-
-                    if (bestId) {
-                        ownerId = bestId;
-                        fuzzyLinked++;
-                        fuzzyInfos.push(`🔍 Pilot ${pilotId} — fuzzy matched owner "${ownerNick}" → "${bestNick}"`);
-                    }
-                }
-            }
-
-            if (ownerId) {
-                if (!db.users[ownerId].pilotIds.includes(pilotId)) {
-                    db.users[ownerId].pilotIds.push(pilotId);
-                }
-                // Register pilot as user (so they show in manage panel)
-                db.users[pilotId] = {
-                    ...db.users[pilotId],
-                    nickname: displayName,
-                    registeredAt: now,
-                    pilotIds: []
-                };
-                pilots++;
-            } else {
-                // Owner not found — register pilot as temporary owner with note
-                db.users[pilotId] = {
-                    nickname: ownerNick,
-                    registeredAt: now,
-                    pilotIds: [],
-                    tempUntil: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-                    tempRegisteredAt: now
-                };
-                errors.push(`⚠️ Pilot ${pilotId} — owner "${ownerNick}" not found, registered as temporary`);
-            }
-        }
-
         saveLocalStorage();
 
-        let responseMsg = `🔄 **Database Rebuilt!**\n\n`;
-        responseMsg += `📋 Previous entries: **${previousCount}**\n`;
-        responseMsg += `👑 Owners registered: **${registered}**\n`;
-        responseMsg += `✈️ Pilots linked: **${pilots}**\n`;
-        responseMsg += `📦 Total: **${Object.keys(db.users).length}**\n`;
 
-        if (fuzzyInfos.length > 0) {
-            responseMsg += `\n🔍 **Fuzzy-matched pilots (${fuzzyLinked}):**\n${fuzzyInfos.slice(0, 5).join('\n')}`;
-            if (fuzzyInfos.length > 5) {
-                responseMsg += `\n... and ${fuzzyInfos.length - 5} more`;
-            }
-        }
-
-        if (errors.length > 0) {
-            responseMsg += `\n⚠️ **Warnings (${errors.length}):**\n${errors.slice(0, 5).join('\n')}`;
-            if (errors.length > 5) {
-                responseMsg += `\n... and ${errors.length - 5} more`;
-            }
-        }
-
-        logEvent(`🔄 Admin ${interaction.user.tag} ran /scanrebuild — ${registered} owners, ${pilots} pilots recovered`);
-        return interaction.editReply(responseMsg);
-    }
-
-    // ── nuke ──
-    if (commandName === 'nuke') {
-        // High-risk command: only the super admin may use it
-        if (user.id !== SUPER_ADMIN_USER_ID) {
-            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
-        }
-
-        const categoryCount = guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).size;
-        const channelCount = guild.channels.cache.size - categoryCount;
-        const protectedChannels = guild.channels.cache.filter(c => NUKE_PROTECTED_CHANNEL_IDS.includes(c.id));
-
-        confirmationCache[`${user.id}-nuke`] = {
-            timestamp: Date.now(),
-            channelCount,
-            categoryCount
-        };
-
-        const protectedLine = protectedChannels.size > 0
-            ? `\n\n🛡️ **Protected (will NOT be deleted):** ${protectedChannels.map(c => `<#${c.id}>`).join(', ')}`
-            : '';
-
-        return interaction.reply({
-            content: `💣 **⚠️ DESTRUCTIVE ACTION WARNING ⚠️**\n\nThis will **PERMANENTLY DELETE** all channels and categories from this server:\n\n📁 Categories: **${categoryCount}**\n📢 Channels: **${channelCount}**${protectedLine}\n\n🔴 **THIS ACTION CANNOT BE UNDONE!** All messages, history and permissions will be lost.\n\nAfterwards, a **#geral** channel will be created with the operation summary.\n\nClick **💣 YES, NUKE EVERYTHING** to proceed or **❌ Cancel**.`,
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('confirm-nuke-yes').setLabel('💣 YES, NUKE EVERYTHING').setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder().setCustomId('confirm-nuke-no').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
-                )
-            ],
-            flags: 64
-        });
-    }
-
-    // ── syncroles ──
-    if (commandName === 'syncroles') {
-        // High-risk-ish command: only the super admin may use it
-        if (user.id !== SUPER_ADMIN_USER_ID) {
-            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
-        }
-
-        await interaction.deferReply({ flags: 64 });
-        const report = await syncClanRoles(interaction.client, db, saveLocalStorage, logEvent);
-        return interaction.editReply(report);
-    }
-
-    // ── syncperms: re-apply claim channel permissions from the roles stored in the DB ──
-    if (commandName === 'syncperms') {
-        // High-risk-ish command: only the super admin may use it
-        if (user.id !== SUPER_ADMIN_USER_ID) {
-            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
-        }
-
-        await interaction.deferReply({ flags: 64 });
-        logEvent(`🔒 Admin ${user.tag} ran /syncperms`);
-
-        const result = await applyClaimChannelPermissions(interaction.client, db, logEvent, saveLocalStorage);
-
-        let report;
-        if (result.applied) {
-            report = `🔒 **Permissions Synced!**\n\n` +
-                `🏰 Clan roles applied: **${result.clanRoles}**\n` +
-                `⏳ GoW Kids temp role: ${result.tempRoleApplied ? '✅ included' : '❌ not found'}\n` +
-                (result.discovered > 0 ? `🔍 Roles discovered by name: **${result.discovered}** (saved to DB)\n` : '') +
-                `\nClaim channels (7F–12F, Summons): view-only for clan-role holders (+ GoW Kids).` +
-                `\nmarket/main-chat: open to registered members only (they can view and send).` +
-                `\nevents/reminders: view-only for members (only the bot posts alerts).` +
-                `\ntower-rules/announcements/allied-list: view-only for members (only the Elder role posts).`;
-        } else if (result.reason === 'no-roles') {
-            report = `⚠️ **No clan roles stored in the DB yet.**\n\nAdd allied clans and run **/syncroles** first — it creates the roles and applies the channel permissions.`;
-        } else {
-            report = `❌ **Could not apply permissions.** Reason: ${result.reason || 'unknown'}`;
-        }
-
-        return interaction.editReply(report);
-    }
-
-    // ── setup ──
-    if (commandName === 'setup') {
-        // High-risk command: only the super admin may use it
-        if (user.id !== SUPER_ADMIN_USER_ID) {
-            return interaction.reply({ content: '❌ **Access denied.** Only the super admin can use this command.', flags: 64 });
-        }
-
-        confirmationCache[`${user.id}-setup`] = {
-            timestamp: Date.now()
-        };
-
-        return interaction.reply({
-            content: `🏗️ **⚠️ SERVER SETUP ⚠️**\n\nThis will **create** the full server structure if missing, **rename** existing channels to the pretty names and **re-sync permissions**:\n\n📁 **Claim categories** (view restricted to clan roles + GoW Kids, bot sends panels):\n   🗼 **7F, 8F, 9F, 10F, 11F, 12F** and 🌀 **Summons** with their SP/MS channels\n\n📁 **General category** (🏠):\n   🛒 **market**, 💬 **main-chat** — everyone can chat\n   📜 **tower-rules**, 📢 **announcements**, 🤝 **allied-list** — elders only\n   ⏰ **reminders**, 📅 **events** — bot-managed (alerts)\n   📝 **registration** — welcome/registration panel (public)\n   📨 **approvals** — registration approval panels (staff only)\n\n🗑️ The legacy **domination/standby** channels (removed feature) will be **deleted**.\n\n✅ Idempotent: only missing channels are created.\n\nClick **✅ YES, CREATE EVERYTHING** to proceed or **❌ Cancel**.`,
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('confirm-setup-yes').setLabel('✅ YES, CREATE EVERYTHING').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId('confirm-setup-no').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary)
-                )
-            ],
-            flags: 64
-        });
-    }
 
     return false;
 }
 
 // ── Select Menu: Admin chooses nickname for manualregister ──
 export async function handleSelectManualNickname(interaction, db, saveLocalStorage, logEvent) {
-    await interaction.deferUpdate();
+    if (!await deferUpdateSafe(interaction)) return;
 
     const userId = interaction.customId.replace('select_manual_nickname_', '');
     const selectedNick = interaction.values[0];
@@ -1227,4 +923,144 @@ export async function handleSelectManualNickname(interaction, db, saveLocalStora
     }).catch(() => {});
 
     logEvent(`📌 Admin selected nickname "${selectedNick}" for manualregister (was "${cached.nickname}")`);
+}
+
+// ── Select Menu: Admin corrects the nickname of a pending owner registration ──
+export async function handleSelectPendingNickname(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
+    const userId = interaction.customId.replace('select_pending_nickname_', '');
+    const selectedNick = interaction.values[0];
+    const pending = pendingRegistrations[userId];
+
+    if (!pending) {
+        await interaction.followUp({ content: '⌛ This pending registration no longer exists. Run /pending again.', flags: 64 }).catch(() => {});
+        return;
+    }
+
+    const previousNick = pending.selectedNickname || pending.nickname;
+    pending.selectedNickname = selectedNick;
+    saveLocalStorage();
+
+    // Update the /pending report: replace this user's fuzzy line with the selection (anchored per-entry)
+    let updatedContent = interaction.message.content;
+    const anchor = `<@${userId}> — **`;
+    const anchorIdx = updatedContent.indexOf(anchor);
+    if (anchorIdx !== -1) {
+        const blockEnd = updatedContent.indexOf('\n<@', anchorIdx + anchor.length);
+        const block = blockEnd === -1 ? updatedContent.slice(anchorIdx) : updatedContent.slice(anchorIdx, blockEnd);
+        const selectionLine = `   ✅ **Selected:** "${selectedNick}" (instead of "${previousNick}")\n`;
+        let newBlock = block.replace(/\n {3}✅ \*\*Selected:\*\* .*\n?/, '\n');
+        if (/ {3}🔍 \*\*Fuzzy suggestion:\*\* .*\n?/.test(newBlock)) {
+            newBlock = newBlock.replace(/ {3}🔍 \*\*Fuzzy suggestion:\*\* .*\n?/, selectionLine);
+        } else {
+            newBlock = `${newBlock.replace(/\n+$/, '')}\n${selectionLine}`;
+        }
+        updatedContent = updatedContent.slice(0, anchorIdx) + newBlock + (blockEnd === -1 ? '' : updatedContent.slice(blockEnd));
+    } else {
+        updatedContent = `${updatedContent.replace(/\n+$/, '')}\n📌 **Selected for <@${userId}>:** "${selectedNick}"`;
+    }
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    // Keep the admin panel in sync so approval uses the corrected nickname
+    if (pending.channelId && pending.messageId) {
+        try {
+            const channel = interaction.guild.channels.cache.get(pending.channelId);
+            if (channel) {
+                const panelMsg = await channel.messages.fetch(pending.messageId).catch(() => null);
+                if (panelMsg) {
+                    const correctedNote = previousNick !== selectedNick ? ` (corrected from "${previousNick}")` : '';
+                    const panelContent = panelMsg.content
+                        .replace(/📝 \*\*Nickname:\*\* [^\n]*/, `📝 **Nickname:** ${selectedNick}${correctedNote}`)
+                        .replace(/\n✅ \*\*Corrected by admin:\*\* [^\n]*/, '');
+                    await panelMsg.edit({ content: panelContent.substring(0, 1900), components: panelMsg.components }).catch(() => {});
+                }
+            }
+        } catch {
+            // best-effort: never let a panel sync failure break the selection
+        }
+    }
+
+    logEvent(`✅ Admin ${interaction.user.tag} corrected pending nickname for <@${userId}>: "${previousNick}" → "${selectedNick}"`);
+}
+
+// ── Select Menu: Admin corrects the owner of a pending pilot approval ──
+export async function handleSelectPendingPilotOwner(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
+    const pilotId = interaction.customId.replace('select_pending_pilot_owner_', '');
+    const selected = interaction.values[0];
+    const pending = pendingPilotApprovals[pilotId];
+
+    if (!pending) {
+        await interaction.followUp({ content: '⌛ This pilot request no longer exists. Run /pending again.', flags: 64 }).catch(() => {});
+        return;
+    }
+
+    const previousNick = pending.ownerNick;
+    const previousOwnerId = pending.ownerId;
+
+    if (selected !== 'keep') {
+        const ownerData = db.users[selected];
+        if (!ownerData) {
+            await interaction.followUp({ content: '❌ That owner is no longer registered.', flags: 64 }).catch(() => {});
+            return;
+        }
+        if (!pending.originalOwnerNick) pending.originalOwnerNick = pending.ownerNick;
+        pending.ownerId = selected;
+        pending.ownerNick = ownerData.nickname;
+    }
+    saveLocalStorage();
+
+    // Update the /pending report: replace this pilot's fuzzy line with the correction note (anchored per-entry)
+    let updatedContent = interaction.message.content;
+    const anchor = `<@${pilotId}> → Owner **`;
+    const anchorIdx = updatedContent.indexOf(anchor);
+    if (anchorIdx !== -1) {
+        const blockEnd = updatedContent.indexOf('\n<@', anchorIdx + anchor.length);
+        const block = blockEnd === -1 ? updatedContent.slice(anchorIdx) : updatedContent.slice(anchorIdx, blockEnd);
+        const note = selected === 'keep'
+            ? `   ✅ **Owner kept as typed:** "${pending.ownerNick}"\n`
+            : `   ✅ **Owner corrected:** "${pending.originalOwnerNick}" → "${pending.ownerNick}"\n`;
+        let newBlock = block.replace(/\n {3}✅ \*\*Owner (corrected|kept as typed):\*\* .*\n?/, '\n');
+        if (/ {3}🔍 \*\*Fuzzy suggestion:\*\* owner .*\n?/.test(newBlock)) {
+            newBlock = newBlock.replace(/ {3}🔍 \*\*Fuzzy suggestion:\*\* owner .*\n?/, note);
+        } else {
+            newBlock = `${newBlock.replace(/\n+$/, '')}\n${note}`;
+        }
+        updatedContent = updatedContent.slice(0, anchorIdx) + newBlock + (blockEnd === -1 ? '' : updatedContent.slice(blockEnd));
+    } else {
+        updatedContent = `${updatedContent.replace(/\n+$/, '')}\n📌 **Owner corrected for <@${pilotId}>:** "${pending.ownerNick}"`;
+    }
+
+    await interaction.editReply({
+        content: updatedContent.substring(0, 1900),
+        components: interaction.message.components
+    }).catch(() => {});
+
+    // Notify the corrected owner so they can approve (best-effort)
+    if (selected !== 'keep' && pending.ownerId !== previousOwnerId) {
+        try {
+            const ownerMember = await interaction.guild.members.fetch(pending.ownerId);
+            const dmChannel = await ownerMember.createDM();
+            await dmChannel.send({
+                content: `✈️ **Aprovação de Piloto**\n\n👤 **${pending.pilotTag}** quer se registrar como seu piloto.\n📝 **Nickname do dono:** ${pending.ownerNick}\n\nVocê aprova este piloto?`,
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`approve_pilot_${pilotId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+                    )
+                ]
+            });
+            logEvent(`✈️ Pilot owner corrected for ${pilotId} → ${pending.ownerNick}; owner notified`);
+        } catch (e) {
+            logEvent(`⚠️ Could not notify corrected owner for pilot ${pilotId}: ${e.message}`);
+        }
+    }
+
+    logEvent(`✅ Admin ${interaction.user.tag} corrected pending pilot owner for <@${pilotId}>: "${previousNick}" → "${pending.ownerNick}"`);
 }

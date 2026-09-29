@@ -255,11 +255,11 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         setAdminChannelId(db.config.adminChannelId);
     }
 
-    // Load persisted channel IDs saved by /setup (registration channel)
+    // Load persisted channel IDs (registration channel)
     loadChannelIdsFromConfig(db.config);
 
     // Pre-registrations no longer expire by time — they are validated against the
-    // EU11 ranking on every sync (not found in the ranking → removed immediately).
+    // EU21 ranking on every sync (not found in the ranking → removed immediately).
 
     // Restore the welcome/fixed panel on startup if it was deleted
     restoreWelcomePanel(client, db, saveLocalStorage, logEvent).catch(err => {
@@ -289,7 +289,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                 const preReg = db.preRegistrations[member.id];
 
                 // Pre-registration is always applied on join — no time-based expiry.
-                // Ranking validity is enforced by the sync engine (not in the EU11
+                // Ranking validity is enforced by the sync engine (not in the EU21
                 // ranking → removed immediately).
                 {
                     // Check if pilot (has ownerNick)
@@ -321,7 +321,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             saveLocalStorage();
 
                             await member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {});
-                            // Pilots inherit the owner's clan role (GoW Kids fallback)
+                            // Pilots inherit the owner's membership (fixed member role)
                             const assigned = await assignClanRole(member, db, logEvent);
                             if (!assigned) await assignTempRole(member, db, saveLocalStorage, logEvent);
 
@@ -358,8 +358,9 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         saveLocalStorage();
 
                         await member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {});
-                        // Pre-registered owner — assign the clan role if found in an allied clan
-                        // (GoW Kids fallback when the lookup can't resolve it yet)
+                        // Pre-registered owner — grant the member role when found in an allied clan
+                        // (the fixed member role is also granted as fallback while the
+                        // lookup can't resolve the clan yet)
                         const assigned = await assignClanRole(member, db, logEvent);
                         if (!assigned) await assignTempRole(member, db, saveLocalStorage, logEvent);
 

@@ -1,7 +1,7 @@
 // ==========================================
-// 🏗️ SERVER STRUCTURE (used by /setup)
+// 🏗️ SERVER STRUCTURE
 // ==========================================
-// Single source of truth for the Discord structure the /setup command creates.
+// Single source of truth for the Discord structure the bot manages.
 // Claim categories are matched by their explicit `id` first (they win over
 // name/legacy lookups), then by NAME, then by legacyId — which is kept only as
 // an upgrade fallback for servers that still have the old categories.
@@ -9,7 +9,7 @@
 // Channel defs carry:
 //   name       — the display name (with emoji) actually used on Discord
 //   key        — stable logical id used by the bot for wiring (never shown)
-//   legacyName — the old display name so /setup can RENAME existing channels
+//   legacyName — the old display name so the bot can find (and rename) legacy channels
 //                instead of creating duplicates (used for upgrades)
 
 import { PermissionFlagsBits, ChannelType } from 'discord.js';
@@ -23,9 +23,12 @@ export const ELDER_ROLE_ID = '1503934006431973488';
 //   • MS           → every Magic Square floor
 // `id` is the explicit Discord category ID — it wins over name/legacy lookups,
 // and a category matched by id keeps its current name (no rename).
+// Claim channels created inside the category inherit its permission overwrites
+// (auto-channel-setup copies them explicitly), so the category is the source
+// of truth for who can see the panels.
 export const CLAIM_CATEGORIES = [
     {
-        id: '1548033121012813905',
+        id: '1539144586297999400',
         name: '🔸 SP & Summons',
         channels: [
             { name: '🔸 SP-7F', key: 'sp7', legacyName: '🔸┃sp7', panels: ['7peak'] },
@@ -38,7 +41,7 @@ export const CLAIM_CATEGORIES = [
         ]
     },
     {
-        id: '1548033184619438162',
+        id: '1539144926464446484',
         name: '🔹 MS',
         channels: [
             { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squarenormal', '7squareantidemon'] },
@@ -53,7 +56,7 @@ export const CLAIM_CATEGORIES = [
 
 // ── General category — one category with every general channel ──
 // mode:
-//   member      → members-only: only registered members (clan roles + GoW Kids)
+//   member      → members-only: registered members (fixed member role)
 //                 can view and chat (market, main-chat)
 //   member-view → members-only view: members see the posts, only the bot sends
 //                 (reminders, events)
@@ -77,7 +80,7 @@ export const GENERAL_CATEGORY = {
     ]
 };
 
-// Legacy channels from a removed feature (deleted by /setup during upgrades)
+// Legacy channels from a removed feature (deleted during upgrades)
 export const LEGACY_DELETED_CHANNELS = ['domination', 'standby'];
 
 /**
@@ -101,7 +104,7 @@ export function getGeneralChannelName(key) {
 /**
  * Find a text channel inside a category matching a channel def:
  * 1. by the pretty name, 2. by the legacy name, 3. by the logical key.
- * This lets both /setup and the permission sync find and upgrade channels
+ * This lets the permission sync find and upgrade channels
  * that still carry the old (pre-emoji) names.
  * @param {import('discord.js').Guild} guild
  * @param {string} categoryId
@@ -148,12 +151,12 @@ export function findClaimCategory(guild, catDef) {
 /**
  * Alias of buildMemberViewOverwrites used by the claim channels (7F-12F, Summons):
  * @everyone cannot view (or send), the bot and the given roles can VIEW ONLY,
- * only the bot can send (panels). Members holding a clan role (or GoW Kids)
+ * only the bot can send (panels). Members holding the member role
  * can read the panels and click the buttons, but are explicitly denied sending
  * text messages — including in threads — so the channels stay clean.
  * @param {string} everyoneId
  * @param {string} botId
- * @param {string[]} allowViewIds - role IDs allowed to view (clan roles, GoW Kids temp role)
+ * @param {string[]} allowViewIds - role IDs allowed to view (fixed member role)
  */
 export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
     return buildMemberViewOverwrites(everyoneId, botId, allowViewIds);
@@ -161,8 +164,8 @@ export function buildClaimOverwrites(everyoneId, botId, allowViewIds) {
 
 /**
  * Build permission overwrites for members-view channels (reminders, events and
- * claim channels): @everyone is locked out, the given member roles (clan roles
- * + GoW Kids) can VIEW only, only the bot (and any extra writer roles) can send
+ * claim channels): @everyone is locked out, the member role
+ * can VIEW only, only the bot (and any extra writer roles) can send
  * (panels/alerts).
  * @param {string} everyoneId
  * @param {string} botId
@@ -192,8 +195,8 @@ export function buildMemberViewOverwrites(everyoneId, botId, allowViewIds, extra
 
 /**
  * Build permission overwrites for the elders channels (tower-rules,
- * announcements, allied-list): @everyone is locked out, member roles (clan
- * roles + GoW Kids) can VIEW only, the elder role (and the bot) can view AND
+ * announcements, allied-list): @everyone is locked out, the member role
+ * can VIEW only, the elder role (and the bot) can view AND
  * write.
  * @param {string} everyoneId
  * @param {string} botId
@@ -206,8 +209,8 @@ export function buildEldersOverwrites(everyoneId, botId, memberViewIds, elderId)
 
 /**
  * Build permission overwrites for general member channels (market, main-chat):
- * @everyone is locked out, while the bot and the given member roles (clan
- * roles + GoW Kids) can view AND send — registered members chat freely.
+ * @everyone is locked out, while the bot and the member role
+ * can view AND send — registered members chat freely.
  * @param {string} everyoneId
  * @param {string} botId
  * @param {string[]} allowIds - member role IDs allowed to view and chat
