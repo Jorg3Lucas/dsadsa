@@ -284,9 +284,22 @@ src/
 
 ## 🧪 Test Checklist
 
-After any changes, verify:
+### Automated (run these first)
+```
+npm run lint     # ESLint — must end with 0 problems
+npm test         # node:test unit tests (ranking-cache helpers)
+```
+> There is **no integration harness** for the Discord or web flows, so everything below is a manual check against a test guild.
 
-- [ ] Boot → all floor channels recreated + panels deployed (auto-setup)
+### Boot sequence (`src/index.js`, in this order)
+- [ ] Ranking boot runs only with `RANKING_ENABLED=true` (deploy commands, member-role lookup, sync check after 10 s, auto-backup every 6 h)
+- [ ] `initClaimSystem` loads the claim DB, builds missing panels and runs migrations — it must send **nothing** to Discord (no refresh, no recovery)
+- [ ] Auto-setup deletes every text channel in the two claim categories and recreates them with fresh panels — no duplicate panels are left behind
+- [ ] `applyClaimChannelPermissions` restricts claim + member channels to `MEMBER_ROLE_ID` (skipped, with a warning, when the role is missing)
+- [ ] The 15 s tick starts, then the panel watchdog (first pass ~60 s after boot)
+- [ ] Web server (`WEB_ENABLED=true`) and the `!earlyclaim` / `!set*` text commands come up last
+
+### Claim flows
 - [ ] **Floor claim** — claim, leave, queue promotion, grace period
 - [ ] **Boss killed** → cooldown → auto-respawn → DM reminder
 - [ ] **Antidemon rooms** — left/mid/right, combo rooms, password modal
@@ -298,3 +311,15 @@ After any changes, verify:
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
 - [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts
+
+### Tick & watchdog resilience
+- [ ] Tick runs every 15 s and **skips** a pass (no overlap) while the previous one is still awaiting Discord
+- [ ] A panel idle >10 min is heartbeat-refreshed; the watchdog itself runs every 5 min
+- [ ] A panel that stays stale for >1 h → message re-sent; if that fails → channel deleted, recreated and all its panels re-posted; the super admin gets a DM
+- [ ] A panel that keeps failing is not retried more than once per 30 min (recovery cooldown)
+- [ ] Watchdog ignores non-claim panels (registration/approval panels stay untouched)
+
+### Web
+- [ ] `/api/panels` and `/api/history` are served gzipped when the client accepts it, and the response body is intact (not empty) either way
+- [ ] Login survives a bot/PM2 restart (session comes back from `web-sessions.json`)
+- [ ] Logout and 7-day expiry both clear the session on disk
