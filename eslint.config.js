@@ -3,6 +3,7 @@
 // ==========================================
 // Covers the three flavours of code in this repo:
 //   • src/**/*.js, *.mjs  → Node, ES modules (the bot + CLI scripts)
+//   • test/**/*.js        → Node, ES modules (node:test unit tests)
 //   • *.cjs               → Node, CommonJS (deploy / PM2 ecosystem)
 //   • web/**/*.js         → browser, classic scripts (claim website)
 //
@@ -40,6 +41,16 @@ export default [
     {
         // Bot + ESM scripts.
         files: ['src/**/*.js', 'src/**/*.mjs', '*.js', '*.mjs'],
+        languageOptions: {
+            ecmaVersion: 'latest',
+            sourceType: 'module',
+            globals: { ...globals.node },
+        },
+    },
+
+    {
+        // Unit tests (node:test).
+        files: ['test/**/*.js'],
         languageOptions: {
             ecmaVersion: 'latest',
             sourceType: 'module',

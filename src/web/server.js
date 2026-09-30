@@ -68,20 +68,39 @@ function acceptsGzip(res) {
     return /gzip/.test((res.req && res.req.headers && res.req.headers["accept-encoding"]) || "");
 }
 
-function json(res, status, data) {
+// Async gzip — the web server runs INSIDE the bot process, so a synchronous
+// gzipSync() on a large /api/panels payload would block the event loop and
+// stall every Discord interaction until it finished.
+function gzipBuffer(buf) {
+    return new Promise((resolve, reject) => {
+        zlib.gzip(buf, (err, out) => (err ? reject(err) : resolve(out)));
+    });
+}
+
+/**
+ * Compress a body when the client accepts gzip. Compression happens BEFORE
+ * writeHead so a compression failure can silently fall back to identity.
+ * @returns {Promise<Buffer|string>}
+ */
+async function encodeBody(res, body) {
+    if (!acceptsGzip(res) || body.length <= 512) return { gzipped: false, payload: body };
+    try {
+        return { gzipped: true, payload: await gzipBuffer(body) };
+    } catch {
+        return { gzipped: false, payload: body };
+    }
+}
+
+async function json(res, status, data) {
     const body = JSON.stringify(data);
     const headers = {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store"
     };
-    if (acceptsGzip(res) && body.length > 512) {
-        headers["Content-Encoding"] = "gzip";
-        res.writeHead(status, headers);
-        res.end(zlib.gzipSync(body));
-    } else {
-        res.writeHead(status, headers);
-        res.end(body);
-    }
+    const { gzipped, payload } = await encodeBody(res, body);
+    if (gzipped) headers["Content-Encoding"] = "gzip";
+    res.writeHead(status, headers);
+    res.end(payload);
 }
 
 function readBody(req) {
@@ -164,7 +183,7 @@ function serveStatic(req, res, pathname) {
         json(res, 403, { error: "Forbidden" });
         return;
     }
-    fs.readFile(resolved, (err, data) => {
+    fs.readFile(resolved, async (err, data) => {
         if (err) {
             res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
             res.end("Not found");
@@ -172,14 +191,10 @@ function serveStatic(req, res, pathname) {
         }
         const type = MIME[path.extname(resolved).toLowerCase()] || "application/octet-stream";
         const headers = { "Content-Type": type, "Cache-Control": "no-cache" };
-        if (acceptsGzip(res) && data.length > 512 && type.startsWith("text/")) {
-            headers["Content-Encoding"] = "gzip";
-            res.writeHead(200, headers);
-            res.end(zlib.gzipSync(data));
-        } else {
-            res.writeHead(200, headers);
-            res.end(data);
-        }
+        const gz = type.startsWith("text/") ? await encodeBody(res, data) : { gzipped: false, payload: data };
+        if (gz.gzipped) headers["Content-Encoding"] = "gzip";
+        res.writeHead(200, headers);
+        res.end(gz.payload);
     });
 }
 

@@ -324,13 +324,16 @@ export function findTopNicknamesInCache(displayName, cache, limit = 3) {
     // split below yields the whole cleaned query — the loop therefore matches
     // nicknames that CONTAIN the query (e.g. "dinizpilot" for a "diniz"
     // lookup), scoring by how much of the nickname the query covers. It stays
-    // generic in case cleaning is ever relaxed. Any such entry shares all of the
-    // query's bigrams, so it is always present in `candidates`; the full pool is
-    // only a safety net when the similarity pass found nothing at all.
+    // generic in case cleaning is ever relaxed.
+    //
+    // Scanning only `candidates` is safe: an entry whose cleaned name contains
+    // the query necessarily shares ALL of the query's bigrams, so it is always
+    // present in the bigram candidate pool (which falls back to the full entry
+    // list when the prefilter prunes everything). Scanning the full pool here
+    // would re-clean + Levenshtein every entry for nothing.
     const parts = cleanedInput.split(/[\s_]+/).filter(p => p.length > 2);
-    const partsPool = candidates !== index.entries && matches.length > 0 ? candidates : index.entries;
     for (const part of parts) {
-        for (const entry of partsPool) {
+        for (const entry of candidates) {
             const cleanedNick = entry.cleaned;
             if (cleanedNick.length < 2) continue;
             if (cleanedNick.includes(part) && cleanedNick.length > part.length) {

@@ -142,6 +142,11 @@ client.once('clientReady', async () => {
 
             // O bot gerencia UM único cargo fixo de membro (MEMBER_ROLE_ID) e
             // nunca cria cargos — só reaproveita o que já existe no servidor.
+            // Sem a env, o fallback hardcoded pode apontar para um cargo que já
+            // não existe: avisa alto em vez de falhar em silêncio.
+            if (!process.env.MEMBER_ROLE_ID?.trim()) {
+                console.warn(`⚠️ [Ranking] MEMBER_ROLE_ID não definido no .env — usando o fallback ${MEMBER_ROLE_ID}. Defina MEMBER_ROLE_ID com o ID real do cargo de membro.`);
+            }
             const memberRole = guild.roles.cache.get(MEMBER_ROLE_ID);
             if (memberRole) {
                 console.log(`✅ [Ranking] Member role "${memberRole.name}" (${MEMBER_ROLE_ID}) found.`);
@@ -166,8 +171,9 @@ client.once('clientReady', async () => {
     }
 
     // ═══ CLAIM SYSTEM BOOT ═══
-    // Inicializa dados dos painéis sem recovery (não envia para canais antigos)
-    await initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages, true);
+    // Inicializa os dados dos painéis (sem enviar nada): o auto-setup logo
+    // abaixo recria os canais e publica todos os painéis do zero.
+    await initClaimSystem(client, claimDb, saveClaimStorage, logClaimEvent, claimLastMessages);
 
     // Recria canais e envia painéis frescos para os canais novos
     try {

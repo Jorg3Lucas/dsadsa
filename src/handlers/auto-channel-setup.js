@@ -31,7 +31,8 @@ export async function setupAllChannels(client, guildId) {
 
     console.log("🏗️ [Auto Setup] Starting channel setup...");
 
-    // Clear stale panel mapping so processAutoRecoveryOnBoot doesn't try to use old channels
+    // Clear stale panel mapping so the panel watchdog never edits a message in a
+    // channel that is about to be deleted (mappings are rebuilt below).
     db._panelMapping = {};
     for (const key in lastMessages) delete lastMessages[key];
 

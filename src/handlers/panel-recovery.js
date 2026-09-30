@@ -11,7 +11,7 @@
 
 import { client, db, lastMessages, saveLocalStorage, logEvent } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
-import { CLAIM_CATEGORIES, findClaimCategory } from "../core/server-structure.js";
+import { CLAIM_CATEGORIES, findClaimCategory, buildClaimOverwrites } from "../core/server-structure.js";
 import { noop } from "../core/config.js";
 import { logger } from "../core/logger.js";
 import {
@@ -21,7 +21,7 @@ import {
     getPanelHealth,
     notifyUserDM
 } from "./panel-dm.js";
-import { SUPER_ADMIN_USER_ID } from "../core/ranking-constants.js";
+import { SUPER_ADMIN_USER_ID, MEMBER_ROLE_ID } from "../core/ranking-constants.js";
 
 // A panel that has not refreshed successfully for this long is escalated.
 const STALE_PANEL_MS = 60 * 60 * 1000;        // 1h
@@ -32,6 +32,18 @@ const HEARTBEAT_AGE_MS = 10 * 60 * 1000;      // 10m
 const RECOVERY_COOLDOWN_MS = 30 * 60 * 1000;  // 30m
 
 const lastRecoveryAttempt = new Map();
+
+// Every panel owned by a claim channel. Built once at import so the health
+// loop's per-panel check is an O(1) Set lookup instead of re-scanning every
+// category and channel on every pass (twice a minute, forever).
+const CLAIM_PANEL_KEYS = new Set(
+    CLAIM_CATEGORIES.flatMap(cat => cat.channels.flatMap(ch => ch.panels || []))
+);
+
+/** True when the key is a panel rendered by a claim channel (not a static/system panel). @param {string} panelKey */
+export function isClaimPanel(panelKey) {
+    return CLAIM_PANEL_KEYS.has(panelKey);
+}
 
 /**
  * Map a panel key to its claim category + channel definition.
@@ -84,7 +96,13 @@ export async function recreateChannelForPanel(key, guildId) {
         await existing.delete().catch(noop);
     }
 
-    const overwrites = category.permissionOverwrites?.cache?.map(o => o) || [];
+    // Build the channel permissions from the single source of truth instead of
+    // copying whatever the category happens to carry: members view only, the
+    // bot sends the panels. Falls back to the category overwrites when the
+    // member role is absent (Discord rejects overwrites for unknown roles).
+    const overwrites = guild.roles.cache.has(MEMBER_ROLE_ID)
+        ? buildClaimOverwrites(guild.roles.everyone.id, client.user.id, [MEMBER_ROLE_ID])
+        : (category.permissionOverwrites?.cache?.map(o => o) || []);
     const newChannel = await guild.channels.create({
         name: channelDef.name,
         type: 0, // GuildText
@@ -144,7 +162,7 @@ export async function runPanelHealthCheck(guildId) {
         try {
             if (!db[key] || key.startsWith("_")) continue;
             // Only claim panels are monitored (registration/approval panels are static).
-            if (!findChannelDefForPanel(key)) continue;
+            if (!isClaimPanel(key)) continue;
 
             let health = getPanelHealth(key);
             if (!health) {

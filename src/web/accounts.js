@@ -72,15 +72,47 @@ export function verifyPassword(password, account) {
     }
 }
 
-// ── Sessions (in-memory — users re-login after a bot restart) ──
+// ── Sessions (persisted — survive a bot/PM2 restart) ──
+// Stored in web-sessions.json (gitignored) as token -> { username, expiresAt }.
+// Only the opaque random token is kept (no passwords), so the file is no more
+// sensitive than the cookie the browser already holds.
 
-const sessions = new Map(); // token -> { username, expiresAt }
+const SESSIONS_PATH = path.resolve("./web-sessions.json");
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/** Load valid, unexpired sessions from disk, dropping anything stale. */
+function loadSessions() {
+    const map = new Map();
+    try {
+        if (!fs.existsSync(SESSIONS_PATH)) return map;
+        const raw = JSON.parse(fs.readFileSync(SESSIONS_PATH, "utf8"));
+        const now = Date.now();
+        for (const [token, s] of Object.entries(raw || {})) {
+            if (s && s.username && Number(s.expiresAt) > now) {
+                map.set(token, { username: s.username, expiresAt: Number(s.expiresAt) });
+            }
+        }
+    } catch (e) {
+        console.error("[Web] Failed to read web-sessions.json:", e.message);
+    }
+    return map;
+}
+
+let sessions = loadSessions();
+
+function saveSessions() {
+    try {
+        fs.writeFileSync(SESSIONS_PATH, JSON.stringify(Object.fromEntries(sessions), null, 2), "utf8");
+    } catch (e) {
+        console.error("[Web] Failed to write web-sessions.json:", e.message);
+    }
+}
 
 /** @returns {string} */
 export function createSession(username) {
     const token = crypto.randomBytes(32).toString("hex");
     sessions.set(token, { username, expiresAt: Date.now() + SESSION_TTL_MS });
+    saveSessions();
     return token;
 }
 
@@ -91,13 +123,14 @@ export function getSessionUser(token) {
     if (!session) return null;
     if (Date.now() > session.expiresAt) {
         sessions.delete(token);
+        saveSessions();
         return null;
     }
     return session.username;
 }
 
 export function destroySession(token) {
-    if (token) sessions.delete(token);
+    if (token && sessions.delete(token)) saveSessions();
 }
 
 // ── Login rate limiting (brute-force protection) ──

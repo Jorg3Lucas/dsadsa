@@ -1,14 +1,13 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "../core/state.js";
-import { buildPanelDefaults, migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateAntidemon9e10, migrateMS1112, migrateSPLegacyToUnified, processAutoRecoveryOnBoot, refreshVisualPanel } from "./panel-utils.js";
-import { startTickInterval } from "./panel-tick.js";
+import { buildPanelDefaults, migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateAntidemon9e10, migrateMS1112, migrateSPLegacyToUnified } from "./panel-utils.js";
 
 
 // ==========================================
 // 🚀 INITIALIZATION
 // ==========================================
 
-export async function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker, skipRecovery = false) {
+export async function initClaimSystem(botClient, database, saveStorageFn, logEventFn, messagesTracker) {
     initState({ client: botClient, db: database, saveLocalStorage: saveStorageFn, logEvent: logEventFn, lastMessages: messagesTracker });
 
     // Build all known panel keys and initialize if missing
@@ -49,31 +48,14 @@ export async function initClaimSystem(botClient, database, saveStorageFn, logEve
     migrateMS1112();
     migrateSPLegacyToUnified();
 
-    if (skipRecovery) {
-        // The channel auto-setup runs right after this call: it clears the panel
-        // mappings and RE-SENDS every panel. Force-refreshing here would race
-        // with the channel deletion — an edit that fails on a channel being
-        // removed could trigger a recovery that re-sends the panel into a
-        // different (old) channel, leaving a duplicate panel behind.
-        logEvent("Sub-system initialized (panel recovery skipped — will be rebuilt by auto-setup).");
-        return;
-    }
-
-    // Force-refresh all panels to fix any incorrect respawn timers on existing
-    // displays. Awaited (and isolated per panel) so the edits finish before the
-    // recovery pass and the tick start touching the same panels.
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        try {
-            await refreshVisualPanel(key);
-        } catch (err) {
-            logEvent(`Failed to refresh panel ${key}: ${err.message}`);
-        }
-    }
-
-    await processAutoRecoveryOnBoot();
-    startTickInterval();
-    logEvent("Sub-system initialized and panels auto-refreshed inside global Client.");
+    // NOTE: no refresh/recovery here on purpose. index.js runs the channel
+    // auto-setup right after this call, which clears the panel mappings and
+    // RE-SENDS every panel from scratch. Force-refreshing here would race with
+    // the channel deletion — an edit that fails on a channel being removed
+    // could trigger a recovery that re-sends the panel into a different (old)
+    // channel, leaving a duplicate panel behind. index.js starts the tick and
+    // the panel watchdog afterwards, once the new channels exist.
+    logEvent("Sub-system initialized (panels will be rebuilt by auto-setup).");
 }
 
 // ==========================================

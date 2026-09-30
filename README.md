@@ -103,7 +103,7 @@ Admin safeguards: only admins can manage accounts, an admin cannot remove their 
 - **👑 Admin** (só admins) — criar/remover contas e trocar senhas sem usar o terminal.
 
 ### Notes
-- Sessions are in-memory — members re-login after a bot restart.
+- Sessions are persisted in `web-sessions.json` (7-day TTL) — members stay logged in across bot restarts.
 - Login is rate-limited (5 failed attempts → 15 min lockout) + per-IP API throttling.
 - Non-Discord members have a synthetic identity: claims show their display name, and DMs simply can't be delivered to them (logged, never crashes).
 
@@ -190,6 +190,7 @@ Each channel gets its panel embeds + buttons posted automatically.
 | `early-claim-users.json` | Users allowed to claim early |
 | `dm-optout.json` | Users who disabled DMs |
 | `web-accounts.json` | Website accounts (scrypt password hashes) |
+| `web-sessions.json` | Website login sessions (opaque tokens + expiry) |
 
 All are gitignored.
 
@@ -203,7 +204,12 @@ Create a `.env` file (gitignored) — the bot reads **all** of these from the en
 TOKEN=your-bot-token
 CLIENT_ID=your-application-client-id
 DISCORD_SERVER_ID=your-guild-id
+
+# Ranking/registro (only used when RANKING_ENABLED=true)
+MEMBER_ROLE_ID=your-member-role-id
 ```
+
+`MEMBER_ROLE_ID` is the single membership role the bot manages (granted/revoked by the sync, used for claim-channel permissions). The bot **never creates roles** — create it manually on the server first. When the variable is unset the bot falls back to a hardcoded legacy ID and logs a warning at boot; if that fallback role no longer exists, claim-channel permissions are silently skipped (`reason: 'no-roles'`). Always set it explicitly.
 
 `DISCORD_SERVER_ID` is defined once in `src/core/config.js` (from `.env`) and re-used by the ranking/registration system (`src/core/ranking-constants.js`), the claim bot, the web server and `deploy-commands.cjs`. Changing guild only requires editing `.env`.
 

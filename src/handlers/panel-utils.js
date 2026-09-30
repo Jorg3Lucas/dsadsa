@@ -1,9 +1,5 @@
-import { db, client, saveLocalStorage, logEvent, lastMessages } from "../core/state.js";
-import { renderEmbed, renderButtons } from "./panel-render.js";
-import { markPanelHealthy } from "./panel-dm.js";
-import { noop } from "../core/config.js";
+import { db, logEvent } from "../core/state.js";
 import { STATUS_AVAILABLE } from "../core/constants.js";
-import { logger } from "../core/logger.js";
 
 // Re-export from sub-modules
 export { refreshVisualPanel, notifyUserDM } from "./panel-dm.js";
@@ -217,44 +213,4 @@ export function resetPanelData(key) {
         db._panelMapping[key] = oldMapping;
     }
     logEvent(`Panel ${key} data reset to defaults.`);
-}
-
-// ==========================================
-// 🔄 AUTO-RECOVERY ON BOOT
-// ==========================================
-
-/** Re-send all panels with fresh embeds on bot startup, recovering from stale message references. */
-export async function processAutoRecoveryOnBoot() {
-    logEvent("Starting automatic panel recovery and chat cleanup...");
-    if (!db._panelMapping) db._panelMapping = {};
-    for (const key in db) {
-        if (!db[key] || key.startsWith("_")) continue;
-        const mapping = db._panelMapping[key];
-        if (mapping && mapping.channelId && mapping.messageId) {try {
-            const channel = await client.channels.fetch(mapping.channelId).catch(() => null);
-            if (!channel) continue;
-            try {
-                const msg = await channel.messages.fetch(mapping.messageId).catch(() => null);
-                if (msg) await msg.delete().catch(noop);
-            } catch (i) {
-        // Silently ignored — non-critical operation
-    }
-            const newMsg = await channel.send({
-                embeds: [renderEmbed(key)],
-                components: renderButtons(key)
-            }).catch(() => null);
-            if (newMsg) {
-                lastMessages[key] = newMsg;
-                markPanelHealthy(key);
-                db._panelMapping[key] = {
-                    channelId: channel.id,
-                    messageId: newMsg.id
-                };
-            }
-        } catch (s) {
-            logger.error('Panel', `Failed to restore panel ${key}`, s);
-            logEvent(`Failed to restore panel ${key}: ${s.message}`);
-        }}
-    }
-    saveLocalStorage();
 }
