@@ -12,8 +12,7 @@ import {
     getNextScheduleAfter,
     usesScheduleRespawn,
     getBossSchedules,
-    parseStringToDate,
-    getFormattedTime12h
+    parseStringToDate
 } from "../core/time-utils.js";
 import { STATUS_AVAILABLE, STATUS_CLAIMED, STATUS_KILLED, STATUS_KILLED_PREFIX, STATUS_ANY_MOMENT } from "../core/constants.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys } from "./claim-core.js";
@@ -115,12 +114,7 @@ export function renderDefaultPanel(embed, current, now) {
         if (isRoomOpen(current.schedules, fixedMinuteOffset)) {
             desc += `\`\`\`fix\n🟢 ${getMsg("rooms.roomIsOpen")}\n\`\`\`\n`;
         } else {
-            const nextOpenDate = calculateNextOpening(current.schedules, fixedMinuteOffset);
-            const fiveMinBefore = new Date(nextOpenDate.getTime() - 5 * 60 * 1000);
-            const inEarlyWindow = now >= fiveMinBefore;
-            desc += inEarlyWindow
-                ? `\`\`\`fix\n🟡 ${getMsg("rooms.eventEarlyClaimActive", { time: getFormattedTime12h(nextOpenDate) })}\n\`\`\`\n`
-                : `\`\`\`yaml\n🔴 ${getMsg("rooms.eventEnded")}\n\`\`\`\n`;
+            desc += `\`\`\`yaml\n🔴 ${getMsg("rooms.eventEnded")}\n\`\`\`\n`;
         }
     } else if (current.next) {
         desc += `\`\`\`md\n⏭️ ${current.next.userName} — 🕒 ${getMsg("rooms.expectedAt", { formattedTime: getDynamicQueueETA(current), timezone: "Berlin" })}\n\`\`\`\n`;

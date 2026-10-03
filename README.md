@@ -2,7 +2,7 @@
 
 Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** — floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and daily claim reports.
 
-> The bot is **claim-only**: registration, ranking sync, salary polls, tickets, and temp-voice were removed.
+> The bot is **claim-only**: registration, ranking sync, salary polls, and temp-voice were removed. The 🎫 support-ticket system is available (see [Support Tickets](#-support-tickets)).
 
 ---
 
@@ -52,7 +52,6 @@ Single **Summon** panel for summon location claims.
 ### ⚔️ Event Groups (Fury / Frenzy / Fixed / Summon)
 - **Fixed events** (Fury/Frenzy) open on a schedule — claim inside the window
 - **Slide events** — claim when the panel slides open
-- Early claim: see [Early Claim](#-early-claim)
 
 ### 🔔 DM Notifications
 Claim confirmations, boss respawn reminders, and warnings are sent via **DM**. Each user can toggle DMs with the **🔕** button on any panel.
@@ -129,14 +128,15 @@ Multi-step interactive flow:
 
 Reserved slots are blocked for other users until the reservation passes.
 
-### 👑 Early Claim (`!earlyclaim`)
-Text commands (require **Manage Messages**):
+## 🎫 Support Tickets
+
+Members open a private ticket with the **🎫 Open Ticket** button on the ticket panel, pick a category (Support / Report / Doubt), and a private channel is created for them + staff. Staff can **add/remove members** and **close** the ticket; on close a `.txt` transcript (plus saved attachments) is sent to the configured log channel (`dailyLogs.configChannelId`).
 
 | Command | Description |
 |---------|-------------|
-| `!earlyclaim add @user` | Allow a user to claim Fury/Frenzy **5 minutes before** the window opens |
-| `!earlyclaim remove @user` | Remove that permission |
-| `!earlyclaim list` | Show all users with early-claim permission |
+| `!ticket` (or `!ticketpanel`) | Post/refresh the ticket panel in the current channel (requires **Manage Messages**) |
+
+State lives in `tickets.json`; transcripts are written to `ticket-logs/` (both gitignored). Config IDs (`TICKET_CATEGORY_ID`, `STAFF_ROLE_ID`) are at the top of `src/handlers/ticket-core.js`.
 
 ---
 
@@ -176,9 +176,10 @@ Each channel gets its panel embeds + buttons posted automatically.
 | `database.json` | Panel state, claims, owners, queues (gitignored) |
 | `daily-logs.json` | Accumulated claim log queue + configured channel IDs |
 | `punishments.json` | Temporary claim cooldowns after kick/leave |
-| `early-claim-users.json` | Users allowed to claim early |
 | `dm-optout.json` | Users who disabled DMs |
 | `web-accounts.json` | Website accounts (scrypt password hashes) |
+| `tickets.json` | Ticket panel channel + open tickets (user → channel) |
+| `ticket-logs/` | Ticket transcripts and saved attachments |
 
 All are gitignored.
 
@@ -211,7 +212,7 @@ With the flag off, the bot skips the ranking boot, does not register/answer slas
 ### 3. Permissions
 | Permission | Required For |
 |-----------|-------------|
-| **Manage Messages** | `!earlyclaim`, reset/kick/reset-logs admin actions |
+| **Manage Messages** | `!ticket`, reset/kick/reset-logs admin actions |
 | **Manage Channels** | Auto channel setup (delete/recreate channels on boot) |
 
 ### 4. Run
@@ -252,7 +253,10 @@ src/
 │   ├── panel-migrations.js         # Data migrations
 │   ├── auto-channel-setup.js       # Channel recreation + panel deployment on boot
 │   ├── boss-spawn-scheduler.js     # Boss + scheduled event alerts
-│   └── early-claim.js              # !earlyclaim admin commands
+│   ├── ticket-system.js            # Ticket router + panel bootstrap
+│   ├── ticket-core.js              # Ticket state, panel, orphan cleanup
+│   ├── ticket-handlers*.js         # Open/close, member add/remove, transcripts
+│   └── ticket-command.js           # !ticket admin command (post panel)
 └── interactions/
     ├── floor-interactions.js       # Floor/peak buttons (claim, cancel, next)
     ├── floor-*.js                  # Floor-specific handlers
@@ -275,9 +279,9 @@ After any changes, verify:
 - [ ] **Antidemon rooms** — left/mid/right, combo rooms, password modal
 - [ ] **Antidemon queue** — slide / ticket / queue join
 - [ ] **Fury/Frenzy fixed events** — claim inside window, reservation blocks
-- [ ] **Early claim** — `!earlyclaim add/remove/list` + claiming 5 min early
 - [ ] **Admin** — reset panel (single + all), kick user, reset logs
 - [ ] **Reserve flow** — reserve Fury/Frenzy slots, panel refresh
+- [ ] **Tickets** — `!ticket` posts panel; open → category → channel; add/remove member; close → transcript to log channel
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
 - [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts

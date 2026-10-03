@@ -11,9 +11,10 @@ package-lock.json
 database.json
 daily-logs.json
 punishments.json
-early-claim-users.json
 dm-optout.json
 web-accounts.json
+tickets.json
+ticket-logs/
 
 # Ranking / registration system data
 database_ranking.json

@@ -5,6 +5,7 @@
 // ==========================================
 
 import { canHandleAdminInteraction, handleAdminInteraction } from "../interactions/admin-interactions.js";
+import { canHandleTicketInteraction, handleTicketInteraction } from "./ticket-system.js";
 import { canHandleAntidemonInteraction, handleAntidemonInteraction, canHandleAntidemonModal, handleAntidemonModal } from "../interactions/antidemon-interactions.js";
 import { canHandleSummonInteraction, handleSummonInteraction } from "../interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "../interactions/floor-interactions.js";
@@ -27,6 +28,11 @@ export async function handleClaimInteractions(interaction) {
     // 1. Admin interactions (reset menu, kick menu, reset logs, reserve flow)
     if (canHandleAdminInteraction(interaction)) {
         return await handleAdminInteraction(interaction, uid);
+    }
+
+    // 1b. Ticket interactions (open, category, add/remove member, close)
+    if (canHandleTicketInteraction(interaction)) {
+        return await handleTicketInteraction(interaction);
     }
 
     // 2. Antidemon interactions (slide, ticket, queue)
