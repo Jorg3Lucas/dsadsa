@@ -14,8 +14,14 @@
 
 import { PermissionFlagsBits, ChannelType } from 'discord.js';
 
-// Cargo elder — can write in tower-rules, announcements, allied-list
-export const ELDER_ROLE_ID = '1503934006431973488';
+// Cargo elder — can write in tower-rules, announcements, allied-list.
+// Override per deployment with the ELDER_ROLE_ID env var (.env).
+export const ELDER_ROLE_ID = process.env.ELDER_ROLE_ID?.trim() || '1503934006431973488';
+
+// Explicit Discord category IDs for the two claim categories.
+// Override per deployment with CLAIM_CATEGORY_SP_SUMMONS_ID / CLAIM_CATEGORY_MS_ID (.env).
+const SP_SUMMONS_CATEGORY_ID = process.env.CLAIM_CATEGORY_SP_SUMMONS_ID?.trim() || '1548033121012813905';
+const MS_CATEGORY_ID = process.env.CLAIM_CATEGORY_MS_ID?.trim() || '1548033184619438162';
 
 // ── Claim categories (members view-only, bot sends panels) ──
 // Only TWO categories are used:
@@ -28,7 +34,7 @@ export const ELDER_ROLE_ID = '1503934006431973488';
 // of truth for who can see the panels.
 export const CLAIM_CATEGORIES = [
     {
-        id: '1548033121012813905',
+        id: SP_SUMMONS_CATEGORY_ID,
         name: '🔸 SP & Summons',
         channels: [
             { name: '🔸 SP-7F', key: 'sp7', legacyName: '🔸┃sp7', panels: ['7peak'] },
@@ -41,7 +47,7 @@ export const CLAIM_CATEGORIES = [
         ]
     },
     {
-        id: '1548033184619438162',
+        id: MS_CATEGORY_ID,
         name: '🔹 MS',
         channels: [
             { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squarenormal', '7squareantidemon'] },

@@ -12,7 +12,8 @@ import { runBackup } from "../auto-backup.js";
 import { noop } from "../core/config.js";
 
 const ticketsPath = path.resolve("./tickets.json");
-export const TICKET_CATEGORY_ID = "1519145795838808093";
+// Category the ticket channels are created under. Override with TICKET_CATEGORY_ID (.env).
+export const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID?.trim() || "1519145795838808093";
 
 // Staff role is configured via .env (STAFF_ROLE_ID). When unset, staff actions
 // fall back to the Manage Messages permission check only.

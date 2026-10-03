@@ -202,18 +202,29 @@ All are gitignored.
 ## ⚙️ Setup
 
 ### 1. Environment
-Create a `.env` file (gitignored) — the bot reads **all** of these from the environment, nothing is hardcoded:
+Copy the example file and fill it in (`.env` is gitignored):
 ```
-TOKEN=your-bot-token
-CLIENT_ID=your-application-client-id
-DISCORD_SERVER_ID=your-guild-id
-
-# Ranking/registro (only used when RANKING_ENABLED=true)
-MEMBER_ROLE_ID=your-member-role-id
-
-# Support ticket system
-STAFF_ROLE_ID=your-staff-role-id
+cp .env.example .env
 ```
+Every value is read from `.env`; each one also has a fallback in code, so a missing variable keeps the current behavior. `.env.example` lists them all:
+
+| Variable | Purpose |
+|----------|---------|
+| `TOKEN` / `DISCORD_TOKEN` | Bot token (either name works) |
+| `CLIENT_ID` | Application ID — used by `node src/deploy-commands.cjs` |
+| `DISCORD_SERVER_ID` | Guild the bot operates on (required) |
+| `RANKING_ENABLED` | `true` re-enables the ranking/registration system (default `false`) |
+| `WEB_ENABLED` | `true` serves the claim website (default `false`) |
+| `WEB_HOST` / `WEB_PORT` / `WEB_HTTPS` | Website bind address (default `0.0.0.0:3000`, HTTPS off) |
+| `MEMBER_ROLE_ID` | Membership role the bot manages |
+| `STAFF_ROLE_ID` | Ticket staff role (empty = Manage Messages only) |
+| `ELDER_ROLE_ID` | Elder role (tower-rules / announcements / allied-list) |
+| `TICKET_CATEGORY_ID` | Category where ticket channels are created |
+| `CLAIM_CATEGORY_SP_SUMMONS_ID` / `CLAIM_CATEGORY_MS_ID` | The two claim categories |
+| `WORLD_BOSS_ARENA_CHANNEL_ID` | Channel for the world-boss arena alert |
+| `APPROVER_ROLE_IDS` | Comma-separated roles allowed to approve registrations |
+| `SUPER_ADMIN_USER_ID` | User allowed to run high-risk commands |
+| `REGISTRATION_CHANNEL_ID` | Fallback channel for registration DMs |
 
 `MEMBER_ROLE_ID` is the single membership role the bot manages (granted/revoked by the sync, used for claim-channel permissions). The bot **never creates roles** — create it manually on the server first. When the variable is unset the bot falls back to a hardcoded legacy ID and logs a warning at boot; if that fallback role no longer exists, claim-channel permissions are silently skipped (`reason: 'no-roles'`). Always set it explicitly.
 
@@ -230,7 +241,7 @@ RANKING_ENABLED=true    # reativa o sistema completo
 With the flag off, the bot skips the ranking boot, does not register/answer slash commands (claim uses buttons only) and does not apply clan-role permissions to claim channels. All ranking files stay in the repo, so re-enabling is just the flag.
 
 ### 2. Configuration
-- **`src/handlers/auto-channel-setup.js`** — category IDs + channel/panel definitions
+- **`src/core/server-structure.js`** — channel/panel definitions (category IDs come from `.env`)
 - **Daily logs / boss alerts / event alerts** — configured **manually in `daily-logs.json`**: set `configChannelId` (daily claim report), `bossSpawnChannelId` (boss spawn alerts), and `scheduledEventChannelId` (event alerts) to the target channel IDs before boot
 
 ### 3. Permissions

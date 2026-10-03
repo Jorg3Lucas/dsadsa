@@ -31,13 +31,16 @@ export function setAdminChannelId(id) {
 // Override per deployment with the MEMBER_ROLE_ID env var (.env).
 export const MEMBER_ROLE_ID = process.env.MEMBER_ROLE_ID?.trim() || '1503933709756141620';
 
-// Roles that can approve/reject member registrations (in addition to Administrator)
-export const APPROVER_ROLE_IDS = [
-    '1481568277254639626',
-    '1483532193987956817',
-    '1500208456945106944',
-    '1481568065081573467'
-];
+// Roles that can approve/reject member registrations (in addition to Administrator).
+// Override per deployment with APPROVER_ROLE_IDS (.env, comma-separated).
+export const APPROVER_ROLE_IDS = process.env.APPROVER_ROLE_IDS?.trim()
+    ? process.env.APPROVER_ROLE_IDS.split(',').map(id => id.trim()).filter(Boolean)
+    : [
+        '1481568277254639626',
+        '1483532193987956817',
+        '1500208456945106944',
+        '1481568065081573467'
+    ];
 
 // 🌍 WORLDS TO SYNC — only EU11 (world 611)
 // The scraper, lookups, allied-clan management and server display
@@ -121,22 +124,23 @@ export const SCAN_SERVER_ID = DISCORD_SERVER_ID;
 // EU11 ranking on every sync. Not found in the ranking → removed immediately.
 // (PRE_REGISTER_MAX_AGE_MS removed)
 
-// Super admin — only this user can use high-risk commands
-export const SUPER_ADMIN_USER_ID = '864108100880171009';
+// Super admin — only this user can use high-risk commands.
+// Override per deployment with SUPER_ADMIN_USER_ID (.env).
+export const SUPER_ADMIN_USER_ID = process.env.SUPER_ADMIN_USER_ID?.trim() || '864108100880171009';
 
 // ==========================================
 // 📋 WELCOME PANEL MESSAGE
 // ==========================================
 
-export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the **member role** (and your in-game nickname). Temporary approvals hold it until they join an allied clan or expire.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@864108100880171009>';
+export const WELCOME_PANEL_MESSAGE = '📋 **MIR4 Account Registration**\n\n⚠️ **Register only ONE account** — use your exact in-game character name!\n\nClick the buttons below to register your main account or as a pilot.\n\n👑 **Register as Owner** — Register your main character.\n✈️ **Register as Pilot** — Register as a pilot for an existing owner.\n\nAfter approval by an administrator, you will receive the **member role** (and your in-game nickname). Temporary approvals hold it until they join an allied clan or expire.\n\n━━━━━━━━━━━━━━━━━━━━━━\n🤖 Bot developed by <@' + SUPER_ADMIN_USER_ID + '>';
 
 // ==========================================
 // 📢 REGISTRATION CHANNEL (for /listunregistered DMs)
 // ==========================================
 // Dynamic — persisted in db.config.channelIds when the channels are wired up.
-// Defaults are kept as fallbacks until real IDs are persisted.
+// The default fallback can be overridden per deployment with REGISTRATION_CHANNEL_ID (.env).
 
-export let REGISTRATION_CHANNEL_ID = '1524296969521070120';
+export let REGISTRATION_CHANNEL_ID = process.env.REGISTRATION_CHANNEL_ID?.trim() || '1524296969521070120';
 
 export function setRegistrationChannelId(id) { REGISTRATION_CHANNEL_ID = id; }
 

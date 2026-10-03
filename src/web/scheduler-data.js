@@ -14,7 +14,7 @@ export const bossSpawns = [
   // Labyrinth (10h, 20h) + Valley (12h, 22h) + Mirage (0h, 22h)
   { world: "CUSTOM", layer: "1", map: "Join Discord", boss: "World Boss Arena",
     times: [0, 10, 12, 20, 22].map(h => ({ h, m: 0 })),
-    channelId: "1407236253836902462",
+    channelId: process.env.WORLD_BOSS_ARENA_CHANNEL_ID?.trim() || "1407236253836902462",
     mention: "@everyone",
     joinMessage: "Lets go guys, world boss join discord\nhttps://discord.com/channels/1359548384809062480/1359549331509739722" },
 
