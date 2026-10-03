@@ -10,8 +10,11 @@ import {
     initClaimSystem,
     handleClaimInteractions
 } from './handlers/bot.js';
-import { initEarlyClaimCommands } from './handlers/early-claim.js';
 import { initTextCommands } from './handlers/text-commands.js';
+import { initKickCommand } from './handlers/kick-command.js';
+import { initAdminCommands } from './handlers/admin-commands.js';
+import { initTicketSystem } from './handlers/ticket-system.js';
+import { initTicketCommand } from './handlers/ticket-command.js';
 import { noop, getBotToken, DISCORD_SERVER_ID, RANKING_ENABLED } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
@@ -215,12 +218,17 @@ client.once('clientReady', async () => {
         logger.error('Web', 'Failed to start web server', err);
     }
 
-    // Early claim admin commands (!earlyclaim add/remove/list)
-    initEarlyClaimCommands(client);
+    // Admin text commands (!kick / !reset / !reserve)
+    initKickCommand(client);
+    initAdminCommands(client);
 
     // Claim text commands (!setreminders / !setevents / !setlogs) — always on,
     // independent of the ranking feature flag.
     initTextCommands(client);
+
+    // 🎫 Support ticket system (panel + open/close/add-member handlers)
+    initTicketSystem(client);
+    initTicketCommand(client);
 });
 
 // Graceful shutdown handlers — save ranking db on exit
