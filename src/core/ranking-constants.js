@@ -30,12 +30,13 @@ export function setAdminChannelId(id) {
 // longer managed — they are ignored by lookups, sync and channel permissions.
 export const MEMBER_ROLE_ID = '1539146461718122608';
 
-// Roles that can approve/reject member registrations (in addition to Administrator)
+// Roles that can approve/reject member registrations (in addition to Administrator).
+// Holding ANY of these roles is enough — the role's Discord permissions are
+// irrelevant (the check is by role ID, not by permissions).
 export const APPROVER_ROLE_IDS = [
-    '1481568277254639626',
-    '1483532193987956817',
-    '1500208456945106944',
-    '1481568065081573467'
+    '1539146386593943622',
+    '1538943125303726142',
+    '1539146538557640745'
 ];
 
 // 🌍 WORLDS TO SYNC — only EU21 (world 621)
