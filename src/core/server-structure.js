@@ -25,7 +25,7 @@ const MS_CATEGORY_ID = process.env.CLAIM_CATEGORY_MS_ID?.trim() || '154803318461
 
 // Explicit Discord category ID for the ticket category.
 // Override per deployment with TICKET_CATEGORY_ID (.env).
-const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID?.trim() || '1519145795838808093';
+const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID?.trim() || '1557229285629235220';
 
 // ── Claim categories (members view-only, bot sends panels) ──
 // Only TWO categories are used:
