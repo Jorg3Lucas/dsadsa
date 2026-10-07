@@ -40,7 +40,7 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
         notifyUserDM(uid, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.voluntaryLeave") }));
         freeFloorAndActivateNextGracePeriod(targetObj);
         if (!isMod) applyFiveMinCooldown(uid);
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({ content: getMsg("cooldowns.canceledClaimFeedback"), flags: 64 }).catch(noop);
     }
 
@@ -48,7 +48,7 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
         pushToDailyLogs("CANCEL", targetObj.ownerName, targetObj.title, getMsg("logs.staffCancel"));
         notifyUserDM(targetObj.ownerId, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.staffCancel") }));
         freeFloorAndActivateNextGracePeriod(targetObj);
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({ content: getMsg("rooms.floorReleasedSuccess"), flags: 64 }).catch(noop);
     }
 
@@ -57,7 +57,7 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
         notifyUserDM(uid, getMsg("rooms.dmRemovedNotice", { title: targetObj.title, reason: getMsg("logs.queueLeave") }));
         removeUserFromQueue(targetObj, uid);
         saveLocalStorage();
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({ content: getMsg("rooms.removedFromQueueFeedback"), flags: 64 }).catch(noop);
     }
 
@@ -128,7 +128,7 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: targetObj.title, window: windowStr }));
 
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.reply({
         content: getMsg("rooms.eventClaimedFixed", { title: targetObj.title }),
         flags: 64
@@ -189,7 +189,7 @@ export async function handleGeneralClaim(interaction, uid, uName, targetObj, pan
     }
 
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.reply({
         content: getMsg("rooms.floorClaimSuccess"),
         flags: 64
@@ -246,7 +246,7 @@ export async function handleGeneralNext(interaction, uid, uName, targetObj, pane
     notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: targetObj.title }));
 
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.reply({
         content: getMsg("rooms.queueJoinedSuccess"),
         flags: 64

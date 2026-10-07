@@ -74,7 +74,7 @@ export async function handleDeathMark(interaction, uid, uName, targetObj, panelK
     targetObj[specificProp]._lastKilledAt = nowTs;
     pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr}`);
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(noop);
 }
 
@@ -97,7 +97,7 @@ export async function handleDeathConfirm(interaction, uid, uName, targetObj, pan
     targetObj[specificProp]._lastKilledAt = nowTs;
     pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${targetObj[specificProp].name}`, `Killed at ${currTimeStr} (updated)`);
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.update({
         content: getMsg("rooms.deathUpdateConfirmed", { newTime: currTimeStr }),
         components: [],
@@ -155,7 +155,7 @@ export async function handleEGDeathMark(interaction, uid, uName, targetObj, pane
     evData._lastKilledAt = nowTs;
     pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${evData.name}`, `Killed at ${currTimeStr}`);
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.reply({ content: getMsg("rooms.deathLogged"), flags: 64 }).catch(noop);
 }
 
@@ -175,7 +175,7 @@ export async function handleEGDeathConfirm(interaction, uid, uName, targetObj, p
     evData._lastKilledAt = nowTs;
     pushToDailyLogs("DEATH_MARK", uName, `${targetObj.title} - ${evData.name}`, `Killed at ${currTimeStr} (updated)`);
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.update({
         content: getMsg("rooms.deathUpdateConfirmed", { newTime: currTimeStr }),
         components: [], flags: 64

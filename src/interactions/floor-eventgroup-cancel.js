@@ -87,7 +87,7 @@ export async function handleEventGroupCancel(interaction, uid, uName, targetObj,
         }
 
         saveLocalStorage();
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({
             content: anyAction
                 ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))

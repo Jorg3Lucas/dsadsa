@@ -139,7 +139,7 @@ export async function handleSummonCancel(interaction, uid, uName, targetObj, pan
         });
 
         saveLocalStorage();
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({
             content: anyAction
                 ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))

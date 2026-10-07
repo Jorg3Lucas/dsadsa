@@ -120,7 +120,7 @@ export async function handleEGFixClaim(interaction, uid, uName) {
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
 
     saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+    refreshVisualPanel(panelKey);
     return await interaction.reply({
         content: getMsg("rooms.eventClaimedFixed", { title: evData.name }),
         flags: 64

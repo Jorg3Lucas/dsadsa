@@ -76,7 +76,7 @@ export async function handleEGTicket(interaction, uid, uName) {
 
     egSummonCache.delete(uid);
     saveLocalStorage();
-    await refreshVisualPanel(pKey);
+    refreshVisualPanel(pKey);
     return await interaction.update({
         content: getMsg("rooms.summonClaimSuccessEphemeral"),
         components: [], flags: 64

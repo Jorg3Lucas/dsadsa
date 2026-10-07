@@ -139,7 +139,7 @@ export async function handleEGNextSide(interaction, uid, uName) {
     notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - ${evData.name}` }));
 
     saveLocalStorage();
-    await refreshVisualPanel(pKey);
+    refreshVisualPanel(pKey);
     return await interaction.update({
         content: getMsg("rooms.summonQueueSuccessEphemeral"),
         components: [], flags: 64

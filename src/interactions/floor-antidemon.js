@@ -146,7 +146,7 @@ export async function handleAntiCancel(interaction, uid, uName, targetObj, panel
         });
 
         saveLocalStorage();
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({
             content: anyAction
                 ? (penalized ? getMsg("cooldowns.canceledClaimFeedback") : getMsg("rooms.actionsCanceledFeedback"))

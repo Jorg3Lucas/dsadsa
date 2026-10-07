@@ -125,12 +125,12 @@ export async function handleAntiPasswordModal(interaction) {
     if (newPassword) {
         targetFloor[room].password = newPassword;
         saveLocalStorage();
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({ content: getMsg("rooms.antidemonPasswordSet", { room: room.toUpperCase(), password: newPassword }), flags: 64 }).catch(noop);
     } else if (oldPassword) {
         targetFloor[room].password = "";
         saveLocalStorage();
-        await refreshVisualPanel(panelKey);
+        refreshVisualPanel(panelKey);
         return await interaction.reply({ content: getMsg("rooms.antidemonPasswordCleared", { room: room.toUpperCase() }), flags: 64 }).catch(noop);
     } else {
         return await interaction.reply({ content: getMsg("rooms.antidemonPasswordNoChange"), flags: 64 }).catch(noop);
@@ -183,7 +183,7 @@ async function applyClaimFromCache(uid, pKey, password) {
 
     delete antiDemonSelectionCache[uid];
     saveLocalStorage();
-    await refreshVisualPanel(pKey);
+    refreshVisualPanel(pKey);
     return true;
 }
 

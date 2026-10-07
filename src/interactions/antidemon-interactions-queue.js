@@ -76,7 +76,7 @@ export async function handleAntiNextSide(interaction, uid, uName) {
         pushToDailyLogs("QUEUE_JOIN", uName, `${targetFloor.title} - Room ${roomsLabel}`, getMsg("render.joinedAsNext"));
         notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - Room ${roomsLabel}` }));
         saveLocalStorage();
-        await refreshVisualPanel(pKey);
+        refreshVisualPanel(pKey);
         return await interaction.update({
             content: getMsg("rooms.antidemonQueueSuccessEphemeral"),
             components: [], flags: 64

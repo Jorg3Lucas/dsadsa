@@ -182,7 +182,7 @@ async function handleSummonTicket(interaction, uid, uName) {
 
     delete summonSelectionCache[uid];
     saveLocalStorage();
-    await refreshVisualPanel(pKey);
+    refreshVisualPanel(pKey);
     return await interaction.update({
         content: getMsg("rooms.summonClaimSuccessEphemeral"),
         components: [],
@@ -237,7 +237,7 @@ async function handleSummonNextSide(interaction, uid, uName) {
     notifyUserDM(uid, getMsg("rooms.dmQueueJoinedNotice", { title: `${targetFloor.title} - ${targetFloor[selectedLoc].name}` }));
 
     saveLocalStorage();
-    await refreshVisualPanel(pKey);
+    refreshVisualPanel(pKey);
     return await interaction.update({
         content: getMsg("rooms.summonQueueSuccessEphemeral"),
         components: [],

@@ -56,7 +56,7 @@ export async function handleEGSlide(interaction, uid, uName) {
         pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, "Claimed Red Boss");
         notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: "Until boss is killed" }));
         saveLocalStorage();
-        await refreshVisualPanel(pKey);
+        refreshVisualPanel(pKey);
         return await interaction.update({ content: `🏆 ${evData.name} claimed!`, components: [], flags: 64 }).catch(noop);
     } else if (evData.type === "fixed") {
         const now = getLocalTime();
@@ -116,7 +116,7 @@ export async function handleEGSlide(interaction, uid, uName) {
         pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
         notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
         saveLocalStorage();
-        await refreshVisualPanel(pKey);
+        refreshVisualPanel(pKey);
         return await interaction.update({ content: `🏆 ${evData.name} secured!`, components: [], flags: 64 }).catch(noop);
     } else if (evData.type === "summon") {
         egSummonCache.set(uid, { panelId: pKey, event: selectedEvent });
