@@ -8,7 +8,6 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import { EmbedBuilder } from "discord.js";
-import { dailyLogs } from "../core/state.js";
 import { sendFileWithEmbed } from "../core/discord-utils.js";
 import { getTicketLogChannel } from "./ticket-core.js";
 
@@ -100,13 +99,13 @@ async function sendLogToChannel(filePath, channel, totalMessages, ticketOwnerId)
     try {
         const client = channel.client;
         if (!client) return;
-        // Prefer the dedicated 📜 ticket-logs channel inside the ticket category;
-        // fall back to the configured daily-logs channel.
-        let logChannel = getTicketLogChannel(client);
-        if (!logChannel && dailyLogs.configChannelId) {
-            logChannel = await client.channels.fetch(dailyLogs.configChannelId).catch(() => null);
+        // Ticket transcripts always go to the dedicated 📜 ticket-logs channel
+        // inside the ticket category — never to the claim logs channel.
+        const logChannel = getTicketLogChannel(client);
+        if (!logChannel) {
+            console.warn("⚠️ [Tickets] 📜 ticket-logs channel not found — transcript was not sent to a log channel.");
+            return;
         }
-        if (!logChannel) return;
 
         const fileContent = fs.readFileSync(filePath, "utf8");
         const fileName = path.basename(filePath);

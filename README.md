@@ -130,7 +130,7 @@ Reserved slots are blocked for other users until the reservation passes.
 
 ## 🎫 Support Tickets
 
-Members open a private ticket with the **🎫 Open Ticket** button on the ticket panel, pick a category (Support / Report / Doubt), and a private channel is created for them + staff. Staff can **add/remove members** and **close** the ticket; on close a `.txt` transcript (plus saved attachments) is sent to the **📜 ticket-logs** channel inside the ticket category (falling back to `dailyLogs.configChannelId` when that channel is missing).
+Members open a private ticket with the **🎫 Open Ticket** button on the ticket panel, pick a category (Support / Report / Doubt), and a private channel is created for them + staff. Staff can **add/remove members** and **close** the ticket; on close a `.txt` transcript (plus saved attachments) is sent to the **📜 ticket-logs** channel inside the ticket category — never to the claim logs channel. The **Remove Member** menu lists only the members that were explicitly added to the ticket (those with their own permission overwrite).
 
 **On boot** the bot ensures the ticket category contains its channels: it creates `🎫 open-ticket` (the panel channel) and `📜 ticket-logs` **only when missing**, keeps every existing channel untouched — including open `ticket-*` rooms — and (re)posts the panel in `🎫 open-ticket`. Nothing in the ticket category is ever deleted by the setup.
 

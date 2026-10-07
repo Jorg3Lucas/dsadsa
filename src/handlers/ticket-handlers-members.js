@@ -4,7 +4,7 @@
 // Extracted from ticket-handlers.js
 // ==========================================
 
-import { ActionRowBuilder, UserSelectMenuBuilder } from "discord.js";
+import { ActionRowBuilder, StringSelectMenuBuilder, UserSelectMenuBuilder, OverwriteType } from "discord.js";
 import { noop } from "../core/config.js";
 import { STAFF_ROLE_ID, openTickets } from "./ticket-core.js";
 
@@ -38,15 +38,42 @@ export async function handleAddMemberSelect(interaction) {
 export async function handleRemoveMember(interaction) {
     const isStaff = interaction.member.permissions.has("ManageMessages") || (STAFF_ROLE_ID && interaction.member.roles.cache.has(STAFF_ROLE_ID));
     if (!isStaff) { return await interaction.reply({ content: "❌ Only staff can remove members from this ticket.", flags: 64 }).catch(noop); }
+
+    const channel = interaction.channel;
+    let ticketOwnerId = null;
+    for (const [userId, chId] of Object.entries(openTickets)) { if (chId === interaction.channelId) { ticketOwnerId = userId; break; } }
+
+    // Only members that were explicitly added have their own permission overwrite
+    // (the ticket owner does too, but can never be removed).
+    const addedOverwrites = channel.permissionOverwrites.cache.filter(
+        ow => ow.type === OverwriteType.Member && ow.id !== ticketOwnerId
+    );
+    const options = [];
+    for (const ow of addedOverwrites.values()) {
+        const member = interaction.guild.members.cache.get(ow.id) || await interaction.guild.members.fetch(ow.id).catch(() => null);
+        if (member) options.push({ label: member.displayName || member.user.username, value: ow.id, description: member.user.tag });
+    }
+    if (options.length === 0) {
+        return await interaction.reply({ content: "⚠️ There are no added members to remove from this ticket.", flags: 64 }).catch(noop);
+    }
+
     const row = new ActionRowBuilder().addComponents(
-        new UserSelectMenuBuilder().setCustomId("ticket_remove_select").setPlaceholder("Select a member to remove...").setMinValues(1).setMaxValues(1)
+        new StringSelectMenuBuilder().setCustomId("ticket_remove_select").setPlaceholder("Select a member to remove...").addOptions(options)
     );
     return await interaction.reply({ content: "🚫 **Select a member to remove from this ticket:**", components: [row], flags: 64 }).catch(noop);
 }
 
 /** Remove selected member from ticket channel. */
 export async function handleRemoveMemberSelect(interaction) {
-    const targetMember = interaction.members.first();
+    // Supports both the string-select menu (added members only) and the
+    // legacy user-select menu (any member).
+    let targetMember = null;
+    if (typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) {
+        targetMember = interaction.members.first();
+    } else if (interaction.values?.length) {
+        const id = interaction.values[0];
+        targetMember = interaction.guild.members.cache.get(id) || await interaction.guild.members.fetch(id).catch(() => null);
+    }
     const channel = interaction.channel;
     if (!targetMember) { return await interaction.reply({ content: "❌ Could not resolve the selected member.", flags: 64 }).catch(noop); }
 
