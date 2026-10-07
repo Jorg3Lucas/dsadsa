@@ -226,8 +226,10 @@ client.once('clientReady', async () => {
     // independent of the ranking feature flag.
     initTextCommands(client);
 
-    // 🎫 Support ticket system (panel + open/close/add-member handlers)
-    initTicketSystem(client);
+    // 🎫 Support ticket system (panel + open/close/add-member handlers).
+    // Ensures the ticket-category channels exist (creating only missing ones)
+    // and restores the panel before the command listener is registered.
+    await initTicketSystem(client);
     initTicketCommand(client);
 });
 

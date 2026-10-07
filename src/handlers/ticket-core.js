@@ -9,11 +9,13 @@ import fs from "fs";
 import path from "path";
 import { client } from "../core/state.js";
 import { runBackup } from "../auto-backup.js";
-import { noop } from "../core/config.js";
+import { noop, DISCORD_SERVER_ID } from "../core/config.js";
+import { findTextChannel, TICKET_CATEGORY } from "../core/server-structure.js";
 
 const ticketsPath = path.resolve("./tickets.json");
-// Category the ticket channels are created under. Override with TICKET_CATEGORY_ID (.env).
-export const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID?.trim() || "1519145795838808093";
+// Category the ticket channels are created under. Defined in server-structure.js
+// (explicit ID, overridable with TICKET_CATEGORY_ID in .env).
+export const TICKET_CATEGORY_ID = TICKET_CATEGORY.id;
 
 // Staff role is configured via .env (STAFF_ROLE_ID). When unset, staff actions
 // fall back to the Manage Messages permission check only.
@@ -54,17 +56,99 @@ function saveTicketState() {
 }
 
 // ── Init / Restore panel ──
-/** Initialize ticket system: load state, restore panel, clean orphans. @param {object} client - Discord client */
-export function initTicketSystem(client) {
+/**
+ * Initialize ticket system: load state, ensure the ticket-category channels
+ * exist (creating only the missing ones — never deleting) and restore the
+ * panel, then clean orphans.
+ * @param {object} client - Discord client
+ */
+export async function initTicketSystem(client) {
     loadTicketState();
-    if (ticketPanelChannelId) {
+    const handledPanel = await setupTicketChannels(client, DISCORD_SERVER_ID);
+    // Fallback: when the ticket category can't be resolved (missing ID or
+    // permissions) fall back to the channel stored in tickets.json so the
+    // panel is still restored.
+    if (!handledPanel && ticketPanelChannelId) {
         const channel = client.channels.cache.get(ticketPanelChannelId);
         if (channel) {
-            sendTicketPanel(channel);
+            await sendTicketPanel(channel);
             console.log(`🎫 Ticket panel restored in #${channel.name}.`);
         }
     }
-    cleanupOrphanedTickets(client);
+    await cleanupOrphanedTickets(client);
+}
+
+// ── Ticket channel setup ──
+/**
+ * Ensure every channel defined in TICKET_CATEGORY exists inside the ticket
+ * category. Existing channels are kept untouched — this includes open
+ * ticket-* rooms; only missing ones are created. The panel channel gets the
+ * ticket panel (re)posted on every boot.
+ * @param {import('discord.js').Client} client
+ * @param {string} guildId
+ * @returns {Promise<boolean>} true when the panel channel inside the category was handled
+ */
+export async function setupTicketChannels(client, guildId) {
+    const guild = guildId ? client.guilds.cache.get(guildId) : client.guilds.cache.first();
+    if (!guild) {
+        console.error("❌ [Tickets] Guild not found — skipping ticket channel setup.");
+        return false;
+    }
+    const category = guild.channels.cache.get(TICKET_CATEGORY_ID);
+    if (!category || category.type !== ChannelType.GuildCategory) {
+        console.error(`❌ [Tickets] Ticket category ${TICKET_CATEGORY_ID} not found (or not a category) — skipping ticket channel setup.`);
+        return false;
+    }
+
+    const categoryOverwrites = category.permissionOverwrites?.cache?.map(ow => ow) || [];
+    let handledPanel = false;
+
+    for (const chanDef of TICKET_CATEGORY.channels) {
+        let channel = findTextChannel(guild, category.id, chanDef);
+        if (channel) {
+            console.log(`ℹ️ [Tickets] #${channel.name} already exists — keeping it.`);
+        } else {
+            try {
+                channel = await guild.channels.create({
+                    name: chanDef.name,
+                    type: ChannelType.GuildText,
+                    parent: category.id,
+                    permissionOverwrites: categoryOverwrites
+                });
+                console.log(`✅ [Tickets] Created #${chanDef.name} in ${category.name}.`);
+            } catch (err) {
+                console.error(`❌ [Tickets] Failed to create #${chanDef.name}: ${err.message}`);
+                continue;
+            }
+        }
+
+        if (chanDef.panel) {
+            // Remove a stale panel left in a previously configured channel.
+            if (ticketPanelChannelId && ticketPanelChannelId !== channel.id) {
+                const previous = client.channels.cache.get(ticketPanelChannelId);
+                if (previous) await deleteBotPanels(previous);
+            }
+            ticketPanelChannelId = channel.id;
+            saveTicketState();
+            await sendTicketPanel(channel);
+            handledPanel = true;
+        }
+    }
+    return handledPanel;
+}
+
+// ── Ticket log channel ──
+/**
+ * Resolve the ticket transcript log channel (the 📜 ticket-logs channel inside
+ * the ticket category). Returns null when it doesn't exist.
+ * @param {import('discord.js').Client} client
+ * @returns {import('discord.js').TextChannel|null}
+ */
+export function getTicketLogChannel(client) {
+    const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
+    if (!guild) return null;
+    const def = TICKET_CATEGORY.channels.find(c => c.key === "ticket-logs");
+    return def ? findTextChannel(guild, TICKET_CATEGORY_ID, def) || null : null;
 }
 
 // ── Panel setup ──
@@ -75,7 +159,7 @@ export async function setupTicketPanel(channel) {
     await sendTicketPanel(channel);
 }
 
-async function sendTicketPanel(channel) {
+async function deleteBotPanels(channel) {
     try {
         const fetched = await channel.messages.fetch({ limit: 20 }).catch(() => null);
         if (fetched) {
@@ -85,6 +169,10 @@ async function sendTicketPanel(channel) {
             }
         }
     } catch (e) { /* non-critical */ }
+}
+
+async function sendTicketPanel(channel) {
+    await deleteBotPanels(channel);
 
     const embed = {
         color: 0x5865F2,

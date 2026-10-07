@@ -10,6 +10,7 @@ import path from "path";
 import { EmbedBuilder } from "discord.js";
 import { dailyLogs } from "../core/state.js";
 import { sendFileWithEmbed } from "../core/discord-utils.js";
+import { getTicketLogChannel } from "./ticket-core.js";
 
 const TICKET_LOGS_DIR = path.resolve("./ticket-logs");
 
@@ -97,10 +98,14 @@ export async function saveTicketLog(channel, ticketOwnerId) {
 
 async function sendLogToChannel(filePath, channel, totalMessages, ticketOwnerId) {
     try {
-        if (!dailyLogs.configChannelId) return;
         const client = channel.client;
         if (!client) return;
-        const logChannel = await client.channels.fetch(dailyLogs.configChannelId).catch(() => null);
+        // Prefer the dedicated 📜 ticket-logs channel inside the ticket category;
+        // fall back to the configured daily-logs channel.
+        let logChannel = getTicketLogChannel(client);
+        if (!logChannel && dailyLogs.configChannelId) {
+            logChannel = await client.channels.fetch(dailyLogs.configChannelId).catch(() => null);
+        }
         if (!logChannel) return;
 
         const fileContent = fs.readFileSync(filePath, "utf8");
