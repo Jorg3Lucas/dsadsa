@@ -130,7 +130,9 @@ Reserved slots are blocked for other users until the reservation passes.
 
 ## 🎫 Support Tickets
 
-Members open a private ticket with the **🎫 Open Ticket** button on the ticket panel, pick a category (Support / Report / Doubt), and a private channel is created for them + staff. Staff can **add/remove members** and **close** the ticket; on close a `.txt` transcript (plus saved attachments) is sent to the configured log channel (`dailyLogs.configChannelId`).
+Members open a private ticket with the **🎫 Open Ticket** button on the ticket panel, pick a category (Support / Report / Doubt), and a private channel is created for them + staff. Staff can **add/remove members** and **close** the ticket; on close a `.txt` transcript (plus saved attachments) is sent to the **📜 ticket-logs** channel inside the ticket category (falling back to `dailyLogs.configChannelId` when that channel is missing).
+
+**On boot** the bot ensures the ticket category contains its channels: it creates `🎫 open-ticket` (the panel channel) and `📜 ticket-logs` **only when missing**, keeps every existing channel untouched — including open `ticket-*` rooms — and (re)posts the panel in `🎫 open-ticket`. Nothing in the ticket category is ever deleted by the setup.
 
 | Command | Description |
 |---------|-------------|
@@ -179,6 +181,18 @@ On boot, `auto-channel-setup.js` **deletes all text channels** in the **two conf
 The two categories are matched by their explicit **ID** (defined in `src/core/server-structure.js`), so they can be renamed freely — a category matched by ID keeps its current name. Their existing permission overwrites are inherited by the created channels.
 
 Each channel gets its panel embeds + buttons posted automatically.
+
+### 🎫 Ticket category
+
+The ticket category (`TICKET_CATEGORY_ID`) is set up **non-destructively**: the bot only creates the channels it manages when they are missing and otherwise leaves the category untouched (open `ticket-*` rooms included). Defined in `src/core/server-structure.js` as `TICKET_CATEGORY`:
+
+```
+🎫 Tickets  (category from TICKET_CATEGORY_ID)
+  🎫 open-ticket   ← support-ticket panel (re)posted on boot
+  📜 ticket-logs   ← closed-ticket transcripts
+```
+
+Existing channels are matched by pretty name, legacy name or key, so renamed/legacy channels are reused instead of duplicated. When the category can't be resolved, the bot falls back to restoring the panel in the channel stored in `tickets.json`.
 
 ---
 
@@ -331,7 +345,7 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] **Fury/Frenzy fixed events** — claim inside window, reservation blocks
 - [ ] **Admin** — reset panel (single + all), kick user, reset logs
 - [ ] **Reserve flow** — reserve Fury/Frenzy slots, panel refresh
-- [ ] **Tickets** — `!ticket` posts panel; open → category → channel; add/remove member; close → transcript to log channel
+- [ ] **Tickets** — boot creates missing `🎫 open-ticket` / `📜 ticket-logs` and restores the panel without deleting existing channels; `!ticket` posts panel; open → category → channel; add/remove member; close → transcript to the ticket-logs channel
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
 - [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts
