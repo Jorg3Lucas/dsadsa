@@ -7,7 +7,13 @@
 import { getLocalTime, parseStringToDate } from "../core/time-utils.js";
 import { db, punishments, saveLocalStorage, savePunishmentsToDisk } from "../core/state.js";
 import { getMsg } from "../core/lang.js";
+import { IMMUNE_USER_IDS } from "../core/constants.js";
 import { getEventGroupKeys, getAntidemonRoomKeys, getSummonRoomKeys, getAntidemonRoomName } from "./claim-core-rooms.js";
+
+/** True when the user is exempt from every claim restriction. @param {string} uid */
+export function isImmune(uid) {
+    return IMMUNE_USER_IDS.has(uid);
+}
 
 // Returns all Discord user IDs linked to the same in-game account.
 // The registration/pilot system was removed, so each user is treated independently.
@@ -16,6 +22,7 @@ export function getAllLinkedIds(userId) {
 }
 
 export function hasActiveClaim(uid) {
+    if (isImmune(uid)) return false;
     return getActiveClaimInfo(uid).length > 0;
 }
 
@@ -90,6 +97,7 @@ export function buildActiveClaimMessage(uid) {
 }
 
 export function hasActiveQueue(uid) {
+    if (isImmune(uid)) return false;
     const linkedIds = getAllLinkedIds(uid);
     for (const linkedUid of linkedIds) {
         for (const key in db) {
@@ -113,6 +121,7 @@ export function hasActiveQueue(uid) {
 }
 
 export function checkPunishment(uid) {
+    if (isImmune(uid)) return null;
     const linkedIds = getAllLinkedIds(uid);
     for (const linkedUid of linkedIds) {
         if (punishments[linkedUid]) {
@@ -129,6 +138,7 @@ export function checkPunishment(uid) {
 }
 
 export function applyFiveMinCooldown(uid) {
+    if (isImmune(uid)) return;
     punishments[uid] = Date.now() + 3e5;
     savePunishmentsToDisk();
 }

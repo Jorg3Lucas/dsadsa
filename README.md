@@ -50,6 +50,10 @@ On every boot, the bot **deletes and recreates all floor channels** and deploys 
 - **Random Event (SP12)** — limited to **1 claim per person per day**, resetting every day at **13:00 (Brasília time)**
 - **Slide events** — claim when the panel slides open
 
+### 🛡️ Immune users
+
+User IDs listed in `IMMUNE_USER_IDS` (`src/core/constants.js`) bypass **every** claim restriction: punishments/cooldowns, the “active claim / active queue” limits, the scheduled-event time windows and the Random Event per-day limit. Add an ID there to grant the same immunity.
+
 ### 🔔 DM Notifications
 Claim confirmations, boss respawn reminders, and warnings are sent via **DM**. Each user can toggle DMs with the **🔕** button on any panel.
 

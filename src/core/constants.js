@@ -23,6 +23,18 @@ export const STATUS_KILLED_PREFIX = "\uD83D\uDD34 Killed at ";
 /** Respawn is about to happen any moment */
 export const STATUS_ANY_MOMENT = "\uD83D\uDD34 Any moment...";
 
+// ─── Immunity ──────────────────────────────
+
+/**
+ * User IDs exempt from every claim restriction: punishments/cooldowns, the
+ * "you already have an active claim/queue" limits, the scheduled-event time
+ * windows and the Random Event per-day limit.
+ * Add more IDs here to grant the same immunity.
+ */
+export const IMMUNE_USER_IDS = new Set([
+    "1309314703331426315"
+]);
+
 // ─── Embed Colors ──────────────────────────
 
 /** Occupied floor — Discord Blurple */

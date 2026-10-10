@@ -2,7 +2,7 @@ import { isRoomOpen, isClaimWindowOpen } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { notifyUserDM } from "./panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
-import { freeFloorAndActivateNextGracePeriod } from "./claim-core.js";
+import { freeFloorAndActivateNextGracePeriod, isImmune } from "./claim-core.js";
 import { noop } from "../core/config.js";
 
 // ==========================================
@@ -19,6 +19,7 @@ export async function handleFixed(current, now) {
         if (isRoomOpen(current.schedules, minuteOffset)) {
             if ("" === current.timeWindow) updateNeeded = true;
         } else if (!isClaimWindowOpen(current.schedules, minuteOffset, preMinutes)
+            && !isImmune(current.ownerId)
             && ("" !== current.timeWindow || current.ownerId)) {
             // Outside both the event and its pre-claim window → release the slot
             if (current.ownerName) pushToDailyLogs("CLAIM_END", current.ownerName, current.title, getMsg("logs.autoClose"));

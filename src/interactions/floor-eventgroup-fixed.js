@@ -10,6 +10,7 @@ import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
+    isImmune,
     hasActiveClaim,
     hasActiveQueue,
     getEventGroupKeys,
@@ -77,7 +78,7 @@ export async function handleEGFixClaim(interaction, uid, uName) {
         claimedHour = eventStart.getHours();
         // Claims open preMinutes before the event starts
         const claimOpenAt = eventStart.getTime() - preMinutes * 6e4;
-        if (now.getTime() < claimOpenAt) {
+        if (!isImmune(uid) && now.getTime() < claimOpenAt) {
             const diffMins = Math.ceil((claimOpenAt - now.getTime()) / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),

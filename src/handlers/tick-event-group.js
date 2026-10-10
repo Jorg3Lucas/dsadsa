@@ -2,7 +2,7 @@ import { isRoomOpen, isClaimWindowOpen, parseStringToDate, getFormattedTime12h }
 import { getMsg } from "../core/lang.js";
 import { notifyUserDM } from "./panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
-import { getEventGroupKeys } from "./claim-core.js";
+import { getEventGroupKeys, isImmune } from "./claim-core.js";
 import { STATUS_AVAILABLE, STATUS_KILLED } from "../core/constants.js";
 import { noop } from "../core/config.js";
 
@@ -44,6 +44,7 @@ export async function handleEventGroup(current, key, now) {
             if (isRoomOpen(evData.schedules, minuteOffset)) {
                 if ("" === evData.timeWindow) updateNeeded = true;
             } else if (!isClaimWindowOpen(evData.schedules, minuteOffset, preMinutes)
+                && !isImmune(evData.ownerId)
                 && ("" !== evData.timeWindow || evData.ownerId)) {
                 // Outside both the event and its pre-claim window → release the slot
                 if (evData.ownerName) pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.autoClose"));

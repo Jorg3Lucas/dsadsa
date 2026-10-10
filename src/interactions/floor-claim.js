@@ -9,6 +9,7 @@ import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
     checkPunishment,
+    isImmune,
     hasActiveClaim,
     hasActiveQueue,
     applyFiveMinCooldown,
@@ -79,7 +80,7 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
     if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(noop);}
 
     // ── One claim per day (resets 13:00 Brazil time) ──
-    if (targetObj.claimOncePerDay) {
+    if (targetObj.claimOncePerDay && !isImmune(uid)) {
         const cycle = getBrazilDailyCycleKey(13);
         if (!db._dailyClaims) db._dailyClaims = {};
         for (const k in db._dailyClaims) {
@@ -113,7 +114,7 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
         eventStart = calculateNextOpening(targetObj.schedules, minuteOffset);
         // Claims open preMinutes before the event starts
         const claimOpenAt = eventStart.getTime() - preMinutes * 6e4;
-        if (now.getTime() < claimOpenAt) {
+        if (!isImmune(uid) && now.getTime() < claimOpenAt) {
             const diffMins = Math.ceil((claimOpenAt - now.getTime()) / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
@@ -137,7 +138,7 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
     targetObj.timeWindow = windowStr;
     targetObj._claimTimestamp = now.getTime();
 
-    if (targetObj.claimOncePerDay) {
+    if (targetObj.claimOncePerDay && !isImmune(uid)) {
         if (!db._dailyClaims) db._dailyClaims = {};
         db._dailyClaims[`${panelKey}:${uid}`] = getBrazilDailyCycleKey(13);
     }
