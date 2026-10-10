@@ -10,7 +10,10 @@ export {
     migrateSPLegacyToUnified,
     migrateMS1112,
     migrateAntidemon9e10,
-    migrateLastKilledAt
+    migrateLastKilledAt,
+    migrateRemove7F,
+    migrateRemoveSummonPanel,
+    migrateEventClaimConfig
 } from "./panel-migrations.js";
 
 // ==========================================
@@ -21,12 +24,12 @@ export {
  * Build a default panel structure for the given panel key.
  * This is the single source of truth for ALL panel definitions.
  * Used both for initial creation (initClaimSystem) and reset (resetPanelData).
- * @param {string} key - Panel key (e.g. "7peak", "11squareevents", "summon")
+ * @param {string} key - Panel key (e.g. "8peak", "11squareevents", "11goblin")
  * @returns {object|null} Default panel object, or null if the key is unrecognized
  */
 /** Build default panel structure for a given key. Single source of truth for ALL panel definitions. @param {string} key - Panel key @returns {object|null} Default panel object or null if unrecognized */
 export function buildPanelDefaults(key) {
-    // ── Peak panels: 7peak-10peak (has plant/ore), 11peak-12peak (no plant/ore, red has schedules) ──
+    // ── Peak panels: 8peak-10peak (has plant/ore), 11peak-12peak (no plant/ore, red has schedules) ──
     const peakMatch = key.match(/^(\d+)peak$/);
     if (peakMatch) {
         const floor = peakMatch[1];
@@ -46,7 +49,7 @@ export function buildPanelDefaults(key) {
         };
     }
 
-    // ── Normal MS panels: 7squarenormal-10squarenormal ──
+    // ── Normal MS panels: 8squarenormal-10squarenormal ──
     const normalMatch = key.match(/^(\d+)squarenormal$/);
     if (normalMatch) {
         const floor = normalMatch[1];
@@ -94,7 +97,7 @@ export function buildPanelDefaults(key) {
             return { type: "antidemon", title, ...rooms };
         }
 
-        // Floors 7-8 use 3-room format
+        // Floor 8 uses 3-room format
         return {
             type: "antidemon", title,
             left: makeRoom("LEFT ROOM"),
@@ -130,7 +133,8 @@ export function buildPanelDefaults(key) {
                 timeWindow: "", _claimTimestamp: null,
                 reservedFor: null, reservedByName: null, reservations: null,
                 schedules: [0, 3, 6, 9, 12, 15, 18, 21],
-                scheduleMinutes: 30
+                scheduleMinutes: 30,
+                claimBeforeMinutes: 10
             },
             frenzy: {
                 name: "🟣 Frenzy", type: "fixed",
@@ -138,7 +142,8 @@ export function buildPanelDefaults(key) {
                 timeWindow: "", _claimTimestamp: null,
                 reservedFor: null, reservedByName: null, reservations: null,
                 schedules: [2, 5, 8, 11, 14, 17, 20, 23],
-                scheduleMinutes: 0
+                scheduleMinutes: 0,
+                claimBeforeMinutes: 10
             }
         };
     }
@@ -151,7 +156,9 @@ export function buildPanelDefaults(key) {
             status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
             timeWindow: "", _claimTimestamp: null,
             schedules: [3, 9, 15, 21],
-            scheduleMinutes: 0
+            scheduleMinutes: 0,
+            claimBeforeMinutes: 10,
+            claimOncePerDay: true
         };
     }
 
@@ -172,22 +179,6 @@ export function buildPanelDefaults(key) {
                 time: "", timeWindow: "", nextId: null, nextName: null,
                 formattedTimeNext: "", endLimit: null
             }
-        };
-    }
-
-    // ── Summon panel (SP2, SP4, SP7) ──
-    if (key === "summon") {
-        const makeSummonRoom = (label) => ({
-            name: label, status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
-            time: "", timeWindow: "", nextId: null, nextName: null,
-            formattedTimeNext: "", endLimit: null
-        });
-        return {
-            type: "summon",
-            title: "🌀 Summon Locations",
-            sp2: makeSummonRoom("⭐ SP 2F"),
-            sp4: makeSummonRoom("⭐ SP 4F"),
-            sp7: makeSummonRoom("⭐ SP 7F")
         };
     }
 

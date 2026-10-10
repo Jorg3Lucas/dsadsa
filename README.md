@@ -18,20 +18,16 @@ On every boot, the bot **deletes and recreates all floor channels** and deploys 
 
 | Floor | Panels |
 |-------|--------|
-| **MS7–MS10** | Normal floor + Antidemon |
+| **MS8–MS10** | Normal floor + Antidemon |
 | **MS11–MS12** | Leaders, Events, Antidemon, Goblin |
 
 ### 🏔️ Secret Peak (SP)
 
 | Floor | Panels |
 |-------|--------|
-| **SP7–SP10** | Regular Secret Peak |
+| **SP8–SP10** | Regular Secret Peak |
 | **SP11** | Secret Peak + Goblin |
 | **SP12** | Secret Peak + Random Event + Goblin |
-
-### 🌀 Summons
-
-Single **Summon** panel for summon location claims.
 
 ---
 
@@ -50,7 +46,8 @@ Single **Summon** panel for summon location claims.
 - Rooms auto-release on timeout or when the owner is absent
 
 ### ⚔️ Event Groups (Fury / Frenzy / Fixed / Summon)
-- **Fixed events** (Fury/Frenzy) open on a schedule — claim inside the window
+- **Fixed events** (Fury/Frenzy on MS11/MS12, Random Event on SP12) open on a schedule — claims open **10 min before** the event starts and stay open through the 1h window
+- **Random Event (SP12)** — limited to **1 claim per person per day**, resetting every day at **13:00 (Brasília time)**
 - **Slide events** — claim when the panel slides open
 
 ### 🔔 DM Notifications
@@ -171,11 +168,11 @@ Text commands (require **Administrator**) — run them in the channel you want t
 On boot, `auto-channel-setup.js` **deletes all text channels** in the **two configured categories** and recreates them:
 
 ```
-🔸 SP & Summons  (category 1548033121012813905)
-  SP-7F … SP-12F  +  🌀 Summons
+🔸 SP            (category 1548033121012813905)
+  SP-8F … SP-12F
 
 🔹 MS            (category 1548033184619438162)
-  MS-7F … MS-12F
+  MS-8F … MS-12F
 ```
 
 The two categories are matched by their explicit **ID** (defined in `src/core/server-structure.js`), so they can be renamed freely — a category matched by ID keeps its current name. Their existing permission overwrites are inherited by the created channels.

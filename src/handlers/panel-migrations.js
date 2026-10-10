@@ -164,7 +164,7 @@ export function migrateMS1112() {
     for (const floor of ["11", "12"]) {
         const key = `${floor}squareevents`;
         if (!db[key]) {
-            db[key] = { type: "event_group", title: `Magic Square ${floor}F - Events`, fury: { name: "🔴 Fury", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [0, 3, 6, 9, 12, 15, 18, 21], scheduleMinutes: 30 }, frenzy: { name: "🟣 Frenzy", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [2, 5, 8, 11, 14, 17, 20, 23], scheduleMinutes: 0 } };
+            db[key] = { type: "event_group", title: `Magic Square ${floor}F - Events`, fury: { name: "🔴 Fury", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [0, 3, 6, 9, 12, 15, 18, 21], scheduleMinutes: 30, claimBeforeMinutes: 10 }, frenzy: { name: "🟣 Frenzy", type: "fixed", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, timeWindow: "", _claimTimestamp: null, reservedFor: null, reservedByName: null, reservations: null, schedules: [2, 5, 8, 11, 14, 17, 20, 23], scheduleMinutes: 0, claimBeforeMinutes: 10 } };
             migrated++;
             logEvent(`Created missing MS${floor} events panel.`);
         }
@@ -224,13 +224,6 @@ export function migrateMS1112() {
         }
     }
 
-    // Clean up old ms11 from combined summon panel
-    if (db.summon && db.summon.ms11) { delete db.summon.ms11; migrated++; logEvent("Removed ms11 from combined summon panel."); }
-    if (db.summon && db.summon.type === "fixed") {
-        db.summon = { type: "summon", title: "🌀 Summon Locations", sp2: { name: "⭐ SP 2F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }, sp4: { name: "⭐ SP 4F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null }, sp7: { name: "⭐ SP 7F", status: STATUS_AVAILABLE, ownerId: null, ownerName: null, time: "", timeWindow: "", nextId: null, nextName: null, formattedTimeNext: "", endLimit: null } };
-        migrated++;
-        logEvent("Fixed db.summon: was wrongly set as Random Event, restored to Summon panel.");
-    }
 
     if (migrated > 0) { saveLocalStorage(); logEvent(`MS11/MS12 migration complete: ${migrated} panel(s) created/updated.`); }
 }
@@ -301,6 +294,57 @@ export function migrateAntidemon9e10() {
     });
 
     if (migrated > 0) { saveLocalStorage(); logEvent(`MS9/MS10 antidemon migration complete: ${migrated} entries updated.`); }
+}
+
+// ── Backfill event claim config (early window + daily limit) ──
+/** Give Fury/Frenzy (MS11/MS12) a 10-minute early window, and the SP12 Random Event a 10-minute early window + one claim per day. */
+export function migrateEventClaimConfig() {
+    let migrated = 0;
+
+    for (const key of ["11squareevents", "12squareevents"]) {
+        const panel = db[key];
+        if (!panel || panel.type !== "event_group") continue;
+        for (const ev of ["fury", "frenzy"]) {
+            const sub = panel[ev];
+            if (sub && sub.claimBeforeMinutes === undefined) { sub.claimBeforeMinutes = 10; migrated++; }
+        }
+    }
+
+    const randomEvent = db["12randomevent"];
+    if (randomEvent) {
+        if (randomEvent.claimBeforeMinutes === undefined) { randomEvent.claimBeforeMinutes = 10; migrated++; }
+        if (randomEvent.claimOncePerDay === undefined) { randomEvent.claimOncePerDay = true; migrated++; }
+    }
+
+    if (migrated > 0) { saveLocalStorage(); logEvent(`Backfilled event claim config on ${migrated} field(s).`); }
+}
+
+// ── Remove 7F panels (SP-7F / MS-7F were dropped) ──
+/** Delete stale SP-7F / MS-7F panel data. */
+export function migrateRemove7F() {
+    let removed = 0;
+
+    ["7peak", "7squarenormal", "7squareantidemon"].forEach(key => {
+        if (!db[key]) return;
+        delete db[key];
+        delete lastMessages[key];
+        if (db._panelMapping) delete db._panelMapping[key];
+        removed++;
+        logEvent(`Removed stale 7F panel ${key} from DB.`);
+    });
+
+    if (removed > 0) { saveLocalStorage(); logEvent(`7F removal migration complete: ${removed} entries updated.`); }
+}
+
+// ── Remove the Summons channel / combined summon panel ──
+/** Delete the combined summon panel data (the 🌀 Summons channel was dropped). */
+export function migrateRemoveSummonPanel() {
+    if (!db.summon) return;
+    delete db.summon;
+    delete lastMessages.summon;
+    if (db._panelMapping) delete db._panelMapping.summon;
+    saveLocalStorage();
+    logEvent("Removed the combined summon panel (Summons channel dropped).");
 }
 
 // ── Backfill _lastKilledAt timestamp for existing entries ──

@@ -7,7 +7,7 @@
 import {
     EmbedBuilder as e
 } from "discord.js";
-import { getLocalTime, isRoomOpen, calculateNextOpening, getNextScheduleAfter, parseStringToDate } from "../core/time-utils.js";
+import { getLocalTime, getScheduledEventSlot, calculateNextOpening, getNextScheduleAfter, parseStringToDate } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { db } from "../core/state.js";
 import { STATUS_AVAILABLE, STATUS_KILLED, STATUS_KILLED_PREFIX } from "../core/constants.js";
@@ -151,21 +151,22 @@ function renderEventGroupPanel(embed, current, now) {
                         if (resHours.length > 1) lines.push(`📌 ${resHours.length} slot(s) reserved`);
                     }
                 }
-            } else if (isRoomOpen(evData.schedules, minuteOffset)) {
-                const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                const endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
-                const endOfEvent = new Date(now.getTime());
-                endOfEvent.setHours(Math.floor(endMinute / 60) % 24, endMinute % 60, 0, 0);
-                if (endOfEvent <= now) endOfEvent.setHours(endOfEvent.getHours() + 1);
-                const closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
-                lines.push(`🟢 Open`);
-                timerLine = closeMins <= 0 ? "⏱️ Expiring..." : `⏱️ Closes in ${closeMins}m`;
             } else {
-                const nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
-                const diffMs = nextOpenDate.getTime() - now.getTime();
-                const diffMins = Math.floor(diffMs / 6e4);
-                lines.push(`🔴 Closed`);
-                timerLine = diffMins < 60 ? `⏱️ Next in ${diffMins}m` : `⏱️ Next in ${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
+                const slot = getScheduledEventSlot(evData.schedules, minuteOffset, evData.claimBeforeMinutes || 0);
+                if (slot && slot.open) {
+                    const closeMins = Math.max(0, slot.endMin - slot.nowMin);
+                    lines.push(`🟢 Open`);
+                    timerLine = closeMins <= 0 ? "⏱️ Expiring..." : `⏱️ Closes in ${closeMins}m`;
+                } else if (slot) {
+                    lines.push(`🟢 Claim open`);
+                    timerLine = `⏱️ Starts in ${slot.startMin - slot.nowMin}m`;
+                } else {
+                    const nextOpenDate = calculateNextOpening(evData.schedules, minuteOffset);
+                    const diffMs = nextOpenDate.getTime() - now.getTime();
+                    const diffMins = Math.floor(diffMs / 6e4);
+                    lines.push(`🔴 Closed`);
+                    timerLine = diffMins < 60 ? `⏱️ Next in ${diffMins}m` : `⏱️ Next in ${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
+                }
             }
             block = timerLine
                 ? `\`\`\`md\n${lines.join("\n")}\n\`\`\`\n\`\`\`yaml\n${timerLine}\n\`\`\``

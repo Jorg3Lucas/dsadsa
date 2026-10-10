@@ -19,7 +19,7 @@ import {
     getFormattedTime12h,
     getLocalTime,
     calculateNextOpening,
-    isRoomOpen
+    isClaimWindowOpen
 } from "../core/time-utils.js";
 import { noop } from "../core/config.js";
 
@@ -52,10 +52,11 @@ export async function handleEGFixClaim(interaction, uid, uName) {
 
     const now = getLocalTime();
     const minuteOffset = evData.scheduleMinutes || 0;
+    const preMinutes = evData.claimBeforeMinutes || 0;
     let eventStart;
     let claimedHour;
 
-    if (isRoomOpen(evData.schedules, minuteOffset)) {
+    if (isClaimWindowOpen(evData.schedules, minuteOffset, preMinutes)) {
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
         let foundHour = null;
         for (const h of evData.schedules) {
@@ -74,10 +75,10 @@ export async function handleEGFixClaim(interaction, uid, uName) {
     } else {
         eventStart = calculateNextOpening(evData.schedules, minuteOffset);
         claimedHour = eventStart.getHours();
-        // Event is closed until its opening time
-        if (now < eventStart) {
-            const diffMs = eventStart.getTime() - now.getTime();
-            const diffMins = Math.ceil(diffMs / 6e4);
+        // Claims open preMinutes before the event starts
+        const claimOpenAt = eventStart.getTime() - preMinutes * 6e4;
+        if (now.getTime() < claimOpenAt) {
+            const diffMins = Math.ceil((claimOpenAt - now.getTime()) / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
                 flags: 64

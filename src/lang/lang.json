@@ -115,6 +115,7 @@
         "slotAlreadyClaimed": "🔒 {room} is already claimed by {ownerName}.",
         "eventOpensIn": "⏳ This event opens in {minutes} minutes.",
         "eventClaimedFixed": "🏆 {title} claimed! You have 1 full hour.",
+        "randomEventDailyLimit": "🚫 You already claimed the Random Event today. You can claim again after **13:00** (Brasília time).",
         "dmImmediateSpawn": "🚨 **INSTANT SPAWN**\n\n**{boss}** has just spawned on **{title}**!",
         "dmImmediateSpawnFixed": "🚨 **INSTANT SPAWN**\n\n**{boss}** has just spawned on **{title}**! Move now!"
     },

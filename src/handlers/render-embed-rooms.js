@@ -5,7 +5,7 @@
 
 import { getMsg } from "../core/lang.js";
 import {
-    isRoomOpen,
+    getScheduledEventSlot,
     getDynamicQueueETA,
     getEndLimitCountdown,
     calculateNextOpening,
@@ -111,7 +111,7 @@ export function renderDefaultPanel(embed, current, now) {
         desc += `\`\`\`md\n⏭️ ${current.next.userName} — ${getEndLimitCountdown(current.next.endLimit)}\n\`\`\`\n`;
     } else if ("fixed" === current.type) {
         const fixedMinuteOffset = current.scheduleMinutes || 0;
-        if (isRoomOpen(current.schedules, fixedMinuteOffset)) {
+        if (getScheduledEventSlot(current.schedules, fixedMinuteOffset, current.claimBeforeMinutes || 0)) {
             desc += `\`\`\`fix\n🟢 ${getMsg("rooms.roomIsOpen")}\n\`\`\`\n`;
         } else {
             desc += `\`\`\`yaml\n🔴 ${getMsg("rooms.eventEnded")}\n\`\`\`\n`;
@@ -125,16 +125,18 @@ export function renderDefaultPanel(embed, current, now) {
 
     if ("fixed" === current.type) {
         const minuteOffset = current.scheduleMinutes || 0;
-        if (isRoomOpen(current.schedules, minuteOffset)) {
-            const nowMinutes = now.getHours() * 60 + now.getMinutes();
-            const endMinute = Math.ceil((nowMinutes - minuteOffset + 1) / 60) * 60 + minuteOffset;
-            const endOfEvent = new Date(now.getTime());
-            endOfEvent.setHours(Math.floor(endMinute / 60) % 24, endMinute % 60, 0, 0);
-            if (endOfEvent <= now) endOfEvent.setHours(endOfEvent.getHours() + 1);
-            const closeMins = Math.floor((endOfEvent.getTime() - now.getTime()) / 6e4);
+        const slot = getScheduledEventSlot(current.schedules, minuteOffset, current.claimBeforeMinutes || 0);
+        if (slot && slot.open) {
+            const closeMins = Math.max(0, slot.endMin - slot.nowMin);
             embed.addFields({
                 name: `⏰ ${getMsg("rooms.nextOpeningTitle")}`,
                 value: `\`\`\`yaml\n${closeMins <= 0 ? "🟢 Open now" : `🟢 Closes in ${closeMins}m`}\n\`\`\``,
+                inline: false
+            });
+        } else if (slot) {
+            embed.addFields({
+                name: `⏰ ${getMsg("rooms.nextOpeningTitle")}`,
+                value: `\`\`\`yaml\n🟢 Claim open · starts in ${slot.startMin - slot.nowMin}m\n\`\`\``,
                 inline: false
             });
         } else {

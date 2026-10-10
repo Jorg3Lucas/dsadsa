@@ -9,7 +9,7 @@
 //     fail validation.
 //   • The bot NEVER creates, renames or deletes roles — the member role must
 //     already exist on the server (created manually by an admin).
-//   • Claim channels (7F-12F, Summons) and the general member channels are
+//   • Claim channels (8F-12F) and the general member channels are
 //     restricted to this single role. Clan roles and the old "GoW Kids" temp
 //     role are ignored.
 //
@@ -308,7 +308,7 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
         `❌ Revoked: **${rolesRevoked}**\n` +
         `📋 Eligible registrations: **${shouldHave.size}** / **${registered.size}**\n` +
         `👥 Members processed: **${membersProcessed}**\n` +
-        `🔒 Claim channels (7F–12F, Summons) + market/main-chat restricted to the member role.`;
+        `🔒 Claim channels (8F–12F) + market/main-chat restricted to the member role.`;
 
     logEvent(`🎖️ [Member Role] Synced: ${rolesGranted} granted, ${rolesRevoked} revoked, ${registered.size} registrations checked (ranking cache: ${totalPlayers} players)`);
     return report;

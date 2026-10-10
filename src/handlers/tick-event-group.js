@@ -1,4 +1,4 @@
-import { isRoomOpen, parseStringToDate, getFormattedTime12h, calculateNextOpening } from "../core/time-utils.js";
+import { isRoomOpen, isClaimWindowOpen, parseStringToDate, getFormattedTime12h } from "../core/time-utils.js";
 import { getMsg } from "../core/lang.js";
 import { notifyUserDM } from "./panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
@@ -40,21 +40,19 @@ export async function handleEventGroup(current, key, now) {
         // ── Fixed-type events (Fury/Frenzy/Random Event) auto-release ──
         if (evData.type === "fixed" && evData.schedules) {
             const minuteOffset = evData.scheduleMinutes || 0;
+            const preMinutes = evData.claimBeforeMinutes || 0;
             if (isRoomOpen(evData.schedules, minuteOffset)) {
                 if ("" === evData.timeWindow) updateNeeded = true;
-            } else {
-                const nextOpen = calculateNextOpening(evData.schedules, minuteOffset);
-                const fiveMinBefore = new Date(nextOpen.getTime() - 5 * 60 * 1000);
-                const insidePreWindow = now >= fiveMinBefore && now < nextOpen;
-                if (!insidePreWindow && ("" !== evData.timeWindow || evData.ownerId)) {
-                    if (evData.ownerName) pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.autoClose"));
-                    await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
-                        title: `${current.title} - ${evData.name}`,
-                        reason: getMsg("logs.autoClose")
-                    })).catch(noop);
-                    clearClaim(evData);
-                    updateNeeded = true;
-                }
+            } else if (!isClaimWindowOpen(evData.schedules, minuteOffset, preMinutes)
+                && ("" !== evData.timeWindow || evData.ownerId)) {
+                // Outside both the event and its pre-claim window → release the slot
+                if (evData.ownerName) pushToDailyLogs("CLAIM_END", evData.ownerName, `${current.title} - ${evData.name}`, getMsg("logs.autoClose"));
+                await notifyUserDM(evData.ownerId, getMsg("rooms.dmRemovedNotice", {
+                    title: `${current.title} - ${evData.name}`,
+                    reason: getMsg("logs.autoClose")
+                })).catch(noop);
+                clearClaim(evData);
+                updateNeeded = true;
             }
         }
 

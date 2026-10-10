@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "../core/state.js";
-import { buildPanelDefaults, migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateAntidemon9e10, migrateMS1112, migrateSPLegacyToUnified } from "./panel-utils.js";
+import { buildPanelDefaults, migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateAntidemon9e10, migrateMS1112, migrateSPLegacyToUnified, migrateEventClaimConfig, migrateRemove7F, migrateRemoveSummonPanel } from "./panel-utils.js";
 
 
 // ==========================================
@@ -28,7 +28,6 @@ export async function initClaimSystem(botClient, database, saveStorageFn, logEve
     });
     allPanelKeys.push("12randomevent");
     allPanelKeys.push("11goblin", "12goblin", "11msgoblin", "12msgoblin");
-    allPanelKeys.push("summon");
 
     // Deduplicate and initialize
     for (const key of [...new Set(allPanelKeys)]) {
@@ -47,6 +46,9 @@ export async function initClaimSystem(botClient, database, saveStorageFn, logEve
     migrateAntidemon9e10();
     migrateMS1112();
     migrateSPLegacyToUnified();
+    migrateEventClaimConfig();
+    migrateRemove7F();
+    migrateRemoveSummonPanel();
 
     // NOTE: no refresh/recovery here on purpose. index.js runs the channel
     // auto-setup right after this call, which clears the panel mappings and

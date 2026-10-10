@@ -3,8 +3,6 @@
 // Extracted from claim-core.js
 // ==========================================
 
-const SUMMON_PROPS_INTERNAL = ["sp2", "sp4", "sp7"];
-
 // Rooms for expanded antidemon panels
 // MS9/MS10: 1-1, 1-2 each with LEFT/MID/RIGHT (6 rooms)
 // MS11/MS12: 1-1, 1-2, 1-3 each with LEFT/MID/RIGHT (9 rooms)
@@ -34,8 +32,7 @@ export function getSummonRoomKeys(panelKey) {
     if (panelKey === "12goblin") return ["sp12"];
     if (panelKey === "11msgoblin") return ["ms11"];
     if (panelKey === "12msgoblin") return ["ms12"];
-    // Combined summon panel uses the default rooms
-    return SUMMON_PROPS_INTERNAL;
+    return [];
 }
 
 // Returns room key array for an antidemon panel based on its key

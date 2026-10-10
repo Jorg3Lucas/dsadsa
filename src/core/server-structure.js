@@ -29,8 +29,8 @@ const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID?.trim() || '1557229285
 
 // ── Claim categories (members view-only, bot sends panels) ──
 // Only TWO categories are used:
-//   • SP & Summons → every Secret Peak floor + the summon panel
-//   • MS           → every Magic Square floor
+//   • SP → every Secret Peak floor
+//   • MS → every Magic Square floor
 // `id` is the explicit Discord category ID — it wins over name/legacy lookups,
 // and a category matched by id keeps its current name (no rename).
 // Claim channels created inside the category inherit its permission overwrites
@@ -39,22 +39,19 @@ const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID?.trim() || '1557229285
 export const CLAIM_CATEGORIES = [
     {
         id: SP_SUMMONS_CATEGORY_ID,
-        name: '🔸 SP & Summons',
+        name: '🔸 SP',
         channels: [
-            { name: '🔸 SP-7F', key: 'sp7', legacyName: '🔸┃sp7', panels: ['7peak'] },
             { name: '🔸 SP-8F', key: 'sp8', legacyName: '🔸┃sp8', panels: ['8peak'] },
             { name: '🔸 SP-9F', key: 'sp9', legacyName: '🔸┃sp9', panels: ['9peak'] },
             { name: '🔸 SP-10F', key: 'sp10', legacyName: '🔸┃sp10', panels: ['10peak'] },
             { name: '🔸 SP-11F', key: 'sp11', legacyName: '🔸┃sp11', panels: ['11peak', '11goblin'] },
-            { name: '🔸 SP-12F', key: 'sp12', legacyName: '🔸┃sp12', panels: ['12peak', '12randomevent', '12goblin'] },
-            { name: '🌀 Summons', key: 'summons', legacyName: '🌀┃summons', panels: ['summon'] }
+            { name: '🔸 SP-12F', key: 'sp12', legacyName: '🔸┃sp12', panels: ['12peak', '12randomevent', '12goblin'] }
         ]
     },
     {
         id: MS_CATEGORY_ID,
         name: '🔹 MS',
         channels: [
-            { name: '🔹 MS-7F', key: 'ms7', legacyName: '🔹┃ms7', panels: ['7squarenormal', '7squareantidemon'] },
             { name: '🔹 MS-8F', key: 'ms8', legacyName: '🔹┃ms8', panels: ['8squarenormal', '8squareantidemon'] },
             { name: '🔹 MS-9F', key: 'ms9', legacyName: '🔹┃ms9', panels: ['9squarenormal', '9squareantidemon'] },
             { name: '🔹 MS-10F', key: 'ms10', legacyName: '🔹┃ms10', panels: ['10squarenormal', '10squareantidemon'] },
@@ -175,7 +172,7 @@ export function findClaimCategory(guild, catDef) {
 }
 
 /**
- * Alias of buildMemberViewOverwrites used by the claim channels (7F-12F, Summons):
+ * Alias of buildMemberViewOverwrites used by the claim channels (8F-12F):
  * @everyone cannot view (or send), the bot and the given roles can VIEW ONLY,
  * only the bot can send (panels). Members holding the member role
  * can read the panels and click the buttons, but are explicitly denied sending

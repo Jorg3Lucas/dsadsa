@@ -16,7 +16,7 @@ import {
     freeFloorAndActivateNextGracePeriod,
     buildActiveClaimMessage
 } from "../handlers/claim-core.js";
-import { getFormattedTime12h, getLocalTime, parseStringToDate, isRoomOpen, calculateNextOpening } from "../core/time-utils.js";
+import { getFormattedTime12h, getLocalTime, parseStringToDate, isClaimWindowOpen, calculateNextOpening, getBrazilDailyCycleKey } from "../core/time-utils.js";
 import { noop } from "../core/config.js";
 
 // ==========================================
@@ -68,7 +68,7 @@ export async function handleFloorCancel(interaction, uid, uName, targetObj, pane
 // 🔥 FIXED TYPE CLAIM (Fury/Frenzy)
 // ==========================================
 
-/** Claim a fixed-type event (Fury/Frenzy). Calculates the 1-hour window based on the current/next schedule slot. Checks 5-min pre-window. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
+/** Claim a fixed-type event (Fury/Frenzy/Random Event). Calculates the 1-hour window from the current/next schedule slot, honoring the configurable pre-claim window and, when `claimOncePerDay` is set, the 1-per-day limit. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @param {object} targetObj @param {string} panelKey @returns {Promise<boolean>} */
 export async function handleFixedClaim(interaction, uid, uName, targetObj, panelKey) {
     const pStr = checkPunishment(uid);
     if (pStr) {return await interaction.reply({ content: pStr, flags: 64 }).catch(noop);}
@@ -78,11 +78,24 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
     }
     if (hasActiveQueue(uid)) {return await interaction.reply({ content: getMsg("rooms.limitReached"), flags: 64 }).catch(noop);}
 
+    // ── One claim per day (resets 13:00 Brazil time) ──
+    if (targetObj.claimOncePerDay) {
+        const cycle = getBrazilDailyCycleKey(13);
+        if (!db._dailyClaims) db._dailyClaims = {};
+        for (const k in db._dailyClaims) {
+            if (db._dailyClaims[k] !== cycle) delete db._dailyClaims[k];
+        }
+        if (db._dailyClaims[`${panelKey}:${uid}`] === cycle) {
+            return await interaction.reply({ content: getMsg("rooms.randomEventDailyLimit"), flags: 64 }).catch(noop);
+        }
+    }
+
     const now = getLocalTime();
     const minuteOffset = targetObj.scheduleMinutes || 0;
+    const preMinutes = targetObj.claimBeforeMinutes || 0;
     let eventStart;
 
-    if (isRoomOpen(targetObj.schedules, minuteOffset)) {
+    if (isClaimWindowOpen(targetObj.schedules, minuteOffset, preMinutes)) {
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
         let foundHour = null;
         for (const h of targetObj.schedules) {
@@ -98,10 +111,10 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
         }
     } else {
         eventStart = calculateNextOpening(targetObj.schedules, minuteOffset);
-        // Event is closed until its opening time
-        if (now < eventStart) {
-            const diffMs = eventStart.getTime() - now.getTime();
-            const diffMins = Math.ceil(diffMs / 6e4);
+        // Claims open preMinutes before the event starts
+        const claimOpenAt = eventStart.getTime() - preMinutes * 6e4;
+        if (now.getTime() < claimOpenAt) {
+            const diffMins = Math.ceil((claimOpenAt - now.getTime()) / 6e4);
             return await interaction.reply({
                 content: getMsg("rooms.eventOpensIn", { minutes: diffMins }),
                 flags: 64
@@ -123,6 +136,11 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
     targetObj.ownerName = uName;
     targetObj.timeWindow = windowStr;
     targetObj._claimTimestamp = now.getTime();
+
+    if (targetObj.claimOncePerDay) {
+        if (!db._dailyClaims) db._dailyClaims = {};
+        db._dailyClaims[`${panelKey}:${uid}`] = getBrazilDailyCycleKey(13);
+    }
 
     pushToDailyLogs("CLAIM_START", uName, targetObj.title, `${getMsg("render.windowPrefix")}: ${targetObj.timeWindow}`);
     notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: targetObj.title, window: windowStr }));

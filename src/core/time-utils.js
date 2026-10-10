@@ -18,6 +18,25 @@ export function getLocalTime() {
     return new Date(timeStr);
 }
 
+export function getBrazilTime() {
+    const timeStr = (new Date).toLocaleString("en-US", {
+        timeZone: "America/Sao_Paulo"
+    });
+    return new Date(timeStr);
+}
+
+/**
+ * "Claim day" cycle key (YYYY-M-D, Brazil time) for a daily reset at
+ * `resetHour`. Before the reset hour the cycle still belongs to the previous
+ * day, so the counter only rolls over at the reset boundary.
+ * @param {number} [resetHour=13] - reset hour in Brazil time (0-23)
+ */
+export function getBrazilDailyCycleKey(resetHour = 13) {
+    const d = getBrazilTime();
+    if (d.getHours() < resetHour) d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
 export function isRoomOpen(schedules, minuteOffset = 0) {
     const now = getLocalTime();
     const hr = now.getHours();
@@ -33,6 +52,42 @@ export function isRoomOpen(schedules, minuteOffset = 0) {
         return false;
     }
     return schedules.includes(hr);
+}
+
+/**
+ * Describe the scheduled-event slot covering `now`: either running
+ * (`open: true`) or inside its pre-claim window (`open: false`, `preMinutes`
+ * before the start). Returns null when `now` is outside both.
+ * @param {number[]} schedules - event hours (0-23)
+ * @param {number} [minuteOffset] - minute past the hour the event starts
+ * @param {number} [preMinutes] - minutes before the start when claims open
+ * @returns {{open: boolean, startMin: number, endMin: number, nowMin: number}|null}
+ */
+export function getScheduledEventSlot(schedules, minuteOffset = 0, preMinutes = 0) {
+    const now = getLocalTime();
+    const cur = now.getHours() * 60 + now.getMinutes();
+    let preStart = null;
+    for (const h of schedules || []) {
+        const start = h * 60 + minuteOffset;
+        if (cur >= start && cur < start + 60) {
+            return { open: true, startMin: start, endMin: start + 60, nowMin: cur };
+        }
+        if (preMinutes > 0 && cur >= start - preMinutes && cur < start && (preStart === null || start < preStart)) {
+            preStart = start;
+        }
+    }
+    return preStart === null ? null : { open: false, startMin: preStart, endMin: preStart + 60, nowMin: cur };
+}
+
+/**
+ * Claim-window check for scheduled events: true while the event is running
+ * (X → X+1h) or inside the pre-claim window (`preMinutes` before it starts).
+ * @param {number[]} schedules
+ * @param {number} [minuteOffset]
+ * @param {number} [preMinutes]
+ */
+export function isClaimWindowOpen(schedules, minuteOffset = 0, preMinutes = 0) {
+    return getScheduledEventSlot(schedules, minuteOffset, preMinutes) !== null;
 }
 
 // ==========================================

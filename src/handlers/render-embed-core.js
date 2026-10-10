@@ -3,7 +3,7 @@
 // Extracted from render-embed.js
 // ==========================================
 
-import { isRoomOpen } from "../core/time-utils.js";
+import { isClaimWindowOpen } from "../core/time-utils.js";
 import { COLOR_OCCUPIED, COLOR_HAS_QUEUE, COLOR_OPEN, COLOR_DEFAULT } from "../core/constants.js";
 import { getAntidemonRoomKeys, getSummonRoomKeys, getEventGroupKeys } from "./claim-core.js";
 
@@ -27,7 +27,7 @@ export function getEmbedColor(current, key) {
         if (hasQueue) return COLOR_HAS_QUEUE;
     }
     if ("fixed" === current.type) {
-        return isRoomOpen(current.schedules, current.scheduleMinutes || 0) ? COLOR_OPEN : COLOR_DEFAULT;
+        return isClaimWindowOpen(current.schedules, current.scheduleMinutes || 0, current.claimBeforeMinutes || 0) ? COLOR_OPEN : COLOR_DEFAULT;
     }
     return COLOR_DEFAULT;
 }

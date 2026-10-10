@@ -9,7 +9,7 @@ import { logger } from "./logger.js";
 const punishmentsPath = s.resolve("./punishments.json");
 export const dailyLogsPath = s.resolve("./daily-logs.json");
 const dmOptOutPath = s.resolve("./dm-optout.json");
-export const defaultFloors = ["7", "8", "9", "10"];
+export const defaultFloors = ["8", "9", "10"];
 
 export let punishments = {};
 export let dailyLogs = { configChannelId: null, queue: [], bossSpawnChannelId: null, scheduledEventChannelId: null };
