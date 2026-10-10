@@ -4,7 +4,7 @@
 // ==========================================
 
 import { getMsg } from "../core/lang.js";
-import { saveLocalStorage } from "../core/state.js";
+import { db, saveLocalStorage } from "../core/state.js";
 import { refreshVisualPanel, notifyUserDM } from "../handlers/panel-utils.js";
 import { pushToDailyLogs } from "../core/daily-logs.js";
 import {
