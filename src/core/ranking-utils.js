@@ -1,19 +1,143 @@
 // ==========================================
 // 🛠️ SHARED UTILITIES
 // ==========================================
+import { PermissionFlagsBits } from 'discord.js';
 import { MEMBER_ROLE_ID } from './ranking-constants.js';
 import { getMsg } from '../lang/lang.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 
-/**
- * Assign the general member role to a verified player
- */
-export async function assignMemberRole(targetMember, logEvent) {
-    if (!targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
-        await targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {});
-        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
+// ==========================================
+// 🎭 MEMBER ROLE ASSIGNMENT
+// ==========================================
+// `roles.add()` REJECTS when Discord refuses the change (missing permission,
+// role/member hierarchy, deleted role...). Swallowing that rejection with
+// `.catch(() => {})` and then logging "role added" anyway is why an approved
+// member can stay without the role in the server while the bot logs say it was
+// granted. These helpers report the real Discord error so the failing reason is
+// visible in the logs and to the admin who clicked the button.
+
+/** Safe read of GuildMember#manageable (its getter throws if the bot member is unavailable). */
+function isUnmanageable(member) {
+    try {
+        return member?.manageable === false;
+    } catch {
+        return false;
     }
+}
+
+/** Safe read of Role#editable (its getter throws when the bot member is unavailable). */
+function isRoleNotEditable(guild) {
+    try {
+        return guild?.roles?.cache?.get?.(MEMBER_ROLE_ID)?.editable === false;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Turn a failed role mutation into a human-readable reason.
+ *
+ * Discord only lets a bot manage a member when the BOT's highest role sits above
+ * that member's highest role, and only lets it hand out roles that sit below the
+ * bot's highest role. Those two hierarchy rules are the usual cause of the
+ * "approved but never received the role" reports: everyone else works, but the
+ * members who already wear a role at/above the bot's top role (staff, owners,
+ * founders) are silently rejected with error 50013.
+ *
+ * @param {Error} error - Rejection from roles.add()/roles.remove()
+ * @param {object} targetMember - The GuildMember the bot tried to edit
+ * @param {object} [guild] - The guild (for hierarchy details)
+ * @returns {string}
+ */
+export function describeRoleError(error, targetMember, guild = null) {
+    const code = error?.code ?? error?.rawError?.code ?? null;
+    const me = guild?.members?.me ?? null;
+
+    switch (code) {
+        case 50013: // Missing Permissions
+            if (isUnmanageable(targetMember)) {
+                return `Missing Permissions (50013): this member's highest role is at or above the bot's highest role, so Discord does not allow the bot to manage them. Move the bot's role above "Member" (or give the role manually).`;
+            }
+            if (isRoleNotEditable(guild)) {
+                return `Missing Permissions (50013): the Member role is above the bot's highest role. Drag the bot's role ABOVE the Member role in Server Settings → Roles.`;
+            }
+            if (me && typeof me.permissions?.has === 'function' && !me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                return 'Missing Permissions (50013): the bot is missing the "Manage Roles" permission.';
+            }
+            return 'Missing Permissions (50013): check that the bot has "Manage Roles" and a role above the Member role.';
+        case 10011: // Unknown Role
+            return `Unknown Role (10011): the Member role ID (${MEMBER_ROLE_ID}) no longer exists in this server — the role was deleted or replaced.`;
+        case 10007:
+            return 'Unknown Member (10007): the user is no longer in the server.';
+        case 10013:
+            return 'Unknown User (10013).';
+        default:
+            return error?.message || String(error);
+    }
+}
+
+/**
+ * Assign the general member role to a verified player and REPORT the outcome.
+ *
+ * Returns `{ ok: true }` when the member already had the role, when Discord
+ * accepted the change, and `{ ok: false, reason }` (with the Discord error code
+ * explained in plain language) when the change was refused — so the caller can
+ * tell the admin instead of silently claiming success.
+ *
+ * @param {object} targetMember - The GuildMember to give the role to
+ * @param {Function} [logEvent] - Bot log sink
+ * @param {object} [guild] - Guild used for hierarchy diagnostics
+ * @returns {Promise<{ok: boolean, alreadyHad?: boolean, reason?: string, error?: Error}>}
+ */
+export async function assignMemberRole(targetMember, logEvent, guild = null) {
+    if (!targetMember?.roles) return { ok: false, reason: 'member not available' };
+    if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) return { ok: true, alreadyHad: true };
+
+    try {
+        await targetMember.roles.add(MEMBER_ROLE_ID);
+    } catch (error) {
+        const reason = describeRoleError(error, targetMember, guild ?? targetMember.guild ?? null);
+        logEvent?.(`❌ [Role] Failed to add the Member role to ${targetMember.user?.tag || targetMember.id} — ${reason}`);
+        return { ok: false, reason, error };
+    }
+
+    logEvent?.(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
+    return { ok: true, alreadyHad: false };
+}
+
+/**
+ * Sanity-check that the bot can actually hand out the Member role in `guild`.
+ * Returns a list of problems (empty when everything is fine), so the startup
+ * logs answer "why do some approved members never get the role?" up front.
+ *
+ * @param {object} guild - The Discord guild
+ * @returns {string[]}
+ */
+export function checkMemberRolePermissions(guild) {
+    const problems = [];
+    const me = guild?.members?.me ?? null;
+    const role = guild?.roles?.cache?.get?.(MEMBER_ROLE_ID) ?? null;
+
+    if (!role) {
+        problems.push(`The Member role (${MEMBER_ROLE_ID}) does not exist in this server — approved members can never receive it.`);
+        return problems;
+    }
+
+    if (!me) {
+        problems.push('Could not resolve the bot member in this server — role assignment cannot be validated.');
+        return problems;
+    }
+
+    if (role.comparePositionTo(me.roles.highest) >= 0) {
+        problems.push(`The Member role "${role.name}" (position ${role.position}) is at or above the bot's highest role "${me.roles.highest.name}" (position ${me.roles.highest.position}). Move the bot's role above the Member role.`);
+    }
+
+    if (typeof me.permissions?.has === 'function' && !me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        problems.push('The bot is missing the "Manage Roles" permission.');
+    }
+
+    return problems;
 }
 
 /**

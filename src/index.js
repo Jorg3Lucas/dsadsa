@@ -47,6 +47,7 @@ import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, getStorageStats } from './core/ranking-storage.js';
 import { startGatewayWatchdog } from './core/ranking-gateway-watchdog.js';
 import { isExpiredError } from './core/interaction-utils.js';
+import { checkMemberRolePermissions } from './core/ranking-utils.js';
 
 const client = new Client({
     intents: [
@@ -130,6 +131,25 @@ client.once('ready', async () => {
     const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
     if (guild) {
         await registerMir4SlashCommands(guild);
+
+        // Answer "why do some approved members never get the role?" up front:
+        // Discord refuses roles.add() when the bot cannot manage the role or the
+        // member (role hierarchy / Manage Roles), and that failure used to be
+        // swallowed. Logging it at startup makes the cause visible immediately.
+        try {
+            await guild.members.fetchMe().catch(() => null);
+            const roleProblems = checkMemberRolePermissions(guild);
+            if (roleProblems.length === 0) {
+                console.log('✅ [Startup] Member role check OK — the bot can assign the Member role.');
+            } else {
+                for (const problem of roleProblems) {
+                    console.error(`⚠️ [Startup] Member role problem: ${problem}`);
+                    logRankingEvent(`⚠️ [Startup] Member role problem: ${problem}`);
+                }
+            }
+        } catch (error) {
+            console.error(`⚠️ [Startup] Could not validate the Member role: ${error.message}`);
+        }
     } else {
         console.error('❌ Error: Invalid Server ID configuration.');
     }

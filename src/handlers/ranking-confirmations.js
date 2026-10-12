@@ -10,7 +10,7 @@ import {
     SUPER_ADMIN_USER_ID,
     confirmationCache
 } from '../core/ranking-constants.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole } from '../core/ranking-utils.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS
@@ -263,19 +263,20 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
         saveLocalStorage();
 
-        // Nickname + role are independent — run them concurrently. Capture the role
-        // state BEFORE the add: discord.js updates roles.cache when roles.add resolves,
-        // so re-checking after Promise.all would wrongly suppress the log below.
+        // Nickname + role are independent — run them concurrently. The role result
+        // is reported instead of swallowed, so a hierarchy/permission refusal is
+        // visible (see assignMemberRole in ranking-utils).
         if (pilotMember) {
-            const hadMemberRole = pilotMember.roles.cache.has(MEMBER_ROLE_ID);
-            await Promise.all([
+            const [, roleOutcome] = await Promise.all([
                 pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {}),
-                !hadMemberRole
-                    ? pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
-                    : Promise.resolve()
+                assignMemberRole(pilotMember, logEvent, guild)
             ]);
-            if (!hadMemberRole) {
-                logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: pilotMember.user.username }));
+            if (!roleOutcome.ok) {
+                logEvent(`⚠️ [ManualPilot] Failed to apply the Member role to ${pilotMember.user?.tag || cached.pilotId} — ${roleOutcome.reason}`);
+                return interaction.update({
+                    content: `${getMsg('ranking.responses.manualpilot.success', { pilotMember: cached.pilotName, nick: cached.ownerNick })}\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${roleOutcome.reason}`,
+                    components: []
+                }).catch(() => {});
             }
         }
 
@@ -314,12 +315,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
         saveLocalStorage();
 
-        // Nickname + role are independent — run them concurrently.
-        await Promise.all([
+        // Nickname + role are independent — run them concurrently. The role result
+        // is reported instead of swallowed (see assignMemberRole in ranking-utils).
+        const [, registerRoleOutcome] = await Promise.all([
             targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {}),
-            !targetMember.roles.cache.has(MEMBER_ROLE_ID)
-                ? targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
-                : Promise.resolve()
+            assignMemberRole(targetMember, logEvent, guild)
         ]);
 
         const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
@@ -330,7 +330,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             : getMsg('ranking.responses.manualregister.cacheFound', { nickname: finalNickname, clan: cached.clan });
 
         return interaction.update({
-            content: responseMsg,
+            content: responseMsg + (registerRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${registerRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`),
             components: []
         }).catch(() => {});
     }
@@ -360,18 +360,17 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
         saveLocalStorage();
 
-        // Nickname + role are independent — run them concurrently.
-        await Promise.all([
+        // Nickname + role are independent — run them concurrently. The role result
+        // is reported instead of swallowed (see assignMemberRole in ranking-utils).
+        const [, forceRoleOutcome] = await Promise.all([
             targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {}),
-            !targetMember.roles.cache.has(MEMBER_ROLE_ID)
-                ? targetMember.roles.add(MEMBER_ROLE_ID).catch(() => {})
-                : Promise.resolve()
+            assignMemberRole(targetMember, logEvent, guild)
         ]);
 
         logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)`);
 
         return interaction.update({
-            content: getMsg('ranking.responses.manualforce.success', { username: cached.targetName, nickname: cached.nickname }),
+            content: getMsg('ranking.responses.manualforce.success', { username: cached.targetName, nickname: cached.nickname }) + (forceRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${forceRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`),
             components: []
         }).catch(() => {});
     }

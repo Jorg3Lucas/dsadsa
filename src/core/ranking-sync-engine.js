@@ -53,7 +53,14 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
     // groups) so a heavy sync no longer serializes hundreds of API calls one
     // at a time. flush() is awaited between steps so each step still observes
     // the members' role/nickname state as it is on the server.
-    const { queueWrite, flush } = createWriteBatcher();
+    //
+    // Write failures are LOGGED instead of silently dropped: a refused
+    // roles.add() (role hierarchy / missing permission) used to disappear while
+    // the step still logged "role added", leaving approved members without the
+    // role and no trace of why.
+    const { queueWrite, flush } = createWriteBatcher({
+        onError: (error) => logEvent(`❌ [Sync] Discord refused a role/nickname change — ${error?.code ? `[${error.code}] ` : ''}${error?.message || error}`)
+    });
     try {
         ensureConfig(db);
         logEvent(getMsg('ranking.logs.syncStart'));
@@ -544,13 +551,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * between one-at-a-time serial writes (slow on heavy syncs) and unbounded
  * parallelism (rate-limit risk).
  *
- * Per-op errors are swallowed (same semantics as the old `await x.catch(() => {})`),
- * so one failing write never breaks the rest of the batch.
+ * Per-op errors never break the rest of the batch; they are handed to the
+ * optional `onError` callback (silently dropped when it is not provided, same
+ * semantics as the old `await x.catch(() => {})`).
  *
  * `queueWrite` is fire-and-forget; `flush()` must be awaited before the caller
  * relies on all writes having completed.
+ *
+ * @param {{onError?: (error: Error) => void}} [options]
  */
-export function createWriteBatcher() {
+export function createWriteBatcher({ onError } = {}) {
     const queue = [];
     let flushing = false;
     let startScheduled = false;
@@ -561,7 +571,13 @@ export function createWriteBatcher() {
         currentFlush = (async () => {
             while (queue.length > 0) {
                 const batch = queue.splice(0, WRITE_BATCH_SIZE);
-                await Promise.all(batch.map((op) => op().catch(() => {})));
+                await Promise.all(batch.map((op) => op().catch((error) => {
+                    try {
+                        onError?.(error);
+                    } catch {
+                        // A failing log sink must never break the flush loop
+                    }
+                })));
                 if (queue.length > 0) await sleep(WRITE_BATCH_PAUSE_MS);
             }
             flushing = false;
