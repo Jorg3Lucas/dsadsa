@@ -3,7 +3,7 @@ import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
-import { buildPrefixedNickname, baseNicknameKey } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess } from '../core/ranking-utils.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -61,6 +61,15 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
     const { queueWrite, flush } = createWriteBatcher({
         onError: (error) => logEvent(`❌ [Sync] Discord refused a role/nickname change — ${error?.code ? `[${error.code}] ` : ''}${error?.message || error}`)
     });
+
+    // Count role mutations so the channel-access refresh below only runs when a
+    // member's roles actually changed during this run — no pointless
+    // CHANNEL_UPDATE storm on a sync that touched nothing.
+    let roleWriteCount = 0;
+    const queueRoleWrite = (op) => {
+        roleWriteCount++;
+        queueWrite(op);
+    };
     try {
         ensureConfig(db);
         logEvent(getMsg('ranking.logs.syncStart'));
@@ -134,7 +143,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (memberId !== registeredOwnerId && (!ownerData.pilotIds || !ownerData.pilotIds.includes(memberId))) {
                     logEvent(getMsg('ranking.logs.imposterDetected', { username: member.user.username, nickname: ownerData.nickname }));
                     queueWrite(() => member.setNickname(member.user.username));
-                    if (member.roles.cache.has(MEMBER_ROLE_ID)) queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                    if (member.roles.cache.has(MEMBER_ROLE_ID)) queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                     continue; 
                 }
             }
@@ -217,7 +226,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         const member = members.get(memberId);
                         if (member) {
                             if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                                queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                                queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                             }
                         }
 
@@ -227,7 +236,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                                 const pilotMember = members.get(pId);
                                 if (pilotMember) {
                                     if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                        queueWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
+                                        queueRoleWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
                                     }
                                 }
                                 delete db.users[pId];
@@ -292,7 +301,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 }
 
                 if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    queueWrite(() => prodMember.roles.add(MEMBER_ROLE_ID));
+                    queueRoleWrite(() => prodMember.roles.add(MEMBER_ROLE_ID));
                 }
 
                 delete db.preRegistrations[memberId];
@@ -351,19 +360,19 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (ownerData?.manualPermanent) {
                     // 👑 ManualForce user — always ensure role is present, never remove
                     if (!hasMemberRole) {
-                        queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
+                        queueRoleWrite(() => member.roles.add(MEMBER_ROLE_ID));
                         logEvent(`[Sync] Restored role for manualforce user ${member.user.username}`);
                     }
                 } else if (ownerData?.tempUntil) {
                     // ⏳ Temporary registration — keep role until expiry (handled in step 2.75)
                     if (!hasMemberRole) {
-                        queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
+                        queueRoleWrite(() => member.roles.add(MEMBER_ROLE_ID));
                         logEvent(`[Sync] Restored role for temp user ${member.user.username} (expires ${new Date(ownerData.tempUntil).toLocaleDateString()})`);
                     }
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure role is present
                     if (!hasMemberRole) {
-                        queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
+                        queueRoleWrite(() => member.roles.add(MEMBER_ROLE_ID));
                         // Log the REAL role name so a renamed/recreated role id is visible in the logs.
                         const roleName = activeGuild?.roles?.cache?.get?.(MEMBER_ROLE_ID)?.name || 'Member';
                         logEvent(getMsg('ranking.logs.roleAdded', { clan: roleName, username: member.user.username }));
@@ -402,13 +411,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         const grace = getOutOfAlliedGraceStatus(db, memberId);
                         if (!graceEnabled) {
                             // Grace disabled — remove role immediately
-                            queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                            queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                             logEvent(`⚠️ [Sync] ${member.user.username} not in allied clan — grace disabled, role removed immediately (registration kept)`);
                         } else if (!grace.started) {
                             startOutOfAlliedGrace(db, memberId);
                             logEvent(`⏳ [Sync] ${member.user.username} not in allied clan — 72h grace started, role kept (registration kept)`);
                         } else if (grace.expired) {
-                            queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                            queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                             logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan for over 72h (registration kept)`);
                             // Grace consumed — clear so a later re-entry restarts the countdown
                             deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
@@ -422,7 +431,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 // registered through the bot (panel, /manualregister, /manualforce)
                 // to keep their role. Manually-assigned roles from the merge are
                 // cleaned up here automatically.
-                queueWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
                 logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
             }
 
@@ -454,6 +463,14 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         }
 
         await flush();
+
+        // Roles changed in this run: re-emit the Member role's channel overwrites
+        // ONCE (not per member) so every affected client recomputes its channel
+        // list immediately, instead of waiting for a manual role re-add.
+        if (roleWriteCount > 0) {
+            await refreshRoleChannelAccess(activeGuild, logEvent);
+        }
+
         saveLocalStorage();
         logEvent(getMsg('ranking.logs.syncComplete'));
         return true;

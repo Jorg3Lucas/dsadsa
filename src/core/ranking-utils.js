@@ -78,6 +78,65 @@ export function describeRoleError(error, targetMember, guild = null) {
 }
 
 /**
+ * Re-emit the Member role's channel permission overwrites so Discord clients
+ * re-evaluate which channels the role unlocks.
+ *
+ * Why this exists: channel visibility is computed on the CLIENT from the
+ * member's roles plus the guild's channel overwrites. When a role is granted
+ * through the REST API, Discord dispatches GUILD_MEMBER_UPDATE, but a member
+ * whose client has not yet cached the (sometimes just-created) role/overwrites
+ * keeps the new channels hidden until an admin removes and re-adds the role by
+ * hand — exactly the "channels only appear after a manual re-add" symptom.
+ * Re-applying the role's CURRENT overwrites re-emits CHANNEL_UPDATE for those
+ * channels, forcing every affected client to recompute immediately.
+ *
+ * Only channels that actually carry an overwrite for the Member role are
+ * touched, and only their existing overwrites are re-applied — NO permission is
+ * changed. Best-effort: failures are logged and never block the role grant.
+ *
+ * @param {object} guild - The Discord guild (may be null/partial)
+ * @param {Function} [logEvent] - Bot log sink
+ * @returns {Promise<number>} How many channels were refreshed
+ */
+export async function refreshRoleChannelAccess(guild, logEvent) {
+    const targets = [];
+    try {
+        const channels = guild?.channels?.cache;
+        if (!channels?.values) return 0;
+        for (const channel of channels.values()) {
+            if (!channel?.permissionOverwrites?.cache?.has?.(MEMBER_ROLE_ID)) continue;
+            if (typeof channel.permissionOverwrites.set !== 'function') continue;
+            targets.push(channel);
+        }
+    } catch (error) {
+        logEvent?.(`⚠️ [Role] Could not inspect channel overwrites: ${error?.message || error}`);
+        return 0;
+    }
+
+    if (targets.length === 0) return 0;
+
+    let refreshed = 0;
+    for (const channel of targets) {
+        try {
+            // Re-apply the channel's CURRENT overwrites untouched — the goal is to
+            // trigger CHANNEL_UPDATE, not to change any permission.
+            const payload = channel.permissionOverwrites.cache.map((overwrite) =>
+                typeof overwrite?.toJSON === 'function' ? overwrite.toJSON() : overwrite
+            );
+            await channel.permissionOverwrites.set(payload);
+            refreshed++;
+        } catch (error) {
+            logEvent?.(`⚠️ [Role] Could not refresh channel access on #${channel?.name || channel?.id}: ${describeRoleError(error, null, guild)}`);
+        }
+    }
+
+    if (refreshed > 0) {
+        logEvent?.(`🔄 [Role] Re-emitted channel access on ${refreshed} channel(s) so the member role's channels appear immediately`);
+    }
+    return refreshed;
+}
+
+/**
  * Assign the general member role to a verified player and REPORT the outcome.
  *
  * Returns `{ ok: true }` when the member already had the role, when Discord
@@ -85,29 +144,53 @@ export function describeRoleError(error, targetMember, guild = null) {
  * explained in plain language) when the change was refused — so the caller can
  * tell the admin instead of silently claiming success.
  *
+ * After the role is in place (granted OR already present) the role's channel
+ * overwrites are re-emitted by default, so a member whose client missed the
+ * original gateway update still sees the newly unlocked channels immediately
+ * (see refreshRoleChannelAccess). Bulk callers that grant many roles in a loop
+ * should pass `{ refreshChannels: false }` and call refreshRoleChannelAccess
+ * once when they are done, instead of one channel update per member.
+ *
  * @param {object} targetMember - The GuildMember to give the role to
  * @param {Function} [logEvent] - Bot log sink
- * @param {object} [guild] - Guild used for hierarchy diagnostics
- * @returns {Promise<{ok: boolean, alreadyHad?: boolean, reason?: string, error?: Error}>}
+ * @param {object} [guild] - Guild used for hierarchy diagnostics + channel refresh
+ * @param {{refreshChannels?: boolean}} [options]
+ * @returns {Promise<{ok: boolean, alreadyHad?: boolean, reason?: string, error?: Error, channelsRefreshed?: number}>}
  */
-export async function assignMemberRole(targetMember, logEvent, guild = null) {
+export async function assignMemberRole(targetMember, logEvent, guild = null, options = {}) {
+    const resolvedGuild = guild ?? targetMember?.guild ?? null;
+    const refreshChannels = options.refreshChannels !== false;
     if (!targetMember?.roles) return { ok: false, reason: 'member not available' };
-    if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) return { ok: true, alreadyHad: true };
+
+    if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
+        // The member already has the role, so Discord will not re-dispatch a
+        // member update. Refresh the channel overwrites anyway, so a client that
+        // missed the original update still picks up the role's channels.
+        const channelsRefreshed = refreshChannels
+            ? await refreshRoleChannelAccess(resolvedGuild, logEvent)
+            : 0;
+        return { ok: true, alreadyHad: true, channelsRefreshed };
+    }
 
     try {
         await targetMember.roles.add(MEMBER_ROLE_ID);
     } catch (error) {
-        const reason = describeRoleError(error, targetMember, guild ?? targetMember.guild ?? null);
+        const reason = describeRoleError(error, targetMember, resolvedGuild);
         logEvent?.(`❌ [Role] Failed to add the Member role to ${targetMember.user?.tag || targetMember.id} — ${reason}`);
         return { ok: false, reason, error };
     }
 
     // Log the REAL role name (not a hardcoded "Member"): if the role id ever
     // points to a renamed/recreated role, the log shows exactly what was granted.
-    const roleCache = (guild ?? targetMember.guild)?.roles?.cache ?? null;
+    const roleCache = resolvedGuild?.roles?.cache ?? null;
     const roleName = roleCache?.get?.(MEMBER_ROLE_ID)?.name || 'Member';
     logEvent?.(getMsg('ranking.logs.roleAdded', { clan: roleName, username: targetMember.user.username }));
-    return { ok: true, alreadyHad: false };
+
+    const channelsRefreshed = refreshChannels
+        ? await refreshRoleChannelAccess(resolvedGuild, logEvent)
+        : 0;
+
+    return { ok: true, alreadyHad: false, channelsRefreshed };
 }
 
 /**

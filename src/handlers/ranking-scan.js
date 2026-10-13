@@ -25,7 +25,7 @@ import { MEMBER_ROLE_ID, ensureConfig } from '../core/ranking-constants.js';
 import { cleanNickname, getLocalRankingCache } from '../core/ranking-cache.js';
 import { detectPilot, getPilotPatterns } from '../core/pilot-patterns.js';
 import { lookupNickname, lookupNicknameWithSearch } from '../core/ranking-service.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole, refreshRoleChannelAccess } from '../core/ranking-utils.js';
 import { deferReplySafe } from '../core/interaction-utils.js';
 
 const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
@@ -380,6 +380,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
     const notAllied = [];
     const notFound = [];
     const details = [];
+    const roleWrites = [];       // pending role grants — awaited before the channel refresh
 
     // ── 1st pass: match members to list entries and classify them ──
     // Pilots are processed after the regular entries so an owner that is only in
@@ -473,7 +474,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                 };
             }
             if (!item.hasRole) {
-                member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                roleWrites.push(assignMemberRole(member, logEvent, guild, { refreshChannels: false }));
             }
         }
 
@@ -544,7 +545,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                 const desiredNickname = buildPrefixedNickname(ownerData.nickname, db, 'Pilot', ownerResolution.lookup);
                 if (apply) {
                     ownerPilots.push(member.id);
-                    if (!item.hasRole) member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                    if (!item.hasRole) roleWrites.push(assignMemberRole(member, logEvent, guild, { refreshChannels: false }));
                     member.setNickname(desiredNickname).catch(() => {});
                 }
 
@@ -604,6 +605,15 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
     const pilotEntryCount = entries.length - markerLines.filter(l => l.endsWith('no marker')).length;
 
     const queuedPilots = Object.keys(db.scanPilotPending || {}).length;
+
+    // Let every role grant land first, then re-emit the Member role's channel
+    // overwrites ONCE (not per member) so the members who just received the role
+    // see the newly unlocked channels without an admin re-adding it by hand.
+    if (roleWrites.length > 0) {
+        await Promise.allSettled(roleWrites);
+        await refreshRoleChannelAccess(guild, logEvent);
+    }
+
     if (apply && (registered.length > 0 || linkedPilots.length > 0 || queuedPilots > 0)) {
         await saveLocalStorage(db);
     }

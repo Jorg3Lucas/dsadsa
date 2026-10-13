@@ -18,7 +18,7 @@
 import { ActionRowBuilder, AttachmentBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { MEMBER_ROLE_ID } from '../core/ranking-constants.js';
 import { cleanNickname } from '../core/ranking-cache.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole, refreshRoleChannelAccess } from '../core/ranking-utils.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
@@ -215,6 +215,7 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
 
     const linked = [];
     const ownerFull = [];
+    const roleWrites = [];   // pending role grants — awaited before the channel refresh
 
     for (const entry of ready) {
         const ownerData = db.users?.[entry.ownerId];
@@ -236,7 +237,7 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
             ownerPilots.push(entry.pilotId);
             const desiredNickname = buildPrefixedNickname(ownerData.nickname, db, 'Pilot');
             if (!entry.member.roles.cache.has(MEMBER_ROLE_ID)) {
-                entry.member.roles.add(MEMBER_ROLE_ID).catch(() => {});
+                roleWrites.push(assignMemberRole(entry.member, logEvent, guild, { refreshChannels: false }));
             }
             entry.member.setNickname(desiredNickname).catch(() => {});
             delete pending[entry.pilotId];
@@ -245,6 +246,14 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
         } else {
             linked.push({ ...entry, ownerNickname: ownerData.nickname });
         }
+    }
+
+    // Let every role grant land first, then re-emit the Member role's channel
+    // overwrites ONCE (not per member) so the linked pilots see the newly unlocked
+    // channels immediately.
+    if (roleWrites.length > 0) {
+        await Promise.allSettled(roleWrites);
+        await refreshRoleChannelAccess(guild, logEvent);
     }
 
     if (apply) {
@@ -353,10 +362,12 @@ export async function handlePilotBulkSelect(interaction, db, saveLocalStorage, l
         || null;
 
     if (pilotMember) {
-        const hadMemberRole = pilotMember.roles.cache.has(MEMBER_ROLE_ID);
+        // Single-member path: assignMemberRole reports the outcome AND refreshes
+        // the channel access by default, so the pilot sees the role's channels
+        // right away (the bulk loops above refresh once for the whole batch).
         await Promise.all([
             pilotMember.setNickname(desiredNickname).catch(() => {}),
-            !hadMemberRole ? pilotMember.roles.add(MEMBER_ROLE_ID).catch(() => {}) : Promise.resolve()
+            assignMemberRole(pilotMember, logEvent, interaction.guild)
         ]);
     }
 

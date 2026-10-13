@@ -9,6 +9,7 @@ import {
     TextInputStyle
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
+import { assignMemberRole } from '../core/ranking-utils.js';
 import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
@@ -159,8 +160,11 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     if (actionType === 'clan') {
         const clanTarget = await interaction.guild.members.fetch(targetUserId).catch(() => null);
-        if (clanTarget && !clanTarget.roles.cache.has(MEMBER_ROLE_ID)) {
-            await clanTarget.roles.add(MEMBER_ROLE_ID).catch(() => {});
+        if (clanTarget) {
+            // Grant + report + refresh the role's channel access — the old silent
+            // .catch(() => {}) both hid refusals and left the member's client
+            // without the role's channels until an admin re-added the role by hand.
+            await assignMemberRole(clanTarget, logEvent, interaction.guild);
         }
         return interaction.update({
             content: '✅ Member role assigned.',
