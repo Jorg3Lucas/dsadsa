@@ -13,6 +13,7 @@ import {
     adminChannelId,
     PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
+import { setMemberNickname } from '../core/nickname-utils.js';
 import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 
 // ==========================================
@@ -237,7 +238,7 @@ export async function handlePilotRemoveSelect(interaction, db, saveLocalStorage,
                 if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
                     await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
                 }
-                await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+                await setMemberNickname(pilotMember, pilotMember.user.username, logEvent);
             }
         }).catch(() => {});
 
@@ -282,7 +283,7 @@ export async function handleOwnerRemovePilotDm(interaction, db, saveLocalStorage
                     pilotMember.roles.cache.has(MEMBER_ROLE_ID)
                         ? pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {})
                         : Promise.resolve(),
-                    pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+                    setMemberNickname(pilotMember, pilotMember.user.username, logEvent)
                 ]);
             }
         }

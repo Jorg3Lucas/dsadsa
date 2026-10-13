@@ -44,6 +44,7 @@ import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID, ensureConfig, migrateAlliedClans } from './core/ranking-constants.js';
 import { getLocalRankingCache } from './core/ranking-cache.js';
 import { logRankingEvent } from './core/ranking-logger.js';
+import { recordRateLimit, recordUnhandledRejection } from './core/runtime-metrics.js';
 import { saveRankingStorage, saveRankingStorageSync, loadLocalStorageRanking, getStorageStats } from './core/ranking-storage.js';
 import { startGatewayWatchdog } from './core/ranking-gateway-watchdog.js';
 import { isExpiredError } from './core/interaction-utils.js';
@@ -59,6 +60,14 @@ const client = new Client({
     rest: {
         timeout: 60000
     }
+});
+
+// Surface REST rate limits in the logs. They are otherwise invisible, and a
+// burst of them is the usual explanation for "the bot was slow to update
+// roles/channels" — /stats shows the total and the most recent bucket.
+client.rest.on('rateLimited', (info) => {
+    recordRateLimit(info);
+    logRankingEvent(`⏳ [REST] Rate limited — ${info?.method || '?'} ${info?.route || 'unknown'}${info?.global ? ' (GLOBAL)' : ''}, retry in ${info?.retryAfter ?? '?'}ms`);
 });
 
 let rankingDb = {
@@ -79,7 +88,9 @@ console.log('========================================');
 // ==========================================
 // 🚀 READY EVENT
 // ==========================================
-client.once('ready', async () => {
+// `ready` was renamed to `clientReady` in discord.js v14.16+ and will only emit
+// under the new name in v15 — listening to `ready` logs a deprecation warning.
+client.once('clientReady', async () => {
     console.log(`\n🤖 Bot connected successfully as: ${client.user.tag}\n`);
 
     // Load database with recovery
@@ -214,6 +225,18 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason) => {
     console.error('❌ Unhandled Rejection:', reason);
     logRankingEvent(`[ERROR] Unhandled rejection: ${reason}`);
+
+    // One rejection is normal noise; a burst means something systemic is broken
+    // and the process is better restarted by PM2 with a clean session (same
+    // reasoning as the gateway watchdog). The rolling-window threshold keeps an
+    // isolated error from triggering a restart loop.
+    if (recordUnhandledRejection()) {
+        console.error('🛑 [Watchdog] Unhandled-rejection burst — saving and restarting the process.');
+        logRankingEvent('[FATAL] Unhandled-rejection burst — restarting process.');
+        try { saveRankingStorageSync(rankingDb); } catch (e) { /* best-effort */ }
+        destroyRankingScraperAgents();
+        process.exit(1);
+    }
 });
 
 // ==========================================
@@ -232,7 +255,9 @@ async function handleUpdateCommand(interaction, db, saveLocalStorage, logEvent) 
     }
 
     try {
-        const { stdout: pullOut, stderr: pullErr } = await execAsync('git pull', { timeout: 30000 });
+        // --ff-only: a diverged branch fails loudly instead of hanging on a merge
+        // prompt / opening an editor in a non-interactive shell.
+        const { stdout: pullOut, stderr: pullErr } = await execAsync('git pull --ff-only', { timeout: 30000 });
         const pullResult = (pullOut || '').trim();
         console.log(`🔄 [Update] git pull: ${pullResult}`);
 

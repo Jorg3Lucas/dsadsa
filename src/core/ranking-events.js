@@ -430,7 +430,7 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             if (pilotMember) {
                                 await Promise.all([
                                     pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {}),
-                                    pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+                                    setMemberNickname(pilotMember, pilotMember.user.username, logEvent)
                                 ]);
                                 logEvent(getMsg('ranking.logs.pilotCleaned', { tag: pilotMember.user.tag }));
                             }

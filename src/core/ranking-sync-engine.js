@@ -3,6 +3,7 @@ import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
+import { recordSyncRun } from './runtime-metrics.js';
 import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess } from '../core/ranking-utils.js';
 
 // ==========================================
@@ -65,6 +66,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
     // Count role mutations so the channel-access refresh below only runs when a
     // member's roles actually changed during this run — no pointless
     // CHANNEL_UPDATE storm on a sync that touched nothing.
+    const syncStartedAt = Date.now();
     let roleWriteCount = 0;
     const queueRoleWrite = (op) => {
         roleWriteCount++;
@@ -471,10 +473,15 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             await refreshRoleChannelAccess(activeGuild, logEvent);
         }
 
+        // Record the run's real size so /stats can show it and a future
+        // regression is visible instead of "the sync feels slow".
+        recordSyncRun({ durationMs: Date.now() - syncStartedAt, members: members.size, roleWrites: roleWriteCount });
+
         saveLocalStorage();
         logEvent(getMsg('ranking.logs.syncComplete'));
         return true;
     } catch (error) { 
+        recordSyncRun({ durationMs: Date.now() - syncStartedAt, members: null, roleWrites: roleWriteCount });
         logEvent(getMsg('ranking.logs.syncError', { error: error.message }));
         return false;
     } finally {

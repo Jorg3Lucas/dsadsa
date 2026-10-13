@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json is intentionally TRACKED: it pins the exact dependency tree,
+# so `npm ci` reproduces the versions that were actually tested.
 
 # Environment variables
 .env
@@ -19,6 +20,9 @@ ranking_logs.txt
 backups/
 ticket-logs/
 logs/
+
+# Test coverage output (vitest --coverage)
+coverage/
 
 # OS files
 .DS_Store

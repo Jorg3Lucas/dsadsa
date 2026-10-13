@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { MEMBER_ROLE_ID } from '../core/ranking-constants.js';
 import { lookupNickname } from '../core/ranking-service.js';
+import { setMemberNickname } from '../core/ranking-utils.js';
 
 // ==========================================
 // 👋 WELCOME BUTTON HANDLERS
@@ -161,7 +162,7 @@ export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage,
         if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
         }
-        await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+        await setMemberNickname(pilotMember, pilotMember.user.username, logEvent);
     });
     const selfCleanup = (async () => {
         const selfMember = await guild.members.fetch(userId).catch(() => null);
@@ -169,7 +170,7 @@ export async function handleSelfRemoveConfirm(interaction, db, saveLocalStorage,
         if (selfMember.roles.cache.has(MEMBER_ROLE_ID)) {
             await selfMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
         }
-        await selfMember.setNickname(selfMember.user.username).catch(() => {});
+        await setMemberNickname(selfMember, selfMember.user.username, logEvent);
     })();
     await Promise.all([...pilotCleanups, selfCleanup]);
 

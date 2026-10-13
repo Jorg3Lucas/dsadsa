@@ -189,13 +189,13 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
                 await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
             }
-            await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+            await setMemberNickname(pilotMember, pilotMember.user.username, logEvent);
         });
         const targetCleanup = (async () => {
             if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
                 await targetMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
             }
-            await targetMember.setNickname(targetMember.user.username).catch(() => {});
+            await setMemberNickname(targetMember, targetMember.user.username, logEvent);
         })();
         await Promise.all([...pilotCleanups, targetCleanup]);
         delete db.users[cached.targetId];
@@ -233,7 +233,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
                 pilotMember.roles.cache.has(MEMBER_ROLE_ID)
                     ? pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {})
                     : Promise.resolve(),
-                pilotMember.setNickname(pilotMember.user.username).catch(() => {})
+                setMemberNickname(pilotMember, pilotMember.user.username, logEvent)
             ]);
         }
 

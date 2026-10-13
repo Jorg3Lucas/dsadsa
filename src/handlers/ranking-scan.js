@@ -25,7 +25,7 @@ import { MEMBER_ROLE_ID, ensureConfig } from '../core/ranking-constants.js';
 import { cleanNickname, getLocalRankingCache } from '../core/ranking-cache.js';
 import { detectPilot, getPilotPatterns } from '../core/pilot-patterns.js';
 import { lookupNickname, lookupNicknameWithSearch } from '../core/ranking-service.js';
-import { buildPrefixedNickname, assignMemberRole, refreshRoleChannelAccess } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole, refreshRoleChannelAccess, setMemberNickname } from '../core/ranking-utils.js';
 import { deferReplySafe } from '../core/interaction-utils.js';
 
 const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
@@ -546,7 +546,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                 if (apply) {
                     ownerPilots.push(member.id);
                     if (!item.hasRole) roleWrites.push(assignMemberRole(member, logEvent, guild, { refreshChannels: false }));
-                    member.setNickname(desiredNickname).catch(() => {});
+                    setMemberNickname(member, desiredNickname, logEvent);
                 }
 
                 linkedPilots.push({ member, entry: item.entry, ownerNickname: ownerData.nickname, via: item.via });
@@ -566,7 +566,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         // keeps this nickname while the pilot stays in db.scanPilotPending.
         const pendingNickname = item.ownerName ? buildPrefixedNickname(item.ownerName, db, 'Pilot') : null;
         const renameNote = pendingNickname ? `, nickname "${pendingNickname}"` : '';
-        if (apply && pendingNickname) member.setNickname(pendingNickname).catch(() => {});
+        if (apply && pendingNickname) setMemberNickname(member, pendingNickname, logEvent);
 
         if (!ownResolution) {
             notFound.push({ member, entry: item.entry });

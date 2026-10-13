@@ -18,7 +18,7 @@
 import { ActionRowBuilder, AttachmentBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { MEMBER_ROLE_ID } from '../core/ranking-constants.js';
 import { cleanNickname } from '../core/ranking-cache.js';
-import { buildPrefixedNickname, assignMemberRole, refreshRoleChannelAccess } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole, refreshRoleChannelAccess, setMemberNickname } from '../core/ranking-utils.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
@@ -239,7 +239,7 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
             if (!entry.member.roles.cache.has(MEMBER_ROLE_ID)) {
                 roleWrites.push(assignMemberRole(entry.member, logEvent, guild, { refreshChannels: false }));
             }
-            entry.member.setNickname(desiredNickname).catch(() => {});
+            setMemberNickname(entry.member, desiredNickname, logEvent);
             delete pending[entry.pilotId];
             linked.push({ ...entry, ownerNickname: ownerData.nickname, desiredNickname });
             logEvent(`✈️ [PilotBulk] Linked pilot ${entry.member.user.tag} → owner ${ownerData.nickname} (${entry.confidence})`);
@@ -366,7 +366,7 @@ export async function handlePilotBulkSelect(interaction, db, saveLocalStorage, l
         // the channel access by default, so the pilot sees the role's channels
         // right away (the bulk loops above refresh once for the whole batch).
         await Promise.all([
-            pilotMember.setNickname(desiredNickname).catch(() => {}),
+            setMemberNickname(pilotMember, desiredNickname, logEvent),
             assignMemberRole(pilotMember, logEvent, interaction.guild)
         ]);
     }

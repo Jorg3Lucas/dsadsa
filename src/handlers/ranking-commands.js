@@ -28,6 +28,9 @@ import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildOwnerApprovalButtons } from './ranking-approvals.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
+import { getRuntimeMetrics } from '../core/runtime-metrics.js';
+import { getStorageStats } from '../core/ranking-storage.js';
+import { getBackupStats } from '../auto-backup.js';
 import { buildUserListPage } from './ranking-management.js';
 import { handleScanAllied } from './ranking-scan.js';
 import { handlePilotBulk } from './ranking-pilot-bulk.js';
@@ -37,6 +40,18 @@ import { handlePilotMarkers } from './ranking-pilot-patterns.js';
 // 🎯 SLASH COMMAND HANDLERS
 // ==========================================
 // Extracted from ranking-handlers.js
+
+/** Compact "2d 4h 12m" rendering of a duration in ms (used by /stats). */
+function formatDuration(ms) {
+    const totalSeconds = Math.max(0, Math.floor(Number(ms) / 1000));
+    const d = Math.floor(totalSeconds / 86400);
+    const h = Math.floor((totalSeconds % 86400) / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${totalSeconds % 60}s`;
+    return `${totalSeconds}s`;
+}
 
 // Helper: build a nickname select menu for manualregister
 function buildManualNicknameSelect(userId, typedNick, topSuggestions, hasSuggestions) {
@@ -733,6 +748,26 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         // Pre-registrations
         const preRegs = db.preRegistrations ? Object.keys(db.preRegistrations).length : 0;
 
+        // ── Runtime / observability ──
+        // Process-local data that previously had no way to be inspected:
+        // rate limits, the last sync's real size, memory, uptime and the
+        // storage/backup health.
+        const runtime = getRuntimeMetrics();
+        const storage = getStorageStats();
+        const backup = getBackupStats();
+        const rssMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
+        const uptime = formatDuration(interaction.client.uptime || 0);
+        const ping = Number.isFinite(interaction.client.ws?.ping) ? Math.max(0, Math.round(interaction.client.ws.ping)) : 0;
+        const lastSyncLine = runtime.lastSync
+            ? `   🕐 Last sync: **${(runtime.lastSync.durationMs / 1000).toFixed(1)}s** — ${runtime.lastSync.members ?? '?'} members, ${runtime.lastSync.roleWrites ?? '?'} role write(s)\n`
+            : '   🕐 Last sync: no run recorded yet\n';
+        const rateLimitLine = runtime.lastRateLimit
+            ? `   ⏳ Rate limits: **${runtime.rateLimitCount}** (last: ${runtime.lastRateLimit.method || '?'} ${runtime.lastRateLimit.route || '?'}${runtime.lastRateLimit.global ? ' GLOBAL' : ''})\n`
+            : `   ⏳ Rate limits: **${runtime.rateLimitCount}**\n`;
+        const backupLine = backup.latestBackup
+            ? `   📦 Backups: **${backup.count}** (${backup.totalSizeMB} MB, newest ${backup.latestBackup})\n`
+            : `   📦 Backups: **${backup.count}**\n`;
+
         const report = `📊 **Bot Statistics**
 
 ` +
@@ -772,7 +807,19 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             `   🗺️ Worlds: **${alliedWorlds}**
 ` +
             `   🏰 Clans: **${totalAlliedClans}**
+
 ` +
+            `⚙️ **Runtime**
+` +
+            `   ⏱️ Uptime: **${uptime}** • 🧠 RSS: **${rssMb} MB** • 🏓 Ping: **${ping} ms**
+` +
+            lastSyncLine +
+            rateLimitLine +
+            `   ⚠️ Unhandled rejections: **${runtime.unhandledRejectionCount}** (${runtime.recentUnhandledRejections} in the last minute)
+` +
+            `   💾 Saves: **${storage.saveCount}** — users on disk: **${storage.lastSaveUserCount}**
+` +
+            backupLine +
             `━━━━━━━━━━━━━━━━━━━━━━`;
 
         logEvent(`📊 ${interaction.user.tag} requested bot stats`);

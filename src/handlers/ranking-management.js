@@ -9,7 +9,7 @@ import {
     TextInputStyle
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
-import { assignMemberRole } from '../core/ranking-utils.js';
+import { assignMemberRole, setMemberNickname } from '../core/ranking-utils.js';
 import {
     MEMBER_ROLE_ID,
     WORLD_IDS,
@@ -286,7 +286,7 @@ export async function handleManagePilotRemove(interaction, db, saveLocalStorage,
             if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
                 await pilotMember.roles.remove(MEMBER_ROLE_ID).catch(() => {});
             }
-            await pilotMember.setNickname(pilotMember.user.username).catch(() => {});
+            await setMemberNickname(pilotMember, pilotMember.user.username, logEvent);
         }
     }).catch(() => {});
 
