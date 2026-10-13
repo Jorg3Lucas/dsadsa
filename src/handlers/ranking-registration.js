@@ -46,7 +46,15 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     const suggestions = topSuggestions.filter(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
 
     if (suggestions.length > 0) {
-        pendingRegistrations[userId] = { nickname, timestamp: Date.now(), selectedNickname: nickname, awaitingSelection: true };
+        // Preserve any admin-panel reference from a previous submission so the
+        // resubmission can UPDATE that panel instead of posting a duplicate.
+        pendingRegistrations[userId] = {
+            ...pendingRegistrations[userId],
+            nickname,
+            timestamp: Date.now(),
+            selectedNickname: nickname,
+            awaitingSelection: true
+        };
         saveLocalStorage();
 
         const selectOptions = [
@@ -138,10 +146,25 @@ async function submitOwnerRegistration(interaction, db, saveLocalStorage, logEve
         }
     }
 
-    const adminMsg = await adminChannel.send({
-        content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}${fuzzyNote}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
-        components: [buildOwnerApprovalButtons(userId, lookup.found && lookup.inAlliedClan)]
-    });
+    const panelContent = `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}${fuzzyNote}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`;
+    const panelComponents = [buildOwnerApprovalButtons(userId, lookup.found && lookup.inAlliedClan)];
+
+    // A user can submit again while a previous request is still pending. Reuse the
+    // existing admin panel (edit in place) so the channel is never spammed with
+    // duplicate approval messages for the same person; only send a new one when
+    // the previous message no longer exists.
+    const previous = pendingRegistrations[userId];
+    let adminMsg = null;
+    if (previous?.channelId === adminChannel.id && previous?.messageId) {
+        const existingMsg = await adminChannel.messages.fetch(previous.messageId).catch(() => null);
+        if (existingMsg) {
+            adminMsg = await existingMsg.edit({ content: panelContent, components: panelComponents }).catch(() => null);
+        }
+    }
+    const reusedPanel = !!adminMsg;
+    if (!adminMsg) {
+        adminMsg = await adminChannel.send({ content: panelContent, components: panelComponents });
+    }
 
     pendingRegistrations[userId] = {
         nickname,
@@ -152,6 +175,6 @@ async function submitOwnerRegistration(interaction, db, saveLocalStorage, logEve
     };
     saveLocalStorage();
 
-    logEvent(`👑 ${interaction.user.tag} submitted owner registration for "${nickname}" — awaiting admin approval`);
+    logEvent(`👑 ${interaction.user.tag} submitted owner registration for "${nickname}" — ${reusedPanel ? 'admin approval panel updated' : 'awaiting admin approval'}`);
     return interaction.editReply('✅ **Registration sent for approval!** An administrator will review it shortly.');
 }

@@ -10,7 +10,8 @@ import {
     MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
     pendingPilotApprovals,
-    adminChannelId
+    adminChannelId,
+    PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
 import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
 
@@ -147,6 +148,13 @@ async function completePilotRegistration(interaction, db, saveLocalStorage, logE
     }
     if (ownerData.pilotIds.includes(pilotId)) {
         return interaction.editReply('❌ You are already registered as a pilot for this owner.');
+    }
+
+    // Prevent duplicate pilot requests (each one DMs the owner and posts a copy
+    // to the admin channel). A stale request older than 24h is treated as gone.
+    const existingPending = pendingPilotApprovals[pilotId];
+    if (existingPending && Date.now() - (existingPending.timestamp || 0) <= PENDING_MAX_AGE_MS) {
+        return interaction.editReply('⏳ You already have a pilot request awaiting the owner\'s approval. Please wait for a response before sending another.');
     }
 
     pendingPilotApprovals[pilotId] = {

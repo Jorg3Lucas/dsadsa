@@ -48,7 +48,11 @@ export async function registerMir4SlashCommands(guild) {
                     { type: 6, name: 'pilot', description: 'Select the Discord user acting as pilot.', required: true }
                 ]
             },
-            { name: 'manage', description: '🛠️ Bot Management Panel' },
+            {
+                name: 'manage',
+                description: '🛠️ [Admin] Bot management panel.',
+                default_member_permissions: PermissionFlagsBits.Administrator.toString()
+            },
             {
                 name: 'manualremove',
                 description: '👑 [Admin] Completely remove a player\'s registration and profile.',

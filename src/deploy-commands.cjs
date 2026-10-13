@@ -90,7 +90,8 @@ const commands = [
   },
   {
     name: 'manage',
-    description: '🛠️ Bot Management Panel'
+    description: '🛠️ [Admin] Bot management panel.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString()
   },
   {
     name: 'manualremove',
