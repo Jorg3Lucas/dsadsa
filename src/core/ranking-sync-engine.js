@@ -364,7 +364,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     // ✅ In allied clan — ensure role is present
                     if (!hasMemberRole) {
                         queueWrite(() => member.roles.add(MEMBER_ROLE_ID));
-                        logEvent(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: member.user.username }));
+                        // Log the REAL role name so a renamed/recreated role id is visible in the logs.
+                        const roleName = activeGuild?.roles?.cache?.get?.(MEMBER_ROLE_ID)?.name || 'Member';
+                        logEvent(getMsg('ranking.logs.roleAdded', { clan: roleName, username: member.user.username }));
                     }
                     // Role restored — allow future notifications + reset the 72h grace timer
                     deleteRoleNotifyFlag(db, memberId, 'roleRemovedNotifiedAt');

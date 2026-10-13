@@ -102,7 +102,11 @@ export async function assignMemberRole(targetMember, logEvent, guild = null) {
         return { ok: false, reason, error };
     }
 
-    logEvent?.(getMsg('ranking.logs.roleAdded', { clan: 'Member', username: targetMember.user.username }));
+    // Log the REAL role name (not a hardcoded "Member"): if the role id ever
+    // points to a renamed/recreated role, the log shows exactly what was granted.
+    const roleCache = (guild ?? targetMember.guild)?.roles?.cache ?? null;
+    const roleName = roleCache?.get?.(MEMBER_ROLE_ID)?.name || 'Member';
+    logEvent?.(getMsg('ranking.logs.roleAdded', { clan: roleName, username: targetMember.user.username }));
     return { ok: true, alreadyHad: false };
 }
 
