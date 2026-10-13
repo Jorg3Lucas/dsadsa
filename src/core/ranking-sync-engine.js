@@ -3,7 +3,7 @@ import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, baseNicknameKey } from '../core/ranking-utils.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -84,10 +84,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         // Precompute nickname → owner once. The per-member passes below otherwise
         // rescan all users for every member (O(members × users)), which can block
         // the event loop for seconds on a large guild — stalling every interaction.
+        // Keys use the SAME base normalization as the member lookups below, so a
+        // server-prefixed Discord nickname ("EU011 - Name") still matches the
+        // bare registered nickname ("Name").
         const ownerByNick = new Map();
         for (const [id, data] of Object.entries(db.users)) {
             if (!data || !data.nickname) continue;
-            const cleanKey = data.nickname.trim().normalize('NFC').toLowerCase();
+            const cleanKey = baseNicknameKey(data.nickname);
             if (!ownerByNick.has(cleanKey)) ownerByNick.set(cleanKey, { id, data });
         }
 
@@ -105,7 +108,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
             if (currentNick.endsWith(' - Pilot')) {
                 const ownerBaseNick = currentNick.replace(' - Pilot', '').trim();
-                const ownerEntry = ownerByNick.get(ownerBaseNick.toLowerCase());
+                const ownerEntry = ownerByNick.get(baseNicknameKey(currentNick));
                 if (ownerEntry) {
                     const ownerData = ownerEntry.data;
                     if (!ownerData.pilotIds.includes(memberId) && ownerData.pilotIds.length < 4) {
@@ -123,8 +126,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             // exists — never treat that as impersonation.
             if (isPendingPilot(db, memberId)) continue;
             const currentNick = (member.nickname || member.user.username).trim().normalize('NFC');
-            const cleanNick = currentNick.replace(' - Pilot', '').trim();
-            const ownerEntry = ownerByNick.get(cleanNick.toLowerCase());
+            const ownerEntry = ownerByNick.get(baseNicknameKey(currentNick));
 
             if (ownerEntry) {
                 const registeredOwnerId = ownerEntry.id;
@@ -156,6 +158,16 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             for (const [memberId, userData] of Object.entries(db.users)) {
                 if (!userData.tempUntil) continue;
                 if (!userData.nickname) continue;
+
+                // A manualforce registration is permanent by definition — a
+                // leftover tempUntil (e.g. set before the force) must never expire
+                // it. Clean the stale temp fields and leave the registration alone.
+                if (userData.manualPermanent) {
+                    delete userData.tempUntil;
+                    delete userData.tempRegisteredAt;
+                    delete userData.tempNotified24h;
+                    continue;
+                }
 
                 const tempUntil = new Date(userData.tempUntil);
                 const now = new Date();

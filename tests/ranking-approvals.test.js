@@ -383,6 +383,33 @@ describe('handleApproveOwner', () => {
         );
     });
 
+    it('blocks a second concurrent approval of the same registration', async () => {
+        setupPending({ selectedNickname: USER_NICK });
+        interaction.guild.members.fetch.mockResolvedValue(null);
+
+        // Make the first approval pause on deferUpdate so it stays "in flight".
+        let resolveDefer;
+        interaction.deferUpdate.mockReturnValue(new Promise((r) => { resolveDefer = r; }));
+
+        const first = handleApproveOwner(interaction, db, saveLocalStorage, logEvent);
+
+        // A second click for the same user, while the first is still processing,
+        // must be rejected instead of processing the registration twice.
+        const second = {
+            ...interaction,
+            deferUpdate: vi.fn().mockResolvedValue(),
+            update: vi.fn().mockResolvedValue()
+        };
+        await handleApproveOwner(second, db, saveLocalStorage, logEvent);
+        expect(second.update).toHaveBeenCalledWith({
+            content: '⏳ This request is already being processed.',
+            components: []
+        });
+
+        resolveDefer();
+        await first;
+    });
+
     // ── Temporary approval (temp) ──
 
     it('approves temporarily: sets tempUntil, uses temp DM msg', async () => {

@@ -7,7 +7,8 @@ vi.mock('../src/core/ranking-constants.js', () => {
         MEMBER_ROLE_ID: 'mock-member-role',
         DISCORD_SERVER_ID: 'mock-guild-id',
         pendingPilotApprovals: pilotStore,
-        adminChannelId: null
+        adminChannelId: null,
+        PENDING_MAX_AGE_MS: 86400000
     };
 });
 
@@ -119,6 +120,28 @@ describe('handlePilotRegistrationModal', () => {
         expect(interaction.editReply).toHaveBeenCalledWith(
             expect.stringContaining('already registered as a pilot')
         );
+    });
+
+    it('blocks a duplicate request while one is already pending', async () => {
+        interaction.fields.getTextInputValue.mockReturnValue(OWNER_NICK);
+        setupBaseDb();
+        const dmChannel = { send: vi.fn().mockResolvedValue() };
+        interaction.guild.members.fetch.mockResolvedValue({
+            createDM: vi.fn().mockResolvedValue(dmChannel)
+        });
+
+        // 1st request → pending created + owner DMed
+        await handlePilotRegistrationModal(interaction, db, saveLocalStorage, logEvent);
+        expect(getPending()[PILOT_ID]).toBeDefined();
+        expect(dmChannel.send).toHaveBeenCalledTimes(1);
+
+        // 2nd request → blocked, no new DM
+        interaction.editReply.mockClear();
+        await handlePilotRegistrationModal(interaction, db, saveLocalStorage, logEvent);
+        expect(interaction.editReply).toHaveBeenCalledWith(
+            expect.stringContaining('already have a pilot request')
+        );
+        expect(dmChannel.send).toHaveBeenCalledTimes(1);
     });
 
     it('DMs owner for approval and saves pending', async () => {

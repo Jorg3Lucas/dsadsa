@@ -58,18 +58,18 @@ function compilePattern(regex) {
  */
 export function validatePattern(regex) {
     if (typeof regex !== 'string' || !regex.trim()) {
-        return { ok: false, error: 'O regex está vazio.' };
+        return { ok: false, error: 'The regex is empty.' };
     }
     const source = regex.trim();
     if (source.length > 200) {
-        return { ok: false, error: 'Regex muito longo (máx. 200 caracteres).' };
+        return { ok: false, error: 'Regex too long (max 200 characters).' };
     }
 
     let compiled;
     try {
         compiled = new RegExp(source, 'iu');
     } catch (e) {
-        return { ok: false, error: `Regex inválida: ${e.message}` };
+        return { ok: false, error: `Invalid regex: ${e.message}` };
     }
 
     const sample = 'A-P-Pilot シ (P) [ᴘ] '.repeat(10);
@@ -77,7 +77,7 @@ export function validatePattern(regex) {
     compiled.test(sample);
     const elapsed = Date.now() - started;
     if (elapsed > 50) {
-        return { ok: false, error: `Regex muito lenta (${elapsed}ms numa amostra de 200 chars) — simplifique o padrão.` };
+        return { ok: false, error: `Regex too slow (${elapsed}ms on a 200-char sample) — simplify the pattern.` };
     }
 
     return { ok: true, source };

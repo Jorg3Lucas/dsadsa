@@ -17,6 +17,12 @@ import {
 import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from '../core/ranking-utils.js';
 import { deferUpdateSafe } from '../core/interaction-utils.js';
 
+// Registrations currently being processed by an admin approval click — keyed per
+// user so a second rapid click cannot process the same request twice (duplicate
+// role writes, duplicate DMs, confusing second reply). In-memory only, so it
+// never leaks into the persisted pending data or survives a restart.
+const approvalsInFlight = new Set();
+
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS
 // ==========================================
@@ -91,18 +97,30 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         return interaction.showModal(modal);
     }
 
-    if (!await deferUpdateSafe(interaction)) return;
-
     const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
         interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
     if (!canApprove) {
+        if (!await deferUpdateSafe(interaction)) return;
         return interaction.followUp({ content: '❌ You do not have permission to approve registrations.', flags: 64 });
+    }
+
+    // Claim this registration SYNCHRONOUSLY (before the first await) so a second
+    // rapid click cannot process the very same request twice.
+    if (approvalsInFlight.has(userId)) {
+        return interaction.update({ content: '⏳ This request is already being processed.', components: [] }).catch(() => {});
+    }
+    approvalsInFlight.add(userId);
+
+    if (!await deferUpdateSafe(interaction)) {
+        approvalsInFlight.delete(userId);
+        return;
     }
 
     delete pendingRegistrations[userId];
 
     const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
     if (!targetMember) {
+        approvalsInFlight.delete(userId);
         logEvent(`❌ Admin ${interaction.user.tag} tried to approve ${userId} (${pending.nickname}) but user is no longer in the server`);
         return interaction.editReply({ content: '❌ User is no longer in the server.', components: [] });
     }
@@ -113,6 +131,7 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         const finalNickname = pending.selectedNickname || pending.nickname;
         if (existingNick && existingNick.trim().normalize('NFC').toLowerCase() !== finalNickname.trim().normalize('NFC').toLowerCase()) {
             logEvent(`❌ [SAFETY] Admin ${interaction.user.tag} tried to approve registration for ${userId} with different nickname "${finalNickname}" — user already registered as "${existingNick}" — BLOCKED`);
+            approvalsInFlight.delete(userId);
             return interaction.editReply({
                 content: `❌ **Safety Blocked:** User <@${userId}> is already registered as **${existingNick}**.\nCannot overwrite with a different nickname "${finalNickname}".\n\nUse /manualremove first if you need to clear the existing registration.`,
                 components: []
@@ -164,13 +183,18 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${finalNickname}${roleOutcome.ok ? '' : ' — ⚠️ member role NOT applied'}${nickOutcome.ok ? '' : ' — ⚠️ nickname NOT applied'}`);
 
     // Reply + DM are independent — send them concurrently (DM failure is swallowed).
-    await Promise.all([
-        interaction.editReply({
-            content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${finalNickname}\n✅ **Approved by:** ${interaction.user.tag}${roleWarning}${nickWarning}`,
-            components: []
-        }),
-        targetMember.send(dmMsg).catch(() => {})
-    ]);
+    try {
+        await Promise.all([
+            interaction.editReply({
+                content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${finalNickname}\n✅ **Approved by:** ${interaction.user.tag}${roleWarning}${nickWarning}`,
+                components: []
+            }),
+            targetMember.send(dmMsg).catch(() => {})
+        ]);
+    } finally {
+        // Always release the claim, even if replying throws (e.g. expired interaction).
+        approvalsInFlight.delete(userId);
+    }
     return;
 }
 

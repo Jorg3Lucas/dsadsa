@@ -15,7 +15,7 @@ import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
 import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from './handlers/ranking-registration.js';
-import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot } from './handlers/ranking-welcome.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot, handleWelcomeMyRegistration } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
 import { handlePilotBulkSelect } from './handlers/ranking-pilot-bulk.js';
@@ -280,6 +280,7 @@ const BUTTON_EXACT = new Map([
     ['welcome_register_pilot', handleWelcomeRegisterPilot],
     ['welcome_remove_registration', handleWelcomeRemoveRegistration],
     ['welcome_remove_pilot', handleWelcomeRemovePilot],
+    ['welcome_my_registration', handleWelcomeMyRegistration],
     ['selfremove_yes', handleSelfRemoveConfirm],
     ['selfremove_no', handleSelfRemoveConfirm],
     ['restorebackup-confirm', handleRestoreBackupConfirm],
@@ -369,7 +370,7 @@ client.on('interactionCreate', async (interaction) => {
             // so Discord never shows "The application did not respond".
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({ content: '❌ Comando não reconhecido.', flags: 64 }).catch(() => {});
+                    await interaction.reply({ content: '❌ Command not recognized.', flags: 64 }).catch(() => {});
                 } catch { /* interaction already gone — nothing to do */ }
             }
             return result !== false ? result : await handleMir4Interactions(interaction, rankingDb, saveRankingStorageWrapped, logRankingEvent);
@@ -439,11 +440,11 @@ const LOGIN_BASE_DELAY_MS = 5000;
 const TRANSIENT_NETWORK_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'EPIPE', 'ECONNREFUSED']);
 
 function isTransientLoginError(err) {
-    // 429 + any 5xx (ex.: o 503 do gateway em outage) — transitório
+    // 429 + any 5xx (e.g. the gateway's 503 during an outage) — transient
     if (err.status === 429 || (err.status >= 500 && err.status < 600)) return true;
-    // Falhas de rede puras (sem status HTTP, com code do Node) — transitório
+    // Pure network failures (no HTTP status, with a Node code) — transient
     if (!err.status && err.code && TRANSIENT_NETWORK_CODES.has(err.code)) return true;
-    // 401/403, TOKEN_MISSING, intents inválidos, etc. — permanente, falha rápido
+    // 401/403, TOKEN_MISSING, invalid intents, etc. — permanent, fail fast
     return false;
 }
 

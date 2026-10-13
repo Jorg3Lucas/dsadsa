@@ -8,6 +8,7 @@ import {
     TextInputStyle
 } from 'discord.js';
 import { MEMBER_ROLE_ID } from '../core/ranking-constants.js';
+import { lookupNickname } from '../core/ranking-service.js';
 
 // ==========================================
 // 👋 WELCOME BUTTON HANDLERS
@@ -29,6 +30,13 @@ export function buildWelcomePanelComponents() {
 
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
+            .setCustomId('welcome_my_registration')
+            .setLabel('📋 My Registration')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
             .setCustomId('welcome_remove_registration')
             .setLabel('🗑️ Remove My Registration')
             .setStyle(ButtonStyle.Danger),
@@ -38,7 +46,7 @@ export function buildWelcomePanelComponents() {
             .setStyle(ButtonStyle.Secondary)
     );
 
-    return [row1, row2];
+    return [row1, row2, row3];
 }
 
 // ── Welcome: Register as Owner ──
@@ -211,4 +219,64 @@ export async function handleWelcomeRemovePilot(interaction, db, saveLocalStorage
         content: '✈️ **Select a pilot to remove:**',
         components: [new ActionRowBuilder().addComponents(pilotMenu)]
     });
+}
+
+// ── Welcome: "My Registration" (self-service status) ──
+export async function handleWelcomeMyRegistration(interaction, db, saveLocalStorage, logEvent) {
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Welcome] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
+
+    const userId = interaction.user.id;
+    const userData = db.users[userId];
+    const isActuallyRegistered = userData && (userData.registeredAt || userData.manual === true);
+
+    // Not an owner — maybe they are a pilot of someone.
+    if (!isActuallyRegistered) {
+        const ownerEntry = Object.entries(db.users).find(([, d]) => d.pilotIds && d.pilotIds.includes(userId));
+        if (ownerEntry) {
+            return interaction.editReply(`✈️ **You are a pilot for ${ownerEntry[1].nickname}.**\n\nYour nickname and role are managed by the owner. Contact them if you need anything.`);
+        }
+        return interaction.editReply('📋 **You have no registration yet.**\n\nClick **👑 Register as Owner** (main account) or **✈️ Register as Pilot** (you play for someone else) to get started.');
+    }
+
+    const lines = ['📋 **My Registration**\n'];
+    lines.push(`📝 **In-game name:** ${userData.nickname}`);
+
+    if (userData.tempUntil) {
+        const expires = new Date(userData.tempUntil);
+        const hoursLeft = (expires.getTime() - Date.now()) / (1000 * 60 * 60);
+        lines.push('⏳ **Type:** Temporary (up to 3 days)');
+        lines.push(`⏰ **Expires:** ${expires.toLocaleString('en-US')} (${hoursLeft > 0 ? `${hoursLeft.toFixed(1)}h left` : 'expired'})`);
+    } else {
+        lines.push('✅ **Type:** Permanent');
+    }
+
+    const pilotCount = userData.pilotIds ? userData.pilotIds.length : 0;
+    lines.push(`✈️ **Linked pilots:** ${pilotCount}`);
+
+    const lookup = lookupNickname(userData.nickname, db);
+    if (lookup.found) {
+        lines.push(`🔍 **Ranking:** ✅ ${lookup.serverName} (${lookup.clanName})`);
+        lines.push(`🤝 **Allied clan:** ${lookup.inAlliedClan ? '✅ Yes' : '❌ No'}`);
+        if (lookup.inAlliedClan === false) {
+            lines.push('\nℹ️ Join an **allied clan** that appears in the ranking to keep your role.');
+        }
+    } else {
+        lines.push('🔍 **Ranking:** ❌ Not found');
+    }
+
+    if (pilotCount > 0) {
+        const pilotLines = await Promise.all(userData.pilotIds.map(async (pId) => {
+            const m = await interaction.guild.members.fetch(pId).catch(() => null);
+            return `• ${m ? m.user.tag : `<@${pId}>`}`;
+        }));
+        lines.push(`\n👥 **Pilots:**\n${pilotLines.join('\n')}`);
+    }
+
+    logEvent(`📋 ${interaction.user.tag} checked their own registration (${userData.nickname})`);
+    return interaction.editReply(lines.join('\n'));
 }

@@ -10,6 +10,7 @@ vi.mock('../src/core/ranking-service.js', () => ({
 
 vi.mock('../src/core/ranking-constants.js', () => ({
     MEMBER_ROLE_ID: '123',
+    WORLD_IDS: { 611: 'EU011', 621: 'EU021' },
     SERVER_MERGES: {
         'ASIA013': 'ASIA021', 'EU013': 'EU011', 'NA041': 'NA012'
     },
@@ -22,7 +23,7 @@ vi.mock('../src/lang/lang.js', () => ({
     getMsg: vi.fn((key) => key)
 }));
 
-import { buildPrefixedNickname } from '../src/core/ranking-utils.js';
+import { buildPrefixedNickname, baseNicknameKey, stripServerPrefix, stripPilotSuffix } from '../src/core/ranking-utils.js';
 import { resolveServerName } from '../src/core/ranking-constants.js';
 import { getLocalRankingCache } from '../src/core/ranking-cache.js';
 import { lookupNickname } from '../src/core/ranking-service.js';
@@ -68,6 +69,41 @@ describe('buildPrefixedNickname', () => {
         const result = buildPrefixedNickname('PlayerOne', db, 'Pilot');
         expect(result).toBe('PlayerOne - Pilot');
         expect(lookupNickname).not.toHaveBeenCalled();
+    });
+});
+
+describe('baseNicknameKey / prefix normalization', () => {
+    it('strips the bot-assigned pilot suffix', () => {
+        expect(baseNicknameKey('PlayerOne - Pilot')).toBe('playerone');
+    });
+
+    it('strips a known (surviving) server prefix', () => {
+        expect(baseNicknameKey('EU011 - PlayerOne')).toBe('playerone');
+        expect(stripServerPrefix('EU011 - PlayerOne')).toBe('PlayerOne');
+    });
+
+    it('strips a known (absorbed) server prefix', () => {
+        expect(baseNicknameKey('EU013 - PlayerOne')).toBe('playerone');
+        expect(stripServerPrefix('ASIA013 - PlayerOne')).toBe('PlayerOne');
+    });
+
+    it('strips the prefix and the pilot suffix together', () => {
+        expect(baseNicknameKey('NA041 - PlayerOne - Pilot')).toBe('playerone');
+    });
+
+    it('maps a prefixed nickname to the same key as the bare registered name', () => {
+        expect(baseNicknameKey('EU011 - PlayerOne')).toBe(baseNicknameKey('playerone'));
+        expect(baseNicknameKey('EU013 - PlayerOne')).toBe(baseNicknameKey('PlayerOne'));
+    });
+
+    it('leaves an unknown prefix untouched', () => {
+        expect(stripServerPrefix('XX999 - PlayerOne')).toBe('XX999 - PlayerOne');
+    });
+
+    it('is safe with null/undefined input', () => {
+        expect(baseNicknameKey(undefined)).toBe('');
+        expect(baseNicknameKey(null)).toBe('');
+        expect(stripPilotSuffix(undefined)).toBe('');
     });
 });
 

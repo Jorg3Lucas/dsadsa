@@ -165,7 +165,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const ran = await runDailySynchronization(interaction.client, db, saveLocalStorage, logEvent, true);
 
         if (!ran) {
-            return interaction.editReply('⏳ **Sincronização não executada.**\n\nOutro sync (startup, cron ou outro comando) já está em andamento, ou o servidor não está disponível. Espere o sync atual terminar e tente novamente — rodar dois syncs ao mesmo tempo fazia o bot travar e parar de responder.');
+            return interaction.editReply('⏳ **Sync did not run.**\n\nAnother sync (startup, cron or another command) is already in progress, or the server is unavailable. Wait for the current sync to finish and try again — running two syncs at once used to make the bot hang and stop responding.');
         }
 
         let responseMsg = getMsg('ranking.responses.forcesync.success') || '✅ **Force sync completed!**';
@@ -179,7 +179,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
         if (!guild) {
-            return interaction.editReply('❌ Servidor não encontrado.');
+            return interaction.editReply('❌ Server not found.');
         }
 
         // 1. Force-expire all grace timers by setting outOfAlliedSince to >72h ago.
@@ -222,10 +222,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         return interaction.editReply(
             `🔄 **Grace Reset + Role Removal**\n\n` +
-            `⏱️ **${graceTimersExpired}** timer(s) de grace expirados\n` +
-            `🚫 **${rolesRemoved}** membro(s) perderam o cargo` +
-            (rolesFailed > 0 ? `\n⚠️ **${rolesFailed}** falha(s) ao remover cargo` : '') +
-            `\n\nO sync vai limpar os registros de grace expirados automaticamente.`
+            `⏱️ **${graceTimersExpired}** grace timer(s) expired\n` +
+            `🚫 **${rolesRemoved}** member(s) lost the role` +
+            (rolesFailed > 0 ? `\n⚠️ **${rolesFailed}** failure(s) removing the role` : '') +
+            `\n\nThe sync will clean up expired grace records automatically.`
         );
     }
 
@@ -714,11 +714,11 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 const hoursAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60 * 60));
                 const minsAgo = Math.floor((now - syncDate.getTime()) / (1000 * 60));
                 if (hoursAgo < 1) {
-                    lastSync = `🟢 ${minsAgo} min atrás`;
+                    lastSync = `🟢 ${minsAgo} min ago`;
                 } else if (hoursAgo < 24) {
-                    lastSync = `🟡 ${hoursAgo}h atrás`;
+                    lastSync = `🟡 ${hoursAgo}h ago`;
                 } else {
-                    lastSync = `🔴 ${Math.floor(hoursAgo / 24)}d atrás`;
+                    lastSync = `🔴 ${Math.floor(hoursAgo / 24)}d ago`;
                 }
             }
             worldsInCache = Object.keys(rankingCache).length;

@@ -22,23 +22,23 @@ function buildListView(db) {
 
     const lines = patterns.map((p, i) => {
         const regex = String(p.regex ?? '').replace(/`/g, '');
-        const owner = Number(p.ownerGroup) > 0 ? `grupo ${p.ownerGroup}` : 'texto depois do marcador';
+        const owner = Number(p.ownerGroup) > 0 ? `group ${p.ownerGroup}` : 'text after the marker';
         const custom = configured && !DEFAULT_PILOT_PATTERNS.some(d => d.name === p.name && d.regex === p.regex);
-        return `${i + 1}. \`${p.name}\` ${custom ? '*(custom)*' : ''}\n   \`${regex}\` — dono: ${owner}`;
+        return `${i + 1}. \`${p.name}\` ${custom ? '*(custom)*' : ''}\n   \`${regex}\` — owner: ${owner}`;
     });
 
     return [
-        `✈️ **Marcadores de piloto** — fonte: ${configured ? '**configurados neste servidor**' : 'padrões internos (nada configurado)'}`,
-        'Testados nesta ordem — o primeiro que casar vence:',
+        `✈️ **Pilot markers** — source: ${configured ? '**configured on this server**' : 'built-in defaults (nothing configured)'}`,
+        'Tested in this order — the first one that matches wins:',
         ...lines,
         '',
-        '**Como configurar**',
-        '`/pilotmarkers action:add name:<rótulo> regex:<expressão> owner_group:<n>`',
-        '• `owner_group:0` → o dono é o texto **depois** do marcador (ex.: `(P) Zay`)',
-        '• `owner_group:1` → o dono é o **grupo 1** da regex (ex.: `(P-cecilia)`)',
-        '• Em todos os padrões, o nome **antes** do marcador é o personagem da linha.',
-        '• `action:remove name:<rótulo>` apaga um padrão e `action:reset` volta aos padrões internos.',
-        '⚠️ Só o nome do jogador é analisado — a regex roda sobre o apelido copiado da lista.'
+        '**How to configure**',
+        '`/pilotmarkers action:add name:<label> regex:<expression> owner_group:<n>`',
+        '• `owner_group:0` → the owner is the text **after** the marker (e.g. `(P) Zay`)',
+        '• `owner_group:1` → the owner is **group 1** of the regex (e.g. `(P-cecilia)`)',
+        '• In every pattern, the name **before** the marker is the character on the line.',
+        '• `action:remove name:<label>` deletes a pattern and `action:reset` restores the built-in ones.',
+        '⚠️ Only the player name is analyzed — the regex runs over the nickname copied from the list.'
     ].join('\n');
 }
 
@@ -69,7 +69,7 @@ export async function handlePilotMarkers(interaction, db, saveLocalStorage, logE
         await saveLocalStorage(db);
         logEvent(`✈️ [PilotMarkers] ${interaction.user?.tag || 'unknown'} reset the pilot patterns to the defaults`);
         return interaction.editReply({
-            content: `♻️ Padrões voltaram ao padrão interno.\n\n${buildListView(db)}`.substring(0, 1990)
+            content: `♻️ Patterns restored to the built-in defaults.\n\n${buildListView(db)}`.substring(0, 1990)
         });
     }
 
@@ -80,10 +80,10 @@ export async function handlePilotMarkers(interaction, db, saveLocalStorage, logE
         const position = interaction.options.getString('position') || 'last';
 
         if (!name || name.length > MAX_NAME_LENGTH) {
-            return interaction.editReply(`❌ Informe um rótulo de 1 a ${MAX_NAME_LENGTH} caracteres (\`name\`).`);
+            return interaction.editReply(`❌ Provide a label of 1 to ${MAX_NAME_LENGTH} characters (\`name\`).`);
         }
         if (ownerGroup < 0 || ownerGroup > MAX_OWNER_GROUP) {
-            return interaction.editReply(`❌ \`owner_group\` deve ficar entre 0 e ${MAX_OWNER_GROUP}.`);
+            return interaction.editReply(`❌ \`owner_group\` must be between 0 and ${MAX_OWNER_GROUP}.`);
         }
 
         const validation = validatePattern(regex);
@@ -91,10 +91,10 @@ export async function handlePilotMarkers(interaction, db, saveLocalStorage, logE
 
         const patterns = materialize();
         if (patterns.some(p => String(p.name).toLowerCase() === name.toLowerCase())) {
-            return interaction.editReply(`❌ Já existe um padrão chamado \`${name}\`. Remova (\`action:remove\`) ou use outro rótulo.`);
+            return interaction.editReply(`❌ A pattern named \`${name}\` already exists. Remove it (\`action:remove\`) or use another label.`);
         }
         if (patterns.some(p => p.regex === validation.source)) {
-            return interaction.editReply('❌ Esse regex já está configurado.');
+            return interaction.editReply('❌ That regex is already configured.');
         }
 
         const entry = { name, regex: validation.source, ownerGroup };
@@ -104,7 +104,7 @@ export async function handlePilotMarkers(interaction, db, saveLocalStorage, logE
         await saveLocalStorage(db);
         logEvent(`✈️ [PilotMarkers] ${interaction.user?.tag || 'unknown'} added pilot pattern "${name}" (${validation.source}) at ${position}`);
         return interaction.editReply({
-            content: `✅ Padrão \`${name}\` adicionado ${position === 'first' ? 'no **início**' : 'no **fim**'} da lista.\n\n${buildListView(db)}`.substring(0, 1990)
+            content: `✅ Pattern \`${name}\` added ${position === 'first' ? 'at the **start**' : 'at the **end**'} of the list.\n\n${buildListView(db)}`.substring(0, 1990)
         });
     }
 
@@ -114,7 +114,7 @@ export async function handlePilotMarkers(interaction, db, saveLocalStorage, logE
         const index = patterns.findIndex(p => String(p.name).toLowerCase() === name.toLowerCase());
 
         if (index === -1) {
-            return interaction.editReply(`❌ Nenhum padrão chamado \`${name}\`. Veja a lista com \`action:list\`.`);
+            return interaction.editReply(`❌ No pattern named \`${name}\`. See the list with \`action:list\`.`);
         }
 
         const [removed] = patterns.splice(index, 1);
@@ -123,9 +123,9 @@ export async function handlePilotMarkers(interaction, db, saveLocalStorage, logE
         await saveLocalStorage(db);
         logEvent(`✈️ [PilotMarkers] ${interaction.user?.tag || 'unknown'} removed pilot pattern "${removed.name}"`);
         return interaction.editReply({
-            content: `🗑️ Padrão \`${removed.name}\` removido.\n\n${buildListView(db)}`.substring(0, 1990)
+            content: `🗑️ Pattern \`${removed.name}\` removed.\n\n${buildListView(db)}`.substring(0, 1990)
         });
     }
 
-    return interaction.editReply('❌ Ação desconhecida. Use `list`, `add`, `remove` ou `reset`.');
+    return interaction.editReply('❌ Unknown action. Use `list`, `add`, `remove` or `reset`.');
 }

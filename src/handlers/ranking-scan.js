@@ -397,7 +397,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         const match = matchMemberToList(member, index);
         if (!match) {
             if (isRegistered || hasRole) {
-                details.push(`➖ ${member.user.username} (${member.nickname || 'sem apelido'}) — fora da lista${hasRole ? ' [TEM CARGO]' : ''}${isRegistered ? ' [tem registro]' : ''}`);
+                details.push(`➖ ${member.user.username} (${member.nickname || 'no nickname'}) — outside the list${hasRole ? ' [HAS ROLE]' : ''}${isRegistered ? ' [has registration]' : ''}`);
             }
             continue;
         }
@@ -407,7 +407,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         // Already registered AND wearing the role — leave it untouched.
         if (isRegistered && hasRole) {
             alreadyOk.push({ member, entry: match.entry, via: match.via });
-            details.push(`🙋 ${member.user.username} — já registrado + cargo (não mexido)`);
+            details.push(`🙋 ${member.user.username} — already registered + role (untouched)`);
             continue;
         }
 
@@ -424,7 +424,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
             characterName: (entryPilot.isPilot ? entryPilot.characterName : '') || (memberPilot.isPilot ? memberPilot.characterName : '') || match.entry.nickname,
             marker: (entryPilot.isPilot ? entryPilot.marker : memberPilot.marker) || null,
             patternName: (entryPilot.isPilot ? entryPilot.patternName : memberPilot.patternName) || null,
-            markerSource: entryPilot.isPilot ? 'lista' : (memberPilot.isPilot ? 'apelido do servidor' : null)
+            markerSource: entryPilot.isPilot ? 'list' : (memberPilot.isPilot ? 'server nickname' : null)
         };
 
         if (item.isPilot) pilots.push(item);
@@ -435,8 +435,8 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
     const existingPilotIds = buildPilotIdSet(db);
 
     const entryLabelOf = item => `"${item.entry.nickname}"${item.entry.username ? ` (@${item.entry.username})` : ''}`;
-    const viaLabelOf = item => (item.via === 'username' ? 'username' : 'apelido/nickname');
-    const markerLabelOf = item => `marcador "${item.marker}" (padrão ${item.patternName}, ${item.markerSource})`;
+    const viaLabelOf = item => (item.via === 'username' ? 'username' : 'nickname');
+    const markerLabelOf = item => `marker "${item.marker}" (pattern ${item.patternName}, ${item.markerSource})`;
 
     /**
      * Remember a detected pilot that could not be linked here, so /pilotbulk can
@@ -478,7 +478,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         }
 
         registered.push({ member, entry: item.entry, lookup, via: item.via });
-        details.push(`✅ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → "${lookup.nickname}" (${lookup.clanName} @ ${lookup.serverName}) — ${item.isRegistered ? 'registro mantido, ' : ''}${apply ? (item.hasRole ? 'cargo já estava' : 'cargo concedido') : 'seria registrado + cargo'}${note}`);
+        details.push(`✅ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → "${lookup.nickname}" (${lookup.clanName} @ ${lookup.serverName}) — ${item.isRegistered ? 'registration kept, ' : ''}${apply ? (item.hasRole ? 'role already there' : 'role granted') : 'would be registered + role'}${note}`);
         logEvent(`🎯 [ScanAllied] ${apply ? 'Applied' : 'DRY RUN'} — ${member.user.tag} ← ${entryLabelOf(item)} → ${lookup.nickname} (${lookup.clanName} @ ${lookup.serverName})${note}`);
 
         // A newly registered owner becomes linkable for the pilot pass
@@ -496,12 +496,12 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
 
         if (!chosen) {
             notFound.push({ member: item.member, entry: item.entry });
-            details.push(`❌ ${item.member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] — não encontrado no ranking`);
+            details.push(`❌ ${item.member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] — not found in the ranking`);
             continue;
         }
         if (!chosen.lookup.inAlliedClan) {
             notAllied.push({ member: item.member, entry: item.entry, lookup: chosen.lookup });
-            details.push(`⏳ ${item.member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → "${chosen.lookup.nickname}" (${chosen.lookup.clanName} @ ${chosen.lookup.serverName}) — clã NÃO aliado`);
+            details.push(`⏳ ${item.member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → "${chosen.lookup.nickname}" (${chosen.lookup.clanName} @ ${chosen.lookup.serverName}) — NON-allied clan`);
             continue;
         }
 
@@ -515,7 +515,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         // Already someone's pilot — the bot manages that link, leave it alone.
         if (existingPilotIds.has(member.id)) {
             alreadyOk.push({ member, entry: item.entry, via: item.via });
-            details.push(`🙋 ${member.user.username} — já registrado como piloto (não mexido)`);
+            details.push(`🙋 ${member.user.username} — already registered as pilot (untouched)`);
             continue;
         }
 
@@ -532,12 +532,12 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                 const ownerPilots = ownerData.pilotIds || (ownerData.pilotIds = []);
                 if (ownerPilots.includes(member.id)) {
                     alreadyOk.push({ member, entry: item.entry, via: item.via });
-                    details.push(`🙋 ${member.user.username} — já era piloto de "${ownerData.nickname}" (não mexido)`);
+                    details.push(`🙋 ${member.user.username} — was already a pilot for "${ownerData.nickname}" (untouched)`);
                     continue;
                 }
                 if (ownerPilots.length >= MAX_PILOTS_PER_OWNER) {
-                    unlinkedPilots.push({ member, entry: item.entry, ownerNickname: ownerData.nickname, reason: 'owner cheio' });
-                    details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} — piloto de "${ownerData.nickname}", mas o dono já tem ${MAX_PILOTS_PER_OWNER} pilotos — NÃO vinculado (${markerLabelOf(item)})`);
+                    unlinkedPilots.push({ member, entry: item.entry, ownerNickname: ownerData.nickname, reason: 'owner full' });
+                    details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} — pilot for "${ownerData.nickname}", but the owner already has ${MAX_PILOTS_PER_OWNER} pilots — NOT linked (${markerLabelOf(item)})`);
                     continue;
                 }
 
@@ -549,7 +549,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                 }
 
                 linkedPilots.push({ member, entry: item.entry, ownerNickname: ownerData.nickname, via: item.via });
-                details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → piloto de "${ownerData.nickname}" (${ownerResolution.lookup.clanName} @ ${ownerResolution.lookup.serverName}) — ${apply ? `vinculado, apelido "${desiredNickname}"` : `seria vinculado, apelido "${desiredNickname}"`} — ${markerLabelOf(item)}`);
+                details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] → pilot for "${ownerData.nickname}" (${ownerResolution.lookup.clanName} @ ${ownerResolution.lookup.serverName}) — ${apply ? `linked, nickname "${desiredNickname}"` : `would be linked, nickname "${desiredNickname}"`} — ${markerLabelOf(item)}`);
                 logEvent(`🎯 [ScanAllied] ${apply ? 'Applied' : 'DRY RUN'} — pilot ${member.user.tag} linked to owner ${ownerData.nickname}`);
                 continue;
             }
@@ -564,27 +564,27 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
         // the relationship is visible without waiting for /pilotbulk. The sync
         // keeps this nickname while the pilot stays in db.scanPilotPending.
         const pendingNickname = item.ownerName ? buildPrefixedNickname(item.ownerName, db, 'Pilot') : null;
-        const renameNote = pendingNickname ? `, apelido "${pendingNickname}"` : '';
+        const renameNote = pendingNickname ? `, nickname "${pendingNickname}"` : '';
         if (apply && pendingNickname) member.setNickname(pendingNickname).catch(() => {});
 
         if (!ownResolution) {
             notFound.push({ member, entry: item.entry });
-            recordPendingPilot(item, 'não encontrado no ranking e dono não identificado', pendingNickname);
-            details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] — piloto${item.ownerName ? ` de "${item.ownerName}"` : ''}, mas não encontrado no ranking${apply ? renameNote : ''} — ${markerLabelOf(item)}`);
+            recordPendingPilot(item, 'not found in the ranking and owner unidentified', pendingNickname);
+            details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} [${viaLabelOf(item)}] — pilot${item.ownerName ? ` for "${item.ownerName}"` : ''}, but not found in the ranking${apply ? renameNote : ''} — ${markerLabelOf(item)}`);
             continue;
         }
         if (!ownResolution.lookup.inAlliedClan) {
             notAllied.push({ member, entry: item.entry, lookup: ownResolution.lookup });
-            recordPendingPilot(item, 'clã não aliado e dono não identificado', pendingNickname);
-            details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} → "${ownResolution.lookup.nickname}" (${ownResolution.lookup.clanName} @ ${ownResolution.lookup.serverName}) — piloto, clã NÃO aliado${apply ? renameNote : ''} — ${markerLabelOf(item)}`);
+            recordPendingPilot(item, 'non-allied clan and owner unidentified', pendingNickname);
+            details.push(`✈️ ${member.user.username} ← ${entryLabelOf(item)} → "${ownResolution.lookup.nickname}" (${ownResolution.lookup.clanName} @ ${ownResolution.lookup.serverName}) — pilot, NON-allied clan${apply ? renameNote : ''} — ${markerLabelOf(item)}`);
             continue;
         }
 
         const ownerNote = item.ownerName
-            ? ` (piloto detectado — dono "${item.ownerName}" não identificado${apply ? renameNote : ''}; resolva com /pilotbulk ou /manualpilot)`
-            : ' (piloto detectado — sem dono na lista; resolva com /pilotbulk ou /manualpilot)';
-        unlinkedPilots.push({ member, entry: item.entry, ownerNickname: item.ownerName, reason: 'dono não identificado', pendingNickname });
-        recordPendingPilot(item, 'dono não identificado', pendingNickname);
+            ? ` (pilot detected — owner "${item.ownerName}" unidentified${apply ? renameNote : ''}; resolve with /pilotbulk or /manualpilot)`
+            : ' (pilot detected — no owner in the list; resolve with /pilotbulk or /manualpilot)';
+        unlinkedPilots.push({ member, entry: item.entry, ownerNickname: item.ownerName, reason: 'owner unidentified', pendingNickname });
+        recordPendingPilot(item, 'owner unidentified', pendingNickname);
         registerMember(item, ownResolution.lookup, ownerNote);
     }
 
@@ -595,13 +595,13 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
     const markerLines = entries.map(entry => {
         const pilot = detectPilot(entry.nickname, pilotPatterns);
         const label = `${entry.nickname}${entry.username ? ` (@${entry.username})` : ''}`;
-        if (!pilot.isPilot) return `- ${label} → sem marcação`;
-        const bits = [`marcador "${pilot.marker}"`, `padrão ${pilot.patternName}`];
-        if (pilot.characterName) bits.push(`personagem "${pilot.characterName}"`);
-        bits.push(pilot.ownerName ? `dono "${pilot.ownerName}"` : 'dono não informado');
-        return `- ${label} → ✈️ piloto — ${bits.join(', ')}`;
+        if (!pilot.isPilot) return `- ${label} → no marker`;
+        const bits = [`marker "${pilot.marker}"`, `pattern ${pilot.patternName}`];
+        if (pilot.characterName) bits.push(`character "${pilot.characterName}"`);
+        bits.push(pilot.ownerName ? `owner "${pilot.ownerName}"` : 'owner not provided');
+        return `- ${label} → ✈️ pilot — ${bits.join(', ')}`;
     });
-    const pilotEntryCount = entries.length - markerLines.filter(l => l.endsWith('sem marcação')).length;
+    const pilotEntryCount = entries.length - markerLines.filter(l => l.endsWith('no marker')).length;
 
     const queuedPilots = Object.keys(db.scanPilotPending || {}).length;
     if (apply && (registered.length > 0 || linkedPilots.length > 0 || queuedPilots > 0)) {
@@ -609,28 +609,28 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
     }
 
     const counts = [
-        `${apply ? '✅ Aplicado (registro + cargo)' : '✅ Seriam registrados/cargo'}: **${registered.length}**`,
-        `✈️ ${apply ? 'Vinculados como piloto' : 'Seriam vinculados como piloto'}: **${linkedPilots.length}**`,
-        `✈️ Pilotos detectados sem dono identificado: **${unlinkedPilots.length}**`,
-        `✈️ Renomeados para "<Dono> - Pilot"${apply ? '' : ' (aplicado só com `apply:true`)'}: **${unlinkedPilots.filter(p => p.pendingNickname).length}**`,
-        `✈️ Entradas da lista com marcação de piloto: **${pilotEntryCount}**`,
-        `🙋 Já tinham registro + cargo: **${alreadyOk.length}**`,
-        `⏳ Achados fora de clã aliado: **${notAllied.length}**`,
-        `❌ Não encontrados no ranking: **${notFound.length}**`,
-        `📄 Entradas da lista sem membro no servidor: **${listOnly.length}**${listOnlyPilots.length ? ` (${listOnlyPilots.length} com marca de piloto)` : ''}`,
-        ...(apply ? [`🛠️ Na fila do /pilotbulk: **${queuedPilots}**`] : [])
+        `${apply ? '✅ Applied (registration + role)' : '✅ Would be registered/role'}: **${registered.length}**`,
+        `✈️ ${apply ? 'Linked as pilot' : 'Would be linked as pilot'}: **${linkedPilots.length}**`,
+        `✈️ Pilots detected with no identified owner: **${unlinkedPilots.length}**`,
+        `✈️ Renamed to "<Owner> - Pilot"${apply ? '' : ' (applied only with `apply:true`)'}: **${unlinkedPilots.filter(p => p.pendingNickname).length}**`,
+        `✈️ List entries with a pilot marker: **${pilotEntryCount}**`,
+        `🙋 Already had registration + role: **${alreadyOk.length}**`,
+        `⏳ Found outside an allied clan: **${notAllied.length}**`,
+        `❌ Not found in the ranking: **${notFound.length}**`,
+        `📄 List entries with no member in the server: **${listOnly.length}**${listOnlyPilots.length ? ` (${listOnlyPilots.length} with a pilot marker)` : ''}`,
+        ...(apply ? [`🛠️ In the /pilotbulk queue: **${queuedPilots}**`] : [])
     ].join('\n');
 
     const header = [
         `🎯 **/scanallied** — \`${attachment.name}\``,
-        `📋 ${entries.length} entradas na lista • 👥 ${guild.members.cache.size} membros no servidor`,
-        apply ? '⚠️ **APLICANDO** alterações' : '🧪 **DRY RUN** — nada foi alterado (rode com `apply: true` para valer)',
+        `📋 ${entries.length} entries in the list • 👥 ${guild.members.cache.size} members in the server`,
+        apply ? '⚠️ **APPLYING** changes' : '🧪 **DRY RUN** — nothing was changed (run with `apply: true` to take effect)',
         '',
         counts
     ].join('\n');
 
     const preview = [
-        ...linkedPilots.map(p => `✈️ ${p.member.user.username} → piloto de **${p.ownerNickname}**`),
+        ...linkedPilots.map(p => `✈️ ${p.member.user.username} → pilot for **${p.ownerNickname}**`),
         ...registered.slice(0, 15 - Math.min(linkedPilots.length, 15)).map(r =>
             `• ${r.member.user.username} → **${r.lookup.nickname}** (${r.lookup.clanName} @ ${r.lookup.serverName})`
         )
@@ -639,31 +639,31 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
     const totalApplied = registered.length + linkedPilots.length;
     const content = [
         header,
-        preview.length ? `\n**${apply ? 'Aplicados' : 'Alvos'} (${totalApplied}${totalApplied > preview.length ? `, mostrando ${preview.length}` : ''}):**\n${preview.join('\n')}` : '',
-        '\n📎 Relatório completo no arquivo anexado.'
+        preview.length ? `\n**${apply ? 'Applied' : 'Targets'} (${totalApplied}${totalApplied > preview.length ? `, showing ${preview.length}` : ''}):**\n${preview.join('\n')}` : '',
+        '\n📎 Full report in the attached file.'
     ].filter(Boolean).join('\n');
 
     const report = [
-        `# /scanallied ${apply ? '(APLICADO)' : '(DRY RUN)'}`,
-        `Arquivo: ${attachment.name}`,
-        `Entradas na lista: ${entries.length}`,
-        `Membros no servidor: ${guild.members.cache.size}`,
-        `Data: ${new Date().toISOString()}`,
+        `# /scanallied ${apply ? '(APPLIED)' : '(DRY RUN)'}`,
+        `File: ${attachment.name}`,
+        `Entries in the list: ${entries.length}`,
+        `Members in the server: ${guild.members.cache.size}`,
+        `Date: ${new Date().toISOString()}`,
         '',
-        '## Resumo',
+        '## Summary',
         counts.replace(/\*\*/g, ''),
         '',
-        '## Detalhes',
+        '## Details',
         ...details,
         '',
-        '## Marcações de piloto encontradas na lista',
-        `Padrões em uso: ${pilotPatterns.map(p => p.name).join(', ')}`,
+        '## Pilot markers found in the list',
+        `Patterns in use: ${pilotPatterns.map(p => p.name).join(', ')}`,
         ...markerLines,
         '',
-        '## Entradas da lista sem membro encontrado no servidor',
+        '## List entries with no member found in the server',
         ...(listOnly.length
-            ? listOnly.map(e => `- ${e.nickname}${e.username ? ` (@${e.username})` : ''}${detectPilot(e.nickname, pilotPatterns).isPilot ? ' ✈️ piloto' : ''}`)
-            : ['- (nenhuma)'])
+            ? listOnly.map(e => `- ${e.nickname}${e.username ? ` (@${e.username})` : ''}${detectPilot(e.nickname, pilotPatterns).isPilot ? ' ✈️ pilot' : ''}`)
+            : ['- (none)'])
     ].join('\n');
 
     const file = new AttachmentBuilder(Buffer.from(report, 'utf8'), { name: `allied-scan-${Date.now()}.txt` });

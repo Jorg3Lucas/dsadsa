@@ -68,7 +68,7 @@ function pendingPilot(overrides = {}) {
         ownerName: 'cecilia',
         marker: '(P-cecilia)',
         patternName: 'p-dash',
-        reason: 'dono não identificado',
+        reason: 'owner unidentified',
         createdAt: new Date().toISOString(),
         ...overrides
     };
@@ -88,7 +88,7 @@ describe('handlePilotBulk', () => {
         const interaction = createInteraction({ members: [] });
         await handlePilotBulk(interaction, { users: {}, config: {} }, vi.fn(), vi.fn());
 
-        expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('Fila vazia'));
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('Queue empty'));
     });
 
     it('links a queued pilot to the owner with the exact nickname', async () => {
@@ -128,7 +128,7 @@ describe('handlePilotBulk', () => {
         expect(db.scanPilotPending['5']).toBeDefined();
         expect(pilot.roles.add).not.toHaveBeenCalled();
         expect(interaction.replies[0].content).toContain('DRY RUN');
-        expect(interaction.replies[0].content).toContain('Seriam vinculados');
+        expect(interaction.replies[0].content).toContain('Would be linked');
     });
 
     it('auto-links when a single close fuzzy candidate exists', async () => {
@@ -171,7 +171,7 @@ describe('handlePilotBulk', () => {
 
         expect(db.users['4'].pilotIds).toEqual([]);
         expect(db.scanPilotPending['5']).toBeDefined();
-        expect(interaction.replies[0].content).toContain('Ambíguos');
+        expect(interaction.replies[0].content).toContain('Ambiguous');
         expect(interaction.replies[0].content).toContain('/manualpilot');
     });
 
@@ -192,7 +192,7 @@ describe('handlePilotBulk', () => {
         await handlePilotBulk(interaction, db, vi.fn(async () => {}), vi.fn());
 
         expect(db.users['4'].pilotIds).toEqual(['5', '6']);
-        expect(interaction.replies[0].content).toContain('dono forçado');
+        expect(interaction.replies[0].content).toContain('forced owner');
     });
 
     it('refuses an owner without registration', async () => {
@@ -202,7 +202,7 @@ describe('handlePilotBulk', () => {
 
         await handlePilotBulk(interaction, db, vi.fn(async () => {}), vi.fn());
 
-        expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('não tem registro'));
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('has no registration'));
     });
 
     it('skips owners that already reached the pilot cap', async () => {
@@ -218,7 +218,7 @@ describe('handlePilotBulk', () => {
         await handlePilotBulk(interaction, db, vi.fn(async () => {}), vi.fn());
 
         expect(db.users['4'].pilotIds).toEqual(['7', '8', '9', '10']);
-        expect(interaction.replies[0].content).toContain('4 pilotos');
+        expect(interaction.replies[0].content).toContain('already at 4 pilots');
     });
 
     it('drops queue entries for pilots that already have an owner', async () => {
@@ -297,7 +297,7 @@ describe('handlePilotBulk', () => {
         await handlePilotBulk(interaction, db, save, vi.fn());
 
         expect(db.scanPilotPending).toBeUndefined();
-        expect(interaction.replies[0].content).toContain('Descartados');
+        expect(interaction.replies[0].content).toContain('Dropped from the queue');
     });
 });
 
@@ -370,7 +370,7 @@ describe('handlePilotBulkSelect', () => {
         await handlePilotBulkSelect(interaction, db, vi.fn(async () => {}), vi.fn());
 
         expect(db.users['4'].pilotIds).toEqual(['a', 'b', 'c', 'd']);
-        expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('4 pilotos') }));
+        expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('already has 4 pilots') }));
         expect(interaction.update).not.toHaveBeenCalled();
     });
 
@@ -381,7 +381,7 @@ describe('handlePilotBulkSelect', () => {
 
         await handlePilotBulkSelect(interaction, db, vi.fn(async () => {}), vi.fn());
 
-        expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('não tem mais registro') }));
+        expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('no longer has a registration') }));
         expect(interaction.update).not.toHaveBeenCalled();
     });
 });

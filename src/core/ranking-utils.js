@@ -2,7 +2,7 @@
 // 🛠️ SHARED UTILITIES
 // ==========================================
 import { PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID } from './ranking-constants.js';
+import { MEMBER_ROLE_ID, WORLD_IDS, SERVER_MERGES } from './ranking-constants.js';
 import { getMsg } from '../lang/lang.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
@@ -220,4 +220,65 @@ export function buildPrefixedNickname(nickname, db, suffix = '', precomputedLook
         return `${prefix}${nickname} - ${suffix}`;
     }
     return `${prefix}${nickname}`;
+}
+
+// ==========================================
+// 🏷️ NICKNAME NORMALIZATION (base name)
+// ==========================================
+// A Discord display name carries a server prefix ("EU011 - Name") and, for
+// pilots, a " - Pilot" suffix, while the database stores the bare character
+// name. The sync engine's pilot auto-link and anti-impostor checks compare the
+// two, so BOTH sides must be reduced to the same base key — otherwise a
+// prefixed nickname never matches the registered owner and impersonation goes
+// undetected.
+
+const PILOT_SUFFIX_RE = /\s+-\s+Pilot$/i;
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Built lazily and defensively: several tests mock ranking-constants.js with a
+// partial surface, and Vitest throws when a mocked module lacks a named export,
+// so each constant lookup is guarded independently.
+function getServerNames() {
+    const names = [];
+    try {
+        for (const n of Object.values(WORLD_IDS || {})) if (n) names.push(n);
+    } catch { /* mocked partial module */ }
+    try {
+        for (const n of Object.keys(SERVER_MERGES || {})) if (n) names.push(n);
+    } catch { /* mocked partial module */ }
+    return [...new Set(names)].sort((a, b) => b.length - a.length);
+}
+
+let serverPrefixRe; // undefined = not built yet
+function getServerPrefixRe() {
+    if (serverPrefixRe !== undefined) return serverPrefixRe;
+    const names = getServerNames();
+    serverPrefixRe = names.length
+        ? new RegExp(`^(?:${names.map(escapeRegExp).join('|')})\\s*[-–—]\\s*`)
+        : null;
+    return serverPrefixRe;
+}
+
+/** Drop the bot-assigned " - Pilot" suffix (case-insensitive). */
+export function stripPilotSuffix(name) {
+    return String(name ?? '').trim().normalize('NFC').replace(PILOT_SUFFIX_RE, '').trim();
+}
+
+/** Drop a leading known server prefix ("EU011 - ", "ASIA013 - ", ...). */
+export function stripServerPrefix(name) {
+    const n = String(name ?? '').trim().normalize('NFC');
+    const re = getServerPrefixRe();
+    return re ? n.replace(re, '') : n;
+}
+
+/**
+ * Normalize a Discord display name to the base key used for database nicknames:
+ * remove the pilot suffix and any known server prefix, then NFC + lowercase.
+ * `baseNicknameKey('EU011 - PlayerOne - Pilot')` → `'playerone'`.
+ */
+export function baseNicknameKey(name) {
+    return stripServerPrefix(stripPilotSuffix(name)).trim().normalize('NFC').toLowerCase();
 }

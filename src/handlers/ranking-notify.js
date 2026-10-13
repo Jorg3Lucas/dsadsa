@@ -34,7 +34,7 @@ export const DM_CAMPAIGN_CAP = Number.MAX_SAFE_INTEGER; // no per-campaign limit
 export const DM_DAY_CAP = Number.MAX_SAFE_INTEGER;      // no daily limit (several campaigns/day)
 
 function buildCapNotice(skipped) {
-    return `\n\n🛑 **Campanha limitada pelo teto de segurança do bot** (máx. ${DM_CAMPAIGN_CAP} DMs por campanha).\n**${skipped} membros** ficaram de fora — rode o /notify novamente em outro momento para notificá-los.`;
+    return `\n\n🛑 **Campaign capped by the bot's safety limit** (max ${DM_CAMPAIGN_CAP} DMs per campaign).\n**${skipped} members** were skipped — run /notify again later to reach them.`;
 }
 
 // Rolling 24h DM budget (module-level; resets on process restart).

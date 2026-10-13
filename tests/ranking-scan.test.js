@@ -290,7 +290,7 @@ describe('handleScanAllied', () => {
         expect(interaction.editReply).toHaveBeenCalledTimes(1);
         const payload = interaction.replies[0];
         expect(payload.content).toContain('DRY RUN');
-        expect(payload.content).toContain('Seriam registrados/cargo');
+        expect(payload.content).toContain('Would be registered/role');
         expect(payload.files).toHaveLength(1);
 
         // Nothing was written and no role was handed out
@@ -392,7 +392,7 @@ describe('handleScanAllied', () => {
         expect(db.users['4'].pilotIds).toEqual(['5']);
         expect(pilot.roles.add).toHaveBeenCalledWith(MEMBER_ROLE_ID);
         expect(db.users['5']).toBeUndefined();
-        expect(interaction.replies[0].content).toContain('piloto');
+        expect(interaction.replies[0].content).toContain('pilot');
     });
 
     it('does not link pilots in dry run', async () => {
@@ -415,7 +415,7 @@ describe('handleScanAllied', () => {
         expect(db.users['4']).toBeUndefined();
         expect(pilot.roles.add).not.toHaveBeenCalled();
         expect(pilot.setNickname).not.toHaveBeenCalled();
-        expect(interaction.replies[0].content).toContain('Seriam vinculados como piloto');
+        expect(interaction.replies[0].content).toContain('Would be linked as pilot');
     });
 
     it('registers a pilot as a regular member when the owner is not in the server', async () => {
@@ -449,7 +449,7 @@ describe('handleScanAllied', () => {
             patternName: 'p-dash',
             pendingNickname: 'cecilia - Pilot'
         });
-        expect(interaction.replies[0].content).toContain('Renomeados');
+        expect(interaction.replies[0].content).toContain('Renamed to');
     });
 
     it('does not rename pilots whose list line has no owner name', async () => {
@@ -493,12 +493,12 @@ describe('handleScanAllied', () => {
         await handleScanAllied(interaction, { users: {}, config: {} }, vi.fn(async () => {}), vi.fn());
 
         const report = interaction.replies[0].files[0].attachment.toString('utf8');
-        expect(report).toContain('Marcações de piloto encontradas na lista');
-        expect(report).toContain('Padrões em uso: pilot-suffix, p-dash, p-bracket, pilot-word');
-        expect(report).toContain('marcador "(P-cecilia)"');
-        expect(report).toContain('padrão p-dash');
-        expect(report).toContain('dono "cecilia"');
-        expect(report).toContain('sem marcação');
+        expect(report).toContain('Pilot markers found in the list');
+        expect(report).toContain('Patterns in use: pilot-suffix, p-dash, p-bracket, pilot-word');
+        expect(report).toContain('marker "(P-cecilia)"');
+        expect(report).toContain('pattern p-dash');
+        expect(report).toContain('owner "cecilia"');
+        expect(report).toContain('no marker');
     });
 
     it('honours custom pilot patterns configured in the database', async () => {
@@ -525,8 +525,8 @@ describe('handleScanAllied', () => {
         expect(db.users['4']).toMatchObject({ nickname: 'Yuki' });
         expect(db.scanPilotPending['4']).toMatchObject({ patternName: 'bracket-word', marker: '[PILOT]' });
         const report = interaction.replies[0].files[0].attachment.toString('utf8');
-        expect(report).toContain('Padrões em uso: bracket-word');
-        expect(report).toContain('padrão bracket-word');
+        expect(report).toContain('Patterns in use: bracket-word');
+        expect(report).toContain('pattern bracket-word');
     });
 
     it('skips bots and members without a list match', async () => {

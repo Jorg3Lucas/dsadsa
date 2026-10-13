@@ -142,6 +142,34 @@ describe('handleOwnerRegistrationModal', () => {
         );
     });
 
+    it('edits the existing admin panel instead of sending a duplicate on resubmission', async () => {
+        interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
+        lookupNicknameWithSearch.mockReturnValue({ found: true, serverName: 'EU011', clanName: 'ToxicFamily', inAlliedClan: true, exactMatch: true, fuzzySuggestion: null });
+        lookupTopNicknames.mockReturnValue([]);
+
+        constants.adminChannelId = 'admin-ch-123';
+        const existingMsg = { id: 'msg-1', edit: vi.fn().mockResolvedValue({ id: 'msg-1' }) };
+        const adminChannel = {
+            id: 'admin-ch-123',
+            send: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+            messages: { fetch: vi.fn().mockResolvedValue(existingMsg) }
+        };
+        interaction.guild.channels.cache.get.mockReturnValue(adminChannel);
+
+        // 1st submission → a new panel is sent
+        await handleOwnerRegistrationModal(interaction, db, saveLocalStorage, logEvent);
+        expect(adminChannel.send).toHaveBeenCalledTimes(1);
+        expect(getPending()[USER_ID].messageId).toBe('msg-1');
+
+        // 2nd submission → the existing panel is updated, no duplicate send
+        await handleOwnerRegistrationModal(interaction, db, saveLocalStorage, logEvent);
+        expect(adminChannel.send).toHaveBeenCalledTimes(1);
+        expect(adminChannel.messages.fetch).toHaveBeenCalledWith('msg-1');
+        expect(existingMsg.edit).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('New Owner Registration')
+        }));
+    });
+
     it('shows not-found ranking status when lookup fails', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(NICKNAME);
         lookupNicknameWithSearch.mockReturnValue({ found: false });

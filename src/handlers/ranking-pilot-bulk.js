@@ -81,7 +81,7 @@ function buildAmbiguousRows(ambiguous) {
         rows.push(new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId(`pilotbulk_owner_${item.pilotId}`)
-                .setPlaceholder(`Dono de ${item.member.user.username}${item.info?.ownerName ? ` (sugerido: ${item.info.ownerName})` : ''}`.substring(0, 100))
+                .setPlaceholder(`Owner of ${item.member.user.username}${item.info?.ownerName ? ` (suggested: ${item.info.ownerName})` : ''}`.substring(0, 100))
                 .addOptions(options)
         ));
     }
@@ -107,13 +107,13 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
     if (!guild) return interaction.editReply('❌ This command must be used inside the server.');
 
     if (forcedOwner && !db.users?.[forcedOwner.id]) {
-        return interaction.editReply(`❌ **${forcedOwner.displayName}** não tem registro — registre com \`/manualregister\` ou \`/manualforce\` antes.`);
+        return interaction.editReply(`❌ **${forcedOwner.displayName}** has no registration — register with \`/manualregister\` or \`/manualforce\` first.`);
     }
 
     const pending = (db.scanPilotPending && typeof db.scanPilotPending === 'object') ? db.scanPilotPending : {};
     const queuedTotal = Object.keys(pending).length;
     if (queuedTotal === 0) {
-        return interaction.editReply('📭 **Fila vazia.** Rode `/scanallied <lista> apply:true` primeiro — os pilotos que ele detectar mas não conseguir vincular entram nessa fila.');
+        return interaction.editReply('📭 **Queue empty.** Run `/scanallied <list> apply:true` first — pilots it detects but cannot link are added to this queue.');
     }
 
     const existingPilotIds = buildPilotIdSet(db);
@@ -132,17 +132,17 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
         const createdAt = info.createdAt ? Date.parse(info.createdAt) : 0;
 
         if (createdAt && Date.now() - createdAt > PENDING_MAX_AGE_MS) {
-            stale.push({ pilotId, info, reason: 'fila expirada (> 30 dias)' });
+            stale.push({ pilotId, info, reason: 'queue expired (> 30 days)' });
             continue;
         }
         if (ownerOfPilot.has(pilotId)) {
-            stale.push({ pilotId, info, reason: `já vinculado (dono ${db.users?.[ownerOfPilot.get(pilotId)]?.nickname || ownerOfPilot.get(pilotId)})` });
+            stale.push({ pilotId, info, reason: `already linked (owner ${db.users?.[ownerOfPilot.get(pilotId)]?.nickname || ownerOfPilot.get(pilotId)})` });
             continue;
         }
 
         const member = guild.members.cache.get(pilotId) || await guild.members.fetch(pilotId).catch(() => null);
         if (!member) {
-            stale.push({ pilotId, info, reason: 'não está mais no servidor' });
+            stale.push({ pilotId, info, reason: 'no longer in the server' });
             continue;
         }
 
@@ -154,7 +154,7 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
                 info,
                 ownerId: forcedOwner.id,
                 ownerNickname: db.users[forcedOwner.id].nickname,
-                confidence: 'dono informado'
+                confidence: 'owner provided'
             });
             continue;
         }
@@ -219,12 +219,12 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
     for (const entry of ready) {
         const ownerData = db.users?.[entry.ownerId];
         if (!ownerData) {
-            stale.push({ pilotId: entry.pilotId, info: entry.info, reason: 'o dono não tem mais registro' });
+            stale.push({ pilotId: entry.pilotId, info: entry.info, reason: 'the owner no longer has a registration' });
             continue;
         }
         const ownerPilots = ownerData.pilotIds || (ownerData.pilotIds = []);
         if (ownerPilots.includes(entry.pilotId)) {
-            stale.push({ pilotId: entry.pilotId, info: entry.info, reason: 'já vinculado' });
+            stale.push({ pilotId: entry.pilotId, info: entry.info, reason: 'already linked' });
             continue;
         }
         if (ownerPilots.length >= MAX_PILOTS_PER_OWNER) {
@@ -254,25 +254,25 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
     }
 
     const counts = [
-        `📋 Pilotos na fila: **${queuedTotal}**${apply ? ` (restaram **${Object.keys(pending).length}**)` : ''}`,
-        `${apply ? '✅ Vinculados' : '✅ Seriam vinculados'}: **${linked.length}**`,
-        `🤔 Ambíguos (resolva com \`/manualpilot\`): **${ambiguous.length}**`,
-        `🚫 Sem dono na lista: **${noOwner.length}**`,
-        `⛔ Dono já com ${MAX_PILOTS_PER_OWNER} pilotos: **${ownerFull.length}**`,
-        `🗑️ Descartados da fila: **${stale.length}**${apply ? '' : ' (aplicados só com `apply:true`)'}`
+        `📋 Pilots in queue: **${queuedTotal}**${apply ? ` (**${Object.keys(pending).length}** left)` : ''}`,
+        `${apply ? '✅ Linked' : '✅ Would be linked'}: **${linked.length}**`,
+        `🤔 Ambiguous (resolve with \`/manualpilot\`): **${ambiguous.length}**`,
+        `🚫 No owner in the list: **${noOwner.length}**`,
+        `⛔ Owner already at ${MAX_PILOTS_PER_OWNER} pilots: **${ownerFull.length}**`,
+        `🗑️ Dropped from the queue: **${stale.length}**${apply ? '' : ' (only applied with `apply:true`)'}`
     ].join('\n');
 
     const details = [
-        ...linked.map(l => `${apply ? '✅' : '➡️'} <@${l.pilotId}> (${l.member.user.username}) → dono **${l.ownerNickname}** [${l.confidence}]${l.desiredNickname ? ` — apelido "${l.desiredNickname}"` : ''}`),
-        ...ambiguous.map(a => `🤔 <@${a.pilotId}> (${a.member.user.username}) — dono sugerido "${a.info.ownerName || '—'}"${a.candidates?.length ? `: ${a.candidates.map(c => `"${c.nickname}" (${Math.round((c.score || 0) * 100)}%)`).join(', ')}` : ' (nenhum candidato)'} — use \`/manualpilot\``),
-        ...noOwner.map(n => `🚫 <@${n.pilotId}> (${n.member.user.username}) — piloto sem dono na lista (${n.info.marker ? `marcador "${n.info.marker}"` : 'sem marcador'}) — use \`/manualpilot\``),
-        ...ownerFull.map(f => `⛔ <@${f.pilotId}> (${f.member.user.username}) — dono "${f.ownerNickname}" já tem ${MAX_PILOTS_PER_OWNER} pilotos`),
+        ...linked.map(l => `${apply ? '✅' : '➡️'} <@${l.pilotId}> (${l.member.user.username}) → owner **${l.ownerNickname}** [${l.confidence}]${l.desiredNickname ? ` — nickname "${l.desiredNickname}"` : ''}`),
+        ...ambiguous.map(a => `🤔 <@${a.pilotId}> (${a.member.user.username}) — suggested owner "${a.info.ownerName || '—'}"${a.candidates?.length ? `: ${a.candidates.map(c => `"${c.nickname}" (${Math.round((c.score || 0) * 100)}%)`).join(', ')}` : ' (no candidate)'} — use \`/manualpilot\``),
+        ...noOwner.map(n => `🚫 <@${n.pilotId}> (${n.member.user.username}) — pilot with no owner in the list (${n.info.marker ? `marker "${n.info.marker}"` : 'no marker'}) — use \`/manualpilot\``),
+        ...ownerFull.map(f => `⛔ <@${f.pilotId}> (${f.member.user.username}) — owner "${f.ownerNickname}" already has ${MAX_PILOTS_PER_OWNER} pilots`),
         ...stale.map(s => `🗑️ <@${s.pilotId}> — ${s.reason}`)
     ];
 
     const header = [
-        '✈️ **/pilotbulk**' + (forcedOwner ? ` — dono forçado: **${forcedOwner.displayName}**` : ''),
-        apply ? '⚠️ **APLICANDO** os vínculos' : '🧪 **DRY RUN** — nada foi alterado (rode com `apply: true`)',
+        '✈️ **/pilotbulk**' + (forcedOwner ? ` — forced owner: **${forcedOwner.displayName}**` : ''),
+        apply ? '⚠️ **APPLYING** the links' : '🧪 **DRY RUN** — nothing was changed (run with `apply: true`)',
         '',
         counts
     ].join('\n');
@@ -282,26 +282,26 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
     const preview = details.slice(0, 15);
     const content = [
         header,
-        preview.length ? `\n${preview.join('\n')}` : '\nℹ️ Nada para fazer.',
-        details.length > preview.length ? `\n📎 Mais ${details.length - preview.length} linha(s) no anexo.` : '\n📎 Relatório completo no arquivo anexado.',
-        rows.length ? `\n🧩 Escolha o dono de ${rows.length} piloto(s) ambíguo(s) nos menus abaixo.` : ''
+        preview.length ? `\n${preview.join('\n')}` : '\nℹ️ Nothing to do.',
+        details.length > preview.length ? `\n📎 ${details.length - preview.length} more line(s) in the attachment.` : '\n📎 Full report in the attached file.',
+        rows.length ? `\n🧩 Choose the owner for ${rows.length} ambiguous pilot(s) in the menus below.` : ''
     ].filter(Boolean).join('\n');
 
     const report = [
-        `# /pilotbulk ${apply ? '(APLICADO)' : '(DRY RUN)'}`,
-        `Dono forçado: ${forcedOwner ? `${forcedOwner.user.username} (${db.users[forcedOwner.id]?.nickname})` : 'não'}`,
-        `Data: ${new Date().toISOString()}`,
+        `# /pilotbulk ${apply ? '(APPLIED)' : '(DRY RUN)'}`,
+        `Forced owner: ${forcedOwner ? `${forcedOwner.user.username} (${db.users[forcedOwner.id]?.nickname})` : 'no'}`,
+        `Date: ${new Date().toISOString()}`,
         '',
-        '## Resumo',
+        '## Summary',
         counts.replace(/\*\*/g, '').replace(/`/g, ''),
         '',
-        '## Detalhes',
-        ...(details.length ? details : ['- (nada na fila)']),
+        '## Details',
+        ...(details.length ? details : ['- (nothing in the queue)']),
         '',
-        '## Fila restante',
+        '## Remaining queue',
         ...(Object.keys(pending).length
-            ? Object.entries(pending).map(([id, info]) => `- ${id} — "${info.characterName}" dono "${info.ownerName || '—'}" [${info.reason || 'pendente'}]`)
-            : ['- (vazia)'])
+            ? Object.entries(pending).map(([id, info]) => `- ${id} — "${info.characterName}" owner "${info.ownerName || '—'}" [${info.reason || 'pending'}]`)
+            : ['- (empty)'])
     ].join('\n');
 
     const file = new AttachmentBuilder(Buffer.from(report, 'utf8'), { name: `pilotbulk-${Date.now()}.txt` });
@@ -329,13 +329,13 @@ export async function handlePilotBulkSelect(interaction, db, saveLocalStorage, l
     const ownerData = ownerId ? db.users?.[ownerId] : null;
 
     if (!ownerData) {
-        await interaction.followUp({ content: '❌ Esse dono não tem mais registro — rode `/pilotbulk` de novo.', flags: 64 }).catch(() => {});
+        await interaction.followUp({ content: '❌ That owner no longer has a registration — run `/pilotbulk` again.', flags: 64 }).catch(() => {});
         return false;
     }
 
     const ownerPilots = ownerData.pilotIds || (ownerData.pilotIds = []);
     if (!ownerPilots.includes(pilotId) && ownerPilots.length >= MAX_PILOTS_PER_OWNER) {
-        await interaction.followUp({ content: `❌ **${ownerData.nickname}** já tem ${MAX_PILOTS_PER_OWNER} pilotos.`, flags: 64 }).catch(() => {});
+        await interaction.followUp({ content: `❌ **${ownerData.nickname}** already has ${MAX_PILOTS_PER_OWNER} pilots.`, flags: 64 }).catch(() => {});
         return false;
     }
 
@@ -388,10 +388,10 @@ export async function handlePilotBulkSelect(interaction, db, saveLocalStorage, l
     const base = stripTrailingHints(interaction.message?.content);
     const content = [
         base,
-        `✅ <@${pilotId}> → dono **${ownerData.nickname}** — apelido "${desiredNickname}"`,
+        `✅ <@${pilotId}> → owner **${ownerData.nickname}** — nickname "${desiredNickname}"`,
         remainingRows.length
-            ? `🧩 Ainda há ${remainingRows.length} piloto(s) ambíguo(s) — escolha nos menus abaixo.`
-            : '🎉 Todos os ambíguos deste relatório foram resolvidos.'
+            ? `🧩 Still ${remainingRows.length} ambiguous pilot(s) — choose in the menus below.`
+            : '🎉 All ambiguous pilots in this report were resolved.'
     ].join('\n');
 
     await interaction.update({ content: content.substring(0, 1990), components: remainingRows }).catch(() => {});

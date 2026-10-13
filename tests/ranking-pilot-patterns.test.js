@@ -51,7 +51,7 @@ describe('handlePilotMarkers', () => {
         await handlePilotMarkers(interaction, db, save, vi.fn());
 
         const content = replyText(interaction);
-        expect(content).toContain('padrões internos');
+        expect(content).toContain('built-in defaults');
         for (const pattern of DEFAULT_PILOT_PATTERNS) {
             expect(content).toContain(pattern.name);
         }
@@ -69,7 +69,7 @@ describe('handlePilotMarkers', () => {
             name: 'plus-owner', regex: '\\+\\s*(\\S+)$', ownerGroup: 1
         });
         expect(save).toHaveBeenCalled();
-        expect(replyText(interaction)).toContain('adicionado');
+        expect(replyText(interaction)).toContain('added');
     });
 
     it('can place a new pattern first in the test order', async () => {
@@ -90,7 +90,7 @@ describe('handlePilotMarkers', () => {
 
         expect(db.config.pilotPatterns).toHaveLength(1);
         expect(save).not.toHaveBeenCalled();
-        expect(replyText(interaction)).toContain('Já existe');
+        expect(replyText(interaction)).toContain('already exists');
     });
 
     it('rejects an invalid regex', async () => {
@@ -98,14 +98,14 @@ describe('handlePilotMarkers', () => {
         await handlePilotMarkers(interaction, db, save, vi.fn());
 
         expect(db.config.pilotPatterns).toBeUndefined();
-        expect(replyText(interaction)).toContain('Regex inválida');
+        expect(replyText(interaction)).toContain('Invalid regex');
     });
 
     it('rejects a missing label', async () => {
         const interaction = createInteraction({ action: 'add', name: '', regex: 'x', ownerGroup: 0 });
         await handlePilotMarkers(interaction, db, save, vi.fn());
 
-        expect(replyText(interaction)).toContain('rótulo');
+        expect(replyText(interaction)).toContain('label');
     });
 
     it('removes a pattern by label', async () => {
@@ -121,7 +121,7 @@ describe('handlePilotMarkers', () => {
         const interaction = createInteraction({ action: 'remove', name: 'nope' });
         await handlePilotMarkers(interaction, db, save, vi.fn());
 
-        expect(replyText(interaction)).toContain('Nenhum padrão');
+        expect(replyText(interaction)).toContain('No pattern named');
     });
 
     it('resets back to the built-in patterns', async () => {
@@ -131,6 +131,6 @@ describe('handlePilotMarkers', () => {
 
         expect(db.config.pilotPatterns).toBeUndefined();
         expect(save).toHaveBeenCalled();
-        expect(replyText(interaction)).toContain('padrão interno');
+        expect(replyText(interaction)).toContain('built-in defaults');
     });
 });
