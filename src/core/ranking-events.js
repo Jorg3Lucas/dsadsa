@@ -1,11 +1,12 @@
 import cron from 'node-cron';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
+import { PermissionFlagsBits } from 'discord.js';
 import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig } from './ranking-constants.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
-import { buildPrefixedNickname } from './ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from './ranking-utils.js';
 import { buildWelcomePanelComponents } from '../handlers/ranking-welcome.js';
+import { buildOwnerApprovalButtons } from '../handlers/ranking-approvals.js';
 
 // ==========================================
 // 💬 TEXT COMMANDS (!setadminchannel)
@@ -193,27 +194,9 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
                 }
             }
 
-            const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
-
-            const approveButtons = [
-                new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
-            ];
-
-            if (isMissingRankingOrAllied) {
-                approveButtons.push(
-                    new ButtonBuilder().setCustomId(`approve_owner_${userId}-temp`).setLabel('⏳ Approve Temporarily (3 days)').setStyle(ButtonStyle.Primary)
-                );
-            }
-
-            approveButtons.push(
-                new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
-            );
-
             const newMsg = await adminChannel.send({
                 content: `👑 **New Owner Registration**\n\n👤 **User:** ${user.toString()} (${user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
-                components: [
-                    new ActionRowBuilder().addComponents(approveButtons)
-                ]
+                components: [buildOwnerApprovalButtons(userId, lookup.found && lookup.inAlliedClan)]
             });
 
             pendingRegistrations[userId].channelId = adminChannel.id;
@@ -360,13 +343,15 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             delete db.preRegistrations[member.id];
                             saveLocalStorage();
 
-                            // Nickname + role are independent — run concurrently.
-                            await Promise.all([
-                                member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {}),
-                                !member.roles.cache.has(MEMBER_ROLE_ID)
-                                    ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
-                                    : Promise.resolve()
+                            // Nickname + role are independent — run concurrently, and
+                            // both outcomes are reported (a refused role used to vanish
+                            // silently for pre-registered joiners).
+                            const [pilotNick, pilotRole] = await Promise.all([
+                                setMemberNickname(member, buildPrefixedNickname(preReg.ownerNick, db, 'Pilot'), logEvent),
+                                assignMemberRole(member, logEvent, member.guild)
                             ]);
+                            if (!pilotRole.ok) logEvent(`⚠️ [PreReg] Member role NOT applied to ${member.user.tag} — ${pilotRole.reason}`);
+                            if (!pilotNick.ok) logEvent(`⚠️ [PreReg] Nickname NOT applied to ${member.user.tag} — ${pilotNick.reason}`);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as pilot of "${preReg.ownerNick}" from pre-registration`);
                         } else {
@@ -384,13 +369,14 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                             }
                             saveLocalStorage();
 
-                            // Nickname + role are independent — run concurrently.
-                            await Promise.all([
-                                member.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')).catch(() => {}),
-                                !member.roles.cache.has(MEMBER_ROLE_ID)
-                                    ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
-                                    : Promise.resolve()
+                            // Nickname + role are independent — run concurrently, and
+                            // both outcomes are reported.
+                            const [pendingNick, pendingRole] = await Promise.all([
+                                setMemberNickname(member, buildPrefixedNickname(preReg.ownerNick, db, 'Pilot'), logEvent),
+                                assignMemberRole(member, logEvent, member.guild)
                             ]);
+                            if (!pendingRole.ok) logEvent(`⚠️ [PreReg] Member role NOT applied to ${member.user.tag} — ${pendingRole.reason}`);
+                            if (!pendingNick.ok) logEvent(`⚠️ [PreReg] Nickname NOT applied to ${member.user.tag} — ${pendingNick.reason}`);
 
                             logEvent(`📥 [PreReg] ${member.user.tag} joined — registered as pilot awaiting owner "${preReg.ownerNick}"`);
                         }
@@ -404,13 +390,14 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         delete db.preRegistrations[member.id];
                         saveLocalStorage();
 
-                        // Nickname + role are independent — run concurrently.
-                        await Promise.all([
-                            member.setNickname(buildPrefixedNickname(preReg.nickname, db)).catch(() => {}),
-                            !member.roles.cache.has(MEMBER_ROLE_ID)
-                                ? member.roles.add(MEMBER_ROLE_ID).catch(() => {})
-                                : Promise.resolve()
+                        // Nickname + role are independent — run concurrently, and
+                        // both outcomes are reported.
+                        const [ownerNick, ownerRole] = await Promise.all([
+                            setMemberNickname(member, buildPrefixedNickname(preReg.nickname, db), logEvent),
+                            assignMemberRole(member, logEvent, member.guild)
                         ]);
+                        if (!ownerRole.ok) logEvent(`⚠️ [PreReg] Member role NOT applied to ${member.user.tag} — ${ownerRole.reason}`);
+                        if (!ownerNick.ok) logEvent(`⚠️ [PreReg] Nickname NOT applied to ${member.user.tag} — ${ownerNick.reason}`);
 
                         logEvent(`📥 [PreReg] ${member.user.tag} joined — auto-registered as "${preReg.nickname}" from pre-registration`);
                     }

@@ -14,13 +14,36 @@ import {
     APPROVER_ROLE_IDS,
     PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
-import { buildPrefixedNickname, assignMemberRole } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from '../core/ranking-utils.js';
 import { deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
 // ✅ ADMIN APPROVAL HANDLERS
 // ==========================================
 // Extracted from ranking-handlers.js
+
+// ── Owner-registration approval buttons (shared by panel, /pending and startup restore) ──
+// The permanent "✅ Approve" is only offered when the player is confirmed in an
+// allied clan. Approving permanently somebody who is not in an allied clan used
+// to hand out the role only for the daily sync to strip it again after the 72h
+// grace — so a not-found / not-allied player can only be approved TEMPORARILY
+// (3 days) and is auto-converted to permanent once the sync finds them in an
+// allied clan. Admins who need to force a permanent registration use /manualforce.
+//
+// @param {string} userId - Discord ID of the registering member
+// @param {boolean} inAlliedClan - Whether the submitted nickname is in an allied clan
+// @returns {ActionRowBuilder} The button row placed under the admin approval message
+export function buildOwnerApprovalButtons(userId, inAlliedClan) {
+    const buttons = inAlliedClan
+        ? [new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success)]
+        : [new ButtonBuilder().setCustomId(`approve_owner_${userId}-temp`).setLabel('⏳ Approve Temporarily (3 days)').setStyle(ButtonStyle.Primary)];
+
+    buttons.push(
+        new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+    );
+
+    return new ActionRowBuilder().addComponents(buttons);
+}
 
 // ── Admin Approval: Owner Registration ──
 export async function handleApproveOwner(interaction, db, saveLocalStorage, logEvent) {
@@ -117,11 +140,11 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     saveLocalStorage();
 
     // Nickname + role are independent Discord calls — run them concurrently.
-    // The role result is NOT swallowed: when Discord refuses the change (role
-    // hierarchy / permissions), the admin is told instead of seeing a silent
-    // "approved" while the member stays without the role.
-    const [, roleOutcome] = await Promise.all([
-        targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {}),
+    // NEITHER result is swallowed: when Discord refuses the change (hierarchy /
+    // permissions / invalid nickname), the admin is told instead of seeing a
+    // silent "approved" while the member keeps the old name or no role.
+    const [nickOutcome, roleOutcome] = await Promise.all([
+        setMemberNickname(targetMember, buildPrefixedNickname(finalNickname, db), logEvent),
         assignMemberRole(targetMember, logEvent, interaction.guild)
     ]);
 
@@ -129,18 +152,21 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
     const roleWarning = roleOutcome.ok
         ? ''
         : `\n\n⚠️ **The member role could NOT be applied by the bot.** The registration was saved, but the user is still without the role in the server.\n**Discord said:** ${roleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\` (it restores the role automatically on the next sync).`;
+    const nickWarning = nickOutcome.ok
+        ? ''
+        : `\n\n⚠️ **The nickname could NOT be applied by the bot.** The registration was saved, but the user still has their old name.\n**Discord said:** ${nickOutcome.reason}\nSet the nickname manually, then run \`/forcesync\`.`;
     const dmMsg = isTempApproval
         ? '⏳ **Temporary registration approved!** You have 3 days to join an allied clan and appear in the ranking. After that, your role will be removed if you\'re not in an allied clan.'
         : roleOutcome.ok
             ? '✅ **Registration approved!** You received the member role.'
             : '✅ **Registration approved!** An administrator will apply your member role shortly.';
 
-    logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${finalNickname}${roleOutcome.ok ? '' : ' — ⚠️ member role NOT applied'}`);
+    logEvent(`${approvalLabel} Admin ${interaction.user.tag} approved registration for ${userId} as ${finalNickname}${roleOutcome.ok ? '' : ' — ⚠️ member role NOT applied'}${nickOutcome.ok ? '' : ' — ⚠️ nickname NOT applied'}`);
 
     // Reply + DM are independent — send them concurrently (DM failure is swallowed).
     await Promise.all([
         interaction.editReply({
-            content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${finalNickname}\n✅ **Approved by:** ${interaction.user.tag}${roleWarning}`,
+            content: `${approvalLabel}\n\n👤 **User:** ${targetMember.toString()}\n📝 **Nickname:** ${finalNickname}\n✅ **Approved by:** ${interaction.user.tag}${roleWarning}${nickWarning}`,
             components: []
         }),
         targetMember.send(dmMsg).catch(() => {})
@@ -253,22 +279,25 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
     }
     saveLocalStorage();
 
-    // Nickname + role are independent — run them concurrently. The role result is
-    // not swallowed, so a hierarchy/permission refusal surfaces instead of a
-    // silent "approved" (see assignMemberRole in ranking-utils).
-    const [, roleOutcome] = await Promise.all([
-        pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {}),
+    // Nickname + role are independent — run them concurrently. Both results are
+    // reported, so a hierarchy/permission refusal surfaces instead of a silent
+    // "approved" (see assignMemberRole / setMemberNickname in ranking-utils).
+    const [nickOutcome, roleOutcome] = await Promise.all([
+        setMemberNickname(pilotMember, buildPrefixedNickname(pending.ownerNick, db, 'Pilot'), logEvent),
         assignMemberRole(pilotMember, logEvent, guild)
     ]);
     const roleWarning = roleOutcome.ok
         ? ''
         : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${roleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`;
+    const nickWarning = nickOutcome.ok
+        ? ''
+        : `\n\n⚠️ **The nickname could NOT be applied by the bot.**\n**Discord said:** ${nickOutcome.reason}\nSet the nickname manually, then run \`/forcesync\`.`;
 
-    logEvent(`${interaction.user.tag} approved pilot ${pilotUserId} for ${pending.ownerNick}${roleOutcome.ok ? '' : ' — ⚠️ member role NOT applied'}`);
+    logEvent(`${interaction.user.tag} approved pilot ${pilotUserId} for ${pending.ownerNick}${roleOutcome.ok ? '' : ' — ⚠️ member role NOT applied'}${nickOutcome.ok ? '' : ' — ⚠️ nickname NOT applied'}`);
 
     // Reply + pilot DM are independent — run them concurrently.
     await Promise.all([
-        interaction.editReply({ content: `✅ **Pilot approved!** <@${pilotUserId}> is now your pilot.${roleWarning}`, components: [] }),
+        interaction.editReply({ content: `✅ **Pilot approved!** <@${pilotUserId}> is now your pilot.${roleWarning}${nickWarning}`, components: [] }),
         interaction.client.users.fetch(pilotUserId)
             .then(u => u.send('✅ **Registration approved!** The owner accepted your pilot request.'))
             .catch(() => {})
@@ -340,17 +369,20 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
     }
     saveLocalStorage();
 
-    // Nickname + role are independent — run them concurrently. The role result is
+    // Nickname + role are independent — run them concurrently. Both results are
     // reported (see note in handleApprovePilot).
-    const [, roleOutcome] = await Promise.all([
-        pilotMember.setNickname(buildPrefixedNickname(pending.ownerNick, db, 'Pilot')).catch(() => {}),
+    const [nickOutcome, roleOutcome] = await Promise.all([
+        setMemberNickname(pilotMember, buildPrefixedNickname(pending.ownerNick, db, 'Pilot'), logEvent),
         assignMemberRole(pilotMember, logEvent, guild)
     ]);
     const roleWarning = roleOutcome.ok
         ? ''
         : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${roleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`;
+    const nickWarning = nickOutcome.ok
+        ? ''
+        : `\n\n⚠️ **The nickname could NOT be applied by the bot.**\n**Discord said:** ${nickOutcome.reason}\nSet the nickname manually, then run \`/forcesync\`.`;
 
-    logEvent(`✅ Admin ${interaction.user.tag} approved pilot ${pilotUserId} (${pending.pilotTag}) for owner ${pending.ownerNick}${roleOutcome.ok ? '' : ' — ⚠️ member role NOT applied'}`);
+    logEvent(`✅ Admin ${interaction.user.tag} approved pilot ${pilotUserId} (${pending.pilotTag}) for owner ${pending.ownerNick}${roleOutcome.ok ? '' : ' — ⚠️ member role NOT applied'}${nickOutcome.ok ? '' : ' — ⚠️ nickname NOT applied'}`);
 
     // Reply + both DMs are independent — run them concurrently (failures swallowed per-DM).
     const pilotDm = interaction.client.users.fetch(pilotUserId)
@@ -374,7 +406,7 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
 
     await Promise.all([
         interaction.editReply({
-            content: `✅ **Pilot Approved by Admin**\n\n✈️ **Pilot:** ${pending.pilotTag}\n👑 **Owner:** ${pending.ownerNick}\n✅ **Approved by:** ${interaction.user.tag}${roleWarning}`,
+            content: `✅ **Pilot Approved by Admin**\n\n✈️ **Pilot:** ${pending.pilotTag}\n👑 **Owner:** ${pending.ownerNick}\n✅ **Approved by:** ${interaction.user.tag}${roleWarning}${nickWarning}`,
             components: []
         }),
         pilotDm,

@@ -10,7 +10,7 @@ import {
     SUPER_ADMIN_USER_ID,
     confirmationCache
 } from '../core/ranking-constants.js';
-import { buildPrefixedNickname, assignMemberRole } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from '../core/ranking-utils.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS
@@ -263,18 +263,22 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
         saveLocalStorage();
 
-        // Nickname + role are independent — run them concurrently. The role result
-        // is reported instead of swallowed, so a hierarchy/permission refusal is
-        // visible (see assignMemberRole in ranking-utils).
+        // Nickname + role are independent — run them concurrently. Both results
+        // are reported instead of swallowed, so a hierarchy/permission refusal is
+        // visible (see assignMemberRole / setMemberNickname in ranking-utils).
         if (pilotMember) {
-            const [, roleOutcome] = await Promise.all([
-                pilotMember.setNickname(buildPrefixedNickname(cached.ownerNick, db, 'Pilot')).catch(() => {}),
+            const [nickOutcome, roleOutcome] = await Promise.all([
+                setMemberNickname(pilotMember, buildPrefixedNickname(cached.ownerNick, db, 'Pilot'), logEvent),
                 assignMemberRole(pilotMember, logEvent, guild)
             ]);
-            if (!roleOutcome.ok) {
-                logEvent(`⚠️ [ManualPilot] Failed to apply the Member role to ${pilotMember.user?.tag || cached.pilotId} — ${roleOutcome.reason}`);
+            if (!roleOutcome.ok || !nickOutcome.ok) {
+                const warnings = [
+                    !nickOutcome.ok ? `⚠️ **The nickname could NOT be applied by the bot.**\n**Discord said:** ${nickOutcome.reason}` : '',
+                    !roleOutcome.ok ? `⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${roleOutcome.reason}` : ''
+                ].filter(Boolean).join('\n\n');
+                logEvent(`⚠️ [ManualPilot] Failed to fully apply the pilot registration to ${pilotMember.user?.tag || cached.pilotId} — nick.ok=${nickOutcome.ok}, role.ok=${roleOutcome.ok}`);
                 return interaction.update({
-                    content: `${getMsg('ranking.responses.manualpilot.success', { pilotMember: cached.pilotName, nick: cached.ownerNick })}\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${roleOutcome.reason}`,
+                    content: `${getMsg('ranking.responses.manualpilot.success', { pilotMember: cached.pilotName, nick: cached.ownerNick })}\n\n${warnings}`,
                     components: []
                 }).catch(() => {});
             }
@@ -315,22 +319,27 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (db.users[cached.targetId].clanManual) delete db.users[cached.targetId].clanManual;
         saveLocalStorage();
 
-        // Nickname + role are independent — run them concurrently. The role result
-        // is reported instead of swallowed (see assignMemberRole in ranking-utils).
-        const [, registerRoleOutcome] = await Promise.all([
-            targetMember.setNickname(buildPrefixedNickname(finalNickname, db)).catch(() => {}),
+        // Nickname + role are independent — run them concurrently. Both results
+        // are reported instead of swallowed (see assignMemberRole in ranking-utils).
+        const [registerNickOutcome, registerRoleOutcome] = await Promise.all([
+            setMemberNickname(targetMember, buildPrefixedNickname(finalNickname, db), logEvent),
             assignMemberRole(targetMember, logEvent, guild)
         ]);
 
         const tempLabel = cached.needsTempApproval ? ' (temporary — 3 days)' : '';
-        logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${finalNickname} in ${cached.clan}${tempLabel}`);
+        logEvent(`Admin ${interaction.user.tag} manually registered ${cached.targetId} as ${finalNickname} in ${cached.clan}${tempLabel}${registerRoleOutcome.ok && registerNickOutcome.ok ? '' : ` — ⚠️ nick.ok=${registerNickOutcome.ok}, role.ok=${registerRoleOutcome.ok}`}`);
 
         const responseMsg = cached.needsTempApproval
             ? `⏳ **${finalNickname}** registered as temporary (3 days) in **${cached.clan}**. Will be converted to permanent once found in an allied clan.`
             : getMsg('ranking.responses.manualregister.cacheFound', { nickname: finalNickname, clan: cached.clan });
 
+        const registerWarnings = [
+            registerNickOutcome.ok ? '' : `\n\n⚠️ **The nickname could NOT be applied by the bot.**\n**Discord said:** ${registerNickOutcome.reason}\nSet the nickname manually, then run \`/forcesync\`.`,
+            registerRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${registerRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`
+        ].join('');
+
         return interaction.update({
-            content: responseMsg + (registerRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${registerRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`),
+            content: responseMsg + registerWarnings,
             components: []
         }).catch(() => {});
     }
@@ -360,17 +369,22 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
         saveLocalStorage();
 
-        // Nickname + role are independent — run them concurrently. The role result
-        // is reported instead of swallowed (see assignMemberRole in ranking-utils).
-        const [, forceRoleOutcome] = await Promise.all([
-            targetMember.setNickname(buildPrefixedNickname(cached.nickname, db)).catch(() => {}),
+        // Nickname + role are independent — run them concurrently. Both results
+        // are reported instead of swallowed (see assignMemberRole in ranking-utils).
+        const [forceNickOutcome, forceRoleOutcome] = await Promise.all([
+            setMemberNickname(targetMember, buildPrefixedNickname(cached.nickname, db), logEvent),
             assignMemberRole(targetMember, logEvent, guild)
         ]);
 
-        logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)`);
+        logEvent(`👑 Admin ${interaction.user.tag} force-registered ${cached.targetId} as ${cached.nickname} (permanent — no ranking check)${forceRoleOutcome.ok && forceNickOutcome.ok ? '' : ` — ⚠️ nick.ok=${forceNickOutcome.ok}, role.ok=${forceRoleOutcome.ok}`}`);
+
+        const forceWarnings = [
+            forceNickOutcome.ok ? '' : `\n\n⚠️ **The nickname could NOT be applied by the bot.**\n**Discord said:** ${forceNickOutcome.reason}\nSet the nickname manually, then run \`/forcesync\`.`,
+            forceRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${forceRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`
+        ].join('');
 
         return interaction.update({
-            content: getMsg('ranking.responses.manualforce.success', { username: cached.targetName, nickname: cached.nickname }) + (forceRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${forceRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`),
+            content: getMsg('ranking.responses.manualforce.success', { username: cached.targetName, nickname: cached.nickname }) + forceWarnings,
             components: []
         }).catch(() => {});
     }

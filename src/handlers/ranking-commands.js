@@ -25,6 +25,7 @@ import { getLocalRankingCache, getRankingCacheUpdatedAt, findAllNicknameMatchesI
 import { lookupNickname, lookupTopNicknames, isAlliedClanName, lookupNicknameWithSearch, searchRankingForum } from '../core/ranking-service.js';
 import { runDailySynchronization, getOutOfAlliedGraceStatus } from '../core/ranking-sync-engine.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
+import { buildOwnerApprovalButtons } from './ranking-approvals.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 import { buildUserListPage } from './ranking-management.js';
@@ -588,33 +589,15 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                             }
                         }
 
-                        const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
-
                         const displayNick = pending.selectedNickname || pending.nickname;
                         const selectedNote = pending.selectedNickname && pending.selectedNickname !== pending.nickname
                             ? `\n✅ **Corrected by admin:** "${pending.nickname}" → "${pending.selectedNickname}"`
                             : '';
 
-                        const approveButtons = [
-                            new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
-                        ];
-
-                        if (isMissingRankingOrAllied) {
-                            approveButtons.push(
-                                new ButtonBuilder().setCustomId(`approve_owner_${userId}-temp`).setLabel('⏳ Approve Temporarily (3 days)').setStyle(ButtonStyle.Primary)
-                            );
-                        }
-
-                        approveButtons.push(
-                            new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
-                        );
-
                         try {
                             const adminMsg = await adminChannel.send({
                                 content: `👑 **New Owner Registration (re-sent by /pending)**\n\n👤 **User:** ${member ? member.toString() : `<@${userId}>`} (${member ? member.user.tag : userId})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${displayNick}${selectedNote}\n🔍 **Ranking:** ${rankingStatus}${fuzzyNote}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
-                                components: [
-                                    new ActionRowBuilder().addComponents(approveButtons)
-                                ]
+                                components: [buildOwnerApprovalButtons(userId, lookup.found && lookup.inAlliedClan)]
                             });
 
                             pending.channelId = adminChannel.id;

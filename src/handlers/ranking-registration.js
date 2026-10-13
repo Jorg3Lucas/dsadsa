@@ -1,12 +1,11 @@
 import {
     ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder
 } from 'discord.js';
 import { pendingRegistrations, adminChannelId, MAX_NICKNAME_SUGGESTIONS, resolveServerName } from '../core/ranking-constants.js';
 import { lookupNickname, lookupTopNicknames, lookupNicknameWithSearch } from '../core/ranking-service.js';
+import { buildOwnerApprovalButtons } from './ranking-approvals.js';
 
 // ==========================================
 // 👑 OWNER REGISTRATION MODAL HANDLER
@@ -139,27 +138,9 @@ async function submitOwnerRegistration(interaction, db, saveLocalStorage, logEve
         }
     }
 
-    const isMissingRankingOrAllied = !lookup.found || !lookup.inAlliedClan;
-
-    const approveButtons = [
-        new ButtonBuilder().setCustomId(`approve_owner_${userId}-yes`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
-    ];
-
-    if (isMissingRankingOrAllied) {
-        approveButtons.push(
-            new ButtonBuilder().setCustomId(`approve_owner_${userId}-temp`).setLabel('⏳ Approve Temporarily (3 days)').setStyle(ButtonStyle.Primary)
-        );
-    }
-
-    approveButtons.push(
-        new ButtonBuilder().setCustomId(`approve_owner_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
-    );
-
     const adminMsg = await adminChannel.send({
         content: `👑 **New Owner Registration**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Nickname:** ${nickname}${fuzzyNote}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
-        components: [
-            new ActionRowBuilder().addComponents(approveButtons)
-        ]
+        components: [buildOwnerApprovalButtons(userId, lookup.found && lookup.inAlliedClan)]
     });
 
     pendingRegistrations[userId] = {
