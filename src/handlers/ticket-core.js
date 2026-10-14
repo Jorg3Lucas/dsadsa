@@ -57,9 +57,9 @@ function saveTicketState() {
 
 // ── Init / Restore panel ──
 /**
- * Initialize ticket system: load state, ensure the ticket-category channels
- * exist (creating only the missing ones — never deleting) and restore the
- * panel, then clean orphans.
+ * Initialize ticket system: load state, rebuild the panel channel and restore
+ * the ticket panel, keep the 📜 ticket-logs channel and open ticket-* rooms
+ * untouched, then reconcile the open-ticket state (nothing is ever deleted).
  * @param {object} client - Discord client
  */
 export async function initTicketSystem(client) {
@@ -75,15 +75,18 @@ export async function initTicketSystem(client) {
             console.log(`🎫 Ticket panel restored in #${channel.name}.`);
         }
     }
-    await cleanupOrphanedTickets(client);
+    await reconcileOpenTickets(client);
 }
 
 // ── Ticket channel setup ──
 /**
- * Ensure every channel defined in TICKET_CATEGORY exists inside the ticket
- * category. Existing channels are kept untouched — this includes open
- * ticket-* rooms; only missing ones are created. The panel channel gets the
- * ticket panel (re)posted on every boot.
+ * Set up the ticket category on boot, mirroring the claim setup but without
+ * losing history:
+ *   • the PANEL channel (🎫 open-ticket) is rebuilt from scratch — deleted and
+ *     recreated with fresh permissions — and gets the ticket panel posted;
+ *   • the 📜 ticket-logs channel is only created when missing and is NEVER
+ *     deleted or recreated, so the transcript history is preserved;
+ *   • open `ticket-*` rooms are never touched.
  * @param {import('discord.js').Client} client
  * @param {string} guildId
  * @returns {Promise<boolean>} true when the panel channel inside the category was handled
@@ -105,33 +108,64 @@ export async function setupTicketChannels(client, guildId) {
 
     for (const chanDef of TICKET_CATEGORY.channels) {
         let channel = findTextChannel(guild, category.id, chanDef);
-        if (channel) {
-            console.log(`ℹ️ [Tickets] #${channel.name} already exists — keeping it.`);
-        } else {
-            try {
-                channel = await guild.channels.create({
-                    name: chanDef.name,
-                    type: ChannelType.GuildText,
-                    parent: category.id,
-                    permissionOverwrites: categoryOverwrites
-                });
-                console.log(`✅ [Tickets] Created #${chanDef.name} in ${category.name}.`);
-            } catch (err) {
-                console.error(`❌ [Tickets] Failed to create #${chanDef.name}: ${err.message}`);
-                continue;
-            }
-        }
 
         if (chanDef.panel) {
-            // Remove a stale panel left in a previously configured channel.
-            if (ticketPanelChannelId && ticketPanelChannelId !== channel.id) {
+            // Remove a stale panel left in a previously configured channel
+            // (e.g. after a manual `!ticket` run somewhere else).
+            if (ticketPanelChannelId && ticketPanelChannelId !== channel?.id) {
                 const previous = client.channels.cache.get(ticketPanelChannelId);
                 if (previous) await deleteBotPanels(previous);
+            }
+            // Rebuild the panel channel fresh on every boot — like the claim
+            // channels — so its permissions and panel are always current.
+            // 📜 ticket-logs and open ticket-* rooms are never deleted.
+            // Only recreate when the old channel was actually removed, so a
+            // failed delete can't leave two #🎫 open-ticket channels behind.
+            let removed = true;
+            if (channel) {
+                removed = await channel.delete("🎫 [Tickets] panel channel rebuilt on boot")
+                    .then(() => true)
+                    .catch(() => false);
+            }
+            if (removed) {
+                try {
+                    channel = await guild.channels.create({
+                        name: chanDef.name,
+                        type: ChannelType.GuildText,
+                        parent: category.id,
+                        permissionOverwrites: categoryOverwrites
+                    });
+                    console.log(`✅ [Tickets] Created #${chanDef.name} in ${category.name}.`);
+                } catch (err) {
+                    console.error(`❌ [Tickets] Failed to create #${chanDef.name}: ${err.message}`);
+                    continue;
+                }
+            } else {
+                console.warn(`⚠️ [Tickets] Could not delete #${channel.name} — reusing it.`);
             }
             ticketPanelChannelId = channel.id;
             saveTicketState();
             await sendTicketPanel(channel);
             handledPanel = true;
+            continue;
+        }
+
+        // Log / auxiliary channels: create only when missing, never delete or
+        // recreate them (the transcript history must survive restarts).
+        if (channel) {
+            console.log(`ℹ️ [Tickets] #${channel.name} already exists — keeping it.`);
+            continue;
+        }
+        try {
+            channel = await guild.channels.create({
+                name: chanDef.name,
+                type: ChannelType.GuildText,
+                parent: category.id,
+                permissionOverwrites: categoryOverwrites
+            });
+            console.log(`✅ [Tickets] Created #${chanDef.name} in ${category.name}.`);
+        } catch (err) {
+            console.error(`❌ [Tickets] Failed to create #${chanDef.name}: ${err.message}`);
         }
     }
     return handledPanel;
@@ -192,34 +226,60 @@ async function sendTicketPanel(channel) {
     await channel.send({ embeds: [embed], components: [row] }).catch(noop);
 }
 
-// ── Orphaned ticket cleanup ──
-let orphanCleanupDone = false;
+// ── Open-ticket reconciliation ──
+// Created tickets are NEVER deleted on restart. This only re-adopts channels
+// that exist on Discord but are missing from tickets.json (e.g. after the
+// state file was lost), recovering the owner id from the channel topic.
+let stateReconciled = false;
 
-async function cleanupOrphanedTickets(client) {
-    if (orphanCleanupDone) return;
-    orphanCleanupDone = true;
+// Names/keys the bot manages itself — never treated as ticket rooms.
+const MANAGED_CHANNEL_NAMES = new Set(
+    TICKET_CATEGORY.channels.flatMap(c => [c.name, c.legacyName, c.key].filter(Boolean))
+);
+
+/** Recover the owner id from a ticket channel topic (`Ticket for tag (uid) — cat`). */
+function parseTicketOwnerFromTopic(topic) {
+    if (!topic || typeof topic !== "string") return null;
+    const match = topic.match(/\((\d{15,25})\)/);
+    return match ? match[1] : null;
+}
+
+/**
+ * Reconcile open tickets on boot: keep every existing ticket channel, and
+ * re-adopt the ones missing from tickets.json so their owner can still close
+ * them. Nothing is ever deleted.
+ * @param {import('discord.js').Client} client
+ */
+export async function reconcileOpenTickets(client) {
+    if (stateReconciled) return;
+    stateReconciled = true;
     if (!TICKET_CATEGORY_ID) return;
 
-    const now = Date.now();
-    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const tracked = new Set(Object.values(openTickets));
+    let adopted = 0;
 
     for (const [, guild] of client.guilds.cache) {
         const category = guild.channels.cache.get(TICKET_CATEGORY_ID);
         if (!category) continue;
         for (const [, channel] of guild.channels.cache) {
-            if (channel.type === ChannelType.GuildText && channel.parentId === TICKET_CATEGORY_ID && channel.name.startsWith("ticket-")) {
-                const isTracked = Object.values(openTickets).includes(channel.id);
-                if (!isTracked) {
-                    const channelAge = now - channel.createdTimestamp;
-                    if (channelAge > ONE_HOUR_MS) {
-                        await channel.delete("🧹 Cleanup — orphaned ticket channel on startup").catch(noop);
-                    } else {
-                        console.log(`⚠️ [Tickets] Orphaned ticket #${channel.name} is less than 1 hour old — preserving it.`);
-                    }
-                }
+            if (channel.type !== ChannelType.GuildText) continue;
+            if (channel.parentId !== TICKET_CATEGORY_ID) continue;
+            if (!channel.name.startsWith("ticket-")) continue;
+            if (MANAGED_CHANNEL_NAMES.has(channel.name)) continue;
+            if (tracked.has(channel.id)) continue;
+
+            const ownerId = parseTicketOwnerFromTopic(channel.topic);
+            if (ownerId && !openTickets[ownerId]) {
+                openTickets[ownerId] = channel.id;
+                tracked.add(channel.id);
+                adopted++;
+                console.log(`♻️ [Tickets] Re-adopted existing ticket #${channel.name} for owner ${ownerId} (kept, not deleted).`);
+            } else {
+                console.log(`ℹ️ [Tickets] Keeping existing ticket channel #${channel.name} (not deleted).`);
             }
         }
     }
+    if (adopted > 0) saveTicketState();
 }
 
 export { saveTicketState };

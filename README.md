@@ -132,7 +132,7 @@ Reserved slots are blocked for other users until the reservation passes.
 
 Members open a private ticket with the **🎫 Open Ticket** button on the ticket panel, pick a category (Support / Report / Doubt), and a private channel is created for them + staff. Staff can **add/remove members** and **close** the ticket; on close a `.txt` transcript (plus saved attachments) is sent to the **📜 ticket-logs** channel inside the ticket category — never to the claim logs channel. The **Remove Member** menu lists only the members that were explicitly added to the ticket (those with their own permission overwrite).
 
-**On boot** the bot ensures the ticket category contains its channels: it creates `🎫 open-ticket` (the panel channel) and `📜 ticket-logs` **only when missing**, keeps every existing channel untouched — including open `ticket-*` rooms — and (re)posts the panel in `🎫 open-ticket`. Nothing in the ticket category is ever deleted by the setup.
+**On boot** the bot rebuilds **only the panel channel**: `🎫 open-ticket` is deleted and recreated fresh (like the claim channels) and gets the panel posted. The `📜 ticket-logs` channel and every existing `ticket-*` room are **never deleted** — log history and all created tickets survive restarts. `📜 ticket-logs` is created only when missing.
 
 | Command | Description |
 |---------|-------------|
@@ -184,13 +184,19 @@ Each channel gets its panel embeds + buttons posted automatically.
 
 ### 🎫 Ticket category
 
-The ticket category (`TICKET_CATEGORY_ID`) is set up **non-destructively**: the bot only creates the channels it manages when they are missing and otherwise leaves the category untouched (open `ticket-*` rooms included). Defined in `src/core/server-structure.js` as `TICKET_CATEGORY`:
+The ticket category (`TICKET_CATEGORY_ID`) mirrors the claim setup, with one exception that protects history: only the **panel channel** is rebuilt on boot. Defined in `src/core/server-structure.js` as `TICKET_CATEGORY`:
 
 ```
 🎫 Tickets  (category from TICKET_CATEGORY_ID)
-  🎫 open-ticket   ← support-ticket panel (re)posted on boot
-  📜 ticket-logs   ← closed-ticket transcripts
+  🎫 open-ticket   ← panel channel, deleted + recreated on boot (panel reposted)
+  📜 ticket-logs   ← closed-ticket transcripts, created only when missing, never deleted
 ```
+
+How it differs from the claim categories:
+
+- `🎫 open-ticket` is **deleted and recreated** on every boot, so its permissions and panel message are always current.
+- `📜 ticket-logs` is **never deleted or recreated** — the transcript history is kept. It is only created when missing.
+- Open `ticket-*` rooms are **never deleted on restart**. Tickets that exist on Discord but are missing from `tickets.json` are re-adopted from their channel topic, so their owner can still close them.
 
 Existing channels are matched by pretty name, legacy name or key, so renamed/legacy channels are reused instead of duplicated. When the category can't be resolved, the bot falls back to restoring the panel in the channel stored in `tickets.json`.
 
@@ -345,7 +351,7 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] **Fury/Frenzy fixed events** — claim inside window, reservation blocks
 - [ ] **Admin** — reset panel (single + all), kick user, reset logs
 - [ ] **Reserve flow** — reserve Fury/Frenzy slots, panel refresh
-- [ ] **Tickets** — boot creates missing `🎫 open-ticket` / `📜 ticket-logs` and restores the panel without deleting existing channels; `!ticket` posts panel; open → category → channel; add/remove member; close → transcript to the ticket-logs channel
+- [ ] **Tickets** — boot rebuilds only the `🎫 open-ticket` panel channel (reposts the panel) and never deletes `📜 ticket-logs` or open `ticket-*` rooms; `!ticket` posts panel; open → category → channel; add/remove member; close → transcript to the ticket-logs channel
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
 - [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts

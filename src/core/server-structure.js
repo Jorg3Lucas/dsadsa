@@ -65,11 +65,11 @@ export const CLAIM_CATEGORIES = [
 ];
 
 // ── Ticket category — panel channel + transcript log ──
-// On boot the bot ensures every channel below exists inside this category. It
-// NEVER deletes anything in this category: existing channels (including open
-// ticket-* rooms) are kept as-is, only missing ones are created, and the panel
-// channel gets the 🎫 Open Ticket panel (re)posted.
-//   panel: true → channel that receives the ticket panel on boot
+// On boot the bot rebuilds ONLY the panel channel (panel: true) — like the
+// claim channels — so its permissions and panel are always current. It NEVER
+// touches the transcript log or the open ticket-* rooms: those are preserved
+// so the log history and every created ticket survive restarts.
+//   panel: true → channel rebuilt on boot + receives the ticket panel
 //   key          → stable logical id used to resolve the transcript log channel
 export const TICKET_CATEGORY = {
     id: TICKET_CATEGORY_ID,

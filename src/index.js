@@ -227,8 +227,9 @@ client.once('clientReady', async () => {
     initTextCommands(client);
 
     // 🎫 Support ticket system (panel + open/close/add-member handlers).
-    // Ensures the ticket-category channels exist (creating only missing ones)
-    // and restores the panel before the command listener is registered.
+    // Rebuilds ONLY the panel channel (🎫 open-ticket) and reposts the panel;
+    // never deletes 📜 ticket-logs or the open ticket-* rooms, and restores
+    // the panel before the command listener is registered.
     await initTicketSystem(client);
     initTicketCommand(client);
 });
