@@ -477,6 +477,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         // regression is visible instead of "the sync feels slow".
         recordSyncRun({ durationMs: Date.now() - syncStartedAt, members: members.size, roleWrites: roleWriteCount });
 
+        // Persist WHEN the sync last succeeded so the startup path (index.js)
+        // can tell whether the daily cycle still needs a run: the cron owns the
+        // schedule, and a restart only syncs as a catch-up when the last run
+        // predates the most recent scheduled time (sync-schedule.js). Written on
+        // success only — a failed run must leave the catch-up armed.
+        db.config.lastSyncAt = new Date().toISOString();
+
         saveLocalStorage();
         logEvent(getMsg('ranking.logs.syncComplete'));
         return true;

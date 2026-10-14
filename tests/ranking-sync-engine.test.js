@@ -1,9 +1,18 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 // Keep the nickname helpers deterministic (no ranking_cache.json on disk).
 vi.mock('../src/core/ranking-cache.js', async (importOriginal) => ({
     ...(await importOriginal()),
     getLocalRankingCache: vi.fn(() => null)
+}));
+
+vi.mock('../src/core/ranking-scraper.js', () => ({
+    fetchMir4RankingData: vi.fn(async () => ({})),
+    safelyFetchGuildMembers: vi.fn(async () => new Map())
+}));
+
+vi.mock('../src/lang/lang.js', () => ({
+    getMsg: vi.fn((key) => key)
 }));
 
 import {
@@ -13,9 +22,11 @@ import {
     startOutOfAlliedGrace,
     getOutOfAlliedGraceStatus,
     isPendingPilot,
-    pendingPilotNickname
+    pendingPilotNickname,
+    runDailySynchronization
 } from '../src/core/ranking-sync-engine.js';
 import { OUT_OF_ALLIED_GRACE_MS } from '../src/core/ranking-constants.js';
+import { fetchMir4RankingData, safelyFetchGuildMembers } from '../src/core/ranking-scraper.js';
 
 describe('pilots queued by /scanallied', () => {
     it('recognises a queued pilot', () => {
@@ -214,6 +225,69 @@ describe('72h out-of-allied-clan grace (per person)', () => {
         // And a fresh timer can start again
         expect(startOutOfAlliedGrace(db, MEMBER_ID, t73h)).toBe(true);
         expect(getOutOfAlliedGraceStatus(db, MEMBER_ID, t73h).started).toBe(true);
+    });
+});
+
+// ==========================================
+// ⏰ db.config.lastSyncAt — the startup catch-up marker
+// ==========================================
+// A restart must not re-run the sync, so index.js only syncs when the last
+// SUCCESSFUL run predates the most recent scheduled time. That decision reads
+// db.config.lastSyncAt — these tests pin down when the engine writes it.
+
+describe('runDailySynchronization — records the last successful sync', () => {
+    // Minimal fakes: a guild the sync can read, and no members to process.
+    const makeClient = () => ({
+        guilds: { cache: { get: () => ({ id: 'guild', roles: { cache: { get: () => null } } }) } }
+    });
+
+    let saveLocalStorage;
+    let logEvent;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        saveLocalStorage = vi.fn();
+        logEvent = vi.fn();
+    });
+
+    it('stamps db.config.lastSyncAt when the sync completes', async () => {
+        // A bot member: it counts toward "members fetched" but is skipped by every
+        // per-member step, so the run reaches a clean completion.
+        safelyFetchGuildMembers.mockResolvedValueOnce(new Map([
+            ['7', { user: { bot: true, username: 'bot' }, roles: { cache: { has: () => false } } }]
+        ]));
+        const db = { users: {} };
+
+        const before = Date.now();
+        await expect(runDailySynchronization(makeClient(), db, saveLocalStorage, logEvent, true))
+            .resolves.toBe(true);
+
+        expect(fetchMir4RankingData).toHaveBeenCalledWith(true);
+        expect(typeof db.config.lastSyncAt).toBe('string');
+        const stamped = new Date(db.config.lastSyncAt).getTime();
+        expect(Number.isNaN(stamped)).toBe(false);
+        expect(stamped).toBeGreaterThanOrEqual(before - 1000);
+        expect(saveLocalStorage).toHaveBeenCalled();
+    });
+
+    it('does not stamp lastSyncAt when no members could be fetched (aborted run)', async () => {
+        safelyFetchGuildMembers.mockResolvedValueOnce(new Map());
+        const db = { users: {} };
+
+        await expect(runDailySynchronization(makeClient(), db, saveLocalStorage, logEvent, false))
+            .resolves.toBe(false);
+
+        expect(db.config.lastSyncAt).toBeUndefined();
+    });
+
+    it('does not stamp lastSyncAt when the run throws (catch-up stays armed)', async () => {
+        fetchMir4RankingData.mockRejectedValueOnce(new Error('scrape failed'));
+        const db = { users: {} };
+
+        await expect(runDailySynchronization(makeClient(), db, saveLocalStorage, logEvent, true))
+            .resolves.toBe(false);
+
+        expect(db.config.lastSyncAt).toBeUndefined();
     });
 });
 

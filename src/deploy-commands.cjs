@@ -89,6 +89,14 @@ const commands = [
     ]
   },
   {
+    name: 'cleandb',
+    description: '🧹 [Admin] Find and remove duplicate nickname entries from the database.',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    options: [
+      { type: 5, name: 'apply', description: 'Actually remove the duplicates (default: false = report only).', required: false }
+    ]
+  },
+  {
     name: 'manage',
     description: '🛠️ [Admin] Bot management panel.',
     default_member_permissions: PermissionFlagsBits.Administrator.toString()

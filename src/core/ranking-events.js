@@ -4,6 +4,7 @@ import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, W
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
+import { SYNC_CRON_EXPRESSION, SYNC_TIME_ZONE } from './sync-schedule.js';
 import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from './ranking-utils.js';
 import { buildWelcomePanelComponents } from '../handlers/ranking-welcome.js';
 import { buildOwnerApprovalButtons } from '../handlers/ranking-approvals.js';
@@ -445,7 +446,9 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
         }
     });
 
-    cron.schedule('0 20 * * *', async () => {
+    // Daily sync — the schedule lives in sync-schedule.js so the startup
+    // catch-up (index.js) uses the exact same time as this cron.
+    cron.schedule(SYNC_CRON_EXPRESSION, async () => {
         await runDailySynchronization(client, db, saveLocalStorage, logEvent, true);
-    }, { scheduled: true, timezone: "America/Sao_Paulo" });
+    }, { scheduled: true, timezone: SYNC_TIME_ZONE });
 }

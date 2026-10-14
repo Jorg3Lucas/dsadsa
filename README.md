@@ -7,7 +7,7 @@ A Discord bot for managing MIR4 clan member registrations, role assignment, and 
 - **Self-registration** via welcome buttons (Owner / Pilot)
 - **Admin approval workflow** with permanent or temporary (3-day) registration
 - **Automatic EU ranking scraper** — fetches Top 1000 players from the official MIR4 ranking portal
-- **Daily synchronization** at 20:00 BRT — syncs nicknames, roles, and ranking validation
+- **Daily synchronization** at 20:00 BRT (once a day, on the cron — a restart does **not** trigger an extra sync) — syncs nicknames, roles, and ranking validation
 - **Temporary registration** with 3-day expiry, auto-conversion to permanent when found in an allied clan
 - **24h reminder DM** before temp registration expires
 - **Clan expedition weekend grace period** (Fri 00:01 → Sun 17:00 BRT) — no removals during this window
@@ -53,7 +53,7 @@ TOKEN=your_discord_bot_token
 | `/manualpilot <owner> <pilot>` | Admin | Manually link a pilot to an owner |
 | `/manualremove <member>` | Admin | Completely remove a player's registration |
 | `/manualremovepilot <owner> <pilot>` | Admin | Manually remove a pilot from an owner |
-| `/cleandb` | Admin | Remove duplicate nickname entries from database |
+| `/cleandb [apply]` | Admin | Report duplicate nickname entries (same character on several accounts). Default is a **dry run**; pass `apply:true` to remove them (keeps the manual / most-pilots / oldest profile) |
 | `/manage` | Admin | Bot management panel with user list and actions |
 | `/grace [member]` | Admin | Show remaining 72h grace time for members outside allied clans (all members, or a specific one) |
 | `/sendpanel` | Admin | Send a fixed registration panel to the current channel |
@@ -118,7 +118,9 @@ After selecting a user from `/manage`:
 
 ## Synchronization Engine
 
-Runs at **20:00 BRT** daily (configurable in `ranking-events.js`) and on startup:
+Runs **once a day at 20:00 BRT** — the schedule is defined in `src/core/sync-schedule.js` (`SYNC_HOUR`/`SYNC_MINUTE`/`SYNC_TIME_ZONE`), which drives both the cron in `ranking-events.js` and the startup check below.
+
+A **restart does not run a sync**: `index.js` only runs one when the daily cycle was missed (the bot was offline at the scheduled time — nothing succeeded since the last scheduled moment), so a crash loop or a `/update` restart never triggers extra full syncs. The catch-up is recorded in `db.config.lastSyncAt`; use `/forcesync` for an on-demand run.
 
 | Step | Name | Description |
 |------|------|-------------|
@@ -230,6 +232,7 @@ Both runs reply with a summary plus a full per-member report attached as a `.txt
 ├── ranking-handlers.js       # All interaction handlers (commands, modals, buttons)
 ├── ranking-events.js         # Event listeners + text commands + cron
 ├── ranking-sync-engine.js    # Daily sync logic (5 steps)
+├── sync-schedule.js          # When the daily sync runs (cron + startup catch-up)
 ├── ranking-scraper.js        # MIR4 ranking web scraper
 ├── ranking-cache.js          # Local ranking cache (read/write)
 ├── lang.js                   # i18n helper

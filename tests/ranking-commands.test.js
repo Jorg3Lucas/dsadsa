@@ -549,3 +549,80 @@ describe('handleRankingCommand — /grace', () => {
         expect(content).toContain('Grace EXPIRED');
     });
 });
+
+// ──────────────────────────────────────────
+// handleRankingCommand — /cleandb
+// ──────────────────────────────────────────
+
+describe('handleRankingCommand — /cleandb', () => {
+    const ADMIN_TAG = 'AdminUser#0001';
+    const KEEPER = '111111111111111111';
+    const DUPE = '222222222222222222';
+    const OWNER = '333333333333333333';
+
+    function buildInteraction({ apply = false } = {}) {
+        return {
+            commandName: 'cleandb',
+            deferred: true,
+            deferReply: vi.fn().mockResolvedValue(),
+            editReply: vi.fn().mockResolvedValue(),
+            user: { id: ADMIN_TAG, tag: ADMIN_TAG },
+            options: { getBoolean: vi.fn(() => apply) }
+        };
+    }
+
+    function duplicatedDb() {
+        return {
+            users: {
+                [KEEPER]: { nickname: 'Rusima', registeredAt: '2026-01-01T00:00:00.000Z' },
+                [DUPE]: { nickname: 'rusima', registeredAt: '2026-02-01T00:00:00.000Z' },
+                [OWNER]: { nickname: 'Owner', registeredAt: '2026-01-01T00:00:00.000Z', pilotIds: [DUPE] }
+            },
+            roleNotify: { [DUPE]: { outOfAlliedSince: '2026-08-01T00:00:00.000Z' } }
+        };
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('dry run (default) reports the duplicates without touching the database', async () => {
+        const interaction = buildInteraction({ apply: false });
+        const db = duplicatedDb();
+        const saveLocalStorage = vi.fn();
+
+        await handleRankingCommand(interaction, db, saveLocalStorage, vi.fn());
+
+        const content = interaction.editReply.mock.calls[0][0];
+        expect(content).toContain('dry run');
+        expect(content).toContain('keep <@' + KEEPER + '>');
+        expect(content).toContain('<@' + DUPE + '>');
+        expect(db.users[DUPE]).toBeDefined();
+        expect(saveLocalStorage).not.toHaveBeenCalled();
+    });
+
+    it('apply removes the duplicate, unlinks it from owners and persists', async () => {
+        const interaction = buildInteraction({ apply: true });
+        const db = duplicatedDb();
+        const saveLocalStorage = vi.fn();
+        const logEvent = vi.fn();
+
+        await handleRankingCommand(interaction, db, saveLocalStorage, logEvent);
+
+        expect(db.users[DUPE]).toBeUndefined();
+        expect(db.users[KEEPER]).toBeDefined();
+        expect(db.users[OWNER].pilotIds).toEqual([]);
+        expect(db.roleNotify[DUPE]).toBeUndefined();
+        expect(saveLocalStorage).toHaveBeenCalledTimes(1);
+        expect(logEvent.mock.calls[0][0]).toContain('/cleandb');
+    });
+
+    it('reports when there is nothing to clean', async () => {
+        const interaction = buildInteraction();
+        const db = { users: { [KEEPER]: { nickname: 'Solo', registeredAt: '2026-01-01T00:00:00.000Z' } } };
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        expect(interaction.editReply).toHaveBeenCalledWith('ranking.responses.cleandb.noDuplicates');
+    });
+});

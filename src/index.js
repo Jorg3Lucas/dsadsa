@@ -14,6 +14,7 @@ import { destroyRankingScraperAgents } from './core/ranking-scraper.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
+import { shouldRunStartupSync } from './core/sync-schedule.js';
 import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from './handlers/ranking-registration.js';
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot, handleWelcomeMyRegistration } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
@@ -165,10 +166,19 @@ client.once('clientReady', async () => {
         console.error('❌ Error: Invalid Server ID configuration.');
     }
 
-    // Start sync after 15 seconds (give time for everything to initialize)
+    // Catch-up sync after 15 seconds (give time for everything to initialize).
+    // The cron in ranking-events.js is the regular schedule (see
+    // sync-schedule.js); a restart must NOT run an extra sync. This path only
+    // fires when the daily cycle was MISSED — the bot was offline at the
+    // scheduled time and nothing ran since — which also covers a restart right
+    // after the scheduled time (the fresh cron would only fire again tomorrow).
     setTimeout(async () => {
-        console.log('🧪 [Startup] Checking if ranking needs sync...');
-        await runDailySynchronization(client, rankingDb, saveRankingStorageWrapped, logRankingEvent, false);
+        if (!shouldRunStartupSync(rankingDb?.config?.lastSyncAt)) {
+            console.log('⏭️ [Startup] Daily sync already ran for the current cycle — skipping (next run: cron schedule).');
+            return;
+        }
+        console.log('🧪 [Startup] The scheduled sync was missed — running catch-up sync...');
+        await runDailySynchronization(client, rankingDb, saveRankingStorageWrapped, logRankingEvent, true);
     }, 15000);
 
     // Start auto-backup every 30 minutes

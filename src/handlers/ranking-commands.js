@@ -29,6 +29,7 @@ import { buildOwnerApprovalButtons } from './ranking-approvals.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 import { getRuntimeMetrics } from '../core/runtime-metrics.js';
+import { findDuplicateGroups, applyDuplicateCleanup } from '../core/ranking-dedup.js';
 import { getStorageStats } from '../core/ranking-storage.js';
 import { getBackupStats } from '../auto-backup.js';
 import { buildUserListPage } from './ranking-management.js';
@@ -681,6 +682,46 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             content: report,
             components: fuzzySelectRows
         });
+    }
+
+    // ── cleandb ──
+    // Lists nickname duplicates (the same in-game character registered by several
+    // Discord accounts) and removes the extras ONLY with apply:true. Dry run is
+    // the default so an admin always sees what would be deleted first.
+    if (commandName === 'cleandb') {
+        if (!await deferReplySafe(interaction)) return;
+
+        const apply = options.getBoolean('apply') === true;
+        const groups = findDuplicateGroups(db.users || {});
+
+        if (groups.length === 0) {
+            return interaction.editReply(getMsg('ranking.responses.cleandb.noDuplicates'));
+        }
+
+        const describeMember = (id, nickname) => `<@${id}> — \`${nickname ?? '?'}\``;
+        const groupLines = groups.map((group) =>
+            `• **${group.nickname}** → keep ${describeMember(group.winner.id, group.winner.data?.nickname)}\n` +
+            `   🗑️ duplicate(s): ${group.losers.map((l) => describeMember(l.id, l.data?.nickname)).join(', ')}`
+        );
+
+        if (!apply) {
+            return interaction.editReply(
+                `🔎 **${groups.length} duplicate nickname group(s) found** (dry run — nothing was changed)\n\n` +
+                `${groupLines.join('\n')}\n\n` +
+                'Run `/cleandb apply:true` to remove the duplicates listed above.'
+            );
+        }
+
+        const removed = applyDuplicateCleanup(db.users || {}, groups, db.roleNotify);
+        await saveLocalStorage(db);
+
+        const list = removed.map((entry) =>
+            `🗑️ ${describeMember(entry.id, entry.nickname)} — kept <@${entry.keptId}>` +
+            (entry.unlinkedFrom.length ? ` (unlinked from ${entry.unlinkedFrom.map((id) => `<@${id}>`).join(', ')})` : '')
+        ).join('\n');
+
+        logEvent(`🧹 Admin ${interaction.user.tag} ran /cleandb — removed ${removed.length} duplicate profile(s)`);
+        return interaction.editReply(getMsg('ranking.responses.cleandb.success', { list }));
     }
 
     // ── stats ──
