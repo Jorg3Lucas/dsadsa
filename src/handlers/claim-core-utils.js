@@ -6,23 +6,17 @@
 
 import { getLocalTime, parseStringToDate } from "../core/time-utils.js";
 import { db, punishments, saveLocalStorage, savePunishmentsToDisk } from "../core/state.js";
-import { getMsg } from "../core/lang.js";
+import { isUserImmune } from "../core/immunity-utils.js";
 import { getEventGroupKeys, getAntidemonRoomKeys, getSummonRoomKeys, getAntidemonRoomName } from "./claim-core-rooms.js";
 
 // Returns all Discord user IDs linked to the same in-game account.
 // The registration/pilot system was removed, so each user is treated independently.
+
 export function getAllLinkedIds(userId) {
     return [userId];
 }
 
-export function hasActiveClaim(uid) {
-    return getActiveClaimInfo(uid).length > 0;
-}
-
-/**
- * Returns a human-readable remaining time string from a "HH:MM ~ HH:MM" timeWindow.
- * Returns empty string if unavailable or already expired.
- */
+/** Returns a human-readable remaining time string from a "HH:MM ~ HH:MM" timeWindow. */
 function getTimeRemainingStr(timeWindow) {
     if (!timeWindow) return "";
     const endTime = parseStringToDate(timeWindow.split(" ~ ")[1]);
@@ -115,12 +109,15 @@ export function hasActiveQueue(uid) {
 export function checkPunishment(uid) {
     const linkedIds = getAllLinkedIds(uid);
     for (const linkedUid of linkedIds) {
+        if (isUserImmune(linkedUid)) continue;
         if (punishments[linkedUid]) {
             const rem = punishments[linkedUid] - Date.now();
-            if (rem > 0) {return getMsg("cooldowns.activeTimeout", {
-                minutes: Math.floor(rem / 6e4),
-                seconds: Math.floor(rem % 6e4 / 1e3)
-            });}
+            if (rem > 0) {
+                return getMsg("cooldowns.activeTimeout", {
+                    minutes: Math.floor(rem / 6e4),
+                    seconds: Math.floor(rem % 6e4 / 1e3)
+                });
+            }
             delete punishments[linkedUid];
             saveLocalStorage();
         }
@@ -129,6 +126,7 @@ export function checkPunishment(uid) {
 }
 
 export function applyFiveMinCooldown(uid) {
+    if (isUserImmune(uid)) return;
     punishments[uid] = Date.now() + 3e5;
     savePunishmentsToDisk();
 }

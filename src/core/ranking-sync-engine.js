@@ -1,4 +1,5 @@
 import { DISCORD_SERVER_ID, ensureConfig } from './ranking-constants.js';
+import { isUserImmune } from './immunity-utils.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
@@ -88,6 +89,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     if (!userData.nickname) continue;
                     if (userData.tempUntil) continue;       // temp flow (2.75) decides these
                     if (userData.manualPermanent) continue; // manualforce exempt
+                    if (isUserImmune(memberId)) continue;   // penalty immunity
 
                     const nickname = userData.nickname.trim().normalize('NFC');
                     const lookup = lookupNickname(nickname, db, rankingCache);
