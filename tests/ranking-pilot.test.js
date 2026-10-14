@@ -100,14 +100,14 @@ describe('handlePilotRegistrationModal', () => {
         );
     });
 
-    it('errors when owner already has 4 pilots', async () => {
+    it('errors when owner already has 6 pilots', async () => {
         interaction.fields.getTextInputValue.mockReturnValue(OWNER_NICK);
-        db.users[OWNER_ID] = { nickname: OWNER_NICK, pilotIds: ['p1', 'p2', 'p3', 'p4'] };
+        db.users[OWNER_ID] = { nickname: OWNER_NICK, pilotIds: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'] };
 
         await handlePilotRegistrationModal(interaction, db, saveLocalStorage, logEvent);
 
         expect(interaction.editReply).toHaveBeenCalledWith(
-            expect.stringContaining('maximum of 4 pilots')
+            expect.stringContaining('maximum of 6 pilots')
         );
     });
 

@@ -143,9 +143,8 @@ async function completePilotRegistration(interaction, db, saveLocalStorage, logE
         return interaction.editReply('❌ You cannot register as your own pilot.');
     }
 
-    if (!ownerData.pilotIds) ownerData.pilotIds = [];
-    if (ownerData.pilotIds.length >= 4) {
-        return interaction.editReply('❌ This owner already has the maximum of 4 pilots.');
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];        if (ownerData.pilotIds.length >= 6) {
+        return interaction.editReply('❌ This owner already has the maximum of 6 pilots.');
     }
     if (ownerData.pilotIds.includes(pilotId)) {
         return interaction.editReply('❌ You are already registered as a pilot for this owner.');

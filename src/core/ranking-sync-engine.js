@@ -5,6 +5,21 @@ import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { recordSyncRun } from './runtime-metrics.js';
 import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess } from '../core/ranking-utils.js';
+// ── Capacity limits (defined at the top so every consumer can import them) ──
+const DEFAULT_MAX_PILOTS_PER_OWNER = 6;
+// Re-export the original OUT_OF_ALLIED_GRACE_MS constant so the rest of the
+// engine does not have to redefine it (it was already declared in the file).
+export { OUT_OF_ALLIED_GRACE_MS } from '../core/ranking-constants.js';
+
+const MAX_PILOTS_PER_OWNER_DEFAULT = 6;
+export const MAX_PILOTS_PER_OWNER = Number(
+    process.env.PILOT_CAP ||
+    (db => {
+        const override = db?.config?.maxPilotsPerOwner;
+        return override !== undefined && override > 0 ? override : MAX_PILOTS_PER_OWNER_DEFAULT;
+    })({})
+);
+
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -122,7 +137,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 const ownerEntry = ownerByNick.get(baseNicknameKey(currentNick));
                 if (ownerEntry) {
                     const ownerData = ownerEntry.data;
-                    if (!ownerData.pilotIds.includes(memberId) && ownerData.pilotIds.length < 4) {
+                    if (!ownerData.pilotIds.includes(memberId) && ownerData.pilotIds.length < MAX_PILOTS_PER_OWNER) {
                         ownerData.pilotIds.push(memberId);
                         logEvent(getMsg('ranking.logs.autoLink', { username: member.user.username, count: ownerData.pilotIds.length, baseNick: ownerBaseNick }));
                     }

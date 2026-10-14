@@ -118,7 +118,7 @@
                 "confirm": "⚠️ Link **{pilotDisplay}** as pilot for **{ownerDisplay}**?",
                 "ownerNotRegistered": "❌ **{displayName}** does not have an active profile.",
                 "selfPilot": "❌ You cannot link a user as their own pilot.",
-                "limitReached": "❌ Admin Override Failed: Owner already has **4 pilots**.",
+                "limitReached": "❌ Admin Override Failed: Owner already has **6 pilots**.",
                 "alreadyLinked": "❌ This pilot is already linked to this owner.",
                 "success": "✅ **Success!** {pilotMember} manually linked as pilot for **{nick}**."
             },
@@ -167,7 +167,7 @@
             "fetchStart": "🚀 [Scraper] Fetching Top 1000 from the official website...",
             "fetchPageError": "❌ Page {page} error: {error}",
             "gatewayWarning": "⚠️ [Gateway] Gateway busy. Falling back to cached member list.",
-            "autoLink": "🔗 [Auto-Link] {username} linked as pilot ({count}/4) for {baseNick}",
+            "autoLink": "🔗 [Auto-Link] {username} linked as pilot ({count}/6) for {baseNick}",
             "imposterDetected": "⚠️ [Security] Resetting impersonator nickname for {username} trying to impersonate {nickname}",
             "roleAdded": "✅ [Automation] Role [{clan}] added to {username}",
             "roleRemoved": "❌ [Automation] Role [{clan}] removed from {username}",

@@ -34,7 +34,7 @@ const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 const MAX_CANDIDATES = 6;
 const MAX_FORUM_SEARCH_CANDIDATES = 2;
 // Same cap the pilot approval flow enforces per owner.
-const MAX_PILOTS_PER_OWNER = 4;
+const MAX_PILOTS_PER_OWNER = 6;
 
 const HEADER_WORDS = new Set(['nickname', 'nicknames', 'username', 'user', 'nome', 'apelido', 'player', 'name', 'nick']);
 

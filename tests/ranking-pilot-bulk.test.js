@@ -218,7 +218,7 @@ describe('handlePilotBulk', () => {
         await handlePilotBulk(interaction, db, vi.fn(async () => {}), vi.fn());
 
         expect(db.users['4'].pilotIds).toEqual(['7', '8', '9', '10']);
-        expect(interaction.replies[0].content).toContain('already at 4 pilots');
+        expect(interaction.replies[0].content).toContain('already at 6 pilots');
     });
 
     it('drops queue entries for pilots that already have an owner', async () => {
@@ -370,7 +370,7 @@ describe('handlePilotBulkSelect', () => {
         await handlePilotBulkSelect(interaction, db, vi.fn(async () => {}), vi.fn());
 
         expect(db.users['4'].pilotIds).toEqual(['a', 'b', 'c', 'd']);
-        expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('already has 4 pilots') }));
+        expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('already has 6 pilots') }));
         expect(interaction.update).not.toHaveBeenCalled();
     });
 

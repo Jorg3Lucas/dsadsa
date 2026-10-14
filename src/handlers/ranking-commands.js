@@ -388,7 +388,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         if (!db.users[ownerMember.id].pilotIds) db.users[ownerMember.id].pilotIds = [];
 
-        if (db.users[ownerMember.id].pilotIds.length >= 4) {
+        if (db.users[ownerMember.id].pilotIds.length >= 6) {
             return interaction.reply({ content: getMsg('ranking.responses.manualpilot.limitReached'), flags: 64 });
         }
 
