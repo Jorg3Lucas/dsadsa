@@ -30,6 +30,7 @@ export function getSummonRoomKeys(panelKey) {
     // Individual goblin panels (each has its own single room)
     if (panelKey === "11goblin") return ["sp11"];
     if (panelKey === "12goblin") return ["sp12"];
+    if (panelKey === "12summonmiddle") return ["sp12middle"];
     if (panelKey === "11msgoblin") return ["ms11"];
     if (panelKey === "12msgoblin") return ["ms12"];
     return [];

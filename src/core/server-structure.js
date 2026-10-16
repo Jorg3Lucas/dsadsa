@@ -45,7 +45,7 @@ export const CLAIM_CATEGORIES = [
             { name: '🔸 SP-9F', key: 'sp9', legacyName: '🔸┃sp9', panels: ['9peak'] },
             { name: '🔸 SP-10F', key: 'sp10', legacyName: '🔸┃sp10', panels: ['10peak'] },
             { name: '🔸 SP-11F', key: 'sp11', legacyName: '🔸┃sp11', panels: ['11peak', '11goblin'] },
-            { name: '🔸 SP-12F', key: 'sp12', legacyName: '🔸┃sp12', panels: ['12peak', '12randomevent', '12goblin'] }
+            { name: '🔸 SP-12F', key: 'sp12', legacyName: '🔸┃sp12', panels: ['12peak', '12randomevent', '12goblin', '12summonmiddle'] }
         ]
     },
     {

@@ -27,7 +27,7 @@ export async function initClaimSystem(botClient, database, saveStorageFn, logEve
         allPanelKeys.push(`${floor}squareevents`);
     });
     allPanelKeys.push("12randomevent");
-    allPanelKeys.push("11goblin", "12goblin", "11msgoblin", "12msgoblin");
+    allPanelKeys.push("11goblin", "12goblin", "11msgoblin", "12msgoblin", "12summonmiddle");
 
     // Deduplicate and initialize
     for (const key of [...new Set(allPanelKeys)]) {

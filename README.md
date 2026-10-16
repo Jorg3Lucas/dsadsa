@@ -27,7 +27,7 @@ On every boot, the bot **deletes and recreates all floor channels** and deploys 
 |-------|--------|
 | **SP8–SP10** | Regular Secret Peak |
 | **SP11** | Secret Peak + Goblin |
-| **SP12** | Secret Peak + Random Event + Goblin |
+| **SP12** | Secret Peak + Random Event + Goblin + Middle (fixed 1h summon) |
 
 ---
 

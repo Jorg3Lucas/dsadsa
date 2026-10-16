@@ -162,22 +162,28 @@ export function buildPanelDefaults(key) {
         };
     }
 
-    // ── Goblin panels (summon type, single room) ──
-    const goblinMap = {
+    // ── Summon panels (summon type, single room) ──
+    // `durationMinutes` (optional) pins the claim length to a fixed window: the
+    // panel skips the ticket menu and the room auto-releases after it (see
+    // applySummonClaim in summon-interactions.js). Panels without it keep the
+    // ticket flow (30/60/90 min).
+    const summonMap = {
         "11goblin": { roomKey: "sp11", label: "⭐ SP 11F Goblin" },
         "12goblin": { roomKey: "sp12", label: "⭐ SP 12F Goblin" },
         "11msgoblin": { roomKey: "ms11", label: "👹 MS 11 Goblin" },
-        "12msgoblin": { roomKey: "ms12", label: "👹 MS 12 Goblin" }
+        "12msgoblin": { roomKey: "ms12", label: "👹 MS 12 Goblin" },
+        "12summonmiddle": { roomKey: "sp12middle", label: "⭐ SP 12F Middle", durationMinutes: 60 }
     };
-    if (goblinMap[key]) {
-        const { roomKey, label } = goblinMap[key];
+    if (summonMap[key]) {
+        const { roomKey, label, durationMinutes } = summonMap[key];
         return {
             type: "summon",
             title: label,
             [roomKey]: {
                 name: label, status: STATUS_AVAILABLE, ownerId: null, ownerName: null,
                 time: "", timeWindow: "", nextId: null, nextName: null,
-                formattedTimeNext: "", endLimit: null
+                formattedTimeNext: "", endLimit: null,
+                ...(durationMinutes ? { durationMinutes } : {})
             }
         };
     }

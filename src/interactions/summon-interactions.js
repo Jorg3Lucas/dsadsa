@@ -46,7 +46,7 @@ export async function handleSummonInteraction(interaction, uid, uName) {
     const cid = interaction.customId;
 
     if (cid.startsWith("summonslide-")) {
-        return handleSummonSlide(interaction, uid);
+        return handleSummonSlide(interaction, uid, uName);
     }
     if (cid.startsWith("summonticket-")) {
         return handleSummonTicket(interaction, uid, uName);
@@ -62,7 +62,7 @@ export async function handleSummonInteraction(interaction, uid, uName) {
 // 🎯 SUMMON SLIDE — Location Selection
 // ==========================================
 
-async function handleSummonSlide(interaction, uid) {
+async function handleSummonSlide(interaction, uid, uName) {
     const pStr = checkPunishment(uid);
     if (pStr) return await interaction.update({ content: pStr, components: [], flags: 64 }).catch(noop);
 
@@ -81,6 +81,13 @@ async function handleSummonSlide(interaction, uid) {
     }
 
     summonSelectionCache[uid] = { panelId: pKey, selectedLoc };
+
+    // Fixed-duration summon rooms (e.g. SP12 Middle) skip the ticket menu and
+    // claim for their preset duration automatically.
+    const fixedMinutes = targetFloor[selectedLoc]?.durationMinutes;
+    if (fixedMinutes) {
+        return applySummonClaim(interaction, uid, uName, pKey, targetFloor, selectedLoc, fixedMinutes);
+    }
 
     return await interaction.update({
         content: `🎫 **${getMsg("rooms.antidemonPromptSelection")}**`,
@@ -121,8 +128,28 @@ async function handleSummonTicket(interaction, uid, uName) {
     }
 
     const selectedLoc = cacheObj.selectedLoc,
-        calcMinutes = 30 * parseInt(interaction.values[0]),
-        startTime = getLocalTime(),
+        calcMinutes = 30 * parseInt(interaction.values[0]);
+    return applySummonClaim(interaction, uid, uName, pKey, targetFloor, selectedLoc, calcMinutes);
+}
+
+// ==========================================
+// 🎯 SUMMON CLAIM — shared apply
+// ==========================================
+
+/**
+ * Apply a summon claim on one location: reservation/race guards, owner + time
+ * window, daily log, DM and panel refresh. Shared by the ticket flow and by
+ * fixed-duration rooms (which skip the ticket menu).
+ * @param {import('discord.js').StringSelectMenuInteraction} interaction
+ * @param {string} uid
+ * @param {string} uName
+ * @param {string} pKey - Panel key
+ * @param {object} targetFloor - Panel object (db[pKey])
+ * @param {string} selectedLoc - Room key being claimed
+ * @param {number} calcMinutes - Claim duration in minutes
+ */
+async function applySummonClaim(interaction, uid, uName, pKey, targetFloor, selectedLoc, calcMinutes) {
+    const startTime = getLocalTime(),
         endTime = new Date(startTime.getTime() + 6e4 * calcMinutes),
         rangeStr = `${getFormattedTime12h(startTime)} ~ ${getFormattedTime12h(endTime)}`;
 
