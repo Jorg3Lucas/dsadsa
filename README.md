@@ -334,6 +334,7 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] Ranking boot runs only with `RANKING_ENABLED=true` (deploy commands, member-role lookup, sync check after 10 s, auto-backup every 6 h)
 - [ ] `initClaimSystem` loads the claim DB, builds missing panels and runs migrations — it must send **nothing** to Discord (no refresh, no recovery)
 - [ ] Auto-setup deletes every text channel in the two claim categories and recreates them with fresh panels — no duplicate panels are left behind
+- [ ] A panel whose send fails at boot is retried (3 attempts) and, if it still fails, is logged as an error instead of being skipped silently
 - [ ] `applyClaimChannelPermissions` restricts claim + member channels to `MEMBER_ROLE_ID` (skipped, with a warning, when the role is missing)
 - [ ] The 15 s tick starts, then the panel watchdog (first pass ~60 s after boot)
 - [ ] Web server (`WEB_ENABLED=true`) and the `!set*` / `!kick` / `!reset` / `!reserve` / `!ticket` text commands come up last
@@ -355,6 +356,7 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] Tick runs every 15 s and **skips** a pass (no overlap) while the previous one is still awaiting Discord
 - [ ] A panel idle >10 min is heartbeat-refreshed; the watchdog itself runs every 5 min
 - [ ] A panel that stays stale for >1 h → message re-sent; if that fails → channel deleted, recreated and all its panels re-posted; the super admin gets a DM
+- [ ] A claim panel with **no message on record** (never posted, e.g. its boot send failed) → its channel is rebuilt on the watchdog's first pass (~1 min after boot), without waiting for the 1 h threshold
 - [ ] A panel that keeps failing is not retried more than once per 30 min (recovery cooldown)
 - [ ] Watchdog ignores non-claim panels (registration/approval panels stay untouched)
 

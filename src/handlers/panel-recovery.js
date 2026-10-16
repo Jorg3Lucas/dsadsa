@@ -164,6 +164,23 @@ export async function runPanelHealthCheck(guildId) {
             // Only claim panels are monitored (registration/approval panels are static).
             if (!isClaimPanel(key)) continue;
 
+            // A claim panel without a message on record was never posted (every
+            // claim channel is rebuilt at boot, so a panel sent by an earlier
+            // process no longer exists). The heartbeat/stale logic below would
+            // treat it as healthy and never bring it back, so rebuild its
+            // channel right away instead.
+            if (!db._panelMapping || !db._panelMapping[key]) {
+                const lastMissingAttempt = lastRecoveryAttempt.get(key) || 0;
+                if (now - lastMissingAttempt < RECOVERY_COOLDOWN_MS) continue;
+                lastRecoveryAttempt.set(key, now);
+
+                logEvent(`⚠️ Panel ${key} has no message on record — recreating its channel.`);
+                const restored = await recreateChannelForPanel(key, guildId);
+                if (!restored) logEvent(`❌ Panel recovery failed for ${key} (channel recreation).`);
+                await notifySuperAdmin(key, restored ? "canal apagado e recriado" : "falhou (canal)");
+                continue;
+            }
+
             let health = getPanelHealth(key);
             if (!health) {
                 // First time we see this panel: trust it so a restart doesn't

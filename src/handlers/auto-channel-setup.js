@@ -13,6 +13,37 @@ import { CLAIM_CATEGORIES, findClaimCategory } from "../core/server-structure.js
 
 let _setupDone = false;
 
+// Panels are sent right after the channels were deleted and recreated, which is
+// when Discord throttles us the most: retry a transient failure (429/timeout) a
+// few times so a claim channel is never left without one of its panels.
+const PANEL_SEND_ATTEMPTS = 3;
+const PANEL_SEND_RETRY_MS = 2000;
+
+/**
+ * Send a panel message, retrying transient failures.
+ * @param {import('discord.js').TextChannel} channel
+ * @param {string} panelKey
+ * @returns {Promise<object|null>} The sent message, or null after the last attempt
+ */
+async function sendPanelWithRetry(channel, panelKey) {
+    for (let attempt = 1; attempt <= PANEL_SEND_ATTEMPTS; attempt++) {
+        try {
+            return await channel.send({
+                embeds: [renderEmbed(panelKey)],
+                components: renderButtons(panelKey)
+            });
+        } catch (err) {
+            if (attempt === PANEL_SEND_ATTEMPTS) {
+                console.error(`❌ [Auto Setup] Failed to send ${panelKey} in #${channel.name} after ${attempt} attempts: ${err.message}`);
+                return null;
+            }
+            console.warn(`⚠️ [Auto Setup] Sending ${panelKey} in #${channel.name} failed (attempt ${attempt}/${PANEL_SEND_ATTEMPTS}), retrying...`);
+            await new Promise(r => setTimeout(r, PANEL_SEND_RETRY_MS * attempt));
+        }
+    }
+    return null;
+}
+
 // ==========================================
 // 🚀 MAIN SETUP ENTRY POINT
 // ==========================================
@@ -89,22 +120,16 @@ export async function setupAllChannels(client, guildId) {
                     console.warn(`⚠️ [Auto Setup] Panel ${panelKey} not in DB, skipping.`);
                     continue;
                 }
-                try {
-                    const sent = await newChannel.send({
-                        embeds: [renderEmbed(panelKey)],
-                        components: renderButtons(panelKey)
-                    });
-                    lastMessages[panelKey] = sent;
-                    markPanelHealthy(panelKey);
-                    if (!db._panelMapping) db._panelMapping = {};
-                    db._panelMapping[panelKey] = {
-                        channelId: newChannel.id,
-                        messageId: sent.id
-                    };
-                    console.log(`📋 [Auto Setup] Panel ${panelKey} sent to #${chanDef.name}.`);
-                } catch (err) {
-                    console.error(`❌ [Auto Setup] Failed to send ${panelKey} in #${chanDef.name}: ${err.message}`);
-                }
+                const sent = await sendPanelWithRetry(newChannel, panelKey);
+                if (!sent) continue;
+                lastMessages[panelKey] = sent;
+                markPanelHealthy(panelKey);
+                if (!db._panelMapping) db._panelMapping = {};
+                db._panelMapping[panelKey] = {
+                    channelId: newChannel.id,
+                    messageId: sent.id
+                };
+                console.log(`📋 [Auto Setup] Panel ${panelKey} sent to #${chanDef.name}.`);
             }
         }
     }
