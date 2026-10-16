@@ -332,7 +332,8 @@ npm test         # node:test unit tests (ranking-cache helpers)
 
 ### Boot sequence (`src/index.js`, in this order)
 - [ ] Ranking boot runs only with `RANKING_ENABLED=true` (deploy commands, member-role lookup, sync check after 10 s, auto-backup every 6 h)
-- [ ] `initClaimSystem` loads the claim DB, builds missing panels and runs migrations — it must send **nothing** to Discord (no refresh, no recovery)
+- [ ] `initClaimSystem` loads the claim DB, builds missing panels, repairs panels that could not be rendered (e.g. a summon panel whose room entry is missing) and runs migrations — it must send **nothing** to Discord (no refresh, no recovery)
+- [ ] Every panel a claim channel lists (`server-structure.js`) exists in the claim DB after init — a panel missing from it is **not** posted by auto-setup
 - [ ] Auto-setup deletes every text channel in the two claim categories and recreates them with fresh panels — no duplicate panels are left behind
 - [ ] A panel whose send fails at boot is retried (3 attempts) and, if it still fails, is logged as an error instead of being skipped silently
 - [ ] `applyClaimChannelPermissions` restricts claim + member channels to `MEMBER_ROLE_ID` (skipped, with a warning, when the role is missing)

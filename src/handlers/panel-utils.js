@@ -20,6 +20,19 @@ export {
 // 🏗️ SHARED PANEL STRUCTURE (used by bot.js init + reset)
 // ==========================================
 
+// ── Summon panels (summon type, single room) ──
+// `durationMinutes` (optional) pins the claim length to a fixed window: the
+// panel skips the ticket menu and the room auto-releases after it (see
+// applySummonClaim in summon-interactions.js). Panels without it keep the
+// ticket flow (30/60/90 min).
+const SUMMON_PANELS = {
+    "11goblin": { roomKey: "sp11", label: "⭐ SP 11F Goblin" },
+    "12goblin": { roomKey: "sp12", label: "⭐ SP 12F Goblin" },
+    "11msgoblin": { roomKey: "ms11", label: "👹 MS 11 Goblin" },
+    "12msgoblin": { roomKey: "ms12", label: "👹 MS 12 Goblin" },
+    "12summonmiddle": { roomKey: "sp12middle", label: "⭐ SP 12F Middle", durationMinutes: 60 }
+};
+
 /**
  * Build a default panel structure for the given panel key.
  * This is the single source of truth for ALL panel definitions.
@@ -163,19 +176,8 @@ export function buildPanelDefaults(key) {
     }
 
     // ── Summon panels (summon type, single room) ──
-    // `durationMinutes` (optional) pins the claim length to a fixed window: the
-    // panel skips the ticket menu and the room auto-releases after it (see
-    // applySummonClaim in summon-interactions.js). Panels without it keep the
-    // ticket flow (30/60/90 min).
-    const summonMap = {
-        "11goblin": { roomKey: "sp11", label: "⭐ SP 11F Goblin" },
-        "12goblin": { roomKey: "sp12", label: "⭐ SP 12F Goblin" },
-        "11msgoblin": { roomKey: "ms11", label: "👹 MS 11 Goblin" },
-        "12msgoblin": { roomKey: "ms12", label: "👹 MS 12 Goblin" },
-        "12summonmiddle": { roomKey: "sp12middle", label: "⭐ SP 12F Middle", durationMinutes: 60 }
-    };
-    if (summonMap[key]) {
-        const { roomKey, label, durationMinutes } = summonMap[key];
+    if (SUMMON_PANELS[key]) {
+        const { roomKey, label, durationMinutes } = SUMMON_PANELS[key];
         return {
             type: "summon",
             title: label,
@@ -189,6 +191,55 @@ export function buildPanelDefaults(key) {
     }
 
     return null;
+}
+
+/**
+ * Guarantee a stored panel can actually be rendered. Today this repairs summon
+ * panels whose single room entry is missing or malformed (e.g. saved under an
+ * older room key): `renderEmbed` would throw on it and the boot would skip the
+ * whole panel silently, so it would never appear in its channel.
+ * @param {string} key - Panel key
+ * @returns {boolean} true when the panel entry had to be repaired
+ */
+export function repairPanelShape(key) {
+    const current = db[key];
+    const summon = SUMMON_PANELS[key];
+    if (!current || !summon || current.type !== "summon") return false;
+
+    const { roomKey, label, durationMinutes } = summon;
+    const room = current[roomKey];
+    if (room && typeof room === "object" && typeof room.status === "string") return false;
+
+    // Carry over whatever was stored under a stale room key, so a claim/queue is
+    // not lost when the room entry is rebuilt.
+    const stale = Object.entries(current).find(([k, v]) =>
+        !["type", "title"].includes(k) && v && typeof v === "object" && (v.ownerId || v.ownerName || v.nextId)
+    )?.[1];
+
+    for (const k of Object.keys(current)) {
+        if (k !== "type" && k !== "title" && k !== roomKey) delete current[k];
+    }
+    current[roomKey] = {
+        name: label,
+        status: STATUS_AVAILABLE,
+        ownerId: null, ownerName: null,
+        time: "", timeWindow: "", nextId: null, nextName: null,
+        formattedTimeNext: "", endLimit: null,
+        ...(durationMinutes ? { durationMinutes } : {}),
+        ...(stale ? {
+            status: stale.status || STATUS_AVAILABLE,
+            ownerId: stale.ownerId || null,
+            ownerName: stale.ownerName || null,
+            time: stale.time || "",
+            timeWindow: stale.timeWindow || "",
+            nextId: stale.nextId || null,
+            nextName: stale.nextName || null,
+            formattedTimeNext: stale.formattedTimeNext || "",
+            endLimit: stale.endLimit || null
+        } : {})
+    };
+    logEvent(`Repaired summon panel ${key}: rebuilt room ${roomKey}.`);
+    return true;
 }
 
 // ==========================================

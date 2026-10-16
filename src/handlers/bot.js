@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { defaultFloors, initState, loadPunishmentsFromDisk, db, logEvent } from "../core/state.js";
-import { buildPanelDefaults, migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateAntidemon9e10, migrateMS1112, migrateSPLegacyToUnified, migrateEventClaimConfig, migrateRemove7F, migrateRemoveSummonPanel } from "./panel-utils.js";
+import { buildPanelDefaults, repairPanelShape, migrateBossCooldowns, migrateNamesCleanEmojis, migrateLastKilledAt, migratePlantOreCooldown, migrateAntidemon9e10, migrateMS1112, migrateSPLegacyToUnified, migrateEventClaimConfig, migrateRemove7F, migrateRemoveSummonPanel } from "./panel-utils.js";
+import { CLAIM_CATEGORIES } from "../core/server-structure.js";
 
 
 // ==========================================
@@ -29,13 +30,27 @@ export async function initClaimSystem(botClient, database, saveStorageFn, logEve
     allPanelKeys.push("12randomevent");
     allPanelKeys.push("11goblin", "12goblin", "11msgoblin", "12msgoblin", "12summonmiddle");
 
-    // Deduplicate and initialize
+    // Whatever a claim channel lists in server-structure.js must exist in the DB:
+    // auto-setup skips a panel that is missing from it, so a panel added to a
+    // channel would otherwise never be posted. Union the two lists (deduped
+    // below) to keep that from happening again.
+    for (const key of CLAIM_CATEGORIES.flatMap(cat => cat.channels.flatMap(ch => ch.panels || []))) {
+        allPanelKeys.push(key);
+    }
+
+    // Deduplicate, initialize the missing ones and repair stored panels that
+    // could not be rendered as they are (a panel that throws while rendering is
+    // skipped by auto-setup, so it would never show up in its channel).
+    let repaired = 0;
     for (const key of [...new Set(allPanelKeys)]) {
         if (!db[key]) {
             const defaults = buildPanelDefaults(key);
             if (defaults) db[key] = defaults;
+        } else if (repairPanelShape(key)) {
+            repaired++;
         }
     }
+    if (repaired > 0) saveStorageFn();
 
     loadPunishmentsFromDisk();
 

@@ -117,7 +117,9 @@ export async function setupAllChannels(client, guildId) {
             // ── Send panel messages ──
             for (const panelKey of chanDef.panels) {
                 if (!db[panelKey]) {
-                    console.warn(`⚠️ [Auto Setup] Panel ${panelKey} not in DB, skipping.`);
+                    // initClaimSystem builds every panel listed by a claim channel,
+                    // so this means the two lists disagree — shout about it.
+                    console.error(`❌ [Auto Setup] Panel ${panelKey} is missing from the claim DB — not posted to #${chanDef.name}.`);
                     continue;
                 }
                 const sent = await sendPanelWithRetry(newChannel, panelKey);
