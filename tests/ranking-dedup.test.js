@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
     duplicateKey,
     findDuplicateGroups,
+    findNicknameOwner,
+    unlinkPilotLinks,
     ownerReferences,
     applyDuplicateCleanup
 } from '../src/core/ranking-dedup.js';
@@ -113,6 +115,48 @@ describe('ownerReferences', () => {
     it('never reports the member itself', () => {
         const users = { self: { nickname: 'S', pilotIds: ['self'] } };
         expect(ownerReferences(users, 'self')).toEqual([]);
+    });
+});
+
+describe('findNicknameOwner', () => {
+    const users = {
+        a: { nickname: 'PlayerOne' },
+        b: { nickname: 'Other' }
+    };
+
+    it('matches ignoring case and surrounding space', () => {
+        expect(findNicknameOwner(users, ' playerone ')?.id).toBe('a');
+    });
+
+    it('can ignore the account being (re)registered', () => {
+        expect(findNicknameOwner(users, 'PlayerOne', 'a')).toBeNull();
+    });
+
+    it('returns null when the name is free or empty', () => {
+        expect(findNicknameOwner(users, 'Nobody')).toBeNull();
+        expect(findNicknameOwner(users, '')).toBeNull();
+    });
+});
+
+describe('unlinkPilotLinks', () => {
+    it('removes the member from every owner without touching other pilots', () => {
+        const users = {
+            owner1: { nickname: 'O1', pilotIds: ['pilot', 'kept'] },
+            owner2: { nickname: 'O2', pilotIds: ['pilot'] },
+            pilot: { nickname: 'P', pilotIds: ['nested'] }
+        };
+
+        expect(unlinkPilotLinks(users, 'pilot').sort()).toEqual(['owner1', 'owner2']);
+        expect(users.owner1.pilotIds).toEqual(['kept']);
+        expect(users.owner2.pilotIds).toEqual([]);
+        // The member's own pilot list is never touched
+        expect(users.pilot.pilotIds).toEqual(['nested']);
+    });
+
+    it('is a no-op when the member is not linked anywhere', () => {
+        const users = { owner: { nickname: 'O', pilotIds: ['other'] } };
+        expect(unlinkPilotLinks(users, 'missing')).toEqual([]);
+        expect(users.owner.pilotIds).toEqual(['other']);
     });
 });
 

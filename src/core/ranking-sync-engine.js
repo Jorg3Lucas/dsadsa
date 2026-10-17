@@ -1,24 +1,13 @@
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, OUT_OF_ALLIED_GRACE_MS, ensureConfig } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, OUT_OF_ALLIED_GRACE_MS, MAX_PILOTS_PER_OWNER, ensureConfig } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { recordSyncRun } from './runtime-metrics.js';
 import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess } from '../core/ranking-utils.js';
-// ── Capacity limits (defined at the top so every consumer can import them) ──
-const DEFAULT_MAX_PILOTS_PER_OWNER = 6;
 // Re-export the original OUT_OF_ALLIED_GRACE_MS constant so the rest of the
 // engine does not have to redefine it (it was already declared in the file).
 export { OUT_OF_ALLIED_GRACE_MS } from '../core/ranking-constants.js';
-
-const MAX_PILOTS_PER_OWNER_DEFAULT = 6;
-export const MAX_PILOTS_PER_OWNER = Number(
-    process.env.PILOT_CAP ||
-    (db => {
-        const override = db?.config?.maxPilotsPerOwner;
-        return override !== undefined && override > 0 ? override : MAX_PILOTS_PER_OWNER_DEFAULT;
-    })({})
-);
 
 
 // ==========================================
@@ -247,7 +236,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                             }
                         }
 
-                        // Also remove any pilots linked to this owner — just remove role, keep nickname
+                        // Also remove any pilots linked to this owner — just remove
+                        // role, keep nickname. A pilot who is ALSO an owner (own
+                        // registration) keeps their profile: the old code deleted
+                        // db.users[pId] unconditionally and wiped it.
                         if (userData.pilotIds && userData.pilotIds.length > 0) {
                             for (const pId of userData.pilotIds) {
                                 const pilotMember = members.get(pId);
@@ -256,7 +248,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                                         queueRoleWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
                                     }
                                 }
-                                delete db.users[pId];
+                                const pilotData = db.users[pId];
+                                const hasOwnRegistration = !!(pilotData && (pilotData.registeredAt || pilotData.manual === true));
+                                if (!hasOwnRegistration) {
+                                    delete db.users[pId];
+                                } else {
+                                    logEvent(`ℹ️ [Temp Expired] Kept pilot ${pId} (${pilotData.nickname}) — they own their own registration`);
+                                }
                             }
                         }
 
@@ -461,10 +459,16 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 // Ensure correct nickname — ServerName - CharacterName (or - Pilot suffix)
                 let desiredNickname = "";
                 if (isPilot) {
-                    const ownerNick = db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC');
+                    // The owner entry may be missing (deleted while a stale pilotIds
+                    // link survived) — guard before touching .nickname.
+                    const ownerNick = db.users[ownerIdOfThisPilot]?.nickname
+                        ? db.users[ownerIdOfThisPilot].nickname.trim().normalize('NFC')
+                        : '';
                     // Reuse the allied-clan lookup already computed above — it resolves
                     // the SAME owner nickname, so no second ranking lookup is needed.
-                    desiredNickname = buildPrefixedNickname(ownerNick, db, 'Pilot', lookup);
+                    desiredNickname = ownerNick
+                        ? buildPrefixedNickname(ownerNick, db, 'Pilot', lookup)
+                        : '';
                 } else if (ownerData?.nickname) {
                     const nick = ownerData.nickname.trim().normalize('NFC');
                     // Queued pilot (owner not identified yet) keeps the nickname

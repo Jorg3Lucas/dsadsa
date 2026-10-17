@@ -16,7 +16,8 @@ vi.mock('../src/core/ranking-constants.js', () => {
             621: 'EU021', 622: 'EU022', 624: 'EU024',
             653: 'EU032'
         },
-        MAX_NICKNAME_SUGGESTIONS: 6
+        MAX_NICKNAME_SUGGESTIONS: 6,
+        MAX_PILOTS_PER_OWNER: 6
     };
 });
 
@@ -204,6 +205,53 @@ describe('handleAdminApprovePilot', () => {
         expect(db.users[OWNER_ID].pilotIds).toContain(PILOT_ID);
         expect(logEvent).toHaveBeenCalledWith(expect.stringContaining('⚠️ Could not DM owner'));
     });
+
+    it('does not crash when the owner registration was removed meanwhile', async () => {
+        setupPending();
+        delete db.users[OWNER_ID];
+        const pilotMember = {
+            user: { tag: PILOT_TAG, username: 'PilotUser' },
+            roles: { cache: { has: vi.fn().mockReturnValue(true) }, add: vi.fn() },
+            setNickname: vi.fn().mockResolvedValue()
+        };
+        interaction.client.guilds.cache.get.mockReturnValue({ members: { fetch: vi.fn().mockResolvedValue(pilotMember) } });
+
+        await handleAdminApprovePilot(interaction, db, saveLocalStorage, logEvent);
+
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('no longer has a registration')
+        }));
+        // Nothing to link to — the request is discarded instead of hanging forever
+        expect(getPendingPilots()[PILOT_ID]).toBeUndefined();
+    });
+
+    it('keeps the request when a member is temporarily unavailable', async () => {
+        setupPending();
+        interaction.client.guilds.cache.get.mockReturnValue({ members: { fetch: vi.fn().mockResolvedValue(null) } });
+
+        await handleAdminApprovePilot(interaction, db, saveLocalStorage, logEvent);
+
+        expect(getPendingPilots()[PILOT_ID]).toBeDefined();
+    });
+
+    it('refuses to exceed the pilot cap', async () => {
+        setupPending();
+        db.users[OWNER_ID].pilotIds = ['a', 'b', 'c', 'd', 'e', 'f'];
+        const pilotMember = {
+            user: { tag: PILOT_TAG, username: 'PilotUser' },
+            roles: { cache: { has: vi.fn().mockReturnValue(true) }, add: vi.fn() },
+            setNickname: vi.fn().mockResolvedValue()
+        };
+        interaction.client.guilds.cache.get.mockReturnValue({ members: { fetch: vi.fn().mockResolvedValue(pilotMember) } });
+
+        await handleAdminApprovePilot(interaction, db, saveLocalStorage, logEvent);
+
+        expect(db.users[OWNER_ID].pilotIds).not.toContain(PILOT_ID);
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('maximum of 6 pilots')
+        }));
+        expect(getPendingPilots()[PILOT_ID]).toBeDefined();
+    });
 });
 
 // ──────────────────────────────────────────
@@ -330,8 +378,10 @@ describe('handleApproveOwner', () => {
             expect.stringContaining('tried to approve')
         );
         expect(interaction.editReply).toHaveBeenCalledWith({
-            content: '❌ User is no longer in the server.', components: []
+            content: expect.stringContaining('User is no longer in the server'), components: []
         });
+        // The request must survive so the admin can approve again if they rejoin.
+        expect(constants.pendingRegistrations[USER_ID]).toBeDefined();
     });
 
     // ── Full approval (yes) ──

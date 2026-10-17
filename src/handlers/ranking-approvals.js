@@ -12,9 +12,11 @@ import {
     pendingRegistrations,
     pendingPilotApprovals,
     APPROVER_ROLE_IDS,
-    PENDING_MAX_AGE_MS
+    PENDING_MAX_AGE_MS,
+    MAX_PILOTS_PER_OWNER
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from '../core/ranking-utils.js';
+import { findNicknameOwner } from '../core/ranking-dedup.js';
 import { deferUpdateSafe } from '../core/interaction-utils.js';
 
 // Registrations currently being processed by an admin approval click — keyed per
@@ -116,19 +118,21 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         return;
     }
 
-    delete pendingRegistrations[userId];
-
+    // The pending entry is deleted only AFTER the request is validated: if the
+    // member left, the nickname got taken, or the interaction hiccups, the admin
+    // can simply click the button again instead of asking the user to resubmit.
     const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
     if (!targetMember) {
         approvalsInFlight.delete(userId);
         logEvent(`❌ Admin ${interaction.user.tag} tried to approve ${userId} (${pending.nickname}) but user is no longer in the server`);
-        return interaction.editReply({ content: '❌ User is no longer in the server.', components: [] });
+        return interaction.editReply({ content: '❌ User is no longer in the server. The request was kept — approve again once they rejoin.', components: [] });
     }
+
+    const finalNickname = pending.selectedNickname || pending.nickname;
 
     // ── Safety check: prevent overwriting existing registration with different nickname ──
     if (db.users[userId] && (db.users[userId].registeredAt || db.users[userId].manual === true)) {
         const existingNick = db.users[userId].nickname;
-        const finalNickname = pending.selectedNickname || pending.nickname;
         if (existingNick && existingNick.trim().normalize('NFC').toLowerCase() !== finalNickname.trim().normalize('NFC').toLowerCase()) {
             logEvent(`❌ [SAFETY] Admin ${interaction.user.tag} tried to approve registration for ${userId} with different nickname "${finalNickname}" — user already registered as "${existingNick}" — BLOCKED`);
             approvalsInFlight.delete(userId);
@@ -139,9 +143,22 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         }
     }
 
-    const isTempApproval = result === 'temp';
+    // ── Safety check: the chosen nickname must not belong to another account ──
+    // (an admin can pick any name from the /pending dropdown, including one that
+    // is already registered — that would create two profiles for one character).
+    const nicknameOwner = findNicknameOwner(db.users, finalNickname, userId);
+    if (nicknameOwner) {
+        logEvent(`❌ [SAFETY] Admin ${interaction.user.tag} tried to approve ${userId} as "${finalNickname}" — name already registered by ${nicknameOwner.id} — BLOCKED`);
+        approvalsInFlight.delete(userId);
+        return interaction.editReply({
+            content: `❌ **Safety Blocked:** The nickname **${finalNickname}** is already registered by <@${nicknameOwner.id}>.\n\nPick a different name in /pending or clear the other registration with /manualremove first.`,
+            components: []
+        });
+    }
 
-    const finalNickname = pending.selectedNickname || pending.nickname;
+    delete pendingRegistrations[userId];
+
+    const isTempApproval = result === 'temp';
 
     db.users[userId] = {
         ...db.users[userId],
@@ -270,10 +287,9 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
         return interaction.editReply({ content: '❌ Only the account owner can respond to this request.', components: [] });
     }
 
-    delete pendingPilotApprovals[pilotUserId];
-    saveLocalStorage();
-
     if (result === 'no') {
+        delete pendingPilotApprovals[pilotUserId];
+        saveLocalStorage();
         logEvent(`❌ ${pending.ownerNick} REJECTED pilot ${pilotUserId} (${pending.pilotTag})`);
         await interaction.editReply({ content: '❌ **Request rejected.**', components: [] });
         try { const u = await interaction.client.users.fetch(pilotUserId); await u.send('❌ The owner rejected your pilot registration.'); } catch (e) {}
@@ -283,7 +299,17 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
     const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
     if (!guild) {
         logEvent(`❌ Pilot approval failed: guild not found for owner ${pending.ownerNick} approving pilot ${pilotUserId}`);
-        return interaction.editReply({ content: '❌ Error finding the server.', components: [] });
+        return interaction.editReply({ content: '❌ Error finding the server. The request was kept — try again later.', components: [] });
+    }
+
+    // The owner may have been removed while the request was pending: pushing into
+    // db.users[pending.ownerId].pilotIds would throw and lose the whole request.
+    const ownerData = db.users[pending.ownerId];
+    if (!ownerData) {
+        delete pendingPilotApprovals[pilotUserId];
+        saveLocalStorage();
+        logEvent(`❌ Pilot approval failed: owner ${pending.ownerId} (${pending.ownerNick}) no longer has a registration`);
+        return interaction.editReply({ content: '❌ The owner no longer has a registration. The request was discarded.', components: [] });
     }
 
     // Fetch owner + pilot concurrently (independent member lookups).
@@ -294,12 +320,18 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
 
     if (!pilotMember || !ownerMember) {
         logEvent(`❌ Pilot approval failed: owner ${pending.ownerId} or pilot ${pilotUserId} no longer in server`);
-        return interaction.editReply({ content: '❌ One of the members is no longer in the server.', components: [] });
+        return interaction.editReply({ content: '❌ One of the members is no longer in the server. The request was kept — approve again once they return.', components: [] });
     }
 
-    if (!db.users[pending.ownerId].pilotIds) db.users[pending.ownerId].pilotIds = [];
-    if (!db.users[pending.ownerId].pilotIds.includes(pilotUserId)) {
-        db.users[pending.ownerId].pilotIds.push(pilotUserId);
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (!ownerData.pilotIds.includes(pilotUserId) && ownerData.pilotIds.length >= MAX_PILOTS_PER_OWNER) {
+        logEvent(`❌ Pilot approval failed: owner ${pending.ownerId} (${pending.ownerNick}) already has ${MAX_PILOTS_PER_OWNER} pilots`);
+        return interaction.editReply({ content: `❌ **${pending.ownerNick}** already has the maximum of ${MAX_PILOTS_PER_OWNER} pilots. Remove one with /removepilot or /manualremovepilot and approve again.`, components: [] });
+    }
+
+    delete pendingPilotApprovals[pilotUserId];
+    if (!ownerData.pilotIds.includes(pilotUserId)) {
+        ownerData.pilotIds.push(pilotUserId);
     }
     saveLocalStorage();
 
@@ -353,10 +385,9 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
         return interaction.followUp({ content: '❌ You do not have permission to approve pilot registrations.', flags: 64 });
     }
 
-    delete pendingPilotApprovals[pilotUserId];
-    saveLocalStorage();
-
     if (result === 'no') {
+        delete pendingPilotApprovals[pilotUserId];
+        saveLocalStorage();
         logEvent(`❌ Admin ${interaction.user.tag} REJECTED pilot ${pilotUserId} (${pending.pilotTag}) for owner ${pending.ownerNick}`);
         await interaction.editReply({
             content: `❌ **Pilot Rejected by Admin**\n\n✈️ **Pilot:** ${pending.pilotTag}\n👑 **Owner:** ${pending.ownerNick}\n❌ **Rejected by:** ${interaction.user.tag}`,
@@ -373,7 +404,17 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
     const guild = interaction.client.guilds.cache.get(DISCORD_SERVER_ID);
     if (!guild) {
         logEvent(`❌ Admin pilot approval failed: guild not found`);
-        return interaction.editReply({ content: '❌ Error finding the server.', components: [] });
+        return interaction.editReply({ content: '❌ Error finding the server. The request was kept — try again later.', components: [] });
+    }
+
+    // The owner may have been removed while the request was pending (manualremove,
+    // left the server, /cleandb...). Pushing into a missing owner used to throw.
+    const ownerData = db.users[pending.ownerId];
+    if (!ownerData) {
+        delete pendingPilotApprovals[pilotUserId];
+        saveLocalStorage();
+        logEvent(`❌ Admin pilot approval failed: owner ${pending.ownerId} (${pending.ownerNick}) no longer has a registration`);
+        return interaction.editReply({ content: '❌ The owner no longer has a registration. The request was discarded.', components: [] });
     }
 
     // Fetch owner + pilot concurrently (independent member lookups).
@@ -384,12 +425,18 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
 
     if (!pilotMember || !ownerMember) {
         logEvent(`❌ Admin pilot approval failed: owner or pilot no longer in server`);
-        return interaction.editReply({ content: '❌ One of the members is no longer in the server.', components: [] });
+        return interaction.editReply({ content: '❌ One of the members is no longer in the server. The request was kept — approve again once they return.', components: [] });
     }
 
-    if (!db.users[pending.ownerId].pilotIds) db.users[pending.ownerId].pilotIds = [];
-    if (!db.users[pending.ownerId].pilotIds.includes(pilotUserId)) {
-        db.users[pending.ownerId].pilotIds.push(pilotUserId);
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (!ownerData.pilotIds.includes(pilotUserId) && ownerData.pilotIds.length >= MAX_PILOTS_PER_OWNER) {
+        logEvent(`❌ Admin pilot approval failed: owner ${pending.ownerId} (${pending.ownerNick}) already has ${MAX_PILOTS_PER_OWNER} pilots`);
+        return interaction.editReply({ content: `❌ **${pending.ownerNick}** already has the maximum of ${MAX_PILOTS_PER_OWNER} pilots. Remove one with /removepilot or /manualremovepilot and approve again.`, components: [] });
+    }
+
+    delete pendingPilotApprovals[pilotUserId];
+    if (!ownerData.pilotIds.includes(pilotUserId)) {
+        ownerData.pilotIds.push(pilotUserId);
     }
     saveLocalStorage();
 

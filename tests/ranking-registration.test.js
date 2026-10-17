@@ -25,7 +25,7 @@ vi.mock('../src/core/ranking-service.js', () => ({
 }));
 
 import { lookupNickname, lookupTopNicknames, lookupNicknameWithSearch } from '../src/core/ranking-service.js';
-import { handleOwnerRegistrationModal } from '../src/handlers/ranking-registration.js';
+import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from '../src/handlers/ranking-registration.js';
 
 describe('handleOwnerRegistrationModal', () => {
     let interaction;
@@ -268,5 +268,57 @@ describe('handleOwnerRegistrationModal', () => {
 
         const sendArgs = adminChannel.send.mock.calls[0][0];
         expect(sendArgs.content).toContain('❌ Not in allied clan');
+    });
+});
+
+describe('handleUserSelectRegistrationNickname', () => {
+    let interaction;
+    let db;
+    const USER_ID = '111111111111111111';
+    const RIVAL_ID = '222222222222222222';
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        Object.keys(getPending()).forEach(k => delete getPending()[k]);
+        constants.adminChannelId = null;
+
+        db = { users: { [RIVAL_ID]: { nickname: 'Rival', registeredAt: '2026-01-01T00:00:00.000Z' } } };
+        interaction = {
+            customId: `user_select_reg_nickname_${USER_ID}`,
+            values: ['PlayerOne'],
+            user: { id: USER_ID, tag: 'TestUser#1234' },
+            message: { components: [{ fake: 'row' }] },
+            deferUpdate: vi.fn().mockResolvedValue(),
+            editReply: vi.fn().mockResolvedValue()
+        };
+    });
+
+    it('rejects a nickname already owned by another account and keeps the menu', async () => {
+        interaction.values = ['Rival'];
+        getPending()[USER_ID] = {
+            nickname: 'PlayerOne', timestamp: Date.now(), selectedNickname: 'PlayerOne', awaitingSelection: true
+        };
+
+        await handleUserSelectRegistrationNickname(interaction, db, vi.fn(), vi.fn());
+
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('already registered'),
+            components: [(expect.anything())]
+        }));
+        // The pending submission stays intact so the user can pick another name
+        expect(getPending()[USER_ID].awaitingSelection).toBe(true);
+        expect(getPending()[USER_ID].selectedNickname).toBe('PlayerOne');
+    });
+
+    it('refuses to let another user operate the menu', async () => {
+        getPending()[USER_ID] = { nickname: 'PlayerOne', timestamp: Date.now(), awaitingSelection: true };
+        interaction.user = { id: RIVAL_ID, tag: 'Rival#0001' };
+
+        await handleUserSelectRegistrationNickname(interaction, db, vi.fn(), vi.fn());
+
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('another user')
+        }));
+        expect(getPending()[USER_ID].selectedNickname).toBeUndefined();
     });
 });

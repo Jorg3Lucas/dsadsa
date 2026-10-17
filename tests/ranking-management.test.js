@@ -163,7 +163,8 @@ vi.mock('../src/core/ranking-cache.js', () => ({
 import {
     handleManageAlliedWorld,
     handleManageAlliedPage,
-    handleManageAlliedRemove
+    handleManageAlliedRemove,
+    handleManageAction
 } from '../src/handlers/ranking-management.js';
 
 function createMockInteraction(customId, values = [], permissions = true) {
@@ -182,6 +183,30 @@ function createMockInteraction(customId, values = [], permissions = true) {
         update: vi.fn().mockResolvedValue(undefined)
     };
 }
+
+describe('Manage action response after deferUpdate', () => {
+    it('answers with editReply (update() would throw once deferred)', async () => {
+        const db = {
+            users: { '111': { nickname: 'PlayerOne', registeredAt: new Date().toISOString(), pilotIds: [] } },
+            config: { alliedClans: {} }
+        };
+        const interaction = {
+            customId: 'manage_action_111',
+            values: ['status_111'],
+            user: { id: '999', tag: 'Admin#0001' },
+            member: { permissions: { has: () => true } },
+            deferUpdate: vi.fn().mockResolvedValue(undefined),
+            update: vi.fn().mockResolvedValue(undefined),
+            editReply: vi.fn().mockResolvedValue(undefined)
+        };
+
+        await handleManageAction(interaction, db, vi.fn(), vi.fn());
+
+        expect(interaction.deferUpdate).toHaveBeenCalledOnce();
+        expect(interaction.editReply).toHaveBeenCalled();
+        expect(interaction.update).not.toHaveBeenCalled();
+    });
+});
 
 describe('Allied Clans Pagination - Discord 25-option limit', () => {
     let db;

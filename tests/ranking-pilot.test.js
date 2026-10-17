@@ -8,7 +8,8 @@ vi.mock('../src/core/ranking-constants.js', () => {
         DISCORD_SERVER_ID: 'mock-guild-id',
         pendingPilotApprovals: pilotStore,
         adminChannelId: null,
-        PENDING_MAX_AGE_MS: 86400000
+        PENDING_MAX_AGE_MS: 86400000,
+        MAX_PILOTS_PER_OWNER: 6
     };
 });
 

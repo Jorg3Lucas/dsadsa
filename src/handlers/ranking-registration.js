@@ -5,6 +5,7 @@ import {
 } from 'discord.js';
 import { pendingRegistrations, adminChannelId, MAX_NICKNAME_SUGGESTIONS, resolveServerName } from '../core/ranking-constants.js';
 import { lookupNickname, lookupTopNicknames, lookupNicknameWithSearch } from '../core/ranking-service.js';
+import { findNicknameOwner } from '../core/ranking-dedup.js';
 import { buildOwnerApprovalButtons } from './ranking-approvals.js';
 
 // ==========================================
@@ -33,11 +34,9 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
         return interaction.editReply(`❌ **You are already registered!**\nYour account is already registered as **${existingNick}**.\n\nIf you need to update your nickname, contact an administrator.\nYou cannot register a second account.`);
     }
 
-    const existingNickname = Object.entries(db.users).find(([id, data]) =>
-        data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
-    );
-    if (existingNickname) {
-        logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${existingNickname[0]}`);
+    const nicknameOwner = findNicknameOwner(db.users, nickname, userId);
+    if (nicknameOwner) {
+        logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${nicknameOwner.id}`);
         return interaction.editReply('❌ This character name is already registered by another user.');
     }
 
@@ -98,10 +97,26 @@ export async function handleUserSelectRegistrationNickname(interaction, db, save
 
     const userId = interaction.customId.replace('user_select_reg_nickname_', '');
     const selectedNick = interaction.values[0];
+
+    // The menu is ephemeral, but its custom id carries the intended user: never
+    // let a different account alter someone else's pending registration.
+    if (interaction.user.id !== userId) {
+        return interaction.editReply({ content: '❌ This registration menu belongs to another user.', components: [] }).catch(() => {});
+    }
+
     const pending = pendingRegistrations[userId];
 
     if (!pending || !pending.awaitingSelection) {
         return interaction.editReply({ content: '⌛ This registration has expired or was already submitted.', components: [] }).catch(() => {});
+    }
+
+    const nicknameOwner = findNicknameOwner(db.users, selectedNick, userId);
+    if (nicknameOwner) {
+        logEvent(`❌ ${interaction.user.tag} selected "${selectedNick}" but the name is already registered by ${nicknameOwner.id}`);
+        return interaction.editReply({
+            content: `❌ **That character name is already registered by another user.**\nPick a different name from the menu below.`,
+            components: interaction.message?.components || []
+        }).catch(() => {});
     }
 
     delete pending.awaitingSelection;
@@ -114,6 +129,19 @@ export async function handleUserSelectRegistrationNickname(interaction, db, save
 
 // ── Shared: create the pending registration and notify the admin channel ──
 async function submitOwnerRegistration(interaction, db, saveLocalStorage, logEvent, userId, nickname) {
+    // Final gate: the nickname must still be free (it may have been registered
+    // by someone else while this user was choosing from the suggestions).
+    const nicknameOwner = findNicknameOwner(db.users, nickname, userId);
+    if (nicknameOwner) {
+        // Keep the pending record (and the selection menu) so the user can retry
+        // with another name instead of losing the whole submission.
+        logEvent(`❌ ${interaction.user.tag} tried to submit "${nickname}" but the name is already registered by ${nicknameOwner.id}`);
+        return interaction.editReply({
+            content: '❌ **This character name is already registered by another user.**\n\nContact an administrator if you believe this is a mistake.',
+            components: []
+        });
+    }
+
     if (!adminChannelId) {
         logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but admin channel not configured`);
         delete pendingRegistrations[userId];

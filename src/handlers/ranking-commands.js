@@ -16,20 +16,21 @@ import {
     WELCOME_PANEL_MESSAGE,
     SUPER_ADMIN_USER_ID,
     MAX_NICKNAME_SUGGESTIONS,
+    MAX_PILOTS_PER_OWNER,
     MEMBER_ROLE_ID,
     DISCORD_SERVER_ID,
     ensureConfig,
     resolveServerName
 } from '../core/ranking-constants.js';
 import { getLocalRankingCache, getRankingCacheUpdatedAt, findAllNicknameMatchesInCache } from '../core/ranking-cache.js';
-import { lookupNickname, lookupTopNicknames, isAlliedClanName, lookupNicknameWithSearch, searchRankingForum } from '../core/ranking-service.js';
+import { lookupNickname, lookupTopNicknames, isAlliedClanName, lookupNicknameWithSearch } from '../core/ranking-service.js';
 import { runDailySynchronization, getOutOfAlliedGraceStatus } from '../core/ranking-sync-engine.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { buildOwnerApprovalButtons } from './ranking-approvals.js';
 import { buildWelcomePanelComponents } from './ranking-welcome.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 import { getRuntimeMetrics } from '../core/runtime-metrics.js';
-import { findDuplicateGroups, applyDuplicateCleanup } from '../core/ranking-dedup.js';
+import { findDuplicateGroups, applyDuplicateCleanup, findNicknameOwner } from '../core/ranking-dedup.js';
 import { getStorageStats } from '../core/ranking-storage.js';
 import { getBackupStats } from '../auto-backup.js';
 import { buildUserListPage } from './ranking-management.js';
@@ -251,43 +252,24 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         if (!await deferReplySafe(interaction)) return;
 
         const targetMember = options.getMember('member');
+        if (!targetMember) {
+            return interaction.editReply('❌ That user is not a member of this server.');
+        }
         const nickname = options.getString('nickname').trim().normalize('NFC');
+
+        const takenBy = findNicknameOwner(db.users, nickname, targetMember.id);
+        if (takenBy) {
+            return interaction.editReply(`❌ The nickname **${nickname}** is already registered by <@${takenBy.id}>.\n\nUse \`/cleandb\` to review duplicates or \`/manualremove\` to clear the other account first.`);
+        }
 
         const lookup = await lookupNicknameWithSearch(nickname, db);
         // Reuse the fuzzy pool lookupNickname already computed (exact-miss path)
-        // so the suggestion dropdown doesn't re-scan the ranking.
+        // so the suggestion dropdown doesn't re-scan the ranking. No extra forum
+        // request here: lookupNicknameWithSearch already queried the forum for
+        // this exact name (a second live search returned the same page and only
+        // slowed the command down).
         const cacheSuggestions = lookupTopNicknames(nickname, db, null, MAX_NICKNAME_SUGGESTIONS, lookup.fuzzyCandidates);
-
-        // Also search the forum for exact matches (players outside top-1000)
-        const forumResults = await searchRankingForum(nickname);
-        const cache = getLocalRankingCache();
-        const forumSuggestions = forumResults
-            .filter(r => r.nickname.toLowerCase() !== nickname.toLowerCase())
-            .map(r => {
-                // Find worldId from cache by clan name
-                let worldId = r.worldId;
-                if (!worldId && r.clanName && cache) {
-                    for (const [wId, players] of Object.entries(cache)) {
-                        for (const [, playerClan] of Object.entries(players)) {
-                            if (playerClan === r.clanName) { worldId = wId; break; }
-                        }
-                        if (worldId) break;
-                    }
-                }
-                const serverName = worldId ? resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`) : 'Unknown';
-                const inAlliedClan = worldId ? isAlliedClanName(r.clanName, db.config?.alliedClans?.[worldId]) : false;
-                return { worldId, nickname: r.nickname, clanName: r.clanName, serverName, inAlliedClan, score: 1.0 };
-            });
-
-        // Merge: forum exact hits first, then cache fuzzy matches, dedup by nickname
-        const seen = new Set(nickname.toLowerCase());
-        const topSuggestions = [];
-        for (const s of [...forumSuggestions, ...cacheSuggestions]) {
-            if (!seen.has(s.nickname.toLowerCase())) {
-                seen.add(s.nickname.toLowerCase());
-                topSuggestions.push(s);
-            }
-        }
+        const topSuggestions = cacheSuggestions.filter(s => s.nickname.toLowerCase() !== nickname.toLowerCase());
         const hasSuggestions = topSuggestions.length > 0;
 
         if (lookup.found) {
@@ -306,13 +288,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             // Build nickname components
             const nicknameRow = buildManualNicknameSelect(user.id, nickname, topSuggestions, hasSuggestions);
 
+            // Store the CANONICAL ranking name (a fuzzy match "Johnx" → "John"
+            // must register "John", not the typo) and let the dropdown override it.
             confirmationCache[`${user.id}-manualregister`] = {
                 targetId: targetMember.id,
-                nickname: nickname,
+                nickname: lookup.nickname,
+                typedNickname: nickname,
                 clan: lookup.clanName,
                 worldId: lookup.worldId,
                 needsTempApproval: !lookup.inAlliedClan,
-                selectedNickname: nickname,
+                selectedNickname: lookup.nickname,
                 fromForumSearch: !!lookup.fromForumSearch
             };
 
@@ -379,6 +364,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
         const ownerMember = options.getMember('owner');
         const pilotMember = options.getMember('pilot');
 
+        if (!ownerMember || !pilotMember) {
+            return interaction.reply({ content: '❌ Both users must be members of this server.', flags: 64 });
+        }
+
         if (!db.users[ownerMember.id]) {
             return interaction.reply({ content: getMsg('ranking.responses.manualpilot.ownerNotRegistered', { displayName: ownerMember.displayName }), flags: 64 });
         }
@@ -388,7 +377,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         if (!db.users[ownerMember.id].pilotIds) db.users[ownerMember.id].pilotIds = [];
 
-        if (db.users[ownerMember.id].pilotIds.length >= 6) {
+        if (db.users[ownerMember.id].pilotIds.length >= MAX_PILOTS_PER_OWNER) {
             return interaction.reply({ content: getMsg('ranking.responses.manualpilot.limitReached'), flags: 64 });
         }
 
@@ -401,7 +390,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             ownerName: ownerMember.displayName,
             pilotId: pilotMember.id,
             pilotName: pilotMember.displayName,
-            ownerNick: db.users[ownerMember.id].nickname.trim().normalize('NFC')
+            ownerNick: String(db.users[ownerMember.id].nickname || '').trim().normalize('NFC')
         };
 
         return interaction.reply({
@@ -420,6 +409,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     if (commandName === 'manualremovepilot') {
         const ownerMember = options.getMember('owner');
         const pilotMember = options.getMember('pilot');
+
+        if (!ownerMember || !pilotMember) {
+            return interaction.reply({ content: '❌ Both users must be members of this server.', flags: 64 });
+        }
 
         if (!db.users[ownerMember.id]) {
             return interaction.reply({ content: getMsg('ranking.responses.manualremovepilot.ownerNotRegistered', { displayName: ownerMember.displayName }), flags: 64 });
@@ -461,6 +454,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     if (commandName === 'manualremove') {
         const targetMember = options.getMember('member');
 
+        if (!targetMember) {
+            return interaction.reply({ content: '❌ That user is not a member of this server.', flags: 64 });
+        }
+
         if (!db.users[targetMember.id]) return interaction.reply({ content: getMsg('ranking.responses.manualremove.noRegistration'), flags: 64 });
 
         confirmationCache[`${user.id}-manualremove`] = {
@@ -483,7 +480,15 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
     // ── manualforce ──
     if (commandName === 'manualforce') {
         const targetMember = options.getMember('member');
+        if (!targetMember) {
+            return interaction.reply({ content: '❌ That user is not a member of this server.', flags: 64 });
+        }
         const nickname = options.getString('nickname').trim().normalize('NFC');
+
+        const takenBy = findNicknameOwner(db.users, nickname, targetMember.id);
+        if (takenBy) {
+            return interaction.reply({ content: `❌ The nickname **${nickname}** is already registered by <@${takenBy.id}>. Clear it with \`/manualremove\` first.`, flags: 64 });
+        }
 
         confirmationCache[`${user.id}-manualforce`] = {
             targetId: targetMember.id,
@@ -1093,6 +1098,19 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             // Skip members who already have the role
             if (member.roles.cache.has(MEMBER_ROLE_ID)) continue;
 
+            // Skip existing registrations (e.g. a member inside the 72h grace
+            // window). Overwriting them here used to reset registeredAt and
+            // silently drop the member's pilotIds.
+            const existing = db.users[member.id];
+            if (existing && (existing.registeredAt || existing.manual === true)) {
+                skipped.push({
+                    username: member.user.username,
+                    nickname: existing.nickname,
+                    reason: 'already registered (role missing)'
+                });
+                continue;
+            }
+
             const nickname = member.nickname || member.user.username;
 
             // Extract game nickname from Discord nickname
@@ -1125,6 +1143,16 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
             if (lookup.found) {
                 if (lookup.inAlliedClan) {
+                    const takenBy = findNicknameOwner(db.users, lookup.nickname, member.id);
+                    if (takenBy) {
+                        skipped.push({
+                            username: member.user.username,
+                            nickname: lookup.nickname,
+                            reason: `name already registered by <@${takenBy.id}>`
+                        });
+                        continue;
+                    }
+
                     // Register: save to db and add role
                     db.users[member.id] = {
                         nickname: lookup.nickname,
@@ -1136,7 +1164,6 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                         ...(lookup.fromForumSearch ? { fromForumSearch: true } : {})
                     };
                     await member.roles.add(MEMBER_ROLE_ID).catch(() => {});
-                    saveLocalStorage(db);
                     registered.push({
                         username: member.user.username,
                         nickname: lookup.nickname,
@@ -1159,6 +1186,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 });
             }
         }
+
+        // Persist once for the whole run (the old code rewrote the full database
+        // for every member it registered).
+        if (registered.length > 0) saveLocalStorage(db);
 
         // Build response
         let response = `🎯 **Auto-Register Results** — Channel: ${targetChannel}\n\n`;
@@ -1219,11 +1250,24 @@ export async function handleSelectManualNickname(interaction, db, saveLocalStora
 
     const userId = interaction.customId.replace('select_manual_nickname_', '');
     const selectedNick = interaction.values[0];
+
+    // The menu belongs to the admin who ran /manualregister (customId carries it).
+    if (interaction.user.id !== userId) {
+        await interaction.followUp({ content: '❌ This menu belongs to another administrator.', flags: 64 });
+        return;
+    }
+
     const cacheKey = `${userId}-manualregister`;
     const cached = confirmationCache[cacheKey];
 
     if (!cached) {
         await interaction.followUp({ content: '⌛ This confirmation has expired. Please run /manualregister again.', flags: 64 });
+        return;
+    }
+
+    const takenBy = findNicknameOwner(db.users, selectedNick, cached.targetId);
+    if (takenBy) {
+        await interaction.followUp({ content: `❌ **${selectedNick}** is already registered by <@${takenBy.id}>. Pick another name.`, flags: 64 });
         return;
     }
 

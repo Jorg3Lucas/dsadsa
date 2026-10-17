@@ -8,9 +8,11 @@ import { getMsg } from '../lang/lang.js';
 import {
     MEMBER_ROLE_ID,
     SUPER_ADMIN_USER_ID,
+    MAX_PILOTS_PER_OWNER,
     confirmationCache
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from '../core/ranking-utils.js';
+import { findNicknameOwner, unlinkPilotLinks } from '../core/ranking-dedup.js';
 
 // ==========================================
 // ✅ CONFIRMATION BUTTON HANDLERS
@@ -198,6 +200,9 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             await setMemberNickname(targetMember, targetMember.user.username, logEvent);
         })();
         await Promise.all([...pilotCleanups, targetCleanup]);
+        // The removed member may also be a pilot of another account — drop the
+        // stale link, otherwise it keeps counting against that owner's cap.
+        unlinkPilotLinks(db.users, cached.targetId);
         delete db.users[cached.targetId];
         saveLocalStorage();
 
@@ -257,9 +262,18 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
         }
 
-        if (!db.users[cached.ownerId].pilotIds) db.users[cached.ownerId].pilotIds = [];
-        if (!db.users[cached.ownerId].pilotIds.includes(cached.pilotId)) {
-            db.users[cached.ownerId].pilotIds.push(cached.pilotId);
+        if (cached.ownerId === cached.pilotId) {
+            return interaction.update({ content: '❌ A member cannot be their own pilot.', components: [] }).catch(() => {});
+        }
+
+        const ownerData = db.users[cached.ownerId];
+        if (!ownerData.pilotIds) ownerData.pilotIds = [];
+        // The cap may have been reached between /manualpilot and this click.
+        if (!ownerData.pilotIds.includes(cached.pilotId) && ownerData.pilotIds.length >= MAX_PILOTS_PER_OWNER) {
+            return interaction.update({ content: `❌ This owner already has the maximum of ${MAX_PILOTS_PER_OWNER} pilots.`, components: [] }).catch(() => {});
+        }
+        if (!ownerData.pilotIds.includes(cached.pilotId)) {
+            ownerData.pilotIds.push(cached.pilotId);
         }
         saveLocalStorage();
 
@@ -301,6 +315,14 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
 
         const finalNickname = cached.selectedNickname || cached.nickname;
+
+        // Safety net: the name may have been taken by ANOTHER account while the
+        // confirmation was open. Re-registering the same member is an explicit
+        // admin override and stays allowed.
+        const takenBy = findNicknameOwner(db.users, finalNickname, cached.targetId);
+        if (takenBy) {
+            return interaction.update({ content: `❌ The nickname **${finalNickname}** is already registered by <@${takenBy.id}>.`, components: [] }).catch(() => {});
+        }
 
         db.users[cached.targetId] = {
             ...db.users[cached.targetId],
@@ -351,6 +373,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
         if (!targetMember) {
             return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
+        }
+
+        const takenBy = findNicknameOwner(db.users, cached.nickname, cached.targetId);
+        if (takenBy) {
+            return interaction.update({ content: `❌ The nickname **${cached.nickname}** is already registered by <@${takenBy.id}>.`, components: [] }).catch(() => {});
         }
 
         // Register immediately as permanent — no tempUntil, no ranking check

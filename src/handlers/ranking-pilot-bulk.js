@@ -16,7 +16,7 @@
 // /manualpilot.
 
 import { ActionRowBuilder, AttachmentBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { MEMBER_ROLE_ID } from '../core/ranking-constants.js';
+import { MEMBER_ROLE_ID, MAX_PILOTS_PER_OWNER } from '../core/ranking-constants.js';
 import { cleanNickname } from '../core/ranking-cache.js';
 import { buildPrefixedNickname, assignMemberRole, refreshRoleChannelAccess, setMemberNickname } from '../core/ranking-utils.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
@@ -26,7 +26,6 @@ import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 const PENDING_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // A fuzzy owner must be a single, quite similar candidate to be linked unattended.
 const AUTO_OWNER_MIN_SCORE = 0.75;
-const MAX_PILOTS_PER_OWNER = 4;
 
 /** Member ids that are already registered as someone's pilot. */
 function buildPilotIdSet(db) {
@@ -405,6 +404,7 @@ export async function handlePilotBulkSelect(interaction, db, saveLocalStorage, l
             : '🎉 All ambiguous pilots in this report were resolved.'
     ].join('\n');
 
-    await interaction.update({ content: content.substring(0, 1990), components: remainingRows }).catch(() => {});
+    // deferUpdate() already acknowledged the interaction — editReply is required.
+    await interaction.editReply({ content: content.substring(0, 1990), components: remainingRows }).catch(() => {});
     return true;
 }

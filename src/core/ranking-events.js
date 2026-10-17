@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { PermissionFlagsBits } from 'discord.js';
-import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, ensureConfig } from './ranking-constants.js';
+import { MEMBER_ROLE_ID, adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MESSAGE, pendingRegistrations, PENDING_MAX_AGE_MS, MAX_PILOTS_PER_OWNER, ensureConfig } from './ranking-constants.js';
+import { unlinkPilotLinks } from './ranking-dedup.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
@@ -15,6 +16,9 @@ import { buildOwnerApprovalButtons } from '../handlers/ranking-approvals.js';
 
 async function handleTextCommands(message, db, saveLocalStorage) {
     if (message.author.bot || !message.content.startsWith('!')) return;
+    // DM messages have no member (and no permissions getter) — reading
+    // message.member.permissions below used to throw a TypeError.
+    if (!message.member) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
@@ -182,7 +186,9 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
                 continue;
             }
 
-            const nickname = pending.nickname;
+            // The admin may have corrected the nickname through /pending — the
+            // restored panel must show (and be approved with) the selected name.
+            const nickname = pending.selectedNickname || pending.nickname;
             const lookup = lookupNickname(nickname, db);
 
             let rankingStatus = '❌ Not found in ranking';
@@ -305,7 +311,13 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
     });
 
     client.on('messageCreate', async (message) => {
-        await handleTextCommands(message, db, saveLocalStorage);
+        try {
+            await handleTextCommands(message, db, saveLocalStorage);
+        } catch (error) {
+            // Events must never throw: an unhandled rejection here would crash the
+            // whole process (Node exits on unhandled rejections by default).
+            console.error(`❌ messageCreate handler error: ${error.message}`);
+        }
     });
 
     client.on('guildMemberAdd', async (member) => {
@@ -333,6 +345,13 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
                         if (ownerId && db.users[ownerId]) {
                             // ── Pilot pre-registration: link to owner ──
                             if (!db.users[ownerId].pilotIds) db.users[ownerId].pilotIds = [];
+                            if (!db.users[ownerId].pilotIds.includes(member.id) &&
+                                db.users[ownerId].pilotIds.length >= MAX_PILOTS_PER_OWNER) {
+                                delete db.preRegistrations[member.id];
+                                saveLocalStorage();
+                                logEvent(`⚠️ [PreReg] ${member.user.tag} could not be linked as pilot of "${preReg.ownerNick}" — the owner already has ${MAX_PILOTS_PER_OWNER} pilots`);
+                                return;
+                            }
                             if (!db.users[ownerId].pilotIds.includes(member.id)) {
                                 db.users[ownerId].pilotIds.push(member.id);
                             }
@@ -417,6 +436,14 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
 
     client.on('guildMemberRemove', async (member) => {
         try {
+            // Runs even when the member has no registration of their own: a pure
+            // pilot (linked via /manualpilot) only lives in the owner's pilotIds.
+            const unlinkedFrom = unlinkPilotLinks(db.users || {}, member.id);
+            if (unlinkedFrom.length > 0) {
+                saveLocalStorage();
+                logEvent(`🔗 [Leave] Unlinked ${member.user.tag} from pilot list of ${unlinkedFrom.length} owner(s)`);
+            }
+
             if (db.users && db.users[member.id]) {
                 const userData = db.users[member.id];
                 const isActuallyRegistered = userData.registeredAt || userData.manual === true;

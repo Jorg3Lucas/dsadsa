@@ -12,7 +12,8 @@ vi.mock('../src/core/ranking-constants.js', () => {
             621: 'EU021', 622: 'EU022', 624: 'EU024',
             653: 'EU032'
         },
-        MAX_NICKNAME_SUGGESTIONS: 6
+        MAX_NICKNAME_SUGGESTIONS: 6,
+        MAX_PILOTS_PER_OWNER: 6
     };
 });
 

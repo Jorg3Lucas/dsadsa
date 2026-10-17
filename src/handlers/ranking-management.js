@@ -45,12 +45,16 @@ export function buildUserListPage(db, page = 0, options = {}) {
         value: id
     }));
 
-    const components = [new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId(`manage_user_page_${page}`)
-            .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
-            .addOptions(selectOptions)
-    )];
+    // Discord rejects addOptions([]) — an empty database must not crash /manage.
+    const components = [];
+    if (selectOptions.length > 0) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId(`manage_user_page_${page}`)
+                .setPlaceholder(getMsg('ranking.responses.manage.listPlaceholder'))
+                .addOptions(selectOptions)
+        ));
+    }
 
     if (totalPages > 1) {
         components.push(new ActionRowBuilder().addComponents(
@@ -132,13 +136,17 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
     
-    // Defer early for heavy operations (status lookup, pilot fetch)
+    // Defer early for heavy operations (status lookup, pilot fetch).
+    // NOTE: after deferUpdate the interaction is already acknowledged, so the
+    // response MUST go through editReply — interaction.update() throws at that
+    // point, which the old .catch(() => {}) swallowed (the manage menu silently
+    // did nothing when an admin picked an action).
     try { await interaction.deferUpdate(); } catch (e) { return; }
 
     const [actionType, targetUserId] = interaction.values[0].split('_', 2);
     const userData = db.users[targetUserId];
     if (!userData) {
-        return interaction.update({ content: '❌ User no longer registered.', components: [] }).catch(() => {});
+        return interaction.editReply({ content: '❌ User no longer registered.', components: [] }).catch(() => {});
     }
 
     if (actionType === 'remove') {
@@ -146,7 +154,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             targetId: targetUserId,
             targetName: userData.nickname
         };
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manage.actionRemoveConfirm', { username: userData.nickname }),
             components: [
                 new ActionRowBuilder().addComponents(
@@ -160,14 +168,17 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     if (actionType === 'clan') {
         const clanTarget = await interaction.guild.members.fetch(targetUserId).catch(() => null);
-        if (clanTarget) {
-            // Grant + report + refresh the role's channel access — the old silent
-            // .catch(() => {}) both hid refusals and left the member's client
-            // without the role's channels until an admin re-added the role by hand.
-            await assignMemberRole(clanTarget, logEvent, interaction.guild);
+        if (!clanTarget) {
+            return interaction.editReply({ content: '❌ That member is no longer in the server.', components: [] }).catch(() => {});
         }
-        return interaction.update({
-            content: '✅ Member role assigned.',
+        // Grant + report + refresh the role's channel access — the old silent
+        // .catch(() => {}) both hid refusals and left the member's client
+        // without the role's channels until an admin re-added the role by hand.
+        const roleOutcome = await assignMemberRole(clanTarget, logEvent, interaction.guild);
+        return interaction.editReply({
+            content: roleOutcome.ok
+                ? '✅ Member role assigned.'
+                : `⚠️ The member role could NOT be applied.\n**Discord said:** ${roleOutcome.reason}`,
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
@@ -178,7 +189,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     if (actionType === 'pilot') {
         if (!userData.pilotIds || userData.pilotIds.length === 0) {
-            return interaction.update({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {});
+            return interaction.editReply({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {});
         }
 
         // Fetch all pilots concurrently to build the menu (independent lookups).
@@ -193,7 +204,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             .setPlaceholder(getMsg('ranking.responses.manage.pilotSelectPlaceholder'))
             .addOptions(pilotOptions);
 
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manage.removePilotConfirm', { username: userData.nickname }),
             components: [
                 new ActionRowBuilder().addComponents(pilotMenu),
@@ -233,7 +244,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             statusLines += `\n🔍 **Ranking:** ❌ Not found\n`;
         }
 
-        return interaction.update({
+        return interaction.editReply({
             content: statusLines,
             components: [
                 new ActionRowBuilder().addComponents(
@@ -249,7 +260,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             targetId: targetUserId,
             targetName: userData.nickname
         };
-        return interaction.update({
+        return interaction.editReply({
             content: `⚠️ Remove temporary registration for **${userData.nickname}**?`,
             components: [
                 new ActionRowBuilder().addComponents(
@@ -261,7 +272,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
         }).catch(() => {});
     }
 
-    return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {});
+    return interaction.editReply({ content: '❌ Unknown action.', components: [] }).catch(() => {});
 }
 
 // ── Manage: Remove a specific pilot from owner ──
@@ -724,15 +735,16 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
     
-    // Defer early for heavy operations (user list building)
+    // Defer early for heavy operations (user list building). Same rule as
+    // handleManageAction: after deferUpdate, respond with editReply.
     try { await interaction.deferUpdate(); } catch (e) { return; }
 
     if (interaction.customId === 'manage_back' || interaction.customId === 'manage_allied_back') {
         const { content, components, count } = buildUserListPage(db, 0);
         if (count === 0) {
-            return interaction.update({ content: getMsg('ranking.responses.manage.noUsers'), components: [] }).catch(() => {});
+            return interaction.editReply({ content: getMsg('ranking.responses.manage.noUsers'), components: [] }).catch(() => {});
         }
-        return interaction.update({ content, components }).catch(() => {});
+        return interaction.editReply({ content, components }).catch(() => {});
     }
 
     const [, , , pageStr] = interaction.customId.split('_');
@@ -742,8 +754,8 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
     const { content, components, totalPages } = buildUserListPage(db, newPage);
 
     if (newPage < 0 || newPage >= totalPages) {
-        return interaction.deferUpdate().catch(() => {});
+        return interaction.editReply({ content: 'ℹ️ There are no more pages.', components: [] }).catch(() => {});
     }
 
-    return interaction.update({ content, components }).catch(() => {});
+    return interaction.editReply({ content, components }).catch(() => {});
 }

@@ -209,7 +209,7 @@ describe('handlePilotBulk', () => {
         const owner = createMember({ id: '4' });
         const pilot = createMember({ id: '5' });
         const db = {
-            users: { 4: { nickname: 'cecilia', registeredAt: 'x', pilotIds: ['7', '8', '9', '10'] } },
+            users: { 4: { nickname: 'cecilia', registeredAt: 'x', pilotIds: ['7', '8', '9', '10', '11', '12'] } },
             scanPilotPending: { 5: pendingPilot() },
             config: {}
         };
@@ -217,7 +217,7 @@ describe('handlePilotBulk', () => {
 
         await handlePilotBulk(interaction, db, vi.fn(async () => {}), vi.fn());
 
-        expect(db.users['4'].pilotIds).toEqual(['7', '8', '9', '10']);
+        expect(db.users['4'].pilotIds).toEqual(['7', '8', '9', '10', '11', '12']);
         expect(interaction.replies[0].content).toContain('already at 6 pilots');
     });
 
@@ -337,7 +337,9 @@ describe('handlePilotBulkSelect', () => {
             user: { tag: 'AdminUser#0001' },
             guild,
             message: { content: payload.content, components: payload.components || [] },
+            // The handler defers the update, so the response goes through editReply.
             update: vi.fn(async p => p),
+            editReply: vi.fn(async p => p),
             followUp: vi.fn(async p => p)
         };
     }
@@ -356,7 +358,7 @@ describe('handlePilotBulkSelect', () => {
         expect(db.scanPilotPending['7']).toBeDefined();
         expect(save).toHaveBeenCalled();
 
-        const payload = interaction.update.mock.calls[0][0];
+        const payload = interaction.editReply.mock.calls[0][0];
         expect(payload.content).toContain('✅');
         expect(selectsOf(payload)).toHaveLength(1);
         expect(selectsOf(payload)[0].data.custom_id).toBe('pilotbulk_owner_7');
@@ -364,12 +366,12 @@ describe('handlePilotBulkSelect', () => {
 
     it('warns when the chosen owner is already full', async () => {
         const { db, report } = await buildReport();
-        db.users['4'].pilotIds = ['a', 'b', 'c', 'd'];
+        db.users['4'].pilotIds = ['a', 'b', 'c', 'd', 'e', 'f'];
         const interaction = selectInteraction(report, { pilotId: '5', ownerId: '4', guild: report.guild });
 
         await handlePilotBulkSelect(interaction, db, vi.fn(async () => {}), vi.fn());
 
-        expect(db.users['4'].pilotIds).toEqual(['a', 'b', 'c', 'd']);
+        expect(db.users['4'].pilotIds).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
         expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('already has 6 pilots') }));
         expect(interaction.update).not.toHaveBeenCalled();
     });

@@ -81,6 +81,44 @@ export function findDuplicateGroups(users) {
     return groups;
 }
 
+/**
+ * Find the account that already owns a nickname (case/whitespace insensitive).
+ * @param {object} users - `db.users`
+ * @param {string} nickname - Nickname to look up
+ * @param {string|null} [exceptId] - Account to ignore (the one being (re)registered)
+ * @returns {{id: string, data: object}|null}
+ */
+export function findNicknameOwner(users, nickname, exceptId = null) {
+    const key = duplicateKey(nickname);
+    if (!key) return null;
+    for (const [id, data] of Object.entries(users || {})) {
+        if (id === exceptId) continue;
+        if (duplicateKey(data?.nickname) === key) return { id, data };
+    }
+    return null;
+}
+
+/**
+ * Drop `memberId` from every owner's `pilotIds`. Used when the member stops being
+ * a pilot (leaves the server, self-removes, is manually removed) — a stale id
+ * otherwise keeps counting against the owner's pilot cap and blocks re-inviting
+ * the same pilot ("already registered").
+ *
+ * @param {object} users - `db.users`
+ * @param {string} memberId - Discord id of the pilot
+ * @returns {string[]} Owners that referenced the member
+ */
+export function unlinkPilotLinks(users, memberId) {
+    const unlinking = [];
+    for (const [ownerId, data] of Object.entries(users || {})) {
+        if (ownerId === memberId) continue;
+        if (!Array.isArray(data?.pilotIds) || !data.pilotIds.includes(memberId)) continue;
+        data.pilotIds = data.pilotIds.filter((id) => id !== memberId);
+        unlinking.push(ownerId);
+    }
+    return unlinking;
+}
+
 /** Owners whose `pilotIds` still reference `memberId`. */
 export function ownerReferences(users, memberId) {
     const owners = [];

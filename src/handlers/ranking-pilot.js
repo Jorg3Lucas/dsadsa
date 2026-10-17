@@ -11,7 +11,8 @@ import {
     DISCORD_SERVER_ID,
     pendingPilotApprovals,
     adminChannelId,
-    PENDING_MAX_AGE_MS
+    PENDING_MAX_AGE_MS,
+    MAX_PILOTS_PER_OWNER
 } from '../core/ranking-constants.js';
 import { setMemberNickname } from '../core/nickname-utils.js';
 import { cleanNickname, levenshteinDistance } from '../core/ranking-cache.js';
@@ -143,8 +144,9 @@ async function completePilotRegistration(interaction, db, saveLocalStorage, logE
         return interaction.editReply('❌ You cannot register as your own pilot.');
     }
 
-    if (!ownerData.pilotIds) ownerData.pilotIds = [];        if (ownerData.pilotIds.length >= 6) {
-        return interaction.editReply('❌ This owner already has the maximum of 6 pilots.');
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (ownerData.pilotIds.length >= MAX_PILOTS_PER_OWNER) {
+        return interaction.editReply(`❌ This owner already has the maximum of ${MAX_PILOTS_PER_OWNER} pilots.`);
     }
     if (ownerData.pilotIds.includes(pilotId)) {
         return interaction.editReply('❌ You are already registered as a pilot for this owner.');

@@ -162,7 +162,7 @@ How each line is matched and validated:
 - **Already registered + role** — left completely untouched.
 - **Registered but without the role** — only the role is re-assigned; the stored nickname is never changed.
 - New registrations follow the **normal** flow (no `manualPermanent`), so the daily sync keeps validating them.
-- **Resolving the queue** — `/pilotbulk` shows every queued pilot and links those whose owner is unambiguous (exact name, or a single fuzzy candidate ≥ 75%). Ambiguous ones come with a **owner select menu** in the same message: pick the owner and the pair is linked (pilotIds + nickname + role) on the spot; `apply:true` links the unambiguous ones, and `owner:@X` forces a single owner for the whole queue (cap of 4 pilots per owner).
+- **Resolving the queue** — `/pilotbulk` shows every queued pilot and links those whose owner is unambiguous (exact name, or a single fuzzy candidate ≥ 75%). Ambiguous ones come with a **owner select menu** in the same message: pick the owner and the pair is linked (pilotIds + nickname + role) on the spot; `apply:true` links the unambiguous ones, and `owner:@X` forces a single owner for the whole queue (cap of 6 pilots per owner).
 
 ### Pilot markers
 
@@ -176,7 +176,7 @@ The list also tells whether a line belongs to a **pilot** — pilot status is no
 | `… - Pilot` (suffix this bot assigns) | `EU031 - Owner - Pilot` | pilot `EU031 - Owner`, owner unknown |
 
 - The name **before** the marker is the character of the line; the name **after** it is the owner.
-- **Owner identified** (registered member, allied clan) → the pilot is linked to the owner (`pilotIds` + `<Owner> - Pilot` nickname + member role), capped at 4 pilots per owner.
+- **Owner identified** (registered member, allied clan) → the pilot is linked to the owner (`pilotIds` + `<Owner> - Pilot` nickname + member role), capped at 6 pilots per owner.
 - **Owner not identified** → the pilot is **renamed right away** to `<Dono sugerido> - Pilot` (server-prefixed when the owner name is in the ranking), registered as a regular member and queued in `db.scanPilotPending`. While the entry is in the queue the daily sync keeps that nickname (and never treats it as impersonation), so it survives until the pair is resolved with `/pilotbulk` or `/manualpilot` — or until the owner registers and the sync auto-links them. Pilots whose list line has no owner name keep their own nickname.
 - Markers are configurable per server with `/pilotmarkers`: `add` (optional `owner_group`, `position:first/last`), `remove`, `reset`. Patterns are regexes tried in order — the first one that matches wins. Defaults: `pilot-suffix`, `p-dash`, `p-bracket`, `pilot-word`.
 
