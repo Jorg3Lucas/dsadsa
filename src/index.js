@@ -74,6 +74,10 @@ const dbClaimPath = path.resolve('./database.json');
 let rankingDb = { users: {} };
 let rankingDbLoaded = false;
 const getRankingDb = () => rankingDb;
+// Every ranking handler receives this wrapper (not saveRankingStorage directly):
+// handlers call saveLocalStorage() with no argument, and the wrapper makes sure
+// the live database is always the one persisted instead of an empty object.
+const saveRanking = (db) => saveRankingStorage(db || rankingDb);
 
 let claimDb = {};
 const claimLastMessages = {};
@@ -248,10 +252,10 @@ client.on('interactionCreate', async (interaction) => {
             if (!RANKING_ENABLED) {
                 return await interaction.reply({ content: '⚠️ Ranking/registro temporariamente desativado.', flags: 64 }).catch(noop);
             }
-            const result = await handleRankingCommand(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            const result = await handleRankingCommand(interaction, getRankingDb(), saveRanking, logRankingEvent);
             // Fallback: if command wasn't handled by new module, try legacy dispatcher
             if (result !== false) return;
-            return await handleMir4Interactions(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+            return await handleMir4Interactions(interaction, getRankingDb(), saveRanking, logRankingEvent);
         }
 
         // B. CLAIM ROUTER FIRST (has canHandle* guards; returns undefined/false when not matched)
@@ -265,50 +269,50 @@ client.on('interactionCreate', async (interaction) => {
         // C1. STRING SELECT MENUS
         if (interaction.isStringSelectMenu()) {
             if (interaction.customId === 'select_pilot_to_remove') {
-                return await handlePilotRemoveSelect(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handlePilotRemoveSelect(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('user_select_reg_nickname_')) {
-                return await handleUserSelectRegistrationNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleUserSelectRegistrationNickname(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('select_pending_nickname_')) {
-                return await handleSelectPendingNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleSelectPendingNickname(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('select_pending_pilot_owner_')) {
-                return await handleSelectPendingPilotOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleSelectPendingPilotOwner(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('select_manual_nickname_')) {
-                return await handleSelectManualNickname(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleSelectManualNickname(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_user_page_')) {
-                return await handleManageUserPage(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageUserPage(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_action_')) {
-                return await handleManageAction(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageAction(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_pilot_')) {
-                return await handleManagePilotRemove(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManagePilotRemove(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId === 'manage_allied_world') {
-                return await handleManageAlliedWorld(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageAlliedWorld(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId === 'manage_allied_remove') {
-                return await handleManageAlliedRemove(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageAlliedRemove(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
         }
 
         // C2. MODAL SUBMITS
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'register_owner_modal') {
-                return await handleOwnerRegistrationModal(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleOwnerRegistrationModal(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId === 'register_pilot_modal') {
-                return await handlePilotRegistrationModal(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handlePilotRegistrationModal(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('reject_owner_')) {
-                return await handleRejectOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleRejectOwner(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId === 'manage_allied_add_modal') {
-                return await handleManageAlliedAddModal(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageAlliedAddModal(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             // Fallback for any other modal submits not caught above
             return;
@@ -326,38 +330,38 @@ client.on('interactionCreate', async (interaction) => {
                 return await handleWelcomeRemovePilot(interaction, getRankingDb());
             }
             if (interaction.customId.startsWith('approve_owner_')) {
-                return await handleApproveOwner(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleApproveOwner(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('approve_pilot_')) {
-                return await handleApprovePilot(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleApprovePilot(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('admin_approve_pilot_')) {
-                return await handleAdminApprovePilot(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleAdminApprovePilot(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('owner_remove_pilot_')) {
-                return await handleOwnerRemovePilotDm(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleOwnerRemovePilotDm(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             // Order matters: confirm-addclan- must be checked BEFORE the generic confirm- prefix
             if (interaction.customId.startsWith('confirm-addclan-')) {
-                return await handleAddClanSuggestion(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleAddClanSuggestion(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('confirm-')) {
-                return await handleConfirmAction(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleConfirmAction(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId === 'manage_back' ||
                 interaction.customId === 'manage_allied_back' ||
                 interaction.customId.startsWith('manage_user_prev_') ||
                 interaction.customId.startsWith('manage_user_next_')) {
-                return await handleManageNav(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageNav(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId === 'manage_allied') {
-                return await handleManageAllied(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageAllied(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_allied_add_')) {
-                return await handleManageAlliedAdd(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleManageAlliedAdd(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_')) {
-                return await handleMir4Interactions(interaction, getRankingDb(), saveRankingStorage, logRankingEvent);
+                return await handleMir4Interactions(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
         }
 

@@ -34,6 +34,13 @@ export async function handleTicketCategory(interaction) {
     const selectedCategory = interaction.values[0];
     const categoryLabel = TICKET_CATEGORIES.find(c => c.value === selectedCategory)?.label || "Support";
     await interaction.deferUpdate();
+
+    // Double-click guard: the dropdown can be submitted twice before the first
+    // channel is created, which produced a second ticket and orphaned the first.
+    if (openTickets[uid] && guild.channels.cache.get(openTickets[uid])) {
+        return await interaction.editReply({ content: `📩 You already have an open ticket: <#${openTickets[uid]}>`, components: [] }).catch(noop);
+    }
+
     try {
         const safeName = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
         const channelName = `ticket-${selectedCategory}-${safeName}`;

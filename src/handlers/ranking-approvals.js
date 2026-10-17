@@ -15,7 +15,7 @@ import {
     APPROVER_ROLE_IDS,
     PENDING_MAX_AGE_MS
 } from '../core/ranking-constants.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, findNicknameOwner } from '../core/ranking-utils.js';
 import { assignClanRole, assignTempRole } from '../core/clan-roles.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
@@ -78,12 +78,26 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         return interaction.followUp({ content: '❌ You do not have permission to approve registrations.', flags: 64 });
     }
 
-    delete pendingRegistrations[userId];
-
+    // Validate the target BEFORE dropping the pending request, so a failed
+    // approval (member left / name conflict) can still be retried.
     const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
     if (!targetMember) {
         logEvent(`❌ Admin ${interaction.user.tag} tried to approve ${userId} (${pending.nickname}) but user is no longer in the server`);
+        delete pendingRegistrations[userId];
+        saveLocalStorage();
         return interaction.editReply({ content: '❌ User is no longer in the server.', components: [] });
+    }
+
+    // A nickname can never be shared by two registrations (the fuzzy-suggestion
+    // dropdown used to allow selecting a name already taken by someone else).
+    const finalNicknameCheck = pending.selectedNickname || pending.nickname;
+    const nicknameOwner = findNicknameOwner(db, finalNicknameCheck, userId);
+    if (nicknameOwner) {
+        logEvent(`❌ [SAFETY] Admin ${interaction.user.tag} — registration "${finalNicknameCheck}" blocked: already registered by ${nicknameOwner[0]}`);
+        return interaction.editReply({
+            content: `❌ **Safety Blocked:** The nickname **${finalNicknameCheck}** is already registered by another user.\n\nReject this request or use /pending to correct the nickname.`,
+            components: []
+        });
     }
 
     // ── Safety check: prevent overwriting existing registration with different nickname ──
@@ -98,6 +112,8 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
             });
         }
     }
+
+    delete pendingRegistrations[userId];
 
     const isTempApproval = result === 'temp';
 
@@ -231,9 +247,19 @@ export async function handleApprovePilot(interaction, db, saveLocalStorage, logE
         return interaction.editReply({ content: '❌ One of the members is no longer in the server.', components: [] });
     }
 
-    if (!db.users[pending.ownerId].pilotIds) db.users[pending.ownerId].pilotIds = [];
-    if (!db.users[pending.ownerId].pilotIds.includes(pilotUserId)) {
-        db.users[pending.ownerId].pilotIds.push(pilotUserId);
+    // The owner may have been removed between the request and the approval —
+    // guard before touching db.users[pending.ownerId] (used to crash with a TypeError).
+    const ownerData = db.users[pending.ownerId];
+    if (!ownerData) {
+        logEvent(`❌ Pilot approval failed: owner ${pending.ownerId} (${pending.ownerNick}) is no longer registered`);
+        return interaction.editReply({ content: '❌ The account owner is no longer registered.', components: [] });
+    }
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (!ownerData.pilotIds.includes(pilotUserId) && ownerData.pilotIds.length >= 4) {
+        return interaction.editReply({ content: '❌ This owner already has the maximum of 4 pilots.', components: [] });
+    }
+    if (!ownerData.pilotIds.includes(pilotUserId)) {
+        ownerData.pilotIds.push(pilotUserId);
     }
     saveLocalStorage();
 
@@ -299,9 +325,18 @@ export async function handleAdminApprovePilot(interaction, db, saveLocalStorage,
         return interaction.editReply({ content: '❌ One of the members is no longer in the server.', components: [] });
     }
 
-    if (!db.users[pending.ownerId].pilotIds) db.users[pending.ownerId].pilotIds = [];
-    if (!db.users[pending.ownerId].pilotIds.includes(pilotUserId)) {
-        db.users[pending.ownerId].pilotIds.push(pilotUserId);
+    // Same guard as the owner-approval path: the owner may already be gone.
+    const ownerData = db.users[pending.ownerId];
+    if (!ownerData) {
+        logEvent(`❌ Admin pilot approval failed: owner ${pending.ownerId} (${pending.ownerNick}) is no longer registered`);
+        return interaction.editReply({ content: '❌ The account owner is no longer registered.', components: [] });
+    }
+    if (!ownerData.pilotIds) ownerData.pilotIds = [];
+    if (!ownerData.pilotIds.includes(pilotUserId) && ownerData.pilotIds.length >= 4) {
+        return interaction.editReply({ content: '❌ This owner already has the maximum of 4 pilots.', components: [] });
+    }
+    if (!ownerData.pilotIds.includes(pilotUserId)) {
+        ownerData.pilotIds.push(pilotUserId);
     }
     saveLocalStorage();
 

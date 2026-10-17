@@ -266,7 +266,9 @@ async function handleApi(req, res, url, ip) {
     }
 
     // ── Admin account management (admins only) ──
-    const admin = requireAdmin(req, res);
+    // NOTE: only branch for admins — calling requireAdmin() for everyone would
+    // send a 403 on every non-admin request (and then double-send the real response).
+    const admin = account.isAdmin ? account : null;
     if (admin) {
         // GET /api/admin/accounts — list (no password hashes)
         if (method === "GET" && p === "/api/admin/accounts") {

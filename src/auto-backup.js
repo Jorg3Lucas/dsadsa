@@ -11,6 +11,13 @@ import path from 'node:path';
 const BACKUP_DIR = path.resolve("./backups");
 const BACKUP_RETENTION_MS = 48 * 60 * 60 * 1000; // keep backups for 48 hours
 
+// runBackup() is invoked before every database write (registration approvals,
+// sync loops, claim state saves). Without a throttle that produces one full
+// copy per save — thousands of files within the 48h window. Keep at most one
+// backup per file per window.
+const BACKUP_MIN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes per file
+const lastBackupAt = new Map(); // resolved path -> timestamp
+
 // All JSON files that should be backed up
 const BACKUP_FILES = [
   "./database_ranking.json",
@@ -48,6 +55,11 @@ export function runBackup(targetFiles) {
   for (const filePath of filesToBackup) {
     const resolvedPath = path.resolve(filePath);
     if (!fs.existsSync(resolvedPath)) continue;
+
+    // Throttle per file (the scheduled cycle still runs every 6h)
+    const previous = lastBackupAt.get(resolvedPath) || 0;
+    if (Date.now() - previous < BACKUP_MIN_INTERVAL_MS) continue;
+    lastBackupAt.set(resolvedPath, Date.now());
 
     try {
       const baseName = safeFileName(filePath);

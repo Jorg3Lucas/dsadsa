@@ -8,6 +8,7 @@ import {
 import { pendingRegistrations, adminChannelId, MAX_NICKNAME_SUGGESTIONS } from '../core/ranking-constants.js';
 import { lookupTopNicknames, lookupNicknameWithSearch } from '../core/ranking-service.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
+import { findNicknameOwner } from '../core/ranking-utils.js';
 
 // ==========================================
 // 👑 OWNER REGISTRATION MODAL HANDLER
@@ -29,9 +30,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
         return interaction.editReply(`❌ **You are already registered!**\nYour account is already registered as **${existingNick}**.\n\nIf you need to update your nickname, contact an administrator.\nYou cannot register a second account.`);
     }
 
-    const existingNickname = Object.entries(db.users).find(([id, data]) =>
-        data.nickname && data.nickname.trim().normalize('NFC').toLowerCase() === nickname.toLowerCase()
-    );
+    const existingNickname = findNicknameOwner(db, nickname, userId);
     if (existingNickname) {
         logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but name already taken by user ${existingNickname[0]}`);
         return interaction.editReply('❌ This character name is already registered by another user.');
@@ -81,10 +80,25 @@ export async function handleUserSelectRegistrationNickname(interaction, db, save
 
     const userId = interaction.customId.replace('user_select_reg_nickname_', '');
     const selectedNick = interaction.values[0];
-    const pending = pendingRegistrations[userId];
 
+    // The select menu belongs to the user who opened the registration modal —
+    // never let another member change/steal someone else's pending registration.
+    if (interaction.user.id !== userId) {
+        return interaction.editReply({ content: '❌ This menu does not belong to you.', components: [] }).catch(() => {});
+    }
+
+    const pending = pendingRegistrations[userId];
     if (!pending || !pending.awaitingSelection) {
         return interaction.editReply({ content: '⌛ This registration has expired or was already submitted.', components: [] }).catch(() => {});
+    }
+
+    // The typed name was checked against duplicates, but a suggested name was not.
+    const takenBy = findNicknameOwner(db, selectedNick, userId);
+    if (takenBy) {
+        logEvent(`❌ ${interaction.user.tag} tried to select "${selectedNick}" for registration but it is registered by user ${takenBy[0]}`);
+        delete pendingRegistrations[userId];
+        saveLocalStorage();
+        return interaction.editReply({ content: `❌ **"${selectedNick}"** is already registered by another user.\n\nClick **👑 Register as Owner** again and type your exact character name.`, components: [] }).catch(() => {});
     }
 
     delete pending.awaitingSelection;
@@ -108,6 +122,16 @@ async function submitOwnerRegistration(interaction, db, saveLocalStorage, logEve
         logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but admin channel ${adminChannelId} not found`);
         delete pendingRegistrations[userId];
         return interaction.editReply('❌ Admin approval channel not found. Contact an administrator.');
+    }
+
+    // Final safety net: the nickname must not belong to another registration
+    // (covers the fuzzy-suggestion path and any race with another approval).
+    const duplicate = findNicknameOwner(db, nickname, userId);
+    if (duplicate) {
+        logEvent(`❌ ${interaction.user.tag} — registration "${nickname}" blocked: already registered by ${duplicate[0]}`);
+        delete pendingRegistrations[userId];
+        saveLocalStorage();
+        return interaction.editReply('❌ This character name is already registered by another user.');
     }
 
     const lookup = await lookupNicknameWithSearch(nickname, db);

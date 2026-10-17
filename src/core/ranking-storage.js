@@ -8,13 +8,28 @@ import { pendingRegistrations, pendingPilotApprovals, WORLD_IDS } from './rankin
 
 const DB_RANKING_PATH = './database_ranking.json';
 
+// Last database object loaded/saved. Several handlers call saveLocalStorage()
+// without arguments, so this reference keeps those saves from writing an EMPTY
+// database (which used to wipe every registration).
+let lastKnownDb = null;
+
 export function saveRankingStorage(rankingDb) {
     try {
+        // Fall back to the last loaded/saved database when the caller passed no
+        // argument (handler signature is `saveLocalStorage()`). Never write an
+        // empty file over a real database.
+        const source = rankingDb && typeof rankingDb === 'object' ? rankingDb : lastKnownDb;
+        if (!source || typeof source !== 'object' || !source.users) {
+            console.error('\u274c [Save] Refusing to save ranking database: no database object supplied/loaded.');
+            return;
+        }
+        lastKnownDb = source;
+
         try { runBackup(['./database_ranking.json']); } catch (e) {
             console.error('\u26a0\ufe0f [Save] Backup failed (non-fatal):', e.message);
         }
 
-        const dbToSave = { ...rankingDb };
+        const dbToSave = { ...source };
         dbToSave._pendingRegistrations = JSON.parse(JSON.stringify(pendingRegistrations));
         dbToSave._pendingPilotApprovals = JSON.parse(JSON.stringify(pendingPilotApprovals));
         fs.writeFileSync(DB_RANKING_PATH, JSON.stringify(dbToSave, null, 2), 'utf8');
@@ -32,6 +47,7 @@ export function saveRankingStorage(rankingDb) {
 
 export function loadLocalStorageRanking() {
     const rankingDb = { users: {} };
+    lastKnownDb = rankingDb;
 
     try {
         if (fs.existsSync(DB_RANKING_PATH)) {

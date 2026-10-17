@@ -4,7 +4,7 @@ import { adminChannelId, setAdminChannelId, DISCORD_SERVER_ID, WELCOME_PANEL_MES
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { runDailySynchronization } from './ranking-sync-engine.js';
-import { buildPrefixedNickname } from './ranking-utils.js';
+import { buildPrefixedNickname, unlinkPilot } from './ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
 
 // ==========================================
@@ -89,6 +89,9 @@ async function restoreAdminApprovalMessages(client, db, saveLocalStorage, logEve
 
         for (const [userId, pending] of pendingEntries) {
             if (!pending.nickname) continue;
+            // Never restore a registration the user never submitted for approval
+            // (it was waiting in the fuzzy-suggestion dropdown).
+            if (pending.awaitingSelection) continue;
 
             // Check if this registration has expired (>24h) while the bot was offline
             const timeSinceSubmission = Date.now() - (pending.timestamp || 0);
@@ -372,6 +375,14 @@ export function initMir4BotEvents(client, db, saveLocalStorage, logEvent) {
 
     client.on('guildMemberRemove', async (member) => {
         try {
+            // A leaving member may be someone's pilot: drop the dangling link so it
+            // does not count against the 4-pilot limit or block a re-invite.
+            const unlinked = unlinkPilot(db, member.id);
+            if (unlinked > 0) {
+                saveLocalStorage();
+                logEvent(`🧹 [Leave] Removed ${unlinked} stale pilot link(s) for ${member.user.tag}`);
+            }
+
             if (db.users && db.users[member.id]) {
                 const userData = db.users[member.id];
                 const isActuallyRegistered = userData.registeredAt || userData.manual === true;

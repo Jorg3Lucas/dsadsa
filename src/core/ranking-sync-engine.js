@@ -4,7 +4,7 @@ import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles } from './clan-roles.js';
+import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles, hasAnyMemberRoles } from './clan-roles.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -185,14 +185,15 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         await removeMemberRoles(member, db);
                     }
 
-                    // Also remove any pilots linked to this owner — just remove roles, keep nickname
+                    // Also remove any pilots linked to this owner — roles only.
+                    // Never delete another user's own registration here: a pilot may
+                    // also be a registered owner (their data was being wiped).
                     if (userData.pilotIds && userData.pilotIds.length > 0) {
                         for (const pId of userData.pilotIds) {
                             const pilotMember = members.get(pId);
                             if (pilotMember) {
                                 await removeMemberRoles(pilotMember, db);
                             }
-                            delete db.users[pId];
                         }
                     }
 

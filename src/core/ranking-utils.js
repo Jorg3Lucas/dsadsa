@@ -20,6 +20,50 @@ export async function assignMemberRole(targetMember, db, logEvent) {
 }
 
 /**
+ * Find the registration that already uses a character name (case-insensitive,
+ * NFC normalized) — optionally ignoring one user id.
+ *
+ * Used by every registration path (owner modal, nickname suggestions, admin
+ * approval) so a name can never be claimed twice, including through the fuzzy
+ * suggestion dropdowns (which bypass the check done on the typed name).
+ *
+ * @param {object} db
+ * @param {string} nickname
+ * @param {string|null} excludeUserId
+ * @returns {[string, object]|null} [userId, userData] when taken
+ */
+export function findNicknameOwner(db, nickname, excludeUserId = null) {
+    const target = String(nickname || '').trim().normalize('NFC').toLowerCase();
+    if (!target) return null;
+    for (const [id, data] of Object.entries(db?.users || {})) {
+        if (id === excludeUserId) continue;
+        if (!data || !data.nickname) continue;
+        if (data.nickname.trim().normalize('NFC').toLowerCase() === target) return [id, data];
+    }
+    return null;
+}
+
+/**
+ * Remove a user from every owner's `pilotIds` list.
+ *
+ * Pilot links are plain id arrays, so removing a member (leave / /manualremove)
+ * used to leave ghost entries behind: they counted against the 4-pilot limit and
+ * made the ex-pilot look "already linked" if they ever rejoined.
+ *
+ * @returns {number} number of links removed
+ */
+export function unlinkPilot(db, pilotId) {
+    let removed = 0;
+    for (const data of Object.values(db?.users || {})) {
+        if (!data || !Array.isArray(data.pilotIds)) continue;
+        const before = data.pilotIds.length;
+        data.pilotIds = data.pilotIds.filter(id => id !== pilotId);
+        removed += before - data.pilotIds.length;
+    }
+    return removed;
+}
+
+/**
  * Build a server-prefixed nickname for a registered player.
  * Looks up the player's character name in the ranking cache to find their server,
  * then prefixes the nickname with the server name.

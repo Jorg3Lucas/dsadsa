@@ -4,7 +4,8 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    PermissionFlagsBits
 } from 'discord.js';
 import { getMsg } from '../lang/lang.js';
 import {
@@ -22,7 +23,7 @@ import {
 import { getLocalRankingCache } from '../core/ranking-cache.js';
 import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, findNicknameOwner } from '../core/ranking-utils.js';
 import { hasMemberRole } from '../core/clan-roles.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
@@ -188,11 +189,14 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
             confirmationCache[`${user.id}-manualregister`] = {
                 targetId: targetMember.id,
-                nickname: nickname,
+                // Store the CANONICAL ranking spelling (lookup.nickname), not the
+                // typed text: a fuzzy match ("Johnx" → "John") used to save the
+                // misspelled name, which the next sync could not validate.
+                nickname: lookup.nickname,
                 clan: lookup.clanName,
                 worldId: lookup.worldId,
                 needsTempApproval: !lookup.inAlliedClan,
-                selectedNickname: nickname
+                selectedNickname: lookup.nickname
             };
 
             return interaction.reply({
@@ -332,6 +336,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── manage (/manage slash command) ──
     if (commandName === 'manage') {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: '❌ Permission denied.', flags: 64 });
+        }
+
         const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
         if (userEntries.length === 0) {
             return interaction.reply({ content: getMsg('ranking.responses.manage.noUsers'), flags: 64 });
@@ -938,6 +946,13 @@ export async function handleSelectPendingNickname(interaction, db, saveLocalStor
         return;
     }
 
+    // The corrected name must not belong to another registration.
+    const takenBy = findNicknameOwner(db, selectedNick, userId);
+    if (takenBy) {
+        await interaction.followUp({ content: `❌ **"${selectedNick}"** is already registered by <@${takenBy[0]}>.`, flags: 64 }).catch(() => {});
+        return;
+    }
+
     const previousNick = pending.selectedNickname || pending.nickname;
     pending.selectedNickname = selectedNick;
     saveLocalStorage();
@@ -1008,6 +1023,14 @@ export async function handleSelectPendingPilotOwner(interaction, db, saveLocalSt
         const ownerData = db.users[selected];
         if (!ownerData) {
             await interaction.followUp({ content: '❌ That owner is no longer registered.', flags: 64 }).catch(() => {});
+            return;
+        }
+        if (selected === pilotId) {
+            await interaction.followUp({ content: '❌ A user cannot be their own pilot.', flags: 64 }).catch(() => {});
+            return;
+        }
+        if (ownerData.pilotIds && ownerData.pilotIds.length >= 4 && !ownerData.pilotIds.includes(pilotId)) {
+            await interaction.followUp({ content: '❌ That owner already has the maximum of 4 pilots.', flags: 64 }).catch(() => {});
             return;
         }
         if (!pending.originalOwnerNick) pending.originalOwnerNick = pending.ownerNick;

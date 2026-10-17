@@ -1,6 +1,6 @@
 import { getMsg } from '../lang/lang.js';
 import { confirmationCache } from '../core/ranking-constants.js';
-import { buildPrefixedNickname } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, unlinkPilot, findNicknameOwner } from '../core/ranking-utils.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
 
 // ==========================================
@@ -53,6 +53,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             await removeMemberRoles(targetMember, db);
             await targetMember.setNickname(targetMember.user.username).catch(() => {});
         }
+        // If this user was also someone else's pilot, drop the dangling link.
+        unlinkPilot(db, cached.targetId);
         delete db.users[cached.targetId];
         saveLocalStorage();
 
@@ -132,6 +134,15 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
         const finalNickname = cached.selectedNickname || cached.nickname;
 
+        // One character name = one Discord account (checks the dropdown choice too).
+        const duplicate = findNicknameOwner(db, finalNickname, cached.targetId);
+        if (duplicate) {
+            return interaction.update({
+                content: `❌ **"${finalNickname}"** is already registered by another user (<@${duplicate[0]}>).`,
+                components: []
+            }).catch(() => {});
+        }
+
         db.users[cached.targetId] = {
             ...db.users[cached.targetId],
             nickname: finalNickname,
@@ -178,6 +189,14 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
         if (!targetMember) {
             return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
+        }
+
+        const duplicate = findNicknameOwner(db, cached.nickname, cached.targetId);
+        if (duplicate) {
+            return interaction.update({
+                content: `❌ **"${cached.nickname}"** is already registered by another user (<@${duplicate[0]}>).`,
+                components: []
+            }).catch(() => {});
         }
 
         // Register immediately as permanent — no tempUntil, no ranking check

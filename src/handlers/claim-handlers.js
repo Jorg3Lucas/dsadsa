@@ -67,14 +67,14 @@ async function handleDmOptOut(interaction, uid) {
         dmOptOut.delete(uid);
         saveDmOptOutToDisk();
         await interaction.reply({
-            content: '✅ **DM notifications enabled!**\\n\\nYou will now receive claim alerts, boss reminders, and other notifications via DM.',
+            content: '✅ **DM notifications enabled!**\n\nYou will now receive claim alerts, boss reminders, and other notifications via DM.',
             flags: 64
         });
     } else {
         dmOptOut.add(uid);
         saveDmOptOutToDisk();
         await interaction.reply({
-            content: '🔕 **DM notifications disabled!**\\n\\nYou will no longer receive claim alerts, boss reminders, and other notifications via DM.\\n\\nClick the button again anytime to re-enable them.',
+            content: '🔕 **DM notifications disabled!**\n\nYou will no longer receive claim alerts, boss reminders, and other notifications via DM.\n\nClick the button again anytime to re-enable them.',
             flags: 64
         });
     }
