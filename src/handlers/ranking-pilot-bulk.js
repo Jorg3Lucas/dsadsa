@@ -236,7 +236,7 @@ export async function handlePilotBulk(interaction, db, saveLocalStorage, logEven
             ownerPilots.push(entry.pilotId);
             const desiredNickname = buildPrefixedNickname(ownerData.nickname, db, 'Pilot');
             if (!entry.member.roles.cache.has(MEMBER_ROLE_ID)) {
-                roleWrites.push(assignMemberRole(entry.member, logEvent, guild, { refreshChannels: false }));
+                roleWrites.push(assignMemberRole(entry.member, logEvent, guild, { refreshChannels: false, reapplyRole: false }));
             }
             setMemberNickname(entry.member, desiredNickname, logEvent);
             delete pending[entry.pilotId];

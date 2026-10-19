@@ -4,7 +4,7 @@ import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { recordSyncRun } from './runtime-metrics.js';
-import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess } from '../core/ranking-utils.js';
+import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess, reapplyMemberRole } from '../core/ranking-utils.js';
 // Re-export the original OUT_OF_ALLIED_GRACE_MS constant so the rest of the
 // engine does not have to redefine it (it was already declared in the file).
 export { OUT_OF_ALLIED_GRACE_MS } from '../core/ranking-constants.js';
@@ -76,6 +76,17 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         roleWriteCount++;
         queueWrite(op);
     };
+    // A role the sync RESTORES is a fresh grant for the member's client as well, so
+    // it gets the same remove/re-add nudge the single-member flows use
+    // (see reapplyMemberRole in ranking-utils). Without it the member keeps the
+    // role on the profile but may not see the channels it unlocks.
+    const queueRoleRestore = (member, username) => queueRoleWrite(async () => {
+        await member.roles.add(MEMBER_ROLE_ID);
+        const reapplyOutcome = await reapplyMemberRole(member, logEvent, { assumeHasRole: true });
+        if (reapplyOutcome.roleRemoved) {
+            logEvent(`⚠️ [Sync] Member role restored for ${username} but the client refresh nudge failed — ${reapplyOutcome.reason}`);
+        }
+    });
     try {
         ensureConfig(db);
         logEvent(getMsg('ranking.logs.syncStart'));
@@ -316,7 +327,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 }
 
                 if (!prodMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                    queueRoleWrite(() => prodMember.roles.add(MEMBER_ROLE_ID));
+                    queueRoleRestore(prodMember, prodMember.user?.username || memberId);
                 }
 
                 delete db.preRegistrations[memberId];
@@ -375,19 +386,19 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 if (ownerData?.manualPermanent) {
                     // 👑 ManualForce user — always ensure role is present, never remove
                     if (!hasMemberRole) {
-                        queueRoleWrite(() => member.roles.add(MEMBER_ROLE_ID));
+                        queueRoleRestore(member, member.user.username);
                         logEvent(`[Sync] Restored role for manualforce user ${member.user.username}`);
                     }
                 } else if (ownerData?.tempUntil) {
                     // ⏳ Temporary registration — keep role until expiry (handled in step 2.75)
                     if (!hasMemberRole) {
-                        queueRoleWrite(() => member.roles.add(MEMBER_ROLE_ID));
+                        queueRoleRestore(member, member.user.username);
                         logEvent(`[Sync] Restored role for temp user ${member.user.username} (expires ${new Date(ownerData.tempUntil).toLocaleDateString()})`);
                     }
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure role is present
                     if (!hasMemberRole) {
-                        queueRoleWrite(() => member.roles.add(MEMBER_ROLE_ID));
+                        queueRoleRestore(member, member.user.username);
                         // Log the REAL role name so a renamed/recreated role id is visible in the logs.
                         const roleName = activeGuild?.roles?.cache?.get?.(MEMBER_ROLE_ID)?.name || 'Member';
                         logEvent(getMsg('ranking.logs.roleAdded', { clan: roleName, username: member.user.username }));

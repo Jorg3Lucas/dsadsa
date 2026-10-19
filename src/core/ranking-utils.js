@@ -136,6 +136,80 @@ export async function refreshRoleChannelAccess(guild, logEvent) {
     return refreshed;
 }
 
+// ==========================================
+// 🔁 HUMAN-LIKE ROLE RE-APPLY (Discord client cache workaround)
+// ==========================================
+// Some members keep the role on their profile but never see the channels it
+// unlocks: their Discord client cached the channel list from before the grant
+// and never recomputed it. Removing and re-adding the role by hand always fixes
+// it, because the second GUILD_MEMBER_UPDATE carries the role in a state the
+// client already knows how to resolve. This helper replays that human action:
+// role off, short pause, role back on. It is best-effort and NEVER leaves the
+// member without the role — the re-add is retried and, when it still fails, the
+// caller is told so an admin can fix it manually.
+
+export const ROLE_REAPPLY_DELAY_MS = 800;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Remove and immediately re-add the Member role so the member's Discord client
+ * recomputes which channels the role unlocks.
+ *
+ * Only runs when the member currently HAS the role. Failures removing the role
+ * are harmless (the role stays). Failures re-adding it are retried once; when
+ * both attempts fail the member is left without the role, so the failure is
+ * reported as `ok: false, roleRemoved: true` and logged loudly.
+ *
+ * @param {object} targetMember - The GuildMember whose role should be re-applied
+ * @param {Function} [logEvent] - Bot log sink
+ * @param {{delayMs?: number, assumeHasRole?: boolean}} [options] - `delayMs`
+ *   overrides the pause (tests); `assumeHasRole` skips the cache check for callers
+ *   that just granted the role (a stale cache entry must not cancel the nudge)
+ * @returns {Promise<{ok: boolean, reason?: string, error?: Error, roleRemoved?: boolean}>}
+ */
+export async function reapplyMemberRole(targetMember, logEvent, options = {}) {
+    if (!targetMember?.roles?.add || !targetMember?.roles?.remove) {
+        return { ok: false, reason: 'member not available' };
+    }
+    const hasRole = options.assumeHasRole === true || targetMember.roles.cache?.has?.(MEMBER_ROLE_ID);
+    if (!hasRole) {
+        return { ok: false, reason: 'member does not have the Member role' };
+    }
+
+    const label = targetMember.user?.tag || targetMember.id;
+    const delay = Number.isFinite(options.delayMs) ? Math.max(0, options.delayMs) : ROLE_REAPPLY_DELAY_MS;
+
+    try {
+        await sleep(delay);
+        await targetMember.roles.remove(MEMBER_ROLE_ID);
+    } catch (error) {
+        // The role is still on the member — nothing was lost, just no refresh.
+        const reason = describeRoleError(error, targetMember);
+        logEvent?.(`⚠️ [Role] Could not re-apply the Member role to ${label} (remove refused) — ${reason}`);
+        return { ok: false, reason, error };
+    }
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            await sleep(delay);
+            await targetMember.roles.add(MEMBER_ROLE_ID);
+            if (attempt > 1) {
+                logEvent?.(`🔁 [Role] Re-added the Member role to ${label} on retry — client cache refreshed`);
+            }
+            return { ok: true };
+        } catch (error) {
+            if (attempt === 2) {
+                const reason = describeRoleError(error, targetMember);
+                logEvent?.(`❌ [Role] FAILED to re-add the Member role to ${label} after removing it — ${reason}. Give the role manually, then run /forcesync.`);
+                return { ok: false, reason, error, roleRemoved: true };
+            }
+        }
+    }
+
+    return { ok: false, reason: 'could not re-add the Member role' };
+}
+
 /**
  * Assign the general member role to a verified player and REPORT the outcome.
  *
@@ -151,15 +225,22 @@ export async function refreshRoleChannelAccess(guild, logEvent) {
  * should pass `{ refreshChannels: false }` and call refreshRoleChannelAccess
  * once when they are done, instead of one channel update per member.
  *
+ * When the role is newly granted (not `alreadyHad`) it is then removed and
+ * re-added once — a human-like nudge that forces the member's own Discord client
+ * to recompute the channels the role unlocks (see reapplyMemberRole). Bulk
+ * callers that grant hundreds of roles in a row should pass
+ * `{ reapplyRole: false }` so the extra role writes do not flood the API.
+ *
  * @param {object} targetMember - The GuildMember to give the role to
  * @param {Function} [logEvent] - Bot log sink
  * @param {object} [guild] - Guild used for hierarchy diagnostics + channel refresh
- * @param {{refreshChannels?: boolean}} [options]
- * @returns {Promise<{ok: boolean, alreadyHad?: boolean, reason?: string, error?: Error, channelsRefreshed?: number}>}
+ * @param {{refreshChannels?: boolean, reapplyRole?: boolean, reapplyDelayMs?: number}} [options]
+ * @returns {Promise<{ok: boolean, alreadyHad?: boolean, reason?: string, error?: Error, channelsRefreshed?: number, reapplied?: boolean}>}
  */
 export async function assignMemberRole(targetMember, logEvent, guild = null, options = {}) {
     const resolvedGuild = guild ?? targetMember?.guild ?? null;
     const refreshChannels = options.refreshChannels !== false;
+    const reapplyRole = options.reapplyRole !== false;
     if (!targetMember?.roles) return { ok: false, reason: 'member not available' };
 
     if (targetMember.roles.cache.has(MEMBER_ROLE_ID)) {
@@ -186,11 +267,29 @@ export async function assignMemberRole(targetMember, logEvent, guild = null, opt
     const roleName = roleCache?.get?.(MEMBER_ROLE_ID)?.name || 'Member';
     logEvent?.(getMsg('ranking.logs.roleAdded', { clan: roleName, username: targetMember.user.username }));
 
+    // Freshly granted role: nudge the member's client with the remove/re-add dance
+    // BEFORE re-emitting the channel overwrites, so the last member update the
+    // client receives already carries the role.
+    let reapplied = false;
+    if (reapplyRole) {
+        const reapplyOutcome = await reapplyMemberRole(targetMember, logEvent, {
+            delayMs: options.reapplyDelayMs,
+            assumeHasRole: true
+        });
+        // Only a role that was actually removed and could not be put back is a
+        // failed grant — an unavailable member object or a refused removal leaves
+        // the grant intact, so the caller must not report the role as missing.
+        if (!reapplyOutcome.ok && reapplyOutcome.roleRemoved) {
+            return { ok: false, reason: reapplyOutcome.reason, error: reapplyOutcome.error, alreadyHad: false, channelsRefreshed: 0 };
+        }
+        reapplied = reapplyOutcome.ok;
+    }
+
     const channelsRefreshed = refreshChannels
         ? await refreshRoleChannelAccess(resolvedGuild, logEvent)
         : 0;
 
-    return { ok: true, alreadyHad: false, channelsRefreshed };
+    return { ok: true, alreadyHad: false, channelsRefreshed, reapplied };
 }
 
 // Nickname mutation lives in its own dependency-free module (src/core/nickname-utils.js)

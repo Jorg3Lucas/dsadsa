@@ -23,7 +23,7 @@ vi.mock('../src/lang/lang.js', () => ({
     getMsg: vi.fn((key) => key)
 }));
 
-import { buildPrefixedNickname, baseNicknameKey, stripServerPrefix, stripPilotSuffix, assignMemberRole, refreshRoleChannelAccess } from '../src/core/ranking-utils.js';
+import { buildPrefixedNickname, baseNicknameKey, stripServerPrefix, stripPilotSuffix, assignMemberRole, refreshRoleChannelAccess, reapplyMemberRole } from '../src/core/ranking-utils.js';
 import { resolveServerName } from '../src/core/ranking-constants.js';
 import { getLocalRankingCache } from '../src/core/ranking-cache.js';
 import { lookupNickname } from '../src/core/ranking-service.js';
@@ -151,14 +151,16 @@ function makeGuild(channels = []) {
 
 function makeMember(hasRole = false) {
     const roleSet = new Set(hasRole ? [ROLE_ID] : []);
-    return {
+    const member = {
         id: 'u1',
         user: { tag: 'User#0001', username: 'User' },
         roles: {
             cache: { has: (roleId) => roleSet.has(roleId) },
-            add: vi.fn(async () => { roleSet.add(ROLE_ID); })
+            add: vi.fn(async () => { roleSet.add(ROLE_ID); }),
+            remove: vi.fn(async () => { roleSet.delete(ROLE_ID); })
         }
     };
+    return member;
 }
 
 describe('refreshRoleChannelAccess', () => {
@@ -191,24 +193,85 @@ describe('refreshRoleChannelAccess', () => {
     });
 });
 
+describe('reapplyMemberRole', () => {
+    it('removes and re-adds the role so the client recomputes its channels', async () => {
+        const member = makeMember(true);
+        const logEvent = vi.fn();
+
+        const result = await reapplyMemberRole(member, logEvent, { delayMs: 0 });
+
+        expect(result).toEqual({ ok: true });
+        expect(member.roles.remove).toHaveBeenCalledWith(ROLE_ID);
+        expect(member.roles.add).toHaveBeenCalledWith(ROLE_ID);
+        expect(member.roles.remove.mock.invocationCallOrder[0])
+            .toBeLessThan(member.roles.add.mock.invocationCallOrder[0]);
+    });
+
+    it('retries the re-add once so the member is never left without the role', async () => {
+        const member = makeMember(true);
+        member.roles.add.mockRejectedValueOnce({ code: 50013, message: 'Missing Permissions' });
+        const logEvent = vi.fn();
+
+        const result = await reapplyMemberRole(member, logEvent, { delayMs: 0 });
+
+        expect(result.ok).toBe(true);
+        expect(member.roles.add).toHaveBeenCalledTimes(2);
+        expect(logEvent).toHaveBeenCalledWith(expect.stringContaining('on retry'));
+    });
+
+    it('reports a loud failure when the role cannot be put back', async () => {
+        const member = makeMember(true);
+        member.roles.add.mockRejectedValue({ code: 50013, message: 'Missing Permissions' });
+        const logEvent = vi.fn();
+
+        const result = await reapplyMemberRole(member, logEvent, { delayMs: 0 });
+
+        expect(result.ok).toBe(false);
+        expect(result.roleRemoved).toBe(true);
+        expect(result.reason).toEqual(expect.any(String));
+        expect(logEvent).toHaveBeenCalledWith(expect.stringContaining('FAILED to re-add'));
+    });
+
+    it('does nothing when the member does not have the role', async () => {
+        const member = makeMember(false);
+
+        const result = await reapplyMemberRole(member, vi.fn(), { delayMs: 0 });
+
+        expect(result.ok).toBe(false);
+        expect(member.roles.remove).not.toHaveBeenCalled();
+        expect(member.roles.add).not.toHaveBeenCalled();
+    });
+});
+
 describe('assignMemberRole', () => {
     it('grants the role and refreshes the channel access by default', async () => {
         const member = makeMember(false);
         const guild = makeGuild([makeChannel('c1', true)]);
 
-        const result = await assignMemberRole(member, vi.fn(), guild);
+        const result = await assignMemberRole(member, vi.fn(), guild, { reapplyDelayMs: 0 });
 
         expect(member.roles.add).toHaveBeenCalledWith(ROLE_ID);
-        expect(result).toMatchObject({ ok: true, alreadyHad: false, channelsRefreshed: 1 });
+        expect(result).toMatchObject({ ok: true, alreadyHad: false, channelsRefreshed: 1, reapplied: true });
     });
 
-    it('skips the channel refresh when refreshChannels is false (bulk callers)', async () => {
+    it('re-applies the freshly granted role to nudge the member client', async () => {
         const member = makeMember(false);
         const guild = makeGuild([makeChannel('c1', true)]);
 
-        await assignMemberRole(member, vi.fn(), guild, { refreshChannels: false });
+        await assignMemberRole(member, vi.fn(), guild, { reapplyDelayMs: 0 });
+
+        expect(member.roles.remove).toHaveBeenCalledWith(ROLE_ID);
+        expect(member.roles.add).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips the channel refresh and the re-apply for bulk callers', async () => {
+        const member = makeMember(false);
+        const guild = makeGuild([makeChannel('c1', true)]);
+
+        await assignMemberRole(member, vi.fn(), guild, { refreshChannels: false, reapplyRole: false });
 
         expect(member.roles.add).toHaveBeenCalledWith(ROLE_ID);
+        expect(member.roles.remove).not.toHaveBeenCalled();
         expect(guild.channels.cache.get('c1').permissionOverwrites.set).not.toHaveBeenCalled();
     });
 
@@ -219,6 +282,7 @@ describe('assignMemberRole', () => {
         const result = await assignMemberRole(member, vi.fn(), guild);
 
         expect(member.roles.add).not.toHaveBeenCalled();
+        expect(member.roles.remove).not.toHaveBeenCalled();
         expect(result).toMatchObject({ ok: true, alreadyHad: true, channelsRefreshed: 1 });
         expect(guild.channels.cache.get('c1').permissionOverwrites.set).toHaveBeenCalledTimes(1);
     });
@@ -228,7 +292,7 @@ describe('assignMemberRole', () => {
         member.roles.add.mockRejectedValue({ code: 50013 });
         const guild = makeGuild([makeChannel('c1', true)]);
 
-        const result = await assignMemberRole(member, vi.fn(), guild);
+        const result = await assignMemberRole(member, vi.fn(), guild, { reapplyDelayMs: 0 });
 
         expect(result.ok).toBe(false);
         expect(result.reason).toEqual(expect.any(String));

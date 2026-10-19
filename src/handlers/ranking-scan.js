@@ -473,7 +473,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                 };
             }
             if (!item.hasRole) {
-                roleWrites.push(assignMemberRole(member, logEvent, guild, { refreshChannels: false }));
+                roleWrites.push(assignMemberRole(member, logEvent, guild, { refreshChannels: false, reapplyRole: false }));
             }
         }
 
@@ -544,7 +544,7 @@ export async function handleScanAllied(interaction, db, saveLocalStorage, logEve
                 const desiredNickname = buildPrefixedNickname(ownerData.nickname, db, 'Pilot', ownerResolution.lookup);
                 if (apply) {
                     ownerPilots.push(member.id);
-                    if (!item.hasRole) roleWrites.push(assignMemberRole(member, logEvent, guild, { refreshChannels: false }));
+                    if (!item.hasRole) roleWrites.push(assignMemberRole(member, logEvent, guild, { refreshChannels: false, reapplyRole: false }));
                     setMemberNickname(member, desiredNickname, logEvent);
                 }
 
