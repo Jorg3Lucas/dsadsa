@@ -1,8 +1,8 @@
 // ==========================================
 // 🚀 FORCE DEPLOY ALL SLASH COMMANDS
-// Run: node deploy-commands.cjs
+// Run: node src/deploy-commands.cjs
 // ==========================================
-const { REST, Routes, PermissionFlagsBits } = require('discord.js');
+const { REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -46,134 +46,23 @@ console.log('🚀 Force deploying commands...');
 console.log(`   Guild ID: ${GUILD_ID}`);
 
 // ── All commands ──
-const commands = [
-  {
-    name: 'removepilot',
-    description: 'Remove a specific pilot assigned to your account.'
-  },
-  { 
-    name: 'forcesync', 
-    description: '⚡ [Admin] Force an immediate synchronization with the official ranking portal.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'resetgrace',
-    description: '🔄 [Admin] Reset all 72h grace timers and remove the member role from everyone.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'manualregister',
-    description: '👑 [Admin] Register a player via cache lookup.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 6, name: 'member', description: 'Discord member.', required: true },
-      { type: 3, name: 'nickname', description: 'In-game character name.', required: true }
-    ]
-  },
-  {
-    name: 'manualforce',
-    description: '👑 [Admin] Force register a member as permanent — no fuzzy/ranking checks.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 6, name: 'member', description: 'Discord member to register.', required: true },
-      { type: 3, name: 'nickname', description: 'In-game character name (exact as typed).', required: true }
-    ]
-  },
-  {
-    name: 'manualpilot',
-    description: '👑 [Admin] Manually link a pilot to a character owner.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 6, name: 'owner', description: 'Select the primary character owner.', required: true },
-      { type: 6, name: 'pilot', description: 'Select the Discord user acting as pilot.', required: true }
-    ]
-  },
-  {
-    name: 'cleandb',
-    description: '🧹 [Admin] Find and remove duplicate nickname entries from the database.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 5, name: 'apply', description: 'Actually remove the duplicates (default: false = report only).', required: false }
-    ]
-  },
-  {
-    name: 'manage',
-    description: '🛠️ [Admin] Bot management panel.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'manualremove',
-    description: '👑 [Admin] Completely remove a player\'s registration and profile.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [{ type: 6, name: 'member', description: 'Discord member to clear.', required: true }]
-  },
-  {
-    name: 'manualremovepilot',
-    description: '👑 [Admin] Manually remove a pilot from a character owner.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 6, name: 'owner', description: 'Select the character owner.', required: true },
-      { type: 6, name: 'pilot', description: 'Select the pilot to remove.', required: true }
-    ]
-  },
-  {
-    name: 'sendpanel',
-    description: '📋 [Admin] Send a fixed registration panel to this channel.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'pending',
-    description: '⏳ [Admin] List all pending registration requests with time remaining.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'notify',
-    description: '📧 [Admin] Send notifications to server members',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'stats',
-    description: '📊 Show bot statistics (registrations, sync status, allied clans)'
-  },
-  {
-    name: 'grace',
-    description: '⏳ [Admin] Show remaining 72h grace time for members outside allied clans.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 6, name: 'member', description: 'Check a specific member (optional).', required: false }
-    ]
-  },
-  {
-    name: 'restorebackup',
-    description: '💾 [Super Admin] List and restore database backups.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'update',
-    description: '🔄 [Super Admin] Pull latest code and restart the bot.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString()
-  },
-  {
-    name: 'autoregister',
-    description: '🎯 [Admin] Auto-register channel members found in allied clans via ranking cache.',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-    options: [
-      { type: 7, name: 'channel', description: 'Channel to scan for members.', required: true }
-    ]
-  },
-];
+// SINGLE source of truth, shared with src/core/ranking-deploy.js (the list the
+// bot registers on startup). Never hardcode commands here again: both deploy
+// paths replace the whole guild command list, so a divergence silently deletes
+// commands in production.
+const commands = JSON.parse(fs.readFileSync(path.join(__dirname, 'commands.json'), 'utf8'));
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
   try {
     console.log(`📤 Registering ${commands.length} commands...`);
-    
+
     const result = await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
-    
+
     console.log(`✅ ${result.length} commands deployed successfully!`);
     console.log('');
     console.log('📋 Commands deployed:');

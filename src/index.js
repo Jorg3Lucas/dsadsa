@@ -270,6 +270,21 @@ async function handleUpdateCommand(interaction, db, saveLocalStorage, logEvent) 
         const pullResult = (pullOut || '').trim();
         console.log(`🔄 [Update] git pull: ${pullResult}`);
 
+        // Never restart into code that does not even parse: a bad merge would take
+        // the bot offline with no way back except a manual SSH session.
+        try {
+            await execAsync('node scripts/check-syntax.mjs', { timeout: 30000 });
+        } catch (checkError) {
+            const detail = String(checkError.stdout || checkError.stderr || checkError.message || checkError)
+                .trim()
+                .substring(0, 1500);
+            console.error('❌ [Update] Syntax check failed — restart aborted');
+            await interaction.editReply({
+                content: `⚠️ **Update pulled but NOT restarted.**\n\nThe new code failed the syntax check, so the bot is still running the old version.\n\`\`\`\n${detail}\n\`\`\`\nFix the code and run \`/update\` again.`
+            }).catch(() => {});
+            return;
+        }
+
         await interaction.editReply({ content: `✅ **Update complete!**
 
 📥 **git pull:**

@@ -1,124 +1,25 @@
-import { PermissionFlagsBits } from 'discord.js';
+import fs from 'node:fs';
 
 // ==========================================
 // 🚀 SLASH COMMAND REGISTRATION
 // ==========================================
-// NOTE: Keep this list in sync with src/deploy-commands.cjs.
-// Both files use set()/put() which REPLACES all guild commands, so any
-// command missing here will be removed when the bot starts.
+// The command list lives in src/commands.json — a SINGLE source of truth shared
+// with the manual deployer (src/deploy-commands.cjs). Both paths use
+// set()/put(), which REPLACES all guild commands, so a command missing from the
+// JSON disappears on the next start. Keeping two hand-maintained copies used to
+// let the runtime list and the deploy list drift apart.
+//
+// The file is read as JSON (not imported) on purpose: deploy-commands.cjs is
+// CommonJS and cannot `import` an ES module.
+
+const COMMANDS_PATH = new URL('../commands.json', import.meta.url);
+
+/** Every slash command payload, in the exact shape Discord expects. */
+export const SLASH_COMMANDS = JSON.parse(fs.readFileSync(COMMANDS_PATH, 'utf8'));
 
 export async function registerMir4SlashCommands(guild) {
     try {
-        await guild.commands.set([
-            { name: 'removepilot', description: 'Remove a specific pilot assigned to your account.' },
-            {
-                name: 'forcesync',
-                description: '⚡ [Admin] Force an immediate synchronization with the official ranking portal.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'resetgrace',
-                description: '🔄 [Admin] Reset all 72h grace timers and remove the member role from everyone.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'manualregister',
-                description: '👑 [Admin] Register a player via cache lookup.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'member', description: 'Discord member.', required: true },
-                    { type: 3, name: 'nickname', description: 'In-game character name.', required: true }
-                ]
-            },
-            {
-                name: 'manualforce',
-                description: '👑 [Admin] Force register a member as permanent — no fuzzy/ranking checks.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'member', description: 'Discord member to register.', required: true },
-                    { type: 3, name: 'nickname', description: 'In-game character name (exact as typed).', required: true }
-                ]
-            },
-            {
-                name: 'manualpilot',
-                description: '👑 [Admin] Manually link a pilot to a character owner.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'owner', description: 'Select the primary character owner.', required: true },
-                    { type: 6, name: 'pilot', description: 'Select the Discord user acting as pilot.', required: true }
-                ]
-            },
-            {
-                name: 'cleandb',
-                description: '🧹 [Admin] Find and remove duplicate nickname entries from the database.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 5, name: 'apply', description: 'Actually remove the duplicates (default: false = report only).', required: false }
-                ]
-            },
-            {
-                name: 'manage',
-                description: '🛠️ [Admin] Bot management panel.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'manualremove',
-                description: '👑 [Admin] Completely remove a player\'s registration and profile.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [{ type: 6, name: 'member', description: 'Discord member to clear.', required: true }]
-            },
-            {
-                name: 'manualremovepilot',
-                description: '👑 [Admin] Manually remove a pilot from a character owner.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'owner', description: 'Select the character owner.', required: true },
-                    { type: 6, name: 'pilot', description: 'Select the pilot to remove.', required: true }
-                ]
-            },
-            {
-                name: 'sendpanel',
-                description: '📋 [Admin] Send a fixed registration panel to this channel.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'pending',
-                description: '⏳ [Admin] List all pending registration requests with time remaining.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            { name: 'stats', description: '📊 Show bot statistics (registrations, sync status, allied clans)' },
-            {
-                name: 'grace',
-                description: '⏳ [Admin] Show remaining 72h grace time for members outside allied clans.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 6, name: 'member', description: 'Check a specific member (optional).', required: false }
-                ]
-            },
-            {
-                name: 'notify',
-                description: '📧 [Admin] Send notifications to server members',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'restorebackup',
-                description: '💾 [Super Admin] List and restore database backups.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'update',
-                description: '🔄 [Super Admin] Pull latest code and restart the bot.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString()
-            },
-            {
-                name: 'autoregister',
-                description: '🎯 [Admin] Auto-register channel members found in allied clans via ranking cache.',
-                default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-                options: [
-                    { type: 7, name: 'channel', description: 'Channel to scan for members.', required: true }
-                ]
-            },
-        ]);
+        await guild.commands.set(SLASH_COMMANDS);
         console.log('✅ Slash commands registered successfully.');
     } catch (error) {
         console.error('❌ Error registering slash commands:', error);

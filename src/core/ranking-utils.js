@@ -88,7 +88,9 @@ export function describeRoleError(error, targetMember, guild = null) {
  * keeps the new channels hidden until an admin removes and re-adds the role by
  * hand — exactly the "channels only appear after a manual re-add" symptom.
  * Re-applying the role's CURRENT overwrites re-emits CHANNEL_UPDATE for those
- * channels, forcing every affected client to recompute immediately.
+ * channels, forcing every affected client to recompute immediately. Calls are
+ * throttled per guild (CHANNEL_REFRESH_MIN_INTERVAL_MS) — pass `{ force: true }`
+ * to bypass the throttle.
  *
  * Only channels that actually carry an overwrite for the Member role are
  * touched, and only their existing overwrites are re-applied — NO permission is
@@ -98,7 +100,20 @@ export function describeRoleError(error, targetMember, guild = null) {
  * @param {Function} [logEvent] - Bot log sink
  * @returns {Promise<number>} How many channels were refreshed
  */
-export async function refreshRoleChannelAccess(guild, logEvent) {
+export async function refreshRoleChannelAccess(guild, logEvent, options = {}) {
+    // Throttle: a burst of grants (manual registration, approvals, scans) used to
+    // re-emit every channel overwrite once per member. Refreshing at most once per
+    // interval per guild keeps the channel list accurate without flooding the API.
+    const minInterval = Number.isFinite(options.minIntervalMs)
+        ? Math.max(0, options.minIntervalMs)
+        : CHANNEL_REFRESH_MIN_INTERVAL_MS;
+    const guildKey = guild?.id || 'global';
+    const now = Date.now();
+    if (options.force !== true && minInterval > 0 && now - (lastChannelRefreshAt.get(guildKey) || 0) < minInterval) {
+        return 0;
+    }
+    lastChannelRefreshAt.set(guildKey, now);
+
     const targets = [];
     try {
         const channels = guild?.channels?.cache;
@@ -150,7 +165,23 @@ export async function refreshRoleChannelAccess(guild, logEvent) {
 
 export const ROLE_REAPPLY_DELAY_MS = 800;
 
+// Same member touched again within this window (a sync right after a manual
+// approval, for example) skips the extra role writes — the client already got
+// the nudge and Discord would only be re-sent the same update.
+export const ROLE_REAPPLY_DEBOUNCE_MS = 30000;
+// At most one channel-overwrite re-emit per guild in this window.
+export const CHANNEL_REFRESH_MIN_INTERVAL_MS = 15000;
+
+const lastRoleReapplyAt = new Map(); // memberId -> timestamp
+const lastChannelRefreshAt = new Map(); // guildId -> timestamp
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Reset the in-memory throttles (tests / long-running diagnostics). */
+export function clearRoleRefreshThrottles() {
+    lastRoleReapplyAt.clear();
+    lastChannelRefreshAt.clear();
+}
 
 /**
  * Remove and immediately re-add the Member role so the member's Discord client
@@ -163,10 +194,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *
  * @param {object} targetMember - The GuildMember whose role should be re-applied
  * @param {Function} [logEvent] - Bot log sink
- * @param {{delayMs?: number, assumeHasRole?: boolean}} [options] - `delayMs`
- *   overrides the pause (tests); `assumeHasRole` skips the cache check for callers
- *   that just granted the role (a stale cache entry must not cancel the nudge)
- * @returns {Promise<{ok: boolean, reason?: string, error?: Error, roleRemoved?: boolean}>}
+ * @param {{delayMs?: number, debounceMs?: number, assumeHasRole?: boolean}} [options] -
+ *   `delayMs`/`debounceMs` override the pauses (tests); `assumeHasRole` skips the
+ *   cache check for callers that just granted the role (a stale cache entry must
+ *   not cancel the nudge)
+ * @returns {Promise<{ok: boolean, skipped?: boolean, reason?: string, error?: Error, roleRemoved?: boolean}>}
  */
 export async function reapplyMemberRole(targetMember, logEvent, options = {}) {
     if (!targetMember?.roles?.add || !targetMember?.roles?.remove) {
@@ -179,6 +211,14 @@ export async function reapplyMemberRole(targetMember, logEvent, options = {}) {
 
     const label = targetMember.user?.tag || targetMember.id;
     const delay = Number.isFinite(options.delayMs) ? Math.max(0, options.delayMs) : ROLE_REAPPLY_DELAY_MS;
+
+    const debounceMs = Number.isFinite(options.debounceMs) ? Math.max(0, options.debounceMs) : ROLE_REAPPLY_DEBOUNCE_MS;
+    const memberKey = targetMember.id || label;
+    const now = Date.now();
+    if (debounceMs > 0 && now - (lastRoleReapplyAt.get(memberKey) || 0) < debounceMs) {
+        return { ok: true, skipped: true };
+    }
+    lastRoleReapplyAt.set(memberKey, now);
 
     try {
         await sleep(delay);
@@ -274,6 +314,7 @@ export async function assignMemberRole(targetMember, logEvent, guild = null, opt
     if (reapplyRole) {
         const reapplyOutcome = await reapplyMemberRole(targetMember, logEvent, {
             delayMs: options.reapplyDelayMs,
+            debounceMs: options.reapplyDebounceMs,
             assumeHasRole: true
         });
         // Only a role that was actually removed and could not be put back is a

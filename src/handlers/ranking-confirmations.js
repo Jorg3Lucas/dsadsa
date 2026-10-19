@@ -23,18 +23,23 @@ import { findNicknameOwner, unlinkPilotLinks } from '../core/ranking-dedup.js';
 
 // ── Restore Backup: Select menu handler ──
 export async function handleRestoreBackupSelect(interaction, db, saveLocalStorage, logEvent) {
+    // Acknowledge first: reading and parsing a full backup can exceed Discord's
+    // 3s window, which used to show "<bot> didn't respond in time" on a click
+    // that was actually being processed.
+    if (!await deferUpdateSafe(interaction)) return;
+
     const userId = interaction.user.id;
 
     // Super admin only
     if (userId !== SUPER_ADMIN_USER_ID) {
-        return interaction.update({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
+        return interaction.editReply({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
     }
 
     const cacheKey = `${userId}-restorebackup`;
     const cached = confirmationCache[cacheKey];
 
     if (!cached) {
-        return interaction.update({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
+        return interaction.editReply({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
     }
 
     const selectedFile = interaction.values[0];
@@ -42,7 +47,7 @@ export async function handleRestoreBackupSelect(interaction, db, saveLocalStorag
     const backupPath = `${BACKUP_DIR}/${selectedFile}`;
 
     if (!fs.existsSync(backupPath)) {
-        return interaction.update({ content: '❌ Backup file not found.', components: [] }).catch(() => {});
+        return interaction.editReply({ content: '❌ Backup file not found.', components: [] }).catch(() => {});
     }
 
     // Show confirmation with details
@@ -55,7 +60,7 @@ export async function handleRestoreBackupSelect(interaction, db, saveLocalStorag
     try {
         data = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
     } catch (e) {
-        return interaction.update({ content: `❌ Invalid backup file: ${e.message}`, components: [] }).catch(() => {});
+        return interaction.editReply({ content: `❌ Invalid backup file: ${e.message}`, components: [] }).catch(() => {});
     }
 
     const userCount = data.users ? Object.keys(data.users).length : 0;
@@ -81,40 +86,47 @@ export async function handleRestoreBackupSelect(interaction, db, saveLocalStorag
         )
     ];
 
-    return interaction.update({ content: confirmContent, components }).catch(() => {});
+    return interaction.editReply({ content: confirmContent, components }).catch(() => {});
 }
 
 // ── Restore Backup: Cancel handler ──
 export async function handleRestoreBackupCancel(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
     const cacheKey = `${interaction.user.id}-restorebackup`;
     delete confirmationCache[cacheKey];
 
-    return interaction.update({ content: '❌ **Restore cancelled.**', components: [] }).catch(() => {});
+    return interaction.editReply({ content: '❌ **Restore cancelled.**', components: [] }).catch(() => {});
 }
 
 // ── Restore Backup: Confirm handler ──
 export async function handleRestoreBackupConfirm(interaction, db, saveLocalStorage, logEvent) {
+    if (!await deferUpdateSafe(interaction)) return;
+
     const userId = interaction.user.id;
 
     // Super admin only
     if (userId !== SUPER_ADMIN_USER_ID) {
-        return interaction.update({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
+        return interaction.editReply({ content: '❌ **Access denied.**', components: [] }).catch(() => {});
     }
 
     const cacheKey = `${userId}-restorebackup`;
     const cached = confirmationCache[cacheKey];
 
     if (!cached || !cached.selectedBackup) {
-        return interaction.update({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
+        return interaction.editReply({ content: '⌛ Session expired. Run /restorebackup again.', components: [] }).catch(() => {});
     }
 
     const DB_RANKING_PATH = './database_ranking.json';
     const BACKUP_DIR = './backups';
 
-    await interaction.update({ content: '💾 **Restoring backup...**', components: [] }).catch(() => {});
+    await interaction.editReply({ content: '💾 **Restoring backup...**', components: [] }).catch(() => {});
 
     try {
         // 1. Create backup of current state
+        // Persist the in-memory database first: the snapshot below copies the FILE,
+        // so any unsaved change would otherwise be lost by the restore.
+        saveLocalStorage();
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const preRestoreBackup = `${BACKUP_DIR}/database_ranking_PRE_RESTORE_${timestamp}.json`;
         if (fs.existsSync(DB_RANKING_PATH)) {

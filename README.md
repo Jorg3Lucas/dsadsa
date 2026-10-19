@@ -57,7 +57,6 @@ TOKEN=your_discord_bot_token
 | `/manage` | Admin | Bot management panel with user list and actions |
 | `/grace [member]` | Admin | Show remaining 72h grace time for members outside allied clans (all members, or a specific one) |
 | `/sendpanel` | Admin | Send a fixed registration panel to the current channel |
-| `/listunregistered [notify:true/false]` | Admin | List members with role but no registration; optionally DM them with 5s delay |
 
 ### Manage Panel Actions (`/manage`)
 
@@ -150,7 +149,7 @@ Configure via `/manage` → **⚙️ Allied Clans**:
 | `database_ranking.json` | Main database — user registrations, config, allied clans |
 | `ranking_cache.json` | Cached ranking data from the official website |
 | `ranking_logs.txt` | Event log file |
-| `backups/` | Auto-generated backups (every 6 hours) |
+| `backups/` | Auto-generated backups (every 30 minutes) |
 
 ### User Data Structure
 
@@ -182,20 +181,41 @@ Configure via `/manage` → **⚙️ Allied Clans**:
 ## Project Structure
 
 ```
-├── index.js                  # Entry point — Discord client setup
-├── ranking_sync.js           # Barrel exports
-├── ranking-commands.js       # Slash command registration
-├── ranking-constants.js      # Constants (IDs, world maps)
-├── ranking-handlers.js       # All interaction handlers (commands, modals, buttons)
-├── ranking-events.js         # Event listeners + text commands + cron
-├── ranking-sync-engine.js    # Daily sync logic (5 steps)
-├── sync-schedule.js          # When the daily sync runs (cron + startup catch-up)
-├── ranking-scraper.js        # MIR4 ranking web scraper
-├── ranking-cache.js          # Local ranking cache (read/write)
-├── lang.js                   # i18n helper
-├── lang.json                 # String translations
+src/
+├── index.js                  # Entry point — Discord client, router, /update
+├── commands.json             # SINGLE source of truth for the slash commands
+├── deploy-commands.cjs       # Manual deployer (reads commands.json)
 ├── auto-backup.js            # Automatic database backup
-└── package.json
+├── lang/
+│   ├── lang.js               # i18n helper
+│   └── lang.json             # String translations
+├── core/
+│   ├── ranking-deploy.js     # Startup registration (reads commands.json)
+│   ├── ranking-sync-engine.js# Daily sync logic
+│   ├── sync-schedule.js      # When the daily sync runs (cron + startup catch-up)
+│   ├── ranking-events.js     # Event listeners + text commands + cron
+│   ├── ranking-handlers.js   # Interaction handlers (modals, buttons, selects)
+│   ├── ranking-utils.js      # Role/nickname helpers, channel + client refresh
+│   ├── nickname-utils.js     # Nickname mutation helpers
+│   ├── interaction-utils.js  # Safe defer/edit + expired-interaction handling
+│   ├── ranking-constants.js  # Constants (IDs, world maps)
+│   ├── ranking-cache.js      # Local ranking cache (read/write)
+│   ├── ranking-scraper.js    # MIR4 ranking web scraper
+│   ├── ranking-service.js    # Ranking lookups (cache + live forum search)
+│   ├── ranking-dedup.js      # Duplicate nickname handling
+│   ├── ranking-storage.js    # Debounced persistence
+│   ├── ranking-logger.js     # Event log buffer
+│   ├── runtime-metrics.js    # Sync/rate-limit metrics
+│   └── ranking-gateway-watchdog.js # Offline-session watchdog
+└── handlers/
+    ├── ranking-commands.js   # Slash command handlers
+    ├── ranking-registration.js
+    ├── ranking-welcome.js
+    ├── ranking-approvals.js
+    ├── ranking-confirmations.js
+    ├── ranking-management.js
+    ├── ranking-pilot.js
+    └── ranking-notify.js
 ```
 
 ---

@@ -23,13 +23,15 @@ vi.mock('../src/lang/lang.js', () => ({
     getMsg: vi.fn((key) => key)
 }));
 
-import { buildPrefixedNickname, baseNicknameKey, stripServerPrefix, stripPilotSuffix, assignMemberRole, refreshRoleChannelAccess, reapplyMemberRole } from '../src/core/ranking-utils.js';
+import { buildPrefixedNickname, baseNicknameKey, stripServerPrefix, stripPilotSuffix, assignMemberRole, refreshRoleChannelAccess, reapplyMemberRole, clearRoleRefreshThrottles } from '../src/core/ranking-utils.js';
 import { resolveServerName } from '../src/core/ranking-constants.js';
 import { getLocalRankingCache } from '../src/core/ranking-cache.js';
 import { lookupNickname } from '../src/core/ranking-service.js';
 
 beforeEach(() => {
     vi.clearAllMocks();
+    // Throttles are module state: reset so each test starts from a clean slate.
+    clearRoleRefreshThrottles();
 });
 
 describe('buildPrefixedNickname', () => {
@@ -177,6 +179,18 @@ describe('refreshRoleChannelAccess', () => {
         expect(logEvent).toHaveBeenCalledWith(expect.stringContaining('Re-emitted channel access'));
     });
 
+    it('throttles repeated refreshes per guild, and force bypasses it', async () => {
+        const channel = makeChannel('c1', true);
+        const guild = makeGuild([channel]);
+
+        expect(await refreshRoleChannelAccess(guild, vi.fn())).toBe(1);
+        expect(await refreshRoleChannelAccess(guild, vi.fn())).toBe(0);
+        expect(channel.permissionOverwrites.set).toHaveBeenCalledTimes(1);
+
+        expect(await refreshRoleChannelAccess(guild, vi.fn(), { force: true })).toBe(1);
+        expect(channel.permissionOverwrites.set).toHaveBeenCalledTimes(2);
+    });
+
     it('is a no-op when the guild or its channels are unavailable', async () => {
         expect(await refreshRoleChannelAccess(null, vi.fn())).toBe(0);
         expect(await refreshRoleChannelAccess({}, vi.fn())).toBe(0);
@@ -230,6 +244,16 @@ describe('reapplyMemberRole', () => {
         expect(result.roleRemoved).toBe(true);
         expect(result.reason).toEqual(expect.any(String));
         expect(logEvent).toHaveBeenCalledWith(expect.stringContaining('FAILED to re-add'));
+    });
+
+    it('skips a second nudge for the same member inside the debounce window', async () => {
+        const member = makeMember(true);
+
+        expect(await reapplyMemberRole(member, vi.fn(), { delayMs: 0 })).toEqual({ ok: true });
+        expect(await reapplyMemberRole(member, vi.fn(), { delayMs: 0 })).toEqual({ ok: true, skipped: true });
+
+        expect(member.roles.remove).toHaveBeenCalledOnce();
+        expect(member.roles.add).toHaveBeenCalledOnce();
     });
 
     it('does nothing when the member does not have the role', async () => {

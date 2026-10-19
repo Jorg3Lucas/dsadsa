@@ -47,6 +47,55 @@ describe('deferReplySafe', () => {
         warn.mockRestore();
     });
 
+    it('retries a transient failure once instead of aborting the handler', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const interaction = {
+            customId: 'cmd',
+            deferred: false,
+            replied: false,
+            deferReply: vi.fn()
+                .mockRejectedValueOnce(new Error('Service Unavailable'))
+                .mockResolvedValueOnce(undefined)
+        };
+
+        expect(await deferReplySafe(interaction)).toBe(true);
+        expect(interaction.deferReply).toHaveBeenCalledTimes(2);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('retrying once'));
+        warn.mockRestore();
+    });
+
+    it('gives up after the retry when the failure persists', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const interaction = {
+            customId: 'cmd',
+            deferred: false,
+            replied: false,
+            deferReply: vi.fn().mockRejectedValue(new Error('Service Unavailable'))
+        };
+
+        expect(await deferReplySafe(interaction)).toBe(false);
+        expect(interaction.deferReply).toHaveBeenCalledTimes(2);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('after retry'));
+        warn.mockRestore();
+    });
+
+    it('treats an acknowledgement that landed despite the rejection as success', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const interaction = {
+            customId: 'cmd',
+            deferred: false,
+            replied: false,
+            deferReply: vi.fn(async () => {
+                interaction.deferred = true;
+                throw new Error('socket hang up');
+            })
+        };
+
+        expect(await deferReplySafe(interaction)).toBe(true);
+        expect(interaction.deferReply).toHaveBeenCalledOnce();
+        warn.mockRestore();
+    });
+
     it('returns true without calling deferReply when already deferred', async () => {
         const interaction = {
             deferred: true,
