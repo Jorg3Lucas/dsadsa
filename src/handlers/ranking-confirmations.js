@@ -12,6 +12,7 @@ import {
     confirmationCache
 } from '../core/ranking-constants.js';
 import { buildPrefixedNickname, assignMemberRole, setMemberNickname } from '../core/ranking-utils.js';
+import { deferUpdateSafe } from '../core/interaction-utils.js';
 import { findNicknameOwner, unlinkPilotLinks } from '../core/ranking-dedup.js';
 
 // ==========================================
@@ -153,12 +154,18 @@ export async function handleRestoreBackupConfirm(interaction, db, saveLocalStora
 }
 
 export async function handleConfirmAction(interaction, db, saveLocalStorage, logEvent) {
+    // Acknowledge the click immediately. Registering a player fetches the member,
+    // sets the nickname and assigns the role — easily more than Discord's 3s reply
+    // window, and without this the click shows "<bot> didn't respond in time" even
+    // though the registration itself succeeds.
+    if (!await deferUpdateSafe(interaction)) return;
+
     const [_, action, result] = interaction.customId.split('-');
     const cacheKey = `${interaction.user.id}-${action}`;
     const cached = confirmationCache[cacheKey];
 
     if (!cached) {
-        return interaction.update({
+        return interaction.editReply({
             content: '⌛ This confirmation has expired. Please run the command again.',
             components: []
         }).catch(() => {});
@@ -166,7 +173,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
 
     if (result === 'no') {
         delete confirmationCache[cacheKey];
-        return interaction.update({
+        return interaction.editReply({
             content: '❌ Action cancelled.',
             components: []
         }).catch(() => {});
@@ -179,7 +186,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         const guild = interaction.guild;
         const targetMember = await guild.members.fetch(cached.targetId).catch(() => null);
         if (!targetMember || !db.users[cached.targetId]) {
-            return interaction.update({ content: '❌ Target user no longer available.', components: [] }).catch(() => {});
+            return interaction.editReply({ content: '❌ Target user no longer available.', components: [] }).catch(() => {});
         }
 
         const userData = db.users[cached.targetId];
@@ -207,7 +214,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         saveLocalStorage();
 
         logEvent(`Admin ${interaction.user.tag} manually removed user ${cached.targetId}`);
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manualremove.success', { username: cached.targetName }),
             components: []
         }).catch(() => {});
@@ -223,11 +230,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         ]);
 
         if (!ownerMember || !db.users[cached.ownerId]) {
-            return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
+            return interaction.editReply({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
         }
 
         if (!db.users[cached.ownerId].pilotIds || !db.users[cached.ownerId].pilotIds.includes(cached.pilotId)) {
-            return interaction.update({ content: '❌ This pilot is no longer linked.', components: [] }).catch(() => {});
+            return interaction.editReply({ content: '❌ This pilot is no longer linked.', components: [] }).catch(() => {});
         }
 
         db.users[cached.ownerId].pilotIds = db.users[cached.ownerId].pilotIds.filter(id => id !== cached.pilotId);
@@ -243,7 +250,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
 
         logEvent(`Admin ${interaction.user.tag} removed pilot ${cached.pilotName} from ${cached.ownerName}`);
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manualremovepilot.success', { ownerDisplay: cached.ownerName, pilotDisplay: cached.pilotName }),
             components: []
         }).catch(() => {});
@@ -259,18 +266,18 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         ]);
 
         if (!ownerMember || !db.users[cached.ownerId]) {
-            return interaction.update({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
+            return interaction.editReply({ content: '❌ Owner no longer available.', components: [] }).catch(() => {});
         }
 
         if (cached.ownerId === cached.pilotId) {
-            return interaction.update({ content: '❌ A member cannot be their own pilot.', components: [] }).catch(() => {});
+            return interaction.editReply({ content: '❌ A member cannot be their own pilot.', components: [] }).catch(() => {});
         }
 
         const ownerData = db.users[cached.ownerId];
         if (!ownerData.pilotIds) ownerData.pilotIds = [];
         // The cap may have been reached between /manualpilot and this click.
         if (!ownerData.pilotIds.includes(cached.pilotId) && ownerData.pilotIds.length >= MAX_PILOTS_PER_OWNER) {
-            return interaction.update({ content: `❌ This owner already has the maximum of ${MAX_PILOTS_PER_OWNER} pilots.`, components: [] }).catch(() => {});
+            return interaction.editReply({ content: `❌ This owner already has the maximum of ${MAX_PILOTS_PER_OWNER} pilots.`, components: [] }).catch(() => {});
         }
         if (!ownerData.pilotIds.includes(cached.pilotId)) {
             ownerData.pilotIds.push(cached.pilotId);
@@ -291,7 +298,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
                     !roleOutcome.ok ? `⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${roleOutcome.reason}` : ''
                 ].filter(Boolean).join('\n\n');
                 logEvent(`⚠️ [ManualPilot] Failed to fully apply the pilot registration to ${pilotMember.user?.tag || cached.pilotId} — nick.ok=${nickOutcome.ok}, role.ok=${roleOutcome.ok}`);
-                return interaction.update({
+                return interaction.editReply({
                     content: `${getMsg('ranking.responses.manualpilot.success', { pilotMember: cached.pilotName, nick: cached.ownerNick })}\n\n${warnings}`,
                     components: []
                 }).catch(() => {});
@@ -299,7 +306,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         }
 
         logEvent(`Admin ${interaction.user.tag} manually linked pilot ${cached.pilotName} to ${cached.ownerName}`);
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manualpilot.success', { pilotMember: cached.pilotName, nick: cached.ownerNick }),
             components: []
         }).catch(() => {});
@@ -311,7 +318,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         const targetMember = await guild.members.fetch(cached.targetId).catch(() => null);
 
         if (!targetMember) {
-            return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
+            return interaction.editReply({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
         }
 
         const finalNickname = cached.selectedNickname || cached.nickname;
@@ -321,7 +328,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         // admin override and stays allowed.
         const takenBy = findNicknameOwner(db.users, finalNickname, cached.targetId);
         if (takenBy) {
-            return interaction.update({ content: `❌ The nickname **${finalNickname}** is already registered by <@${takenBy.id}>.`, components: [] }).catch(() => {});
+            return interaction.editReply({ content: `❌ The nickname **${finalNickname}** is already registered by <@${takenBy.id}>.`, components: [] }).catch(() => {});
         }
 
         db.users[cached.targetId] = {
@@ -360,7 +367,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             registerRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${registerRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`
         ].join('');
 
-        return interaction.update({
+        return interaction.editReply({
             content: responseMsg + registerWarnings,
             components: []
         }).catch(() => {});
@@ -372,12 +379,12 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
         const targetMember = await guild.members.fetch(cached.targetId).catch(() => null);
 
         if (!targetMember) {
-            return interaction.update({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
+            return interaction.editReply({ content: '❌ Member no longer available.', components: [] }).catch(() => {});
         }
 
         const takenBy = findNicknameOwner(db.users, cached.nickname, cached.targetId);
         if (takenBy) {
-            return interaction.update({ content: `❌ The nickname **${cached.nickname}** is already registered by <@${takenBy.id}>.`, components: [] }).catch(() => {});
+            return interaction.editReply({ content: `❌ The nickname **${cached.nickname}** is already registered by <@${takenBy.id}>.`, components: [] }).catch(() => {});
         }
 
         // Register immediately as permanent — no tempUntil, no ranking check
@@ -410,11 +417,11 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             forceRoleOutcome.ok ? '' : `\n\n⚠️ **The member role could NOT be applied by the bot.**\n**Discord said:** ${forceRoleOutcome.reason}\nGive the role manually or fix the bot's role position, then run \`/forcesync\`.`
         ].join('');
 
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manualforce.success', { username: cached.targetName, nickname: cached.nickname }) + forceWarnings,
             components: []
         }).catch(() => {});
     }
 
-    return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {});
+    return interaction.editReply({ content: '❌ Unknown action.', components: [] }).catch(() => {});
 }

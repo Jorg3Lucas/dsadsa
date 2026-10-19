@@ -78,8 +78,51 @@ describe('handleConfirmAction', () => {
             guild: {
                 members: { fetch: vi.fn() }
             },
-            update: vi.fn().mockResolvedValue()
+            deferred: false,
+            replied: false,
+            deferUpdate: vi.fn().mockImplementation(async () => { interaction.deferred = true; }),
+            update: vi.fn().mockResolvedValue(),
+            editReply: vi.fn().mockResolvedValue()
         };
+    });
+
+    it('acknowledges the click before doing slow work', async () => {
+        interaction.customId = 'confirm-manualregister-yes';
+        getCache()[`${ADMIN_ID}-manualregister`] = {
+            targetId: TARGET_ID, nickname: 'PlayerOne', clan: 'ToxicFamily',
+            worldId: '611', needsTempApproval: false, selectedNickname: null
+        };
+        const targetMember = {
+            user: { tag: 'PlayerOne#1234', username: 'PlayerOne' },
+            roles: { cache: { has: vi.fn().mockReturnValue(false) }, add: vi.fn().mockResolvedValue() },
+            setNickname: vi.fn().mockResolvedValue()
+        };
+        interaction.guild.members.fetch.mockResolvedValue(targetMember);
+
+        await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
+
+        // Deferred before touching the guild, so Discord never shows the 3s timeout
+        expect(interaction.deferUpdate).toHaveBeenCalledOnce();
+        expect(interaction.deferUpdate.mock.invocationCallOrder[0])
+            .toBeLessThan(interaction.guild.members.fetch.mock.invocationCallOrder[0]);
+        expect(interaction.update).not.toHaveBeenCalled();
+        expect(interaction.editReply).toHaveBeenCalled();
+    });
+
+    it('skips the work when the click can no longer be acknowledged', async () => {
+        interaction.customId = 'confirm-manualregister-yes';
+        getCache()[`${ADMIN_ID}-manualregister`] = {
+            targetId: TARGET_ID, nickname: 'PlayerOne', clan: 'ToxicFamily',
+            worldId: '611', needsTempApproval: false, selectedNickname: null
+        };
+        delete db.users[TARGET_ID].registeredAt;
+        interaction.deferUpdate.mockRejectedValueOnce(Object.assign(new Error('Unknown interaction'), { code: 10062 }));
+
+        await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
+
+        expect(interaction.guild.members.fetch).not.toHaveBeenCalled();
+        expect(saveLocalStorage).not.toHaveBeenCalled();
+        expect(db.users[TARGET_ID].registeredAt).toBeUndefined();
     });
 
     // ── Generic ──
@@ -87,7 +130,7 @@ describe('handleConfirmAction', () => {
     it('returns expired when no cached confirmation', async () => {
         interaction.customId = 'confirm-manualremove-yes';
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('expired')
         }));
     });
@@ -97,7 +140,7 @@ describe('handleConfirmAction', () => {
         getCache()[`${ADMIN_ID}-manualremove`] = { targetId: TARGET_ID, targetName: 'PlayerOne' };
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('Action cancelled')
         }));
         expect(getCache()[`${ADMIN_ID}-manualremove`]).toBeUndefined();
@@ -111,7 +154,7 @@ describe('handleConfirmAction', () => {
         interaction.guild.members.fetch.mockResolvedValue(null);
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('no longer available')
         }));
     });
@@ -160,7 +203,7 @@ describe('handleConfirmAction', () => {
         interaction.guild.members.fetch.mockResolvedValue(null);
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('no longer available')
         }));
     });
@@ -171,7 +214,7 @@ describe('handleConfirmAction', () => {
         interaction.guild.members.fetch.mockResolvedValue({ id: TARGET_ID });
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('no longer linked')
         }));
     });
@@ -202,7 +245,7 @@ describe('handleConfirmAction', () => {
         interaction.guild.members.fetch.mockResolvedValue(null);
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('no longer available')
         }));
     });
@@ -260,7 +303,7 @@ describe('handleConfirmAction', () => {
         interaction.guild.members.fetch.mockResolvedValue(null);
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('no longer available')
         }));
     });
@@ -336,7 +379,7 @@ describe('handleConfirmAction', () => {
         interaction.guild.members.fetch.mockResolvedValue(null);
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('no longer available')
         }));
     });
@@ -377,7 +420,7 @@ describe('handleConfirmAction', () => {
         getCache()[`${ADMIN_ID}-unknownaction`] = { dummy: true };
 
         await handleConfirmAction(interaction, db, saveLocalStorage, logEvent);
-        expect(interaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('Unknown action')
         }));
     });
