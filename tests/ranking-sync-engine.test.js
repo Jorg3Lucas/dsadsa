@@ -28,7 +28,7 @@ import {
 import { OUT_OF_ALLIED_GRACE_MS } from '../src/core/ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from '../src/core/ranking-scraper.js';
 
-describe('pilots queued by /scanallied', () => {
+describe('pilots in the legacy scan queue', () => {
     it('recognises a queued pilot', () => {
         const db = { scanPilotPending: { 5: { ownerName: 'cecilia' } } };
         expect(isPendingPilot(db, '5')).toBe(true);

@@ -19,7 +19,6 @@ import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } fr
 import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot, handleWelcomeMyRegistration } from './handlers/ranking-welcome.js';
 import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
-import { handlePilotBulkSelect } from './handlers/ranking-pilot-bulk.js';
 import { handleConfirmAction, handleRestoreBackupSelect, handleRestoreBackupCancel, handleRestoreBackupConfirm } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname, handleSelectPendingNickname, handleSelectPendingPilotOwner } from './handlers/ranking-commands.js';
 import {
@@ -368,7 +367,6 @@ const SELECT_PREFIX = [
     ['manage_action_', handleManageAction],
     ['manage_pilot_', handleManagePilotRemove],
     ['manage_allied_page_', handleManageAlliedPage],
-    ['pilotbulk_owner_', handlePilotBulkSelect],
 ];
 
 const MODAL_PREFIX = [

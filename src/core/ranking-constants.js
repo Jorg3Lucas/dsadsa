@@ -284,8 +284,8 @@ export const MAX_NICKNAME_SUGGESTIONS = 6;
 // ✈️ PILOT CAP PER OWNER
 // ==========================================
 // Single source of truth for how many pilots one owner may have. It used to be
-// duplicated as 4/6 across the registration flow, /manualpilot, /scanallied and
-// /pilotbulk, so the limit drifted between commands.
+// duplicated as 4/6 across the registration flow and /manualpilot, so the limit
+// drifted between commands.
 // Override with PILOT_CAP (env) when the clan decides to change it.
 export const MAX_PILOTS_PER_OWNER_DEFAULT = 6;
 export const MAX_PILOTS_PER_OWNER = (() => {

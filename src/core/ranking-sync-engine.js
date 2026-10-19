@@ -15,16 +15,17 @@ export { OUT_OF_ALLIED_GRACE_MS } from '../core/ranking-constants.js';
 // ==========================================
 
 // ==========================================
-// ✈️ PILOTS QUEUED BY /scanallied
+// ✈️ LEGACY PILOT QUEUE (retired /scanallied command)
 // ==========================================
-// When the copied list names an owner that the scan cannot match to a member,
-// the pilot is registered as a regular member and queued in db.scanPilotPending
-// while wearing "<Owner> - Pilot". Until an admin resolves the pair (/pilotbulk
-// or /manualpilot) — or the owner registers and step 1 auto-links them — the
-// sync must leave that nickname alone and must not flag the member as an
-// impostor using the owner's name.
+// The /scanallied and /pilotbulk commands were removed, but databases created
+// before that still carry db.scanPilotPending entries: pilots registered as
+// regular members while wearing "<Owner> - Pilot" whose owner was never linked.
+// Until an admin resolves the pair with /manualpilot — or the owner registers and
+// step 1 auto-links them — the sync keeps that nickname and never flags the
+// member as an impostor using the owner's name. Dropping this handling would make
+// the next sync strip those members' roles.
 
-/** True when the member is a pilot queued by /scanallied, still without an owner. */
+/** True when the member is a pilot left in the legacy queue, still without an owner. */
 export function isPendingPilot(db, memberId) {
     return !!(db?.scanPilotPending?.[memberId]);
 }
