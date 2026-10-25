@@ -13,7 +13,7 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 
 export function getLocalTime() {
     const timeStr = (new Date).toLocaleString("en-US", {
-        timeZone: "Etc/GMT-2"
+        timeZone: "Africa/Cairo"
     });
     return new Date(timeStr);
 }
