@@ -13,7 +13,7 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 
 export function getLocalTime() {
     const timeStr = (new Date).toLocaleString("en-US", {
-        timeZone: "Europe/Kaliningrad"
+        timeZone: "Etc/GMT-2"
     });
     return new Date(timeStr);
 }
