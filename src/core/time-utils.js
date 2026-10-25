@@ -12,16 +12,17 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 // ==========================================
 
 export function getLocalTime() {
-    const date = new Date();
-    const isoString = date.toLocaleString("sv-SE", { timeZone: "Etc/GMT-2" }).replace(" ", "T");
-    return new Date(`${isoString}+02:00`);
+    const now = new Date();
+    // Kaliningrad / Etc/GMT-2 (UTC+2 fixo) -> deslocamento de +2 horas
+    const utc2Ms = now.getTime() + (now.getTimezoneOffset() * 60000) + (2 * 3600000);
+    return new Date(utc2Ms);
 }
 
 export function getBrazilTime() {
-    const timeStr = (new Date).toLocaleString("en-US", {
-        timeZone: "America/Sao_Paulo"
-    });
-    return new Date(timeStr);
+    const now = new Date();
+    // Brasil / America/Sao_Paulo (UTC-3 fixo / padrão) -> deslocamento de -3 horas
+    const utc3Ms = now.getTime() + (now.getTimezoneOffset() * 60000) - (3 * 3600000);
+    return new Date(utc3Ms);
 }
 
 /**
@@ -159,12 +160,12 @@ export function getBossSchedules(current, prop) {
 export function parseStringToDate(str) {
     if (!str) return null;
     const base = getLocalTime();
-        const isPm = str.toLowerCase().includes("pm");
-        const isAm = str.toLowerCase().includes("am");
-        const parts = str.toLowerCase().replace("am", "").replace("pm", "").replace("killed at ", "").replace("active", "").trim().split(":");
-        let hr = Number(parts[0]);
-        const min = Number(parts[1]);
-        const sec = parts[2] ? Number(parts[2]) : 0;
+    const isPm = str.toLowerCase().includes("pm");
+    const isAm = str.toLowerCase().includes("am");
+    const parts = str.toLowerCase().replace("am", "").replace("pm", "").replace("killed at ", "").replace("active", "").trim().split(":");
+    let hr = Number(parts[0]);
+    const min = Number(parts[1]);
+    const sec = parts[2] ? Number(parts[2]) : 0;
 
     if (isPm && hr < 12) hr += 12;
     if (isAm && 12 === hr) hr = 0;
