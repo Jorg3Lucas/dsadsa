@@ -158,7 +158,7 @@ Text commands (require **Administrator**) — run them in the channel you want t
 
 ## ⏰ Automatic Schedules
 
-| Time (Server/Berlin) | Action |
+| Time (Server, UTC+2 — no DST) | Action |
 |----------------------|--------|
 | **Every 15s** | Panel tick — countdowns, cooldowns, auto-respawn, timeouts, force refresh |
 | **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |

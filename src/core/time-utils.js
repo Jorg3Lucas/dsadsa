@@ -11,52 +11,23 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 // ⏰ DATE/TIME UTILITIES
 // ==========================================
 
-/** Game/server time zone. Europe/Berlin follows CET in winter and CEST in
- * summer, so the bot's schedules stay aligned with the local wall clock
- * across daylight-saving changes instead of drifting one hour. */
-const GAME_TIME_ZONE = "Europe/Berlin";
-
-let gameTimeFormatter = null;
-
 /**
- * Wall-clock offset of Europe/Berlin from UTC at `date` (ms), DST included.
- * @param {Date} date
- * @returns {number}
+ * Game clock offset: MIR4 EU server time is UTC+2 the whole year — the game
+ * does NOT observe European daylight saving. Every panel, schedule and log
+ * time is expressed in this clock, so it must never follow CET/CEST: in
+ * winter Europe is UTC+1 and any DST-aware clock would run an hour early
+ * (e.g. Frenzy announced at 04:00 instead of the real 05:00 server slot).
+ * Do not replace this with a time zone like Europe/Berlin.
  */
-function getGameOffsetMs(date) {
-    gameTimeFormatter ??= new Intl.DateTimeFormat("en-US", {
-        timeZone: GAME_TIME_ZONE,
-        hourCycle: "h23",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-    });
-    const parts = {};
-    for (const part of gameTimeFormatter.formatToParts(date)) {
-        if (part.type !== "literal") parts[part.type] = part.value;
-    }
-    const wallClockMs = Date.UTC(
-        Number(parts.year),
-        Number(parts.month) - 1,
-        Number(parts.day),
-        Number(parts.hour) % 24,
-        Number(parts.minute),
-        Number(parts.second)
-    );
-    return wallClockMs - Math.floor(date.getTime() / 1000) * 1000;
-}
+const GAME_UTC_OFFSET_MS = 2 * 3600000;
 
 /**
  * Game clock: a Date whose local getters (getHours, getDay, setHours, ...)
- * read the Europe/Berlin wall clock for the given instant, including CET/CEST.
+ * read the MIR4 server clock (UTC+2, no DST) for the given instant.
  * @param {Date} [at] instant to read (defaults to now)
  */
 export function getLocalTime(at = new Date()) {
-    const offsetMs = getGameOffsetMs(at);
-    return new Date(at.getTime() + offsetMs + at.getTimezoneOffset() * 60000);
+    return new Date(at.getTime() + at.getTimezoneOffset() * 60000 + GAME_UTC_OFFSET_MS);
 }
 
 export function getBrazilTime() {
