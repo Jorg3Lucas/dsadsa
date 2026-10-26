@@ -11,11 +11,52 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 // ⏰ DATE/TIME UTILITIES
 // ==========================================
 
-export function getLocalTime() {
-    const now = new Date();
-    // Kaliningrad / Etc/GMT-2 (UTC+2 fixo) -> deslocamento de +2 horas
-    const utc2Ms = now.getTime() + (now.getTimezoneOffset() * 60000) + (2 * 3600000);
-    return new Date(utc2Ms);
+/** Game/server time zone. Europe/Berlin follows CET in winter and CEST in
+ * summer, so the bot's schedules stay aligned with the local wall clock
+ * across daylight-saving changes instead of drifting one hour. */
+const GAME_TIME_ZONE = "Europe/Berlin";
+
+let gameTimeFormatter = null;
+
+/**
+ * Wall-clock offset of Europe/Berlin from UTC at `date` (ms), DST included.
+ * @param {Date} date
+ * @returns {number}
+ */
+function getGameOffsetMs(date) {
+    gameTimeFormatter ??= new Intl.DateTimeFormat("en-US", {
+        timeZone: GAME_TIME_ZONE,
+        hourCycle: "h23",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
+    const parts = {};
+    for (const part of gameTimeFormatter.formatToParts(date)) {
+        if (part.type !== "literal") parts[part.type] = part.value;
+    }
+    const wallClockMs = Date.UTC(
+        Number(parts.year),
+        Number(parts.month) - 1,
+        Number(parts.day),
+        Number(parts.hour) % 24,
+        Number(parts.minute),
+        Number(parts.second)
+    );
+    return wallClockMs - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+/**
+ * Game clock: a Date whose local getters (getHours, getDay, setHours, ...)
+ * read the Europe/Berlin wall clock for the given instant, including CET/CEST.
+ * @param {Date} [at] instant to read (defaults to now)
+ */
+export function getLocalTime(at = new Date()) {
+    const offsetMs = getGameOffsetMs(at);
+    return new Date(at.getTime() + offsetMs + at.getTimezoneOffset() * 60000);
 }
 
 export function getBrazilTime() {
