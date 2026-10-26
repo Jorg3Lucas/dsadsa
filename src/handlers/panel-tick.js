@@ -40,7 +40,7 @@ export function startTickInterval() {
             const now = getLocalTime();
         reloadLanguage();
 
-        // Daily logs dispatch at 18:00 Berlin time
+        // Daily logs dispatch at 18:00 game/server time (UTC+2, no DST)
         if (18 === now.getHours() && 0 === now.getMinutes() && !alertCache._dailyDispatched) {
             alertCache._dailyDispatched = true;
             await dispatchDailyLogs(false);
