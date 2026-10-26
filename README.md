@@ -142,7 +142,7 @@ State lives in `tickets.json`; transcripts are written to `ticket-logs/` (both g
 
 ## ⏰ Automatic Schedules
 
-| Time (Server/Berlin) | Action |
+| Time (Server, UTC+2 — no DST) | Action |
 |----------------------|--------|
 | **Every 15s** | Panel tick — countdowns, cooldowns, auto-respawn, timeouts, force refresh |
 | **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |

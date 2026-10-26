@@ -1,6 +1,6 @@
 // ==========================================
 // 🦁 BOSS SPAWN SCHEDULER
-// Server Time (Europe/Berlin) based spawn alerts
+// Server Time (UTC+2, no DST — the game's clock) based spawn alerts
 // ==========================================
 
 import { EmbedBuilder } from "discord.js";

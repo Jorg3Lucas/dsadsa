@@ -192,8 +192,9 @@ export function computeUpcomingEvents(limit = 24) {
         }
     }
 
-    // Convert bot-convention dates (Berlin wall clock parsed as local) to real
-    // epoch so the frontend can run accurate ticking countdowns against Date.now().
+    // Convert bot-convention dates (game clock: UTC+2, no DST, parsed as local)
+    // to real epoch so the frontend can run accurate ticking countdowns
+    // against Date.now().
     const realOffset = Date.now() - now.getTime();
     return events
         .sort((a, b) => a.date - b.date)

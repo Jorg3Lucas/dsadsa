@@ -11,11 +11,23 @@ export const leader3Schedules = [0, 3, 6, 9, 12, 15, 18, 21];
 // ⏰ DATE/TIME UTILITIES
 // ==========================================
 
-export function getLocalTime() {
-    const timeStr = (new Date).toLocaleString("en-US", {
-        timeZone: "Europe/Berlin"
-    });
-    return new Date(timeStr);
+/**
+ * Game clock offset: MIR4 EU server time is UTC+2 the whole year — the game
+ * does NOT observe European daylight saving. Every panel, schedule and log
+ * time is expressed in this clock, so it must never follow CET/CEST: in
+ * winter Europe is UTC+1 and any DST-aware clock would run an hour early
+ * (e.g. Frenzy announced at 04:00 instead of the real 05:00 server slot).
+ * Do not replace this with a time zone like Europe/Berlin.
+ */
+const GAME_UTC_OFFSET_MS = 2 * 3600000;
+
+/**
+ * Game clock: a Date whose local getters (getHours, getDay, setHours, ...)
+ * read the MIR4 server clock (UTC+2, no DST) for the given instant.
+ * @param {Date} [at] instant to read (defaults to now)
+ */
+export function getLocalTime(at = new Date()) {
+    return new Date(at.getTime() + at.getTimezoneOffset() * 60000 + GAME_UTC_OFFSET_MS);
 }
 
 export function isRoomOpen(schedules, minuteOffset = 0) {
