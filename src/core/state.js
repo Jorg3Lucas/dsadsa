@@ -12,7 +12,18 @@ const dmOptOutPath = s.resolve("./dm-optout.json");
 export const defaultFloors = ["7", "8", "9", "10"];
 
 export let punishments = {};
-export let dailyLogs = { configChannelId: null, queue: [], bossSpawnChannelId: null, scheduledEventChannelId: null };
+
+// Default daily-logs state — also holds the alert channel IDs
+const defaultDailyLogs = {
+    configChannelId: null,
+    queue: [],
+    // Boss spawn alerts: which boss is spawning and on which map
+    bossSpawnChannelId: "1539143015359062086",
+    // Scheduled events: World Boss, Purgatory, Red Boss, Leader 3, etc.
+    scheduledEventChannelId: "1539142987844419634"
+};
+
+export let dailyLogs = { ...defaultDailyLogs };
 export const alertCache = { warning5mAfter: {}, spawnAlerted: {} };
 export const antiDemonSelectionCache = {};
 export const summonSelectionCache = {};
@@ -33,9 +44,18 @@ export function initState(opts) {
 
 function loadDailyLogsFromDisk() {
     try {
-        if (o.existsSync(dailyLogsPath)) {
-            dailyLogs = JSON.parse(o.readFileSync(dailyLogsPath, "utf8"));
-        }
+        if (!o.existsSync(dailyLogsPath)) return;
+
+        const parsed = JSON.parse(o.readFileSync(dailyLogsPath, "utf8"));
+
+        // An empty channel id in the file means "not configured" — keep the defaults
+        dailyLogs = {
+            ...defaultDailyLogs,
+            ...parsed,
+            queue: Array.isArray(parsed.queue) ? parsed.queue : [],
+            bossSpawnChannelId: parsed.bossSpawnChannelId || defaultDailyLogs.bossSpawnChannelId,
+            scheduledEventChannelId: parsed.scheduledEventChannelId || defaultDailyLogs.scheduledEventChannelId
+        };
     } catch (l) {
         logger.error('State', 'Error loading daily-logs.json', l);
     }
