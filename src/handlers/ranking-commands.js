@@ -443,6 +443,10 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
                 .setLabel('✈️ Register as Pilot')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
+                .setCustomId('welcome_remove_registration')
+                .setLabel('🗑️ Remove My Registration')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
                 .setCustomId('welcome_remove_pilot')
                 .setLabel('🗑️ Remove Pilot')
                 .setStyle(ButtonStyle.Danger)
