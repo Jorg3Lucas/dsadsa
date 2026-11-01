@@ -207,6 +207,156 @@ export async function handleRejectOwner(interaction, db, saveLocalStorage, logEv
     return interaction.editReply('❌ **Registration rejected.** The user was notified via DM with the reason.');
 }
 
+// ── Admin Approval: Registration Update (nickname change) ──
+// The member keeps their registration; only the character name is replaced,
+// and only after an administrator approves it.
+export async function handleApproveUpdate(interaction, db, saveLocalStorage, logEvent) {
+    const rest = interaction.customId.replace('approve_update_', '');
+    const [userId, result] = rest.split('-');
+    const pending = db.pendingUpdates ? db.pendingUpdates[userId] : null;
+
+    if (!pending) {
+        return interaction.update({ content: '⌛ This update request was already processed.', components: [] });
+    }
+
+    const timeSinceSubmission = Date.now() - (pending.timestamp || 0);
+    if (timeSinceSubmission > PENDING_MAX_AGE_MS) {
+        delete db.pendingUpdates[userId];
+        saveLocalStorage();
+        return interaction.update({
+            content: `⌛ **This update request has expired.** (>24h since submission)\n\n👤 **User:** <@${userId}>\n📝 **Requested name:** ${pending.newNickname}\n\nThe member must submit a new update request.`,
+            components: []
+        });
+    }
+
+    const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+
+    if (!canApprove) {
+        if (!await deferUpdateSafe(interaction)) return;
+        return interaction.followUp({ content: '❌ You do not have permission to review registration updates.', flags: 64 });
+    }
+
+    if (result === 'no') {
+        const modal = new ModalBuilder()
+            .setCustomId(`reject_update_${userId}`)
+            .setTitle('❌ Reject Registration Update');
+
+        const reasonInput = new TextInputBuilder()
+            .setCustomId('reject_reason')
+            .setLabel('Reason — explain how to resolve')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('e.g. New name not found in the EU21 ranking.')
+            .setMinLength(1)
+            .setMaxLength(500)
+            .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+        return interaction.showModal(modal);
+    }
+
+    if (!await deferUpdateSafe(interaction)) return;
+
+    const userData = db.users[userId];
+    if (!userData) {
+        delete db.pendingUpdates[userId];
+        saveLocalStorage();
+        logEvent(`❌ Admin ${interaction.user.tag} tried to approve an update for ${userId} but the user is no longer registered`);
+        return interaction.editReply({ content: '❌ This user is no longer registered.', components: [] });
+    }
+
+    const nicknameOwner = findNicknameOwner(db, pending.newNickname, userId);
+    if (nicknameOwner) {
+        logEvent(`❌ [SAFETY] Admin ${interaction.user.tag} — update to "${pending.newNickname}" blocked: already registered by ${nicknameOwner[0]}`);
+        return interaction.editReply({
+            content: `❌ **Safety Blocked:** **${pending.newNickname}** is already registered by another user.\n\nReject this request.`,
+            components: []
+        });
+    }
+
+    const oldNickname = userData.nickname;
+    userData.nickname = pending.newNickname;
+    delete db.pendingUpdates[userId];
+    saveLocalStorage();
+
+    // Nicknames carry the server prefix, and pilots mirror the owner's name.
+    const ownerMember = await interaction.guild.members.fetch(userId).catch(() => null);
+    if (ownerMember) {
+        await ownerMember.setNickname(buildPrefixedNickname(pending.newNickname, db)).catch(() => {});
+    }
+
+    if (userData.pilotIds && userData.pilotIds.length > 0) {
+        for (const pilotId of userData.pilotIds) {
+            const pilotMember = await interaction.guild.members.fetch(pilotId).catch(() => null);
+            if (pilotMember) {
+                await pilotMember.setNickname(buildPrefixedNickname(pending.newNickname, db, 'Pilot')).catch(() => {});
+            }
+        }
+    }
+
+    logEvent(`✅ Admin ${interaction.user.tag} approved registration update for ${userId}: "${oldNickname}" → "${pending.newNickname}"`);
+
+    await interaction.editReply({
+        content: `✅ **UPDATE APPROVED**\n\n👤 **User:** <@${userId}>\n📝 **Previous name:** ${oldNickname}\n📝 **New name:** ${pending.newNickname}\n✅ **Approved by:** ${interaction.user.tag}`,
+        components: []
+    });
+
+    try {
+        const user = await interaction.client.users.fetch(userId);
+        await user.send(`✅ **Registration updated!**\n\nYour registered character name is now **${pending.newNickname}** (was **${oldNickname}**). Your member role stays with you.`);
+    } catch (e) {
+        logEvent(`⚠️ Could not send update-approved DM to ${userId} (DMs closed or user not found)`);
+    }
+
+    return;
+}
+
+// ── Admin Rejection Modal Submit (registration update) ──
+export async function handleRejectUpdate(interaction, db, saveLocalStorage, logEvent) {
+    const canApprove = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        interaction.member.roles.cache.some(r => APPROVER_ROLE_IDS.includes(r.id));
+    if (!canApprove) {
+        return interaction.reply({ content: '❌ You do not have permission to reject registration updates.', flags: 64 });
+    }
+
+    if (!await deferReplySafe(interaction)) return;
+
+    const userId = interaction.customId.replace('reject_update_', '');
+    const reason = interaction.fields.getTextInputValue('reject_reason').trim();
+    const pending = db.pendingUpdates ? db.pendingUpdates[userId] : null;
+
+    if (!pending) {
+        return interaction.editReply('⌛ This update request has expired or was already processed.');
+    }
+
+    delete db.pendingUpdates[userId];
+    saveLocalStorage();
+
+    logEvent(`❌ Admin ${interaction.user.tag} REJECTED registration update for ${userId} ("${pending.oldNickname}" → "${pending.newNickname}") — reason: ${reason}`);
+
+    if (pending.channelId && pending.messageId) {
+        const adminChannel = interaction.guild.channels.cache.get(pending.channelId);
+        if (adminChannel) {
+            const adminMsg = await adminChannel.messages.fetch(pending.messageId).catch(() => null);
+            if (adminMsg) {
+                await adminMsg.edit({
+                    content: `❌ **Registration Update Rejected**\n\n👤 **User:** <@${userId}>\n📝 **Kept name:** ${pending.oldNickname}\n📝 **Refused name:** ${pending.newNickname}\n📝 **Reason:** ${reason}\n🕐 **Processed by:** ${interaction.user.tag}`,
+                    components: []
+                }).catch(() => {});
+            }
+        }
+    }
+
+    try {
+        const user = await interaction.client.users.fetch(userId);
+        await user.send(`❌ **Registration update rejected**\n\n📝 **Reason:** ${reason}\n\nYour registration keeps the name **${pending.oldNickname}**. If you need further assistance, contact an administrator.`);
+    } catch (e) {
+        logEvent(`⚠️ Could not send update-rejected DM to ${userId} (DMs closed or user not found)`);
+    }
+
+    return interaction.editReply('❌ **Update rejected.** The user was notified via DM with the reason.');
+}
+
 // ── Owner DM Approval: Pilot Registration ──
 export async function handleApprovePilot(interaction, db, saveLocalStorage, logEvent) {
     if (!await deferUpdateSafe(interaction)) return;

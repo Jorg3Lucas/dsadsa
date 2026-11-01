@@ -54,6 +54,35 @@ export function handleWelcomeRegisterPilot(interaction) {
     return interaction.showModal(modal);
 }
 
+// ── Welcome: Update my registration (needs admin approval) ──
+export function handleWelcomeUpdateRegistration(interaction, db) {
+    const userData = db.users[interaction.user.id];
+    const isActuallyRegistered = userData && (userData.registeredAt || userData.manual === true);
+
+    if (!isActuallyRegistered) {
+        return interaction.reply({ content: '❌ You are not registered. Use **👑 Register as Owner** first.', flags: 64 });
+    }
+
+    const modal = new ModalBuilder()
+        .setCustomId('update_registration_modal')
+        .setTitle('🔄 Update Registration');
+
+    const nicknameInput = new TextInputBuilder()
+        .setCustomId('update_nickname')
+        .setLabel('Your NEW exact in-game name')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Type your exact character name as shown in MIR4')
+        .setMinLength(2)
+        .setMaxLength(30)
+        .setRequired(true);
+
+    // Pre-fill with the current name so the member only edits what changed.
+    if (userData.nickname) nicknameInput.setValue(userData.nickname.substring(0, 30));
+
+    modal.addComponents(new ActionRowBuilder().addComponents(nicknameInput));
+    return interaction.showModal(modal);
+}
+
 // ── Welcome: Remove my own registration (self-service) ──
 export async function handleWelcomeRemoveRegistration(interaction, db, saveLocalStorage, logEvent) {
     await interaction.deferReply({ flags: 64 });

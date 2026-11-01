@@ -22,9 +22,9 @@ import { registerMir4SlashCommands } from './core/ranking-deploy.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
-import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from './handlers/ranking-registration.js';
-import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemovePilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm } from './handlers/ranking-welcome.js';
-import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
+import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname, handleUpdateRegistrationModal } from './handlers/ranking-registration.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemovePilot, handleWelcomeRemoveRegistration, handleWelcomeUpdateRegistration, handleSelfRemoveConfirm } from './handlers/ranking-welcome.js';
+import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot, handleApproveUpdate, handleRejectUpdate } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm } from './handlers/ranking-pilot.js';
 import { handleConfirmAction } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname, handleSelectPendingNickname, handleSelectPendingPilotOwner } from './handlers/ranking-commands.js';
@@ -308,6 +308,12 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId === 'register_pilot_modal') {
                 return await handlePilotRegistrationModal(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
+            if (interaction.customId === 'update_registration_modal') {
+                return await handleUpdateRegistrationModal(interaction, getRankingDb(), saveRanking, logRankingEvent);
+            }
+            if (interaction.customId.startsWith('reject_update_')) {
+                return await handleRejectUpdate(interaction, getRankingDb(), saveRanking, logRankingEvent);
+            }
             if (interaction.customId.startsWith('reject_owner_')) {
                 return await handleRejectOwner(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
@@ -331,6 +337,12 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (interaction.customId === 'welcome_remove_registration') {
                 return await handleWelcomeRemoveRegistration(interaction, getRankingDb(), saveRanking, logRankingEvent);
+            }
+            if (interaction.customId === 'welcome_update_registration') {
+                return handleWelcomeUpdateRegistration(interaction, getRankingDb());
+            }
+            if (interaction.customId.startsWith('approve_update_')) {
+                return await handleApproveUpdate(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId === 'selfremove_yes' || interaction.customId === 'selfremove_no') {
                 return await handleSelfRemoveConfirm(interaction, getRankingDb(), saveRanking, logRankingEvent);
