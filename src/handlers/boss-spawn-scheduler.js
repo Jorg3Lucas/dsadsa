@@ -36,7 +36,7 @@ const bossSpawns = [
     joinMessage: "Lets go guys, world boss join discord\nhttps://discord.com/channels/1359548384809062480/1359549331509739722" },
 
   // ═══ LAYER 3 — W1 ═══
-  { world: "W1", layer: "3", map: "Bullface Forest", boss: "Mata",
+  { world: "W1", layer: "3", map: "Bullface Forest", boss: "Matha",
     times: [2,4,6,8,10,12,14,16,18,20,22,0].map(h => ({ h, m: 0 })) },
   { world: "W1", layer: "3", map: "Demon Bull Temple 1F", boss: "Boltox",
     times: [1,3,5,7,9,11,13,15,17,19,21,23].map(h => ({ h, m: 0 })) },
@@ -56,7 +56,7 @@ const bossSpawns = [
   // ═══ LAYER 3 — W4 ═══
   { world: "W4", layer: "3", map: "Phantasia Desert", boss: "Nefariox Obdurate Zenith",
     times: [2,4,6,8,10,12,14,16,18,20,22,0].map(h => ({ h, m: 0 })) },
-  { world: "W4", layer: "3", map: "Overlord Sealing Circle", boss: "Kurilaica",
+  { world: "W4", layer: "3", map: "Overlord Sealing Circle", boss: "Kurilaca",
     times: [3,6,9,12,15,18,21,0].map(h => ({ h, m: 0 })) },
 
   // ═══ LAYER 3 — W2 ═══
@@ -80,15 +80,15 @@ const bossSpawns = [
     times: (() => { const t=[]; for(const h of[3,9,15,21])t.push({h,m:30}); return t; })() },
 
   // ═══ LAYER 3 — W6 ═══
-  { world: "W6", layer: "3", map: "Bincheon Town", boss: "Mokgang",
+  { world: "W6", layer: "3", map: "Bicheon Town", boss: "Cheol Mokgang",
     times: (() => { const t=[]; for(const h of[2,4,6,8,10,12,14,16,18,20,22,0])t.push({h,m:30}); return t; })() },
   { world: "W6", layer: "3", map: "Demoniac Mine Deep Area", boss: "Hong Yeo",
     times: (() => { const t=[]; for(const h of[1,3,5,7,9,11,13,15,17,19,21,23])t.push({h,m:30}); return t; })() },
-  { world: "W6", layer: "3", map: "Bincheon Town", boss: "Sura",
+  { world: "W6", layer: "3", map: "Bicheon Town", boss: "Asura Bicheon",
     times: (() => { const t=[]; for(const h of[4,10,16,22])t.push({h,m:30}); return t; })() },
   { world: "W6", layer: "3", map: "Phantom Woods", boss: "Wihan",
     times: (() => { const t=[]; for(const h of[5,11,17,23])t.push({h,m:30}); return t; })() },
-  { world: "W6", layer: "3", map: "Bincheon Labyrinth", boss: "Obscene Yeticlops",
+  { world: "W6", layer: "3", map: "Bicheon Labyrinth", boss: "Obscene Yeticlops",
     times: (() => { const t=[]; for(const h of[6,12,18,0])t.push({h,m:30}); return t; })() },
 
   // ═══ LAYER 1 — W1 ═══
