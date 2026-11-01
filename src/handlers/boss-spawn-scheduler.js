@@ -4,10 +4,23 @@
 // ==========================================
 
 import { EmbedBuilder } from "discord.js";
-import { dailyLogs, bossSpawnAlertCache } from "../core/state.js";
+import { client, bossSpawnAlertCache } from "../core/state.js";
 import { getLocalTime, redBossSchedules, leader3Schedules } from "../core/time-utils.js";
-import { resolveAlertChannel } from "../core/daily-logs.js";
-import { getGeneralChannelName } from "../core/server-structure.js";
+import { BOSS_SPAWN_CHANNEL_ID, EVENT_ALERT_CHANNEL_ID } from "../core/constants.js";
+
+// ─── Alert channel resolution ────────────────────────────
+// The two alert channels are fixed on purpose: no name-based fallback and no
+// config override, so an alert can never end up in a different channel.
+let announcedChannels = false;
+
+async function fetchAlertChannel(client, channelId, label) {
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel) {
+    console.error(`❌ [${label}] Canal ${channelId} não encontrado — confira o ID e as permissões do bot (Ver Canal / Enviar Mensagens). Alerta NÃO enviado.`);
+    return null;
+  }
+  return channel;
+}
 
 // ─── Boss schedule entries ───────────────────────────────
 // Each entry: { world, layer, map, boss, times }
@@ -160,12 +173,16 @@ function getUpcomingSpawnAlerts(nowArg) {
 // ─── Send notification ───────────────────────────────────
 
 export async function sendBossSpawnAlerts() {
-  // Uses the configured channel, or falls back to #reminders
-  const channel = await resolveAlertChannel(dailyLogs.bossSpawnChannelId, getGeneralChannelName("reminders"));
-  if (!channel) return;
-
   const alerts = getUpcomingSpawnAlerts();
   if (alerts.length === 0) return;
+
+  const channel = await fetchAlertChannel(client, BOSS_SPAWN_CHANNEL_ID, "Boss Spawn Alert");
+  if (!channel) return;
+
+  if (!announcedChannels) {
+    console.log(`🦁 [Alerts] Boss → ${BOSS_SPAWN_CHANNEL_ID} | Eventos → ${EVENT_ALERT_CHANNEL_ID}`);
+    announcedChannels = true;
+  }
 
   for (const alert of alerts) {
     const { entry, spawnTime, cacheKey } = alert;
@@ -317,12 +334,11 @@ export async function sendCustomWorldBossAlerts(now = getLocalTime()) {
   }
 }
 export async function sendScheduledEventAlerts() {
-  // Uses the configured channel, or falls back to #events
-  const channel = await resolveAlertChannel(dailyLogs.scheduledEventChannelId, getGeneralChannelName("events"));
-  if (!channel) return;
-
   const alerts = getUpcomingScheduledAlerts();
   if (alerts.length === 0) return;
+
+  const channel = await fetchAlertChannel(client, EVENT_ALERT_CHANNEL_ID, "Event Alert");
+  if (!channel) return;
 
   // Build list of event names for this alert time
   const eventNames = alerts.map(a => a.name);

@@ -23,6 +23,14 @@ export const STATUS_KILLED_PREFIX = "\uD83D\uDD34 Killed at ";
 /** Respawn is about to happen any moment */
 export const STATUS_ANY_MOMENT = "\uD83D\uDD34 Any moment...";
 
+// ─── Alert Channels ────────────────────────
+
+/** Boss spawn alerts (which boss is spawning, on which map) — 5 min before spawn */
+export const BOSS_SPAWN_CHANNEL_ID = "1539143015359062086";
+
+/** Scheduled event alerts (World Boss, Purgatory, Red Boss, Leader 3, …) — 10 min before */
+export const EVENT_ALERT_CHANNEL_ID = "1539142987844419634";
+
 // ─── Embed Colors ──────────────────────────
 
 /** Occupied floor — Discord Blurple */
