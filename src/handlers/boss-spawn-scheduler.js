@@ -16,7 +16,7 @@ let announcedChannels = false;
 async function fetchAlertChannel(client, channelId, label) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) {
-    console.error(`❌ [${label}] Canal ${channelId} não encontrado — confira o ID e as permissões do bot (Ver Canal / Enviar Mensagens). Alerta NÃO enviado.`);
+    console.error(`❌ [${label}] Channel ${channelId} not found — check the ID and the bot's permissions (View Channel / Send Messages). Alert NOT sent.`);
     return null;
   }
   return channel;
