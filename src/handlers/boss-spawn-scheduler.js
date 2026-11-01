@@ -48,9 +48,9 @@ const bossSpawns = [
     times: [1,5,9,13,17,21].map(h => ({ h, m: 0 })) },
 
   // ═══ LAYER 3 — W7 ═══
-  { world: "W7", layer: "3", map: "Redmoon Gorge 2F", boss: "Taehyul",
+  { world: "W7", layer: "3", map: "Taehyuls Garden", boss: "Taehyul",
     times: [1,3,5,7,9,11,13,15,17,19,21,23].map(h => ({ h, m: 0 })) },
-  { world: "W7", layer: "3", map: "Demonic Cult Main Hall", boss: "Yiun",
+  { world: "W7", layer: "3", map: "Demon Cult Hall", boss: "Yiun",
     times: [2,5,8,11,14,17,20,23].map(h => ({ h, m: 0 })) },
 
   // ═══ LAYER 3 — W4 ═══
@@ -64,17 +64,17 @@ const bossSpawns = [
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
 
   // ═══ LAYER 3 — W5 ═══
-  { world: "W5", layer: "3", map: "Great Sabuk Wall Camp", boss: "Faluk",
+  { world: "W5", layer: "3", map: "Great Sabuk Wall", boss: "Faluk",
     times: (() => { const t=[]; for(const h of[3,6,9,12,15,18,21,0])t.push({h,m:30}); return t; })() },
   { world: "W5", layer: "3", map: "Illusion Temple", boss: "Tale Warper Fiend",
     times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
 
   // ═══ LAYER 3 — W3 ═══
   { world: "W3", layer: "3", map: "Viperbeast Plain", boss: "Dusk Armado Emperor",
-    times: (() => { const t=[]; for(const h of[1,3,7,9,11,13,15,19,21,23])t.push({h,m:30}); return t; })() },
+    times: (() => { const t=[]; for(const h of[1,3,5,7,9,11,13,15,17,19,21,23])t.push({h,m:30}); return t; })() },
   { world: "W3", layer: "3", map: "Rockcut Tomb", boss: "Mara",
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
-  { world: "W3", layer: "3", map: "Tombbeast Gyo", boss: "Tombbeast Gyo",
+  { world: "W3", layer: "3", map: "Nefariox Necropolis", boss: "Tombbeast Gyo",
     times: (() => { const t=[]; for(const h of[2,8,14,20])t.push({h,m:30}); return t; })() },
   { world: "W3", layer: "3", map: "Rockcut Tomb", boss: "Boodo",
     times: (() => { const t=[]; for(const h of[3,9,15,21])t.push({h,m:30}); return t; })() },
@@ -82,7 +82,7 @@ const bossSpawns = [
   // ═══ LAYER 3 — W6 ═══
   { world: "W6", layer: "3", map: "Bicheon Town", boss: "Cheol Mokgang",
     times: (() => { const t=[]; for(const h of[2,4,6,8,10,12,14,16,18,20,22,0])t.push({h,m:30}); return t; })() },
-  { world: "W6", layer: "3", map: "Abiss Demonic Mine", boss: "Hong Yeo",
+  { world: "W6", layer: "3", map: "Demoniac Mine Deep Area", boss: "Hong Yeo",
     times: (() => { const t=[]; for(const h of[1,3,5,7,9,11,13,15,17,19,21,23])t.push({h,m:30}); return t; })() },
   { world: "W6", layer: "3", map: "Bicheon Town", boss: "Asura Bicheon",
     times: (() => { const t=[]; for(const h of[4,10,16,22])t.push({h,m:30}); return t; })() },
@@ -112,10 +112,6 @@ const bossSpawns = [
     times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
 
   // ═══ LAYER 1 — W3 (level 158+) ═══
-  { world: "W3", layer: "1", map: "Underground Jail", boss: "Molgrash",
-    times: (() => { const t=[]; for(const h of[1,4,7,10,13,16,19,22])t.push({h,m:30}); return t; })() },
-  { world: "W3", layer: "1", map: "Nine Dragon Palace", boss: "Wi Gwangryeong",
-    times: (() => { const t=[]; for(const h of[2,5,8,11,14,17,20,23])t.push({h,m:30}); return t; })() },
   { world: "W3", layer: "1", map: "Primal Nefariox Ruins", boss: "Krog",
     times: (() => { const t=[]; for(const h of[1,7,13,19])t.push({h,m:30}); return t; })() },
   { world: "W3", layer: "1", map: "Frozen Gorge", boss: "Kelis",
