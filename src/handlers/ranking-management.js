@@ -30,6 +30,7 @@ import {
     closeWarLeave,
     isWarLeaveReviewDue
 } from '../core/war-leave.js';
+import { findAlliedClanSuggestions, getAlliedClanSuggestionMinMembers } from '../core/allied-suggestions.js';
 
 // ==========================================
 // 🛡️ WAR LEAVE OVERVIEW
@@ -136,6 +137,164 @@ export async function handleManageWarLeaveEnd(interaction, db, saveLocalStorage,
 // 📋 MANAGE MENU HANDLERS
 // ==========================================
 
+// ==========================================
+// 💡 ALLIED CLAN SUGGESTIONS
+// ==========================================
+
+/** Thresholds offered in the panel. */
+const SUGGESTION_THRESHOLD_OPTIONS = [3, 5, 8, 10, 15, 20];
+
+/** Select menu that changes how many members a clan needs to be suggested. */
+function buildSuggestionThresholdRow(limit) {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('manage_allied_suggest_limit')
+            .setPlaceholder(`Threshold: more than ${limit} member(s)`)
+            .addOptions(SUGGESTION_THRESHOLD_OPTIONS.map(n => ({
+                label: `More than ${n} member(s)`,
+                description: n === limit ? 'Current threshold' : `Suggest clans with ${n + 1}+ registered members`,
+                value: String(n),
+                default: n === limit
+            })))
+    );
+}
+
+/** Content + components for the "clans worth allying" view. */
+function buildAlliedSuggestionsView(db, note = null) {
+    const limit = getAlliedClanSuggestionMinMembers(db);
+    const suggestions = findAlliedClanSuggestions(db);
+    const prefix = note ? `${note}\n\n` : '';
+    const backRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('manage_back').setLabel('🔙 Back to Users').setStyle(ButtonStyle.Secondary)
+    );
+    // Always shown, even with no candidates: the admin may want to lower the
+    // threshold to see clans that are currently below it.
+    const thresholdRow = buildSuggestionThresholdRow(limit);
+
+    if (suggestions.length === 0) {
+        return {
+            content: `${prefix}💡 **Clan Suggestions**\n\nNo clan has more than ${limit} registered member(s) outside the allied list right now.\n\n⚙️ Use the threshold menu below to change the limit.`,
+            components: [thresholdRow, backRow]
+        };
+    }
+
+    // Discord caps a select at 25 options and a value at 100 characters.
+    const listed = suggestions
+        .filter(s => `${s.worldId}~${s.clanName}`.length <= 100)
+        .slice(0, 25);
+    const lines = listed.map(s => `• 🌐 **${s.worldName}** — **${s.clanName}** — ${s.count} registered member(s)`);
+    const overflow = suggestions.length - listed.length;
+    if (overflow > 0) lines.push(`…and ${overflow} more (add these first to see the rest)`);
+
+    const components = [];
+    if (listed.length > 0) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('manage_allied_suggest_add')
+                .setPlaceholder('Select the clans to add as allied...')
+                .setMinValues(1)
+                .setMaxValues(listed.length)
+                .addOptions(listed.map(s => ({
+                    label: s.clanName.substring(0, 100),
+                    description: `${s.worldName} · ${s.count} registered member(s)`.substring(0, 100),
+                    value: `${s.worldId}~${s.clanName}`
+                })))
+        ));
+    }
+    components.push(thresholdRow, backRow);
+
+    return {
+        content: `${prefix}💡 **Clan Suggestions — ${suggestions.length} clan(s) worth allying**\n\n`
+            + `These clans have more than ${limit} registered member(s) but are **not** in the allied list of their server:\n\n`
+            + `${lines.join('\n')}\n\n`
+            + 'Select one or more clans below to add them in a single click. The next sync restores the member role for everyone in them.',
+        components
+    };
+}
+
+// ── Manage: Show the allied-clan suggestions ──
+export async function handleManageAlliedSuggest(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    return interaction.update(buildAlliedSuggestionsView(db)).catch(() => {});
+}
+
+// ── Manage: Change the suggestion threshold from the panel ──
+export async function handleManageAlliedSuggestLimit(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    const limit = parseInt(interaction.values?.[0], 10);
+    if (!Number.isFinite(limit) || limit < 1) {
+        return interaction.update(buildAlliedSuggestionsView(db, '❌ Invalid threshold.')).catch(() => {});
+    }
+
+    ensureConfig(db);
+    db.config.clanSuggestionMinMembers = limit;
+    // New threshold: let the next sync announce candidates it was hiding before.
+    db.config.clanSuggestionNotified = {};
+    saveLocalStorage();
+
+    logEvent(`💡 Admin ${interaction.user.tag} changed the clan suggestion threshold to more than ${limit} member(s)`);
+    return interaction.update(buildAlliedSuggestionsView(
+        db,
+        `⚙️ Threshold updated: clans with more than **${limit}** registered member(s).`
+    )).catch(() => {});
+}
+
+// ── Manage: Add the selected suggested clans in one click ──
+export async function handleManageAlliedSuggestAdd(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    ensureConfig(db);
+
+    const added = [];
+    const skipped = [];
+
+    for (const value of interaction.values || []) {
+        const sep = value.indexOf('~');
+        if (sep <= 0) continue;
+        const worldId = value.slice(0, sep);
+        const clanName = value.slice(sep + 1).trim();
+        if (!clanName) continue;
+
+        if (!db.config.alliedClans[worldId]) db.config.alliedClans[worldId] = [];
+        const alreadyExists = db.config.alliedClans[worldId].some(
+            c => String(c).toLowerCase() === clanName.toLowerCase()
+        );
+        if (alreadyExists) {
+            skipped.push(clanName);
+            continue;
+        }
+
+        db.config.alliedClans[worldId].push(clanName);
+        added.push(`${clanName} (${resolveServerName(WORLD_IDS[worldId] || `World ${worldId}`)})`);
+
+        // Added by hand — never re-announce it if the list is edited again later.
+        if (db.config.clanSuggestionNotified) {
+            delete db.config.clanSuggestionNotified[`${worldId}::${clanName.toLowerCase()}`];
+        }
+    }
+
+    if (added.length > 0) {
+        saveLocalStorage();
+        logEvent(`💡 Admin ${interaction.user.tag} added ${added.length} suggested allied clan(s): ${added.join(', ')}`);
+    }
+
+    const notes = [];
+    if (added.length > 0) notes.push(`✅ **Added:** ${added.join(', ')} — the next sync restores the member role for their members.`);
+    if (skipped.length > 0) notes.push(`ℹ️ Already allied: ${skipped.join(', ')}.`);
+    if (notes.length === 0) notes.push('ℹ️ Nothing was changed.');
+
+    return interaction.update(buildAlliedSuggestionsView(db, notes.join('\n'))).catch(() => {});
+}
+
 const USER_PAGE_SIZE = 25;
 
 /**
@@ -174,6 +333,9 @@ export function buildUserListPage(db, page = 0, options = {}) {
     }
 
     if (options.withAlliedButton) {
+        // 💡 Clans that hold several registered members but are not allied yet —
+        // the button only appears when there is something worth adding.
+        const suggestionCount = findAlliedClanSuggestions(db).length;
         const warLeaveCount = Object.values(db.users || {})
             .filter(data => data?.warLeave && data.warLeave.status !== 'denied').length;
         components.push(new ActionRowBuilder().addComponents(
@@ -181,7 +343,13 @@ export function buildUserListPage(db, page = 0, options = {}) {
             new ButtonBuilder()
                 .setCustomId('manage_warleave')
                 .setLabel(`🛡️ War Leaves (${warLeaveCount})`)
-                .setStyle(warLeaveCount > 0 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setStyle(warLeaveCount > 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+            ...(suggestionCount > 0 ? [
+                new ButtonBuilder()
+                    .setCustomId('manage_allied_suggest')
+                    .setLabel(`💡 Clan Suggestions (${suggestionCount})`)
+                    .setStyle(ButtonStyle.Primary)
+            ] : [])
         ));
     }
 
@@ -901,7 +1069,7 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
     try { await interaction.deferUpdate(); } catch (e) { return; }
 
     if (interaction.customId === 'manage_back' || interaction.customId === 'manage_allied_back') {
-        const { content, components, count } = buildUserListPage(db, 0);
+        const { content, components, count } = buildUserListPage(db, 0, { withAlliedButton: true });
         if (count === 0) {
             return interaction.editReply({ content: getMsg('ranking.responses.manage.noUsers'), components: [] }).catch(() => {});
         }

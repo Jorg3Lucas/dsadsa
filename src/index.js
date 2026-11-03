@@ -41,7 +41,10 @@ import {
     handleManageNav,
     handleAddClanSuggestion,
     handleManageWarLeave,
-    handleManageWarLeaveEnd
+    handleManageWarLeaveEnd,
+    handleManageAlliedSuggest,
+    handleManageAlliedSuggestAdd,
+    handleManageAlliedSuggestLimit
 } from './handlers/ranking-management.js';
 import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID, ensureConfig, migrateAlliedClans } from './core/ranking-constants.js';
@@ -343,6 +346,7 @@ const BUTTON_EXACT = new Map([
     ['manage_allied_world', handleManageAlliedWorld],
     ['manage_allied_remove', handleManageAlliedRemove],
     ['manage_warleave', handleManageWarLeave],
+    ['manage_allied_suggest', handleManageAlliedSuggest],
     ['manage_back', handleManageNav],
     ['manage_allied_back', handleManageNav],
 ]);
@@ -355,6 +359,8 @@ const SELECT_EXACT = new Map([
     ['manage_allied_world', handleManageAlliedWorld],
     ['manage_allied_remove', handleManageAlliedRemove],
     ['manage_warleave_end', handleManageWarLeaveEnd],
+    ['manage_allied_suggest_add', handleManageAlliedSuggestAdd],
+    ['manage_allied_suggest_limit', handleManageAlliedSuggestLimit],
 ]);
 
 const MODAL_EXACT = new Map([

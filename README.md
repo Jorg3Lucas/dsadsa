@@ -13,6 +13,7 @@ A Discord bot for managing MIR4 clan member registrations, role assignment, and 
 - **Clan expedition weekend grace period** (Fri 00:01 → Sun 17:00 BRT) — no removals during this window
 - **72h out-of-allied-clan grace (per person)** — members keep their role for 72h after leaving an allied clan (or the ranking), so temporary clan switches for events don't strip roles before they can rejoin
 - **Allied Clans system** — configure which clans are allied per world
+- **Allied clan suggestions** — when more than 5 registered members are in the same non-allied clan, the sync posts the suggestion in the approval channel and `/manage` → **💡 Clan Suggestions** adds them in one click
 - **Anti-impersonation security system**
 - **Auto-backup** of database files
 - **Bulk DM** unregistered members who have the role
@@ -70,6 +71,7 @@ After selecting a user from `/manage`:
 | ✈️ **Remove pilot** | Unlink a pilot from this user |
 | 🗑️ **Remove Temp** | *(only for temp users)* Remove temporary registration immediately |
 | ⚙️ **Allied Clans** | Manage allied clans per world |
+| 💡 **Clan Suggestions** | *(only when there are candidates)* Clans holding more than 5 registered members that are not allied — select one or more and add them in a single click |
 
 ### Text Commands (`!`)
 
@@ -139,6 +141,26 @@ Configure via `/manage` → **⚙️ Allied Clans**:
 - Role removal for leaving an allied clan (or dropping out of the ranking) waits **72h per person** — the countdown starts on the first sync where the member is found outside an allied clan and resets the moment they return (`db.roleNotify[memberId].outOfAlliedSince`)
 - When the 72h countdown starts, the member receives an **automatic DM** warning that their role will be removed unless they rejoin an allied clan in time
 - Used by the temp registration conversion check and admin approval display
+
+### War leave (approver decision)
+
+A registered member outside the allied clans — listed in a non-allied clan on **any server** (this branch sees every server of the game) or missing from every ranking — is sent to the **same channel used for registrations/approvals** (`!setadminchannel`). The prompt always shows:
+
+- 🎖️ **Member role** — whether the role is assigned right now, so a member who already lost it is covered too
+- 📊 **Ranking (all servers)** — clan and server found in the ranking, or “not found in any server ranking”
+- 🌐 **Forum search** — exact-name forum location when the name is not in the ranking
+- 🔄 what changed since the last check — a clan/server move raises a new prompt
+
+**Keep role** keeps/restores the role (reviewed again in 30 days by default); **Remove role** revokes it. A fuzzy-only name match never triggers a prompt — that case keeps following the 72h grace.
+
+### Suggested clans
+
+When the sync finds **more than 5 registered members** in the same clan that is not in the allied list of its server, the bot points it out instead of letting the 72h grace strip everyone's role:
+
+- One notice is posted in the admin/approval channel per clan, at most **once every 7 days** (`db.config.clanSuggestionNotified`), listing the server, the clan and how many members it holds
+- `/manage` → **💡 Clan Suggestions** lists every candidate and adds the selected clans at once; the next sync restores the member role for their members and resets their 72h countdown
+- Only **exact** ranking matches count (a fuzzy hit could be a different player on another server), and ManualForce registrations, war-leave members and forum-search registrations are ignored
+- Threshold: chosen in the panel itself (**More than 3 / 5 / 8 / 10 / 15 / 20 members**), stored in `db.config.clanSuggestionMinMembers` and defaulting to `ALLIED_CLAN_SUGGESTION_MIN_MEMBERS` (5) in `src/core/allied-suggestions.js`
 
 ---
 

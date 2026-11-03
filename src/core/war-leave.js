@@ -281,13 +281,32 @@ export async function resolveWarLeaveChannel(client, db) {
     return client.channels.fetch(channelId).catch(() => null);
 }
 
-function buildWarLeaveEmbed(userId, userData, location, change, review = false) {
+function buildWarLeaveEmbed(userId, userData, { location, change, review = false, ranking = null, hasRole = null, forumChecked = true } = {}) {
     const lines = [
         `<@${userId}> — **${userData.nickname}**`,
-        '',
-        `📉 **Ranking:** not found in an allied clan`,
-        `🌐 **Forum search:** ${locationLabel(location)}`
+        ''
     ];
+
+    // "With or without the role" — the approver must know whether access is
+    // still granted while they decide.
+    if (hasRole === true) lines.push('🎖️ **Member role:** ✅ has it');
+    else if (hasRole === false) lines.push('🎖️ **Member role:** ❌ not assigned');
+
+    // This branch tracks every server of the game, so show where the character
+    // is listed, not only that it is outside the allied clans.
+    if (ranking?.found) {
+        lines.push(
+            `📊 **Ranking (all servers):** **${ranking.clanName || 'no clan'}** on **${ranking.serverName || 'unknown server'}**`
+            + (ranking.inAlliedClan ? ' — ✅ allied clan' : ' — ❌ not an allied clan')
+        );
+    } else {
+        lines.push('📊 **Ranking (all servers):** not found in any server ranking');
+    }
+
+    if (forumChecked) {
+        lines.push(`🌐 **Forum search:** ${locationLabel(location)}`);
+    }
+
     if (change) {
         lines.push('', `🔄 **Change since the last check:**`, change);
     }
@@ -302,7 +321,7 @@ function buildWarLeaveEmbed(userId, userData, location, change, review = false) 
             ? '🛡️ War leave review — approver confirmation needed'
             : change
                 ? '🛡️ War leave — clan/server changed outside the allied clans'
-                : '🛡️ War leave — member left the allied clans')
+                : '🛡️ War leave — member outside the allied clans')
         .setColor(review ? '#5865f2' : '#f0b400')
         .setDescription(lines.join('\n'))
         .setFooter({ text: 'Approvers only · Keep role keeps access while they fight wars outside the allied clans' })
@@ -328,7 +347,7 @@ function buildWarLeaveButtons(userId) {
  * Post the approver prompt and remember where it was posted.
  * @returns {Promise<boolean>} true when the message was sent
  */
-export async function sendWarLeaveRequest(client, db, userId, userData, { location, change, review = false, logEvent } = {}) {
+export async function sendWarLeaveRequest(client, db, userId, userData, { location, change, review = false, ranking = null, hasRole = null, forumChecked = true, logEvent } = {}) {
     const channel = await resolveWarLeaveChannel(client, db);
     if (!channel) {
         logEvent?.(`⚠️ [War Leave] No approvals channel available to ask about ${userData.nickname} (${userId}).`);
@@ -337,7 +356,7 @@ export async function sendWarLeaveRequest(client, db, userId, userData, { locati
 
     const message = await channel.send({
         content: '🛡️ A member left the allied clans — an approver must decide.',
-        embeds: [buildWarLeaveEmbed(userId, userData, location, change, review)],
+        embeds: [buildWarLeaveEmbed(userId, userData, { location, change, review, ranking, hasRole, forumChecked })],
         components: [buildWarLeaveButtons(userId)],
         allowedMentions: { parse: [] }
     }).catch(err => {
@@ -360,29 +379,57 @@ export async function sendWarLeaveRequest(client, db, userId, userData, { locati
 }
 
 /**
- * First detection: the member is not in the allied-clan ranking. Search the
- * forum and ask approvers. The caller keeps the role unless an approver refuses.
+ * First detection: a registered member is outside the allied clans.
+ *
+ * The location comes from the ranking of ANY server when the name is listed
+ * there (this branch tracks every server of the game) and from the forum
+ * ranking when it is not, so approvers always get the full picture: role state,
+ * clan and server. The caller keeps the role unless an approver refuses.
+ *
+ * @param {{ranking?: object|null, hasRole?: boolean|null}} [options]
  * @returns {Promise<{location: object, asked: boolean, protected: boolean, warLeave: object|null}>}
  */
-export async function openWarLeave(client, db, userId, userData, logEvent) {
-    const location = await detectMemberLocation(userData.nickname, db);
+export async function openWarLeave(client, db, userId, userData, logEvent, { ranking = null, hasRole = null } = {}) {
+    let location;
+    let forumChecked = false;
 
-    // Forum unreachable — never remove a role without information. Keep it and
-    // ask again on the next sync.
-    if (!location.forumOk) {
-        logEvent(`⚠️ [War Leave] Forum lookup failed for ${userData.nickname} (${userId}) — role kept until the next sync`);
-        return { location, asked: false, protected: true, warLeave: null };
-    }
+    if (ranking?.found) {
+        // Already located in the ranking of some server — no forum request needed.
+        location = {
+            found: true,
+            clanName: ranking.clanName || null,
+            serverName: ranking.serverName || null,
+            inAlliedClan: !!ranking.inAlliedClan,
+            forumOk: true
+        };
+    } else {
+        location = await detectMemberLocation(userData.nickname, db);
+        forumChecked = true;
 
-    // No exact hit on the forum: the character is not listed in any clan/server,
-    // so there is nothing to ask about — the normal validation decides.
-    if (!location.found) {
-        logEvent(`🔎 [War Leave] ${userData.nickname} (${userId}) has no exact match on the forum ranking — no approver prompt`);
-        return { location, asked: false, protected: false, warLeave: null };
+        // Forum unreachable — never remove a role without information. Keep it and
+        // ask again on the next sync.
+        if (!location.forumOk) {
+            logEvent(`⚠️ [War Leave] Forum lookup failed for ${userData.nickname} (${userId}) — role kept until the next sync`);
+            return { location, asked: false, protected: true, warLeave: null };
+        }
+
+        // No exact hit anywhere: the character is not listed in any clan/server,
+        // so there is nothing to ask about — the normal validation decides.
+        if (!location.found) {
+            logEvent(`🔎 [War Leave] ${userData.nickname} (${userId}) has no exact match on the forum ranking — no approver prompt`);
+            return { location, asked: false, protected: false, warLeave: null };
+        }
     }
 
     const warLeave = createWarLeave(userData, location);
-    const asked = await sendWarLeaveRequest(client, db, userId, userData, { location, change: null, logEvent });
+    const asked = await sendWarLeaveRequest(client, db, userId, userData, {
+        location,
+        change: null,
+        ranking,
+        hasRole,
+        forumChecked,
+        logEvent
+    });
     return { location, asked, protected: true, warLeave };
 }
 
@@ -391,17 +438,33 @@ export async function openWarLeave(client, db, userId, userData, logEvent) {
  * the clan or server changed, or when the review window (30 days by default)
  * ended after a "Keep role".
  */
-export async function trackWarLeaveMember(client, db, userId, userData, logEvent) {
+export async function trackWarLeaveMember(client, db, userId, userData, logEvent, { ranking = null, hasRole = null } = {}) {
     const warLeave = userData.warLeave;
     if (!warLeave || !ACTIVE_STATUSES.has(warLeave.status)) return false;
 
-    const location = await detectMemberLocation(userData.nickname, db, { clanName: warLeave.lastClan });
+    let location;
+    let forumChecked = false;
 
-    // Forum unreachable: keep the last known location and retry on the next sync.
-    if (!location.forumOk) {
-        warLeave.lastCheckedAt = new Date().toISOString();
-        logEvent?.(`⚠️ [War Leave] Forum lookup failed for ${userData.nickname} — keeping the last known location`);
-        return false;
+    if (ranking?.found && !ranking.inAlliedClan) {
+        // Listed on a server ranking — the cache is cheaper and more precise
+        // than a forum request, and it is what the approvers must see.
+        location = {
+            found: true,
+            clanName: ranking.clanName || null,
+            serverName: ranking.serverName || null,
+            inAlliedClan: false,
+            forumOk: true
+        };
+    } else {
+        location = await detectMemberLocation(userData.nickname, db, { clanName: warLeave.lastClan });
+        forumChecked = true;
+
+        // Forum unreachable: keep the last known location and retry on the next sync.
+        if (!location.forumOk) {
+            warLeave.lastCheckedAt = new Date().toISOString();
+            logEvent?.(`⚠️ [War Leave] Forum lookup failed for ${userData.nickname} — keeping the last known location`);
+            return false;
+        }
     }
 
     if (shouldAskElders(warLeave, location) || isWarLeaveReviewDue(warLeave, db)) {
@@ -413,6 +476,9 @@ export async function trackWarLeaveMember(client, db, userId, userData, logEvent
             location,
             change,
             review,
+            ranking,
+            hasRole,
+            forumChecked,
             logEvent
         });
         return false;

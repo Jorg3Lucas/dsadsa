@@ -3,6 +3,7 @@ import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
 import { isWarLeaveActive, isWarLeaveDenied, clearWarLeave, openWarLeave, trackWarLeaveMember } from './war-leave.js';
+import { notifyAlliedClanSuggestions } from './allied-suggestions.js';
 import { getMsg } from '../lang/lang.js';
 import { recordSyncRun } from './runtime-metrics.js';
 import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess, reapplyMemberRole } from '../core/ranking-utils.js';
@@ -393,7 +394,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             // 🛡️ Active war leave — refresh the forum location and re-ask when
             // the clan/server changed or the 30-day review is due.
             if (isRegistered && !isPilot && isWarLeaveActive(ownerData)) {
-                await trackWarLeaveMember(client, db, effectiveOwnerId, ownerData, logEvent);
+                await trackWarLeaveMember(client, db, effectiveOwnerId, ownerData, logEvent, {
+                    ranking: lookup?.found ? lookup : null,
+                    hasRole: member.roles.cache.has(MEMBER_ROLE_ID)
+                });
             }
 
             // ── ROLE MANAGEMENT ──
@@ -436,12 +440,20 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     // Only run when the ranking cache is available: if the cache is
                     // missing/unavailable, skip role changes (fail-safe, keep roles).
                     //
-                    // 🛡️ Exact forum check BEFORE the grace/removal: a member who
-                    // left to fight a war keeps the role while approvers decide.
-                    // (Only when the name is not in the ranking at all — a member
-                    // found in a non-allied clan still follows the 72h grace.)
-                    const warProtected = !isPilot && !lookup?.found && !isWarLeaveDenied(ownerData)
-                        ? (await openWarLeave(client, db, effectiveOwnerId, ownerData, logEvent))?.protected
+                    // 🛡️ Ask the approvers BEFORE the grace/removal in the
+                    // approvals channel: any registered member outside the allied
+                    // clans — listed in a non-allied clan on ANY server or missing
+                    // from every ranking — gets a prompt with their role state,
+                    // clan and server. A fuzzy-only match is not evidence, so it
+                    // still follows the normal grace flow.
+                    const canAskApprovers = !isPilot
+                        && !isWarLeaveDenied(ownerData)
+                        && (!lookup?.found || lookup.exactMatch !== false);
+                    const warProtected = canAskApprovers
+                        ? (await openWarLeave(client, db, effectiveOwnerId, ownerData, logEvent, {
+                            ranking: lookup?.found ? lookup : null,
+                            hasRole: hasMemberRole
+                        }))?.protected
                         : false;
 
                     // Safety: a fuzzy-only match must never remove the role. A fuzzy
@@ -548,6 +560,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         // predates the most recent scheduled time (sync-schedule.js). Written on
         // success only — a failed run must leave the catch-up armed.
         db.config.lastSyncAt = new Date().toISOString();
+
+        // 💡 Several registered members sitting in the same non-allied clan?
+        // Suggest adding it to that server's allied list (once per clan/week).
+        await notifyAlliedClanSuggestions(client, db, saveLocalStorage, logEvent, syncCache);
 
         saveLocalStorage();
         logEvent(getMsg('ranking.logs.syncComplete'));
