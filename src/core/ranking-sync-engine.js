@@ -125,11 +125,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
                     // First detection (not previously refused): search the exact name
                     // on the forum and, when it exists, ask an elder and keep the role
-                    // until they answer. Pure pilots are skipped — their owner's war
-                    // leave covers them and asking twice would be noise.
+                    // until they answer. Registrations that already lost the member
+                    // role (e.g. before war leave existed) are checked too — a pending
+                    // or approved war leave restores it. Pure pilots are skipped —
+                    // their owner's war leave covers them and asking twice is noise.
                     const isPilotOnly = !userData.registeredAt &&
                         Object.values(db.users).some(data => data.pilotIds?.includes(memberId));
-                    if (!isPilotOnly && !isWarLeaveDenied(userData) && member && hasAnyMemberRoles(member, db)) {
+                    if (!isPilotOnly && !isWarLeaveDenied(userData) && member) {
                         const opened = await openWarLeave(client, db, memberId, userData, logEvent);
                         if (opened?.protected) {
                             saveLocalStorage();
