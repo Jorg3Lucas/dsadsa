@@ -129,6 +129,8 @@ export async function handleApproveOwner(interaction, db, saveLocalStorage, logE
         const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
         db.users[userId].tempUntil = threeDaysFromNow.toISOString();
         db.users[userId].tempRegisteredAt = db.users[userId].registeredAt;
+    } else {
+        db.users[userId].permanentSince = db.users[userId].registeredAt;
     }
 
     if (!db.users[userId].pilotIds) db.users[userId].pilotIds = [];

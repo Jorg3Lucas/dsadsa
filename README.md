@@ -214,6 +214,8 @@ WAR_LEAVE_REVIEW_DAYS=30   # default; 0 disables the periodic review
 ```
 `db.config.warLeaveReviewDays` overrides the env var. When the window ends, elders get a "War leave review" prompt and the role stays kept until they answer.
 
+A permanent member found in the EU21 ranking outside the allied clans keeps the member role for **3 days** (`db.users[id].notAlliedSince`) before it is revoked — enough for a clan switch, and a return to an allied clan clears the window. `/manage` → **View Status** shows when the member became permanent and when the allied clan was left (with the remaining grace days).
+
 `/manage` shows each member's war-leave state (`🛡️ WL`, `🛡️ WL pending`, `🛡️ WL review`), the full status in **View Status**, and an **🛡️ End War Leave** action that closes the protection and removes the role. The **🛡️ War Leaves (N)** button lists every protected member with their status and forum location, and lets an admin end any of them from that panel.
 
 ### 2. Configuration

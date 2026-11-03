@@ -4,7 +4,7 @@ import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
-import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles, hasAnyMemberRoles } from './clan-roles.js';
+import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles, hasAnyMemberRoles, ALLIED_CLAN_GRACE_DAYS, isAlliedClanGraceActive, startAlliedClanGrace, clearAlliedClanGrace } from './clan-roles.js';
 import { isWarLeaveActive, isWarLeaveDenied, clearWarLeave, openWarLeave, trackWarLeaveMember } from './war-leave.js';
 
 // ==========================================
@@ -202,6 +202,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     delete userData.tempUntil;
                     delete userData.tempRegisteredAt;
                     delete userData.tempNotified24h;
+                    userData.permanentSince = new Date().toISOString();
                     saveLocalStorage();
                     logEvent(`✅ [Temp→Permanent] ${memberId} (${userData.nickname}) found in allied clan ${lookup.clanName} (${lookup.serverName}) — converted to permanent`);
                 } else {
@@ -337,10 +338,12 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             // ── If registered, check allied clan status ──
             let inAlliedClan = false;
+            let foundInRanking = false;
 
             if (isRegistered && ownerData && ownerData.nickname && syncCache) {
                 const lookup = lookupNickname(ownerData.nickname, db, syncCache);
                 if (lookup.found) {
+                    foundInRanking = true;
                     inAlliedClan = lookup.inAlliedClan;
                 }
             }
@@ -363,7 +366,16 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     await assignTempRole(member, db, saveLocalStorage, logEvent);
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure the clan role is present
+                    clearAlliedClanGrace(ownerData);
                     await assignClanRole(member, db, logEvent);
+                } else if (foundInRanking && (isAlliedClanGraceActive(ownerData) || (!ownerData.notAlliedSince && hasAnyRole))) {
+                    // ⏳ Left the allied clans but is still in the EU21 ranking: keep
+                    // the role for ALLIED_CLAN_GRACE_DAYS before revoking it.
+                    if (!ownerData.notAlliedSince) {
+                        startAlliedClanGrace(ownerData);
+                        saveLocalStorage();
+                        logEvent(`⏳ [Clan Grace] ${member.user.username} left the allied clan — role kept for ${ALLIED_CLAN_GRACE_DAYS} days`);
+                    }
                 } else {
                     // ❌ Not in allied clan — remove roles (keep registration)
                     if (hasAnyRole) {

@@ -22,6 +22,47 @@ import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
 import { isWarLeaveActive } from './war-leave.js';
 
+// ==========================================
+// ⏳ ALLIED-CLAN GRACE
+// ==========================================
+// A permanent member who leaves the allied clans keeps the member role for a
+// few days before it is revoked, so a clan switch or a brief absence is not
+// punished on the very next sync. `db.users[id].notAlliedSince` stores when the
+// absence was first detected. Temp registrations have their own 3-day window.
+export const ALLIED_CLAN_GRACE_DAYS = 3;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** When the grace window ends (null when it never started / invalid). */
+export function alliedClanGraceEndsAt(userData) {
+    const since = userData?.notAlliedSince ? new Date(userData.notAlliedSince) : null;
+    if (!since || Number.isNaN(since.getTime())) return null;
+    return new Date(since.getTime() + ALLIED_CLAN_GRACE_DAYS * DAY_MS);
+}
+
+/** Days left in the grace window (0 when inactive). */
+export function alliedClanGraceDaysLeft(userData, now = new Date()) {
+    const endsAt = alliedClanGraceEndsAt(userData);
+    if (!endsAt) return 0;
+    const ms = endsAt.getTime() - now.getTime();
+    return ms > 0 ? Math.ceil(ms / DAY_MS) : 0;
+}
+
+/** True while the member is still inside the grace window. */
+export function isAlliedClanGraceActive(userData, now = new Date()) {
+    return alliedClanGraceDaysLeft(userData, now) > 0;
+}
+
+/** Start the grace window (the first detection is kept). */
+export function startAlliedClanGrace(userData, now = new Date()) {
+    if (userData) userData.notAlliedSince = now.toISOString();
+}
+
+/** The member is back in an allied clan — drop the marker. */
+export function clearAlliedClanGrace(userData) {
+    if (userData?.notAlliedSince) delete userData.notAlliedSince;
+}
+
 /**
  * Apply restrictive permissions to a claim category and its channels:
  * @everyone cannot view (or send), the bot and the member role can VIEW ONLY,
@@ -267,7 +308,10 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
         const lookup = lookupNickname(data.nickname, db, cache);
         // War leave (pending or approved by an elder) keeps the role even when the
         // member is no longer in the EU21 ranking — they are away fighting a war.
-        const eligible = !!data.manualPermanent || !!data.tempUntil || isWarLeaveActive(data) || (lookup.found && lookup.inAlliedClan);
+        // A member found in the ranking outside the allied clans keeps the role
+        // during the allied-clan grace window (see ALLIED_CLAN_GRACE_DAYS).
+        const inGrace = lookup.found && isAlliedClanGraceActive(data);
+        const eligible = !!data.manualPermanent || !!data.tempUntil || isWarLeaveActive(data) || (lookup.found && lookup.inAlliedClan) || inGrace;
         if (!eligible) continue;
         shouldHave.add(userId);
         for (const pid of data.pilotIds || []) shouldHave.add(pid);

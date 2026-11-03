@@ -15,7 +15,7 @@ import {
     ensureConfig
 } from '../core/ranking-constants.js';
 import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
-import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
+import { assignClanRole, assignTempRole, removeMemberRoles, isAlliedClanGraceActive, alliedClanGraceDaysLeft } from '../core/clan-roles.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 import {
     warLeaveBadge,
@@ -267,6 +267,18 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
         statusLines += `🆔 **ID:** ${targetUserId}\n`;
         statusLines += `${userData.tempUntil ? '⏳ **Type:** Temporary' : '✅ **Type:** Permanent'}\n`;
         statusLines += `📅 **Registered:** ${new Date(userData.registeredAt).toLocaleString('en-US')}\n`;
+
+        if (!userData.tempUntil) {
+            const permanentSince = userData.permanentSince || userData.registeredAt;
+            statusLines += `✅ **Permanent since:** ${new Date(permanentSince).toLocaleString('en-US')}\n`;
+        }
+
+        if (userData.notAlliedSince) {
+            statusLines += `⚠️ **Left allied clan:** ${new Date(userData.notAlliedSince).toLocaleString('en-US')}\n`;
+            statusLines += isAlliedClanGraceActive(userData)
+                ? `⏳ **Grace:** ${alliedClanGraceDaysLeft(userData)} day(s) left before the role is removed\n`
+                : `⌛ **Grace:** ended\n`;
+        }
 
         if (userData.tempUntil) {
             const expires = new Date(userData.tempUntil);

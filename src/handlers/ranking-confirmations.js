@@ -153,6 +153,8 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
             db.users[cached.targetId].tempUntil = threeDaysFromNow.toISOString();
             db.users[cached.targetId].tempRegisteredAt = db.users[cached.targetId].registeredAt;
+        } else {
+            db.users[cached.targetId].permanentSince = db.users[cached.targetId].registeredAt;
         }
 
         if (!db.users[cached.targetId].pilotIds) db.users[cached.targetId].pilotIds = [];
@@ -204,6 +206,7 @@ export async function handleConfirmAction(interaction, db, saveLocalStorage, log
             ...db.users[cached.targetId],
             nickname: cached.nickname,
             registeredAt: new Date().toISOString(),
+            permanentSince: new Date().toISOString(),
             manualPermanent: true
         };
 
