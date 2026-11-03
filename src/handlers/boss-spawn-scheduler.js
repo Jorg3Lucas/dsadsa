@@ -179,6 +179,8 @@ export async function sendBossSpawnAlerts() {
     announcedChannels = true;
   }
 
+  const standardAlerts = [];
+
   for (const alert of alerts) {
     const { entry, spawnTime, cacheKey } = alert;
 
@@ -205,24 +207,42 @@ export async function sendBossSpawnAlerts() {
       continue;
     }
 
+    standardAlerts.push(alert);
+  }
+
+  // Group by spawn time: bosses that spawn at the same minute share one
+  // message instead of one embed each, cutting the alert spam.
+  const groups = new Map();
+  for (const alert of standardAlerts) {
+    const key = `${alert.spawnTime.h}-${alert.spawnTime.m}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(alert);
+  }
+
+  for (const group of groups.values()) {
+    const { spawnTime } = group[0];
     const spawnHour12 = spawnTime.h % 12 || 12;
     const amPm = spawnTime.h < 12 ? "AM" : "PM";
     const timeStr = `${spawnHour12}:${String(spawnTime.m).padStart(2, "0")} ${amPm}`;
 
+    const bossLines = group
+      .map(({ entry }) => `• **${entry.boss}** — ${entry.map} (${entry.world} Layer ${entry.layer})`)
+      .join("\n");
+
     const embed = new EmbedBuilder()
-      .setTitle("\u2721\ufe0f Boss Spawning Soon! \u2694\ufe0f")
+      .setTitle(group.length > 1 ? `⚔️ ${group.length} Bosses Spawning Soon!` : "⚔️ Boss Spawning Soon!")
       .setColor("#ff4444")
       .setDescription(
-        `**${entry.boss}** at **${entry.map}** (${entry.world} Layer ${entry.layer})\n\n` +
+        `${bossLines}\n\n` +
         `⏰ **Spawning in 5 minutes** — ${timeStr} (Server Time)\n\n` +
-        `Prepare yourselves and **don't forget to do the mission!** \uD83D\uDCAA`
+        `Prepare yourselves and **don't forget to do the mission!** 💪`
       )
       .setTimestamp();
 
     try {
       await channel.send({ embeds: [embed] });
-      bossSpawnAlertCache[cacheKey] = true;
-      console.log(`✅ [Boss Spawn Alert] Sent: ${entry.boss} at ${entry.map} (${timeStr})`);
+      for (const { cacheKey } of group) bossSpawnAlertCache[cacheKey] = true;
+      console.log(`✅ [Boss Spawn Alert] Sent ${group.length} boss(es) at ${timeStr}: ${group.map(({ entry }) => entry.boss).join(", ")}`);
     } catch (err) {
       console.error(`❌ [Boss Spawn Alert] Failed to send: ${err.message}`);
     }
