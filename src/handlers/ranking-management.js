@@ -17,6 +17,108 @@ import {
 import { findNicknameInCache, findTopClanSuggestions, getLocalRankingCache, cleanNickname } from '../core/ranking-cache.js';
 import { assignClanRole, assignTempRole, removeMemberRoles } from '../core/clan-roles.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
+import {
+    warLeaveBadge,
+    warLeaveStatusLabel,
+    warLeaveReviewLabel,
+    recordLabel,
+    closeWarLeave,
+    isWarLeaveActive,
+    isWarLeaveReviewDue
+} from '../core/war-leave.js';
+
+// ==========================================
+// 🛡️ WAR LEAVE OVERVIEW
+// ==========================================
+
+/** Users with a war-leave record that still protects them (pending or approved). */
+function activeWarLeaveEntries(db) {
+    return Object.entries(db.users || {})
+        .filter(([, data]) => data?.nickname && data.warLeave && data.warLeave.status !== 'denied')
+        .sort((a, b) => {
+            const pendingFirst = (a[1].warLeave.status === 'pending' ? 0 : 1) - (b[1].warLeave.status === 'pending' ? 0 : 1);
+            return pendingFirst || a[1].nickname.localeCompare(b[1].nickname);
+        });
+}
+
+/** Content + components for the war-leave overview (also used after ending one). */
+function buildWarLeaveOverview(db, note = null) {
+    const entries = activeWarLeaveEntries(db);
+    const backRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
+    );
+
+    if (entries.length === 0) {
+        return {
+            content: `${note ? `${note}\n\n` : ''}🛡️ **War Leave**\n\nNo member is under war-leave protection right now.`,
+            components: [backRow]
+        };
+    }
+
+    const listed = entries.slice(0, 25);
+    const lines = listed.map(([id, data]) =>
+        `• <@${id}> — **${data.nickname}** — ${warLeaveStatusLabel(data, db)}\n   🌐 ${recordLabel(data.warLeave)}`
+    );
+    const overflow = entries.length - listed.length;
+    if (overflow > 0) lines.push(`…and ${overflow} more (end one to be able to see the rest)`);
+
+    const endMenu = new StringSelectMenuBuilder()
+        .setCustomId('manage_warleave_end')
+        .setPlaceholder('Select a member to end the war leave...')
+        .addOptions(listed.map(([id, data]) => ({
+            label: data.nickname.substring(0, 100),
+            description: `${warLeaveStatusLabel(data, db)} · ${recordLabel(data.warLeave)}`.substring(0, 100),
+            value: id
+        })));
+
+    return {
+        content: `${note ? `${note}\n\n` : ''}🛡️ **War Leave — ${entries.length} member(s) protected**\n\n${lines.join('\n')}`,
+        components: [new ActionRowBuilder().addComponents(endMenu), backRow]
+    };
+}
+
+/** End the war leave of one member: close the record and revoke the roles. */
+async function endWarLeaveFor(guild, targetUserId, userData, db, actorId = 'manage-panel') {
+    closeWarLeave(userData, actorId);
+
+    const member = await guild.members.fetch(targetUserId).catch(() => null);
+    if (member) await removeMemberRoles(member, db);
+    for (const pilotId of userData.pilotIds || []) {
+        const pilotMember = await guild.members.fetch(pilotId).catch(() => null);
+        if (pilotMember) await removeMemberRoles(pilotMember, db);
+    }
+}
+
+// ── Manage: War leave overview ──
+export async function handleManageWarLeave(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    return interaction.update(buildWarLeaveOverview(db)).catch(() => {});
+}
+
+// ── Manage: End a war leave from the overview ──
+export async function handleManageWarLeaveEnd(interaction, db, saveLocalStorage, logEvent) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
+    }
+
+    const targetUserId = interaction.values[0];
+    const userData = db.users?.[targetUserId];
+    if (!userData || !isWarLeaveActive(userData)) {
+        return interaction.update(buildWarLeaveOverview(db, '⌛ That war leave is no longer active.')).catch(() => {});
+    }
+
+    await endWarLeaveFor(interaction.guild, targetUserId, userData, db, interaction.user.id);
+    saveLocalStorage();
+
+    logEvent(`🛡️ Admin ${interaction.user.tag} ended the war leave of ${userData.nickname} (${targetUserId}) via manage panel`);
+    return interaction.update(buildWarLeaveOverview(
+        db,
+        `✅ **War leave ended for ${userData.nickname}** — the role was removed and no new elder prompt will be sent.`
+    )).catch(() => {});
+}
 
 // ==========================================
 // 📋 MANAGE MENU HANDLERS
@@ -53,6 +155,14 @@ export async function handleManageUserPage(interaction, db, saveLocalStorage, lo
             label: '🗑️ Remove Temp',
             description: 'Remove this temporary registration immediately',
             value: `removetemp_${targetUserId}`
+        });
+    }
+
+    if (isWarLeaveActive(userData)) {
+        actionOptions.push({
+            label: '🛡️ End War Leave',
+            description: 'Stop protecting this member and remove the role',
+            value: `endwarleave_${targetUserId}`
         });
     }
 
@@ -167,6 +277,18 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
         statusLines += `✈️ **Pilots:** ${userData.pilotIds ? userData.pilotIds.length : 0}\n`;
 
+        if (userData.warLeave) {
+            const review = warLeaveReviewLabel(userData.warLeave, db);
+            statusLines += `\n🛡️ **War leave:** ${warLeaveStatusLabel(userData, db)}\n`;
+            statusLines += `🌐 **War leave location:** ${recordLabel(userData.warLeave)}\n`;
+            if (userData.warLeave.decidedBy) {
+                statusLines += `🗳️ **Decided by:** <@${userData.warLeave.decidedBy}>\n`;
+            }
+            if (review && isWarLeaveReviewDue(userData.warLeave, db)) {
+                statusLines += `🔁 **Review overdue** — elders will be asked again on the next sync\n`;
+            }
+        }
+
         if (cacheHit) {
             const serverName = WORLD_IDS[cacheHit.worldId] || `World ${cacheHit.worldId}`;
             const worldAlliedClans = db.config?.alliedClans?.[cacheHit.worldId];
@@ -180,6 +302,33 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
         return interaction.update({
             content: statusLines,
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
+                )
+            ]
+        }).catch(() => {});
+    }
+
+    // ── End War Leave (admin override, no elder prompt) ──
+    if (actionType === 'endwarleave') {
+        if (!isWarLeaveActive(userData)) {
+            return interaction.update({
+                content: '⌛ This member has no active war leave.',
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
+                    )
+                ]
+            }).catch(() => {});
+        }
+
+        await endWarLeaveFor(interaction.guild, targetUserId, userData, db, interaction.user.id);
+        saveLocalStorage();
+
+        logEvent(`🛡️ Admin ${interaction.user.tag} ended the war leave of ${userData.nickname} (${targetUserId}) via manage menu`);
+        return interaction.update({
+            content: `✅ **War leave ended for ${userData.nickname}.** The role was removed and no new elder prompt will be sent.`,
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('manage_back').setLabel(getMsg('ranking.responses.manage.back')).setStyle(ButtonStyle.Secondary)
@@ -574,7 +723,7 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
         const pageItems = sorted.slice(0, PAGE_SIZE);
         const selectOptions = pageItems.map(([id, data]) => ({
             label: data.nickname.substring(0, 100),
-            description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
+            description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)${warLeaveBadge(data, db)}`,
             value: id
         }));
         const selectMenu = new StringSelectMenuBuilder()
@@ -610,7 +759,7 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
     const pageItems = sorted.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE);
     const selectOptions = pageItems.map(([id, data]) => ({
         label: data.nickname.substring(0, 100),
-        description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
+        description: `${data.pilotIds ? data.pilotIds.length : 0} pilot(s)${warLeaveBadge(data, db)}`,
         value: id
     }));
 

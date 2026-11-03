@@ -38,12 +38,15 @@ import {
     handleManageAlliedAddModal,
     handleManageAlliedRemove,
     handleManageNav,
-    handleAddClanSuggestion
+    handleAddClanSuggestion,
+    handleManageWarLeave,
+    handleManageWarLeaveEnd
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
 import { startWebServer } from './web/server.js';
 import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig, MEMBER_ROLE_ID } from './core/ranking-constants.js';
 import { applyClaimChannelPermissions } from './core/clan-roles.js';
+import { handleWarLeaveDecision, isWarLeaveInteraction } from './core/war-leave.js';
 import { logRankingEvent } from './core/ranking-logger.js';
 import { saveRankingStorage, loadLocalStorageRanking } from './core/ranking-storage.js';
 
@@ -298,6 +301,9 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId === 'manage_allied_remove') {
                 return await handleManageAlliedRemove(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
+            if (interaction.customId === 'manage_warleave_end') {
+                return await handleManageWarLeaveEnd(interaction, getRankingDb(), saveRanking, logRankingEvent);
+            }
         }
 
         // C2. MODAL SUBMITS
@@ -326,6 +332,10 @@ client.on('interactionCreate', async (interaction) => {
 
         // C3. BUTTON CLICKS
         if (interaction.isButton()) {
+            // 🛡️ War leave [Keep role] / [Remove role] — elders only
+            if (isWarLeaveInteraction(interaction)) {
+                return await handleWarLeaveDecision(interaction, getRankingDb(), saveRanking, logRankingEvent);
+            }
             if (interaction.customId === 'welcome_register_owner') {
                 return handleWelcomeRegisterOwner(interaction);
             }
@@ -374,6 +384,9 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (interaction.customId === 'manage_allied') {
                 return await handleManageAllied(interaction, getRankingDb(), saveRanking, logRankingEvent);
+            }
+            if (interaction.customId === 'manage_warleave') {
+                return await handleManageWarLeave(interaction, getRankingDb(), saveRanking, logRankingEvent);
             }
             if (interaction.customId.startsWith('manage_allied_add_')) {
                 return await handleManageAlliedAdd(interaction, getRankingDb(), saveRanking, logRankingEvent);

@@ -20,6 +20,7 @@ import { DISCORD_SERVER_ID, ensureConfig, MEMBER_ROLE_ID } from './ranking-const
 import { CLAIM_CATEGORIES, GENERAL_CATEGORY, ELDER_ROLE_ID, buildClaimOverwrites, buildEldersOverwrites, buildMemberOverwrites, buildMemberViewOverwrites, findTextChannel, findClaimCategory } from './server-structure.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname } from './ranking-service.js';
+import { isWarLeaveActive } from './war-leave.js';
 
 /**
  * Apply restrictive permissions to a claim category and its channels:
@@ -264,7 +265,9 @@ export async function syncClanRoles(client, db, saveLocalStorage, logEvent) {
         for (const pid of data.pilotIds || []) registered.add(pid);
 
         const lookup = lookupNickname(data.nickname, db, cache);
-        const eligible = !!data.manualPermanent || !!data.tempUntil || (lookup.found && lookup.inAlliedClan);
+        // War leave (pending or approved by an elder) keeps the role even when the
+        // member is no longer in the EU21 ranking — they are away fighting a war.
+        const eligible = !!data.manualPermanent || !!data.tempUntil || isWarLeaveActive(data) || (lookup.found && lookup.inAlliedClan);
         if (!eligible) continue;
         shouldHave.add(userId);
         for (const pid of data.pilotIds || []) shouldHave.add(pid);

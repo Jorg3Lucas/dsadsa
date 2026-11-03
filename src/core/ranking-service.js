@@ -157,7 +157,7 @@ export async function searchRankingForum(nickname) {
             }
             if (!clan || clan === '-' || clan === '—') clan = 'No Clan';
 
-            results.push({ nickname: nick, clanName: clan, worldId: null });
+            results.push({ nickname: nick, clanName: clan, serverName: serverText || null, worldId: null });
         });
 
         return results;

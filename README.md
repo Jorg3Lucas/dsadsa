@@ -205,6 +205,17 @@ RANKING_ENABLED=true    # reativa o sistema completo
 ```
 With the flag off, the bot skips the ranking boot, does not register/answer slash commands (claim uses buttons only) and does not apply clan-role permissions to claim channels. All ranking files stay in the repo, so re-enabling is just the flag.
 
+### 🛡️ War leave (cargo mantido fora do EU21)
+When a registered member disappears from the EU21 ranking, the sync searches the character name on the forum and asks the elders (in `#announcements`, or `db.config.warLeaveChannelId`) whether the member keeps the role while fighting wars on another server. The role is kept while the request is pending and after "Keep role"; members with an active war leave are re-checked every sync and a new request is sent whenever the clan or server changes.
+
+An approved war leave is reviewed again after a configurable window:
+```
+WAR_LEAVE_REVIEW_DAYS=30   # default; 0 disables the periodic review
+```
+`db.config.warLeaveReviewDays` overrides the env var. When the window ends, elders get a "War leave review" prompt and the role stays kept until they answer.
+
+`/manage` shows each member's war-leave state (`🛡️ WL`, `🛡️ WL pending`, `🛡️ WL review`), the full status in **View Status**, and an **🛡️ End War Leave** action that closes the protection and removes the role. The **🛡️ War Leaves (N)** button lists every protected member with their status and forum location, and lets an admin end any of them from that panel.
+
 ### 2. Configuration
 - **`src/handlers/auto-channel-setup.js`** — category IDs + channel/panel definitions
 - **Daily logs / boss alerts / event alerts** — configured **manually in `daily-logs.json`**: set `configChannelId` (daily claim report), `bossSpawnChannelId` (boss spawn alerts), and `scheduledEventChannelId` (event alerts) to the target channel IDs before boot

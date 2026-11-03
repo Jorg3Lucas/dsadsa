@@ -25,6 +25,7 @@ import { lookupNickname, lookupTopNicknames } from '../core/ranking-service.js';
 import { runDailySynchronization } from '../core/ranking-sync-engine.js';
 import { buildPrefixedNickname, findNicknameOwner } from '../core/ranking-utils.js';
 import { hasMemberRole } from '../core/clan-roles.js';
+import { warLeaveBadge } from '../core/war-leave.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
@@ -353,7 +354,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         const selectOptions = pageItems.map(([id, data]) => ({
             label: data.nickname.substring(0, 100),
-            description: `${data.tempUntil ? '⏳ Temp' : '✅ Perm'} | ${data.pilotIds ? data.pilotIds.length : 0} pilot(s)`,
+            description: `${data.tempUntil ? '⏳ Temp' : '✅ Perm'} | ${data.pilotIds ? data.pilotIds.length : 0} pilot(s)${warLeaveBadge(data, db)}`,
             value: id
         }));
 
@@ -372,8 +373,13 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             components.push(navRow);
         }
 
+        const warLeaveCount = userEntries.filter(([, data]) => data.warLeave && data.warLeave.status !== 'denied').length;
         components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('manage_warleave')
+                .setLabel(`🛡️ War Leaves (${warLeaveCount})`)
+                .setStyle(warLeaveCount > 0 ? ButtonStyle.Primary : ButtonStyle.Secondary)
         ));
 
         return interaction.reply({

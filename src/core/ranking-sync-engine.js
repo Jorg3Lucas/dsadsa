@@ -5,6 +5,7 @@ import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles, hasAnyMemberRoles } from './clan-roles.js';
+import { isWarLeaveActive, isWarLeaveDenied, clearWarLeave, openWarLeave, trackWarLeaveMember, WAR_LEAVE_LOOKUPS_PER_SYNC } from './war-leave.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -83,6 +84,10 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 logEvent('⚠️ [Ranking Validation] Ranking cache is empty — skipping removal to avoid mass deletion.');
             } else {
                 let removedRoleCount = 0;
+                let warLeaveKept = 0;
+                // Forum lookups are network calls — cap them so a mass departure
+                // cannot stall the synchronization (the rest are checked next run).
+                const warLeaveLookups = { left: WAR_LEAVE_LOOKUPS_PER_SYNC };
 
                 for (const [memberId, userData] of Object.entries(db.users)) {
                     if (!userData.nickname) continue;
@@ -93,11 +98,53 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const lookup = lookupNickname(nickname, db, rankingCache);
 
                     // ✅ Found in the EU21 ranking — keep everything
-                    if (lookup.found) continue;
+                    if (lookup.found) {
+                        if (userData.warLeave) {
+                            clearWarLeave(userData);
+                            saveLocalStorage();
+                            logEvent(`✅ [War Leave] ${userData.nickname} is back in the EU21 ranking — monitoring ended`);
+                        }
+                        continue;
+                    }
 
-                    // ❌ Not found in the EU21 ranking — remove the role, keep the name
                     const member = members.get(memberId);
                     const displayName = userData.nickname || member?.user.username || memberId;
+
+                    // 🛡️ WAR LEAVE — the member may have moved to another server to
+                    // fight a war. Keep the role while an elder decides and refresh
+                    // the forum location on every sync. A pilot follows its owner's
+                    // war leave (step 3 re-adds the role for pilots too).
+                    const warLeaveOwner = isWarLeaveActive(userData)
+                        ? null
+                        : Object.values(db.users).find(data => isWarLeaveActive(data) && data.pilotIds?.includes(memberId));
+                    if (isWarLeaveActive(userData) || warLeaveOwner) {
+                        if (member && isWarLeaveActive(userData)) {
+                            await trackWarLeaveMember(client, db, memberId, userData, logEvent);
+                            saveLocalStorage();
+                        }
+                        warLeaveKept++;
+                        continue;
+                    }
+
+                    // First detection (not previously refused): ask an elder and keep
+                    // the role until they answer. Pure pilots are skipped — their
+                    // owner's war leave covers them and asking twice would be noise.
+                    const isPilotOnly = !userData.registeredAt &&
+                        Object.values(db.users).some(data => data.pilotIds?.includes(memberId));
+                    if (!isPilotOnly && !isWarLeaveDenied(userData) && member && hasAnyMemberRoles(member, db)) {
+                        if (warLeaveLookups.left > 0) {
+                            warLeaveLookups.left--;
+                            await openWarLeave(client, db, memberId, userData, logEvent);
+                            saveLocalStorage();
+                            warLeaveKept++;
+                            continue;
+                        }
+                        logEvent(`⏸️ [War Leave] Forum lookup budget reached — ${displayName} stays protected until the next sync`);
+                        warLeaveKept++;
+                        continue;
+                    }
+
+                    // ❌ Not found in the EU21 ranking — remove the role, keep the name
 
                     if (member) {
                         const hadRole = hasAnyMemberRoles(member, db);
@@ -121,9 +168,14 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     }
                 }
 
-                if (removedRoleCount > 0) {
+                if (removedRoleCount > 0 || warLeaveKept > 0) {
                     saveLocalStorage();
+                }
+                if (removedRoleCount > 0) {
                     logEvent(`🧹 [Ranking Validation] Removed member role from ${removedRoleCount} member(s) not found in the EU21 ranking (nicknames and registrations kept)`);
+                }
+                if (warLeaveKept > 0) {
+                    logEvent(`🛡️ [War Leave] Kept the member role for ${warLeaveKept} member(s) not found in the EU21 ranking while elders decide`);
                 }
             }
         }
@@ -308,6 +360,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     }
                 } else if (ownerData?.tempUntil) {
                     // ⏳ Temporary registration — hold the member role until expiry (step 2.75)
+                    await assignTempRole(member, db, saveLocalStorage, logEvent);
+                } else if (isWarLeaveActive(ownerData)) {
+                    // 🛡️ Left EU21 for a war — an elder is deciding (or approved) keeping the role
                     await assignTempRole(member, db, saveLocalStorage, logEvent);
                 } else if (inAlliedClan) {
                     // ✅ In allied clan — ensure the clan role is present
