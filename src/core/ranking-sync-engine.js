@@ -5,7 +5,7 @@ import { lookupNickname } from './ranking-service.js';
 import { getMsg } from '../lang/lang.js';
 import { buildPrefixedNickname } from '../core/ranking-utils.js';
 import { syncClanRoles, assignClanRole, assignTempRole, removeMemberRoles, hasAnyMemberRoles } from './clan-roles.js';
-import { isWarLeaveActive, isWarLeaveDenied, clearWarLeave, openWarLeave, trackWarLeaveMember, WAR_LEAVE_LOOKUPS_PER_SYNC } from './war-leave.js';
+import { isWarLeaveActive, isWarLeaveDenied, clearWarLeave, openWarLeave, trackWarLeaveMember } from './war-leave.js';
 
 // ==========================================
 // 🔄 SYNCHRONIZATION ENGINE
@@ -85,9 +85,6 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             } else {
                 let removedRoleCount = 0;
                 let warLeaveKept = 0;
-                // Forum lookups are network calls — cap them so a mass departure
-                // cannot stall the synchronization (the rest are checked next run).
-                const warLeaveLookups = { left: WAR_LEAVE_LOOKUPS_PER_SYNC };
 
                 for (const [memberId, userData] of Object.entries(db.users)) {
                     if (!userData.nickname) continue;
@@ -126,22 +123,20 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         continue;
                     }
 
-                    // First detection (not previously refused): ask an elder and keep
-                    // the role until they answer. Pure pilots are skipped — their
-                    // owner's war leave covers them and asking twice would be noise.
+                    // First detection (not previously refused): search the exact name
+                    // on the forum and, when it exists, ask an elder and keep the role
+                    // until they answer. Pure pilots are skipped — their owner's war
+                    // leave covers them and asking twice would be noise.
                     const isPilotOnly = !userData.registeredAt &&
                         Object.values(db.users).some(data => data.pilotIds?.includes(memberId));
                     if (!isPilotOnly && !isWarLeaveDenied(userData) && member && hasAnyMemberRoles(member, db)) {
-                        if (warLeaveLookups.left > 0) {
-                            warLeaveLookups.left--;
-                            await openWarLeave(client, db, memberId, userData, logEvent);
+                        const opened = await openWarLeave(client, db, memberId, userData, logEvent);
+                        if (opened?.protected) {
                             saveLocalStorage();
                             warLeaveKept++;
                             continue;
                         }
-                        logEvent(`⏸️ [War Leave] Forum lookup budget reached — ${displayName} stays protected until the next sync`);
-                        warLeaveKept++;
-                        continue;
+                        // No exact forum hit — the normal validation below removes the role.
                     }
 
                     // ❌ Not found in the EU21 ranking — remove the role, keep the name

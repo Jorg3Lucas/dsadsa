@@ -7,9 +7,11 @@
 // immediately. This module keeps the role while an elder decides:
 //
 //   1. The member is no longer found in the EU21 ranking.
-//   2. The character name is searched on the MIR4 forum ranking to find the
-//      clan/server the member moved to.
-//   3. Elders get a message with that result and [Keep role] / [Remove role].
+//   2. The exact character name is searched on the MIR4 forum ranking to find
+//      the clan/server the member moved to.
+//   3. When the forum has an exact hit, elders get a message with that result
+//      and [Keep role] / [Remove role]. No hit → the normal validation removes
+//      the role; forum unreachable → the role is kept until the next sync.
 //   4. While the request is pending (and after "Keep role") the role is kept.
 //      "Remove role" revokes it immediately.
 //   5. On every sync the forum is searched again for members with an active
@@ -24,9 +26,9 @@
 //     decidedBy, decidedAt }
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
-import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, WORLD_IDS, APPROVER_ROLE_IDS, adminChannelId } from './ranking-constants.js';
+import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, WORLD_IDS, APPROVER_ROLE_IDS, adminChannelId, WAR_LEAVE_CHANNEL_ID } from './ranking-constants.js';
 import { ELDER_ROLE_ID, getGeneralChannelName } from './server-structure.js';
-import { isAlliedClanName, searchRankingForum } from './ranking-service.js';
+import { isAlliedClanName, searchRankingForumDetailed } from './ranking-service.js';
 import { cleanNickname } from './ranking-cache.js';
 import { deferUpdateSafe } from './interaction-utils.js';
 
@@ -34,9 +36,6 @@ import { deferUpdateSafe } from './interaction-utils.js';
 const EU21_WORLD_ID = Object.keys(WORLD_IDS)[0] || '621';
 
 const ACTIVE_STATUSES = new Set(['pending', 'approved']);
-
-/** Maximum forum searches per sync — keeps a mass departure from stalling the sync. */
-export const WAR_LEAVE_LOOKUPS_PER_SYNC = 12;
 
 /** Days between reviews of an approved war leave when nothing is configured. */
 export const WAR_LEAVE_DEFAULT_REVIEW_DAYS = 30;
@@ -147,14 +146,14 @@ export function warLeaveBadge(userData, db) {
  * @param {string} nickname
  * @param {object} db
  * @param {{clanName?: string|null}} [previous] - last known location
- * @returns {Promise<{found: boolean, clanName: string|null, serverName: string|null, inAlliedClan: boolean}>}
+ * @returns {Promise<{found: boolean, clanName: string|null, serverName: string|null, inAlliedClan: boolean, forumOk: boolean}>}
  */
 export async function detectMemberLocation(nickname, db, previous = null) {
-    if (!nickname) return { found: false, clanName: null, serverName: null, inAlliedClan: false };
+    if (!nickname) return { found: false, clanName: null, serverName: null, inAlliedClan: false, forumOk: true };
 
-    const results = await searchRankingForum(nickname);
+    const { results, ok } = await searchRankingForumDetailed(nickname);
     if (!results || results.length === 0) {
-        return { found: false, clanName: null, serverName: null, inAlliedClan: false };
+        return { found: false, clanName: null, serverName: null, inAlliedClan: false, forumOk: ok };
     }
 
     const alliedClans = db?.config?.alliedClans?.[EU21_WORLD_ID];
@@ -170,7 +169,8 @@ export async function detectMemberLocation(nickname, db, previous = null) {
         found: true,
         clanName,
         serverName,
-        inAlliedClan: !!clanName && isAlliedClanName(clanName, alliedClans)
+        inAlliedClan: !!clanName && isAlliedClanName(clanName, alliedClans),
+        forumOk: ok
     };
 }
 
@@ -278,11 +278,12 @@ export function rememberLocation(userData, location, now = new Date()) {
 
 /**
  * Resolve the channel where elders answer war-leave requests.
- * `db.config.warLeaveChannelId` (explicit) wins, then the elders announcements
- * channel (the deciding group can see it), then the approvals/admin channel.
+ * `db.config.warLeaveChannelId` (explicit) wins, then the fixed war-leave
+ * channel (WAR_LEAVE_CHANNEL_ID), then the elders announcements channel (the
+ * deciding group can see it), then the approvals/admin channel.
  */
 export async function resolveWarLeaveChannel(client, db) {
-    const explicitId = db?.config?.warLeaveChannelId;
+    const explicitId = db?.config?.warLeaveChannelId || WAR_LEAVE_CHANNEL_ID;
     if (explicitId) {
         const channel = await client.channels.fetch(explicitId).catch(() => null);
         if (channel) return channel;
@@ -400,17 +401,31 @@ export async function sendWarLeaveRequest(client, db, userId, userData, { locati
 export async function openWarLeave(client, db, userId, userData, logEvent) {
     const location = await detectMemberLocation(userData.nickname, db);
 
-    // The ranking cache did not find the member, so the role is at risk. Ask the
-    // elders even when the forum still lists an allied clan (the cache only
-    // holds the scraped top players); the forum result is shown in the prompt.
+    // Forum unreachable — never remove a role without information. Keep it and
+    // ask again on the next sync.
+    if (!location.forumOk) {
+        logEvent(`⚠️ [War Leave] Forum lookup failed for ${userData.nickname} (${userId}) — role kept until the next sync`);
+        return { location, asked: false, protected: true, warLeave: null };
+    }
+
+    // No exact hit on the forum: the character is not listed in any clan/server,
+    // so there is nothing to ask about — the normal validation removes the role.
+    if (!location.found) {
+        logEvent(`🔎 [War Leave] ${userData.nickname} (${userId}) has no exact match on the forum ranking — no elder prompt`);
+        return { location, asked: false, protected: false, warLeave: null };
+    }
+
+    // Exact forum hit. Ask the elders even when the forum lists an allied clan
+    // (the cache only holds the scraped top players); the result is in the prompt.
     const warLeave = createWarLeave(userData, location);
     const asked = await sendWarLeaveRequest(client, db, userId, userData, { location, change: null, logEvent });
-    return { location, asked, warLeave };
+    return { location, asked, protected: true, warLeave };
 }
 
 /**
  * Re-check an active war leave: refresh the forum location and ask again when
- * the clan or server changed.
+ * the clan or server changed, or when the review window (30 days by default)
+ * ended after a "Keep role".
  */
 export async function trackWarLeaveMember(client, db, userId, userData, logEvent) {
     const warLeave = userData.warLeave;
@@ -418,11 +433,10 @@ export async function trackWarLeaveMember(client, db, userId, userData, logEvent
 
     const location = await detectMemberLocation(userData.nickname, db, { clanName: warLeave.lastClan });
 
-    // The member is back in an allied clan: stop asking, but keep the record so
-    // the role is not revoked while the name is still outside the scraped cache.
-    // The record is cleared when the EU21 ranking finds the member again.
-    if (location.found && location.inAlliedClan) {
-        rememberLocation(userData, location);
+    // Forum unreachable: keep the last known location and retry on the next sync.
+    if (!location.forumOk) {
+        warLeave.lastCheckedAt = new Date().toISOString();
+        logEvent?.(`⚠️ [War Leave] Forum lookup failed for ${userData.nickname} — keeping the last known location`);
         return false;
     }
 

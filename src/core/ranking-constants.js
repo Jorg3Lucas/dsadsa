@@ -22,6 +22,11 @@ export function setAdminChannelId(id) {
     adminChannelId = id;
 }
 
+// 🛡️ WAR-LEAVE CHANNEL — where the sync posts the elder prompts (and the
+// review prompts) for members that left the EU21 ranking.
+// db.config.warLeaveChannelId overrides it.
+export const WAR_LEAVE_CHANNEL_ID = '1567040293864472727';
+
 // 👤 MEMBER ROLE — the ONLY role the bot manages for membership.
 // Registered members validated against the EU21 ranking hold it; anyone who
 // fails validation loses it. The bot NEVER creates / renames / deletes roles,

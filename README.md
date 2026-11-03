@@ -206,7 +206,7 @@ RANKING_ENABLED=true    # reativa o sistema completo
 With the flag off, the bot skips the ranking boot, does not register/answer slash commands (claim uses buttons only) and does not apply clan-role permissions to claim channels. All ranking files stay in the repo, so re-enabling is just the flag.
 
 ### 🛡️ War leave (cargo mantido fora do EU21)
-When a registered member disappears from the EU21 ranking, the sync searches the character name on the forum and asks the elders (in `#announcements`, or `db.config.warLeaveChannelId`) whether the member keeps the role while fighting wars on another server. The role is kept while the request is pending and after "Keep role"; members with an active war leave are re-checked every sync and a new request is sent whenever the clan or server changes.
+When a registered member disappears from the EU21 ranking, the sync searches the **exact** character name on the forum. When the name exists, the elders get a prompt with the clan/server where it was found and decide whether the member keeps the role while fighting wars on another server; when the forum has no exact hit the normal validation removes the role, and when the forum is unreachable the role is kept until the next sync. Prompts are posted in channel `1567040293864472727` (override with `db.config.warLeaveChannelId`). The role is kept while the request is pending and after "Keep role"; members with an active war leave are re-checked every sync and a new request is sent whenever the clan or server changes.
 
 An approved war leave is reviewed again after a configurable window:
 ```
