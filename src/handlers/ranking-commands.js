@@ -27,6 +27,7 @@ import { buildPrefixedNickname, findNicknameOwner } from '../core/ranking-utils.
 import { hasMemberRole } from '../core/clan-roles.js';
 import { warLeaveBadge } from '../core/war-leave.js';
 import { findOwnerCandidates } from './ranking-pilot.js';
+import { buildManageFooterRow } from './ranking-management.js';
 import { deferReplySafe, deferUpdateSafe } from '../core/interaction-utils.js';
 
 // ==========================================
@@ -373,14 +374,7 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             components.push(navRow);
         }
 
-        const warLeaveCount = userEntries.filter(([, data]) => data.warLeave && data.warLeave.status !== 'denied').length;
-        components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('manage_warleave')
-                .setLabel(`🛡️ War Leaves (${warLeaveCount})`)
-                .setStyle(warLeaveCount > 0 ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        ));
+        components.push(buildManageFooterRow(db));
 
         return interaction.reply({
             content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),

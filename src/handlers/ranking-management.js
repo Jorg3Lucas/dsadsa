@@ -31,6 +31,11 @@ import {
 // 🛡️ WAR LEAVE OVERVIEW
 // ==========================================
 
+/** Discord rejects messages longer than 2000 characters — keep a safety margin. */
+const WAR_LEAVE_CONTENT_LIMIT = 1900;
+/** Discord allows at most 25 options in a select menu. */
+const WAR_LEAVE_MAX_OPTIONS = 25;
+
 /** Users with a war-leave record that still protects them (pending or approved). */
 function activeWarLeaveEntries(db) {
     return Object.entries(db.users || {})
@@ -39,6 +44,22 @@ function activeWarLeaveEntries(db) {
             const pendingFirst = (a[1].warLeave.status === 'pending' ? 0 : 1) - (b[1].warLeave.status === 'pending' ? 0 : 1);
             return pendingFirst || a[1].nickname.localeCompare(b[1].nickname);
         });
+}
+
+/**
+ * "⚙️ Allied Clans" + "🛡️ War Leaves (N)" row of the /manage list.
+ * Shared by the /manage reply, the Back button and the pagination buttons so the
+ * war-leave overview stays reachable from every manage screen.
+ */
+export function buildManageFooterRow(db) {
+    const warLeaveCount = activeWarLeaveEntries(db).length;
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('manage_allied').setLabel('⚙️ Allied Clans').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('manage_warleave')
+            .setLabel(`🛡️ War Leaves (${warLeaveCount})`)
+            .setStyle(warLeaveCount > 0 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
 }
 
 /** Content + components for the war-leave overview (also used after ending one). */
@@ -55,12 +76,31 @@ function buildWarLeaveOverview(db, note = null) {
         };
     }
 
-    const listed = entries.slice(0, 25);
-    const lines = listed.map(([id, data]) =>
-        `• <@${id}> — **${data.nickname}** — ${warLeaveStatusLabel(data, db)}\n   🌐 ${recordLabel(data.warLeave)}`
-    );
-    const overflow = entries.length - listed.length;
-    if (overflow > 0) lines.push(`…and ${overflow} more (end one to be able to see the rest)`);
+    const listed = entries.slice(0, WAR_LEAVE_MAX_OPTIONS);
+    const menuOverflow = entries.length - listed.length;
+    const menuNote = menuOverflow > 0
+        ? `\n\n⚠️ The menu below lists the first ${listed.length} members — end one to see the rest.`
+        : '';
+
+    // The overview lists whole member blocks; stop before the 2000-char limit
+    // instead of sending a message Discord will refuse.
+    const header = `${note ? `${note}\n\n` : ''}🛡️ **War Leave — ${entries.length} member(s) protected**\n\n`;
+    const lines = [];
+    let used = header.length + menuNote.length;
+    let hidden = 0;
+    for (const [id, data] of entries) {
+        const line = `• <@${id}> — **${data.nickname}** — ${warLeaveStatusLabel(data, db)}\n   🌐 ${recordLabel(data.warLeave)}`;
+        // Reserve room for the "…and N more" line.
+        if (used + line.length + 80 > WAR_LEAVE_CONTENT_LIMIT) {
+            hidden = entries.length - lines.length;
+            break;
+        }
+        lines.push(line);
+        used += line.length + 1;
+    }
+    if (hidden > 0) {
+        lines.push(`…and ${hidden} more — end one from the menu to refresh this list.`);
+    }
 
     const endMenu = new StringSelectMenuBuilder()
         .setCustomId('manage_warleave_end')
@@ -72,7 +112,7 @@ function buildWarLeaveOverview(db, note = null) {
         })));
 
     return {
-        content: `${note ? `${note}\n\n` : ''}🛡️ **War Leave — ${entries.length} member(s) protected**\n\n${lines.join('\n')}`,
+        content: `${header}${lines.join('\n')}${menuNote}`,
         components: [new ActionRowBuilder().addComponents(endMenu), backRow]
     };
 }
@@ -749,6 +789,7 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
                 new ButtonBuilder().setCustomId('manage_user_next_0').setLabel('Next ▶️').setStyle(ButtonStyle.Primary)
             ));
         }
+        components.push(buildManageFooterRow(db));
         return interaction.update({
             content: getMsg('ranking.responses.manage.pageInfo', { current: 1, total: totalPages, count: sorted.length }),
             components
@@ -787,6 +828,6 @@ export async function handleManageNav(interaction, db, saveLocalStorage, logEven
 
     return interaction.update({
         content: getMsg('ranking.responses.manage.pageInfo', { current: newPage + 1, total: totalPages, count: sorted.length }),
-        components: [new ActionRowBuilder().addComponents(selectMenu), navRow]
+        components: [new ActionRowBuilder().addComponents(selectMenu), navRow, buildManageFooterRow(db)]
     }).catch(() => {});
 }
