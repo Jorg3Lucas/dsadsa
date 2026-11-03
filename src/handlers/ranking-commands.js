@@ -342,9 +342,13 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
             return interaction.reply({ content: '❌ Permission denied.', flags: 64 });
         }
 
+        // Acknowledge immediately: building the list (and the war-leave badge for
+        // every member) must never race Discord's 3s interaction window (10062).
+        if (!await deferReplySafe(interaction)) return;
+
         const userEntries = Object.entries(db.users || {}).filter(([id, data]) => data && data.nickname);
         if (userEntries.length === 0) {
-            return interaction.reply({ content: getMsg('ranking.responses.manage.noUsers'), flags: 64 });
+            return interaction.editReply({ content: getMsg('ranking.responses.manage.noUsers') });
         }
 
         const sorted = userEntries.sort((a, b) => a[1].nickname.localeCompare(b[1].nickname));
@@ -376,10 +380,9 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
         components.push(buildManageFooterRow(db));
 
-        return interaction.reply({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manage.pageInfo', { current: page + 1, total: totalPages, count: sorted.length }),
-            components,
-            flags: 64
+            components
         });
     }
 

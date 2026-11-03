@@ -135,7 +135,11 @@ export async function handleManageWarLeave(interaction, db, saveLocalStorage, lo
         return interaction.update({ content: '❌ Permission denied.', components: [] }).catch(() => {});
     }
 
-    return interaction.update(buildWarLeaveOverview(db)).catch(() => {});
+    // Acknowledge first: Discord expires an unanswered interaction in 3s (10062)
+    // and the panel must keep working while the build grows with member count.
+    if (!await deferUpdateSafe(interaction)) return;
+
+    return interaction.editReply(buildWarLeaveOverview(db)).catch(() => {});
 }
 
 // ── Manage: End a war leave from the overview ──
@@ -147,14 +151,18 @@ export async function handleManageWarLeaveEnd(interaction, db, saveLocalStorage,
     const targetUserId = interaction.values[0];
     const userData = db.users?.[targetUserId];
     if (!userData || !isWarLeaveActive(userData)) {
-        return interaction.update(buildWarLeaveOverview(db, '⌛ That war leave is no longer active.')).catch(() => {});
+        if (!await deferUpdateSafe(interaction)) return;
+        return interaction.editReply(buildWarLeaveOverview(db, '⌛ That war leave is no longer active.')).catch(() => {});
     }
+
+    // Member fetches + role removals take longer than the 3s interaction window.
+    if (!await deferUpdateSafe(interaction)) return;
 
     await endWarLeaveFor(interaction.guild, targetUserId, userData, db, interaction.user.id);
     saveLocalStorage();
 
     logEvent(`🛡️ Admin ${interaction.user.tag} ended the war leave of ${userData.nickname} (${targetUserId}) via manage panel`);
-    return interaction.update(buildWarLeaveOverview(
+    return interaction.editReply(buildWarLeaveOverview(
         db,
         `✅ **War leave ended for ${userData.nickname}** — the role was removed and no new elder prompt will be sent.`
     )).catch(() => {});
@@ -237,12 +245,17 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
         return interaction.update({ content: '❌ User no longer registered.', components: [] }).catch(() => {});
     }
 
+    // Some actions (clan role, pilot list, end war leave) fetch members and edit
+    // roles, which can exceed Discord's 3s interaction window (error 10062).
+    // Acknowledge now and answer through editReply below.
+    if (!await deferUpdateSafe(interaction)) return;
+
     if (actionType === 'remove') {
         confirmationCache[`${interaction.user.id}-manualremove`] = {
             targetId: targetUserId,
             targetName: userData.nickname
         };
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manage.actionRemoveConfirm', { username: userData.nickname }),
             components: [
                 new ActionRowBuilder().addComponents(
@@ -261,7 +274,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             const assigned = await assignClanRole(clanTarget, db, logEvent);
             if (!assigned) await assignTempRole(clanTarget, db, saveLocalStorage, logEvent);
         }
-        return interaction.update({
+        return interaction.editReply({
             content: '✅ Clan role assigned.',
             components: [
                 new ActionRowBuilder().addComponents(
@@ -273,7 +286,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
 
     if (actionType === 'pilot') {
         if (!userData.pilotIds || userData.pilotIds.length === 0) {
-            return interaction.update({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {});
+            return interaction.editReply({ content: getMsg('ranking.responses.manage.noPilots', { username: userData.nickname }), components: [] }).catch(() => {});
         }
 
         const pilotOptions = [];
@@ -288,7 +301,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             .setPlaceholder(getMsg('ranking.responses.manage.pilotSelectPlaceholder'))
             .addOptions(pilotOptions);
 
-        return interaction.update({
+        return interaction.editReply({
             content: getMsg('ranking.responses.manage.removePilotConfirm', { username: userData.nickname }),
             components: [
                 new ActionRowBuilder().addComponents(pilotMenu),
@@ -352,7 +365,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             statusLines += `\n🔍 **Ranking:** ❌ Not found\n`;
         }
 
-        return interaction.update({
+        return interaction.editReply({
             content: statusLines,
             components: [
                 new ActionRowBuilder().addComponents(
@@ -365,7 +378,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
     // ── End War Leave (admin override, no elder prompt) ──
     if (actionType === 'endwarleave') {
         if (!isWarLeaveActive(userData)) {
-            return interaction.update({
+            return interaction.editReply({
                 content: '⌛ This member has no active war leave.',
                 components: [
                     new ActionRowBuilder().addComponents(
@@ -379,7 +392,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
         saveLocalStorage();
 
         logEvent(`🛡️ Admin ${interaction.user.tag} ended the war leave of ${userData.nickname} (${targetUserId}) via manage menu`);
-        return interaction.update({
+        return interaction.editReply({
             content: `✅ **War leave ended for ${userData.nickname}.** The role was removed and no new elder prompt will be sent.`,
             components: [
                 new ActionRowBuilder().addComponents(
@@ -395,7 +408,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
             targetId: targetUserId,
             targetName: userData.nickname
         };
-        return interaction.update({
+        return interaction.editReply({
             content: `⚠️ Remove temporary registration for **${userData.nickname}**?`,
             components: [
                 new ActionRowBuilder().addComponents(
@@ -407,7 +420,7 @@ export async function handleManageAction(interaction, db, saveLocalStorage, logE
         }).catch(() => {});
     }
 
-    return interaction.update({ content: '❌ Unknown action.', components: [] }).catch(() => {});
+    return interaction.editReply({ content: '❌ Unknown action.', components: [] }).catch(() => {});
 }
 
 // ── Manage: Remove a specific pilot from owner ──
