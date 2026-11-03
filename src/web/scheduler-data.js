@@ -10,12 +10,11 @@
 // Each entry: { world, layer, map, boss, times }
 // times: array of { h, m } in 24h format (Server Time)
 export const bossSpawns = [
-  // ═══ Custom arena world boss alert (10-min @everyone + join link) ═══
+  // ═══ Custom arena world boss alert (10-min + join link) ═══
   // Labyrinth (10h, 20h) + Valley (12h, 22h) + Mirage (0h, 22h)
   { world: "CUSTOM", layer: "1", map: "Join Discord", boss: "World Boss Arena",
     times: [0, 10, 12, 20, 22].map(h => ({ h, m: 0 })),
     channelId: "1407236253836902462",
-    mention: "@everyone",
     joinMessage: "Lets go guys, world boss join discord\nhttps://discord.com/channels/1359548384809062480/1359549331509739722" },
 
   // ═══ LAYER 3 — W1 ═══

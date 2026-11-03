@@ -27,12 +27,11 @@ async function fetchAlertChannel(client, channelId, label) {
 // times: array of { h, m } in 24h format (Server Time)
 
 const bossSpawns = [
-  // ═══ Custom arena world boss alert (10-min @everyone + join link) ═══
+  // ═══ Custom arena world boss alert (10-min + join link) ═══
   // Labyrinth (10h, 20h) + Valley (12h, 22h) + Mirage (0h, 22h)
   { world: "CUSTOM", layer: "1", map: "Join Discord", boss: "World Boss Arena",
     times: [0, 10, 12, 20, 22].map(h => ({ h, m: 0 })),
     channelId: "1407236253836902462",
-    mention: "@everyone",
     joinMessage: "Lets go guys, world boss join discord\nhttps://discord.com/channels/1359548384809062480/1359549331509739722" },
 
   // ═══ LAYER 3 — W1 ═══
@@ -145,7 +144,7 @@ function getUpcomingSpawnAlerts(nowArg) {
     const entry = bossSpawns[i];
 
     for (const time of entry.times) {
-      // Calculate the alert time: 5 min before for standard bosses, 10 min before for custom @everyone bosses
+      // Calculate the alert time: 5 min before for standard bosses, 10 min before for custom bosses
       let alertH = time.h;
       let alertM = entry.joinMessage ? 0 - 10 : time.m - 5;
       if (alertM < 0) {
@@ -183,7 +182,7 @@ export async function sendBossSpawnAlerts() {
   for (const alert of alerts) {
     const { entry, spawnTime, cacheKey } = alert;
 
-    // Custom arena-style world boss: post @everyone message with join link 10 min before (uses spawnTime for keying only)
+    // Custom arena-style world boss: post message with join link 10 min before (uses spawnTime for keying only)
     if (entry.channelId && entry.joinMessage) {
       const targetChannel = await client.channels.cache.get(entry.channelId) || await client.channels.fetch(entry.channelId).catch(() => null);
       if (!targetChannel) {
@@ -197,8 +196,7 @@ export async function sendBossSpawnAlerts() {
       const minutesToSpawn = Math.max(0, Math.floor((spawnDate.getTime() - now.getTime()) / 6e4));
 
       try {
-        // Discord requires the mention + message in a single send to actually ping @everyone
-        await targetChannel.send({ content: `${entry.mention}\n${entry.joinMessage.replace(/\r\n/g, "\n")}` });
+        await targetChannel.send({ content: entry.joinMessage.replace(/\r\n/g, "\n") });
         bossSpawnAlertCache[cacheKey] = true;
         console.log(`✅ [Custom Boss Alert] Sent to #${targetChannel.name} (${entry.boss}) — ${minutesToSpawn}min to spawn`);
       } catch (err) {
@@ -233,7 +231,7 @@ export async function sendBossSpawnAlerts() {
 
 // ══════════════════════════════════════════════════════════
 // 🌍 SCHEDULED EVENT ALERTS (Red Boss, Leader 3, Purgatory, etc.)
-// 10 minutes before each spawn, with @everyone mention
+// 10 minutes before each spawn
 // ══════════════════════════════════════════════════════════
 
 const scheduledEvents = [
@@ -325,7 +323,7 @@ export async function sendCustomWorldBossAlerts(now = getLocalTime()) {
 
     const resolved = await client.channels.cache.get(entry.channelId) || await client.channels.fetch(entry.channelId).catch(() => null);
     if (!resolved) continue;
-    await resolved.send({ content: `${entry.mention}\n${entry.joinMessage.replace(/\r\n/g, "\n")}` }).catch(err => console.error(`❌ [Custom Boss Alert] Failed: ${err.message}`));
+    await resolved.send({ content: entry.joinMessage.replace(/\r\n/g, "\n") }).catch(err => console.error(`❌ [Custom Boss Alert] Failed: ${err.message}`));
     bossSpawnAlertCache[cacheKey] = true;
   }
 }
@@ -358,7 +356,7 @@ export async function sendCustomWorldBossAlerts(now = getLocalTime()) {
     .setTimestamp();
 
   try {
-    await channel.send({ content: "@everyone", embeds: [embed] });
+    await channel.send({ embeds: [embed] });
     for (const alert of alerts) {
       scheduledEventAlertCache[alert.cacheKey] = true;
     }

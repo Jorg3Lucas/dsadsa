@@ -146,7 +146,7 @@ State lives in `tickets.json`; transcripts are written to `ticket-logs/` (both g
 |----------------------|--------|
 | **Every 15s** | Panel tick — countdowns, cooldowns, auto-respawn, timeouts, force refresh |
 | **5 min before boss spawns** | 🛡️ Boss spawn alerts (world bosses, layer 1/3) |
-| **10 min before events** | 🚨 Scheduled event alerts with @everyone (Red Boss, Leader 3, Purgatory, weekly events, etc.) |
+| **10 min before events** | 🚨 Scheduled event alerts (Red Boss, Leader 3, Purgatory, weekly events, etc.) |
 | **18:00 daily** | 📤 Daily claim report dispatched (as `.txt` file + summary embed) |
 
 ---
