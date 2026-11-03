@@ -33,7 +33,11 @@ export function buildWelcomePanelComponents() {
         new ButtonBuilder()
             .setCustomId('welcome_my_registration')
             .setLabel('📋 My Registration')
-            .setStyle(ButtonStyle.Secondary)
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('welcome_update_registration')
+            .setLabel('🔄 Update My Registration')
+            .setStyle(ButtonStyle.Primary)
     );
 
     const row3 = new ActionRowBuilder().addComponents(
@@ -85,6 +89,35 @@ export function handleWelcomeRegisterPilot(interaction) {
         .setRequired(true);
 
     modal.addComponents(new ActionRowBuilder().addComponents(ownerNickInput));
+    return interaction.showModal(modal);
+}
+
+// ── Welcome: Update my registration (needs admin approval) ──
+export function handleWelcomeUpdateRegistration(interaction, db) {
+    const userData = db.users[interaction.user.id];
+    const isActuallyRegistered = userData && (userData.registeredAt || userData.manual === true);
+
+    if (!isActuallyRegistered) {
+        return interaction.reply({ content: '❌ You are not registered. Use **👑 Register as Owner** first.', flags: 64 });
+    }
+
+    const modal = new ModalBuilder()
+        .setCustomId('update_registration_modal')
+        .setTitle('🔄 Update Registration');
+
+    const nicknameInput = new TextInputBuilder()
+        .setCustomId('update_nickname')
+        .setLabel('Your NEW exact in-game name')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Type your exact character name as shown in MIR4')
+        .setMinLength(2)
+        .setMaxLength(30)
+        .setRequired(true);
+
+    // Pre-fill with the current name so the member only edits what changed.
+    if (userData.nickname) nicknameInput.setValue(userData.nickname.substring(0, 30));
+
+    modal.addComponents(new ActionRowBuilder().addComponents(nicknameInput));
     return interaction.showModal(modal);
 }
 

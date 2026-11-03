@@ -1,5 +1,7 @@
 import {
     ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder
 } from 'discord.js';
@@ -31,7 +33,7 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     if (db.users[userId] && (db.users[userId].registeredAt || db.users[userId].manual === true)) {
         const existingNick = db.users[userId].nickname;
         logEvent(`❌ ${interaction.user.tag} tried to register as "${nickname}" but already registered as "${existingNick}" — rejected`);
-        return interaction.editReply(`❌ **You are already registered!**\nYour account is already registered as **${existingNick}**.\n\nIf you need to update your nickname, contact an administrator.\nYou cannot register a second account.`);
+        return interaction.editReply(`❌ **You are already registered!**\nYour account is already registered as **${existingNick}**.\n\nUse **🔄 Update My Registration** on the panel if your in-game name changed.\nYou cannot register a second account.`);
     }
 
     const nicknameOwner = findNicknameOwner(db.users, nickname, userId);
@@ -84,6 +86,87 @@ export async function handleOwnerRegistrationModal(interaction, db, saveLocalSto
     }
 
     return submitOwnerRegistration(interaction, db, saveLocalStorage, logEvent, userId, nickname);
+}
+
+// ==========================================
+// 🔄 REGISTRATION UPDATE MODAL HANDLER
+// ==========================================
+// A registered member changes the character name tied to their account.
+// The change is NOT applied immediately: it goes to the approvals channel and
+// is only written to the database once an administrator approves it.
+
+export async function handleUpdateRegistrationModal(interaction, db, saveLocalStorage, logEvent) {
+    if (!db.users) db.users = {};
+    try {
+        await interaction.deferReply({ flags: 64 });
+    } catch (e) {
+        console.warn(`⚠️ [Update] deferReply failed for ${interaction.user.tag}: ${e.message}`);
+        return;
+    }
+
+    const userId = interaction.user.id;
+    const userData = db.users[userId];
+
+    if (!userData || !(userData.registeredAt || userData.manual === true)) {
+        return interaction.editReply('❌ You are not registered. Use **👑 Register as Owner** first.');
+    }
+
+    const oldNickname = userData.nickname || '';
+    const newNickname = interaction.fields.getTextInputValue('update_nickname').trim().normalize('NFC');
+
+    if (newNickname.toLowerCase() === oldNickname.trim().normalize('NFC').toLowerCase()) {
+        logEvent(`❌ ${interaction.user.tag} submitted a registration update with the same nickname "${oldNickname}" — ignored`);
+        return interaction.editReply(`❌ You are already registered as **${oldNickname}**. Type a different in-game name to request a change.`);
+    }
+
+    const takenBy = findNicknameOwner(db.users, newNickname, userId);
+    if (takenBy) {
+        logEvent(`❌ ${interaction.user.tag} tried to update registration to "${newNickname}" but the name is registered by user ${takenBy.id}`);
+        return interaction.editReply(`❌ **${newNickname}** is already registered by another user.`);
+    }
+
+    if (!adminChannelId) {
+        logEvent(`❌ ${interaction.user.tag} tried to update their registration to "${newNickname}" but admin channel not configured`);
+        return interaction.editReply('❌ Admin approval channel not configured. Use !setadminchannel first.');
+    }
+
+    const adminChannel = interaction.guild.channels.cache.get(adminChannelId);
+    if (!adminChannel) {
+        logEvent(`❌ ${interaction.user.tag} tried to update their registration but admin channel ${adminChannelId} not found`);
+        return interaction.editReply('❌ Admin approval channel not found. Contact an administrator.');
+    }
+
+    const lookup = await lookupNicknameWithSearch(newNickname, db);
+    let rankingStatus = '❌ Not found in ranking';
+    let alliedClanStatus = '❌ Not in allied clan';
+
+    if (lookup.found) {
+        rankingStatus = `✅ Found — ${lookup.serverName} (${lookup.clanName})`;
+        if (lookup.inAlliedClan) alliedClanStatus = '✅ Yes — Allied clan';
+    }
+
+    const adminMsg = await adminChannel.send({
+        content: `🔄 **Registration Update Request**\n\n👤 **User:** ${interaction.user.toString()} (${interaction.user.tag})\n🆔 **ID:** ${userId}\n📝 **Current name:** ${oldNickname}\n📝 **New name:** ${newNickname}\n🔍 **Ranking:** ${rankingStatus}\n🤝 **Allied Clan:** ${alliedClanStatus}\n🕐 **Date:** ${new Date().toLocaleString('en-US')}`,
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`approve_update_${userId}-yes`).setLabel('✅ Approve Update').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`approve_update_${userId}-no`).setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+            )
+        ]
+    });
+
+    if (!db.pendingUpdates) db.pendingUpdates = {};
+    db.pendingUpdates[userId] = {
+        oldNickname,
+        newNickname,
+        timestamp: Date.now(),
+        channelId: adminChannel.id,
+        messageId: adminMsg.id
+    };
+    saveLocalStorage();
+
+    logEvent(`🔄 ${interaction.user.tag} requested a registration update: "${oldNickname}" → "${newNickname}" — awaiting admin approval`);
+    return interaction.editReply('✅ **Update sent for approval!** An administrator will review it shortly. Your current registration stays active until then.');
 }
 
 // ── User confirms the exact nickname from the fuzzy suggestions ──

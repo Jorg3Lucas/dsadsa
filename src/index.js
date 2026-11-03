@@ -14,10 +14,11 @@ import { destroyRankingScraperAgents } from './core/ranking-scraper.js';
 import { initMir4BotEvents } from './core/ranking-events.js';
 import { handleMir4Interactions } from './core/ranking-handlers.js';
 import { runDailySynchronization } from './core/ranking-sync-engine.js';
+import { handleWarLeaveDecision } from './core/war-leave.js';
 import { shouldRunStartupSync } from './core/sync-schedule.js';
-import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname } from './handlers/ranking-registration.js';
-import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot, handleWelcomeMyRegistration } from './handlers/ranking-welcome.js';
-import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot } from './handlers/ranking-approvals.js';
+import { handleOwnerRegistrationModal, handleUserSelectRegistrationNickname, handleUpdateRegistrationModal } from './handlers/ranking-registration.js';
+import { handleWelcomeRegisterOwner, handleWelcomeRegisterPilot, handleWelcomeRemoveRegistration, handleSelfRemoveConfirm, handleWelcomeRemovePilot, handleWelcomeMyRegistration, handleWelcomeUpdateRegistration } from './handlers/ranking-welcome.js';
+import { handleApproveOwner, handleRejectOwner, handleApprovePilot, handleAdminApprovePilot, handleApproveUpdate, handleRejectUpdate } from './handlers/ranking-approvals.js';
 import { handlePilotRegistrationModal, handlePilotRemoveSelect, handleOwnerRemovePilotDm, handleUserSelectPilotOwner } from './handlers/ranking-pilot.js';
 import { handleConfirmAction, handleRestoreBackupSelect, handleRestoreBackupCancel, handleRestoreBackupConfirm } from './handlers/ranking-confirmations.js';
 import { handleRankingCommand, handleSelectManualNickname, handleSelectPendingNickname, handleSelectPendingPilotOwner } from './handlers/ranking-commands.js';
@@ -38,7 +39,9 @@ import {
     handleManageAlliedAddModal,
     handleManageAlliedRemove,
     handleManageNav,
-    handleAddClanSuggestion
+    handleAddClanSuggestion,
+    handleManageWarLeave,
+    handleManageWarLeaveEnd
 } from './handlers/ranking-management.js';
 import { startAutoBackup, getBackupStats } from './auto-backup.js';
 import { DISCORD_SERVER_ID, ensureConfig, migrateAlliedClans } from './core/ranking-constants.js';
@@ -330,6 +333,7 @@ const BUTTON_EXACT = new Map([
     ['welcome_remove_registration', handleWelcomeRemoveRegistration],
     ['welcome_remove_pilot', handleWelcomeRemovePilot],
     ['welcome_my_registration', handleWelcomeMyRegistration],
+    ['welcome_update_registration', handleWelcomeUpdateRegistration],
     ['selfremove_yes', handleSelfRemoveConfirm],
     ['selfremove_no', handleSelfRemoveConfirm],
     ['restorebackup-confirm', handleRestoreBackupConfirm],
@@ -338,6 +342,7 @@ const BUTTON_EXACT = new Map([
     ['manage_allied_region', handleManageAlliedRegion],
     ['manage_allied_world', handleManageAlliedWorld],
     ['manage_allied_remove', handleManageAlliedRemove],
+    ['manage_warleave', handleManageWarLeave],
     ['manage_back', handleManageNav],
     ['manage_allied_back', handleManageNav],
 ]);
@@ -349,18 +354,23 @@ const SELECT_EXACT = new Map([
     ['manage_allied_region', handleManageAlliedRegion],
     ['manage_allied_world', handleManageAlliedWorld],
     ['manage_allied_remove', handleManageAlliedRemove],
+    ['manage_warleave_end', handleManageWarLeaveEnd],
 ]);
 
 const MODAL_EXACT = new Map([
     ['register_owner_modal', handleOwnerRegistrationModal],
     ['register_pilot_modal', handlePilotRegistrationModal],
     ['manage_allied_add_modal', handleManageAlliedAddModal],
+    ['update_registration_modal', handleUpdateRegistrationModal],
 ]);
 
 // ── Prefix match routes (order matters: longest prefix first) ──
 const BUTTON_PREFIX = [
     ['admin_approve_pilot_', handleAdminApprovePilot],
     ['owner_remove_pilot_', handleOwnerRemovePilotDm],
+    ['warleave_keep_', handleWarLeaveDecision],
+    ['warleave_remove_', handleWarLeaveDecision],
+    ['approve_update_', handleApproveUpdate],
     ['approve_owner_', handleApproveOwner],
     ['approve_pilot_', handleApprovePilot],
     ['manage_user_prev_', handleManageNav],
@@ -385,6 +395,7 @@ const SELECT_PREFIX = [
 ];
 
 const MODAL_PREFIX = [
+    ['reject_update_', handleRejectUpdate],
     ['reject_owner_', handleRejectOwner],
 ];
 

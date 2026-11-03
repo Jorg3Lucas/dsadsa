@@ -128,9 +128,12 @@ const FORUM_REQUEST_TIMEOUT_MS = 15000;
  * Search the MIR4 forum ranking directly by name.
  * Used as a fallback when the name is not in the local cache
  * (e.g. player is outside the top 1000 scraped per world).
- * Returns an array of { nickname, clanName, worldId } or [].
+ * Only exact character names are kept — the forum also returns partial matches
+ * for the typed name.
+ * Returns { results: Array<{ nickname, clanName, serverName, worldId }>, ok }
+ * where ok is false when the request itself failed.
  */
-export async function searchRankingForum(nickname) {
+async function fetchForumRanking(nickname) {
     try {
         const url = FORUM_RANK_URL + encodeURIComponent(nickname);
         const { data } = await axios.get(url, {
@@ -164,14 +167,25 @@ export async function searchRankingForum(nickname) {
 
             // Try to find worldId by matching clan against allied clans config
             // Since we don't know the server from search, we search all worlds
-            results.push({ nickname: nick, clanName: clan, worldId: null });
+            results.push({ nickname: nick, clanName: clan, serverName: serverText || null, worldId: null });
         });
 
-        return results;
+        return { results, ok: true };
     } catch (err) {
         console.error(`⚠️ [Ranking] Forum search failed for "${nickname}": ${err.message}`);
-        return [];
+        return { results: [], ok: false };
     }
+}
+
+/** Forum search returning only the exact-name hits (see fetchForumRanking). */
+export async function searchRankingForum(nickname) {
+    const { results } = await fetchForumRanking(nickname);
+    return results;
+}
+
+/** Forum search with the request status — a war-leave decision needs `ok`. */
+export async function searchRankingForumDetailed(nickname) {
+    return fetchForumRanking(nickname);
 }
 
 /**

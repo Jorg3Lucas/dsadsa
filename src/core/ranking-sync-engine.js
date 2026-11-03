@@ -2,6 +2,7 @@ import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, OUT_OF_ALLIED_GRACE_MS, MAX_PILOTS_P
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache } from './ranking-cache.js';
 import { lookupNickname, lookupNicknameWithSearch } from './ranking-service.js';
+import { isWarLeaveActive, isWarLeaveDenied, clearWarLeave, openWarLeave, trackWarLeaveMember } from './war-leave.js';
 import { getMsg } from '../lang/lang.js';
 import { recordSyncRun } from './runtime-metrics.js';
 import { buildPrefixedNickname, baseNicknameKey, refreshRoleChannelAccess, reapplyMemberRole } from '../core/ranking-utils.js';
@@ -382,6 +383,19 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
 
             const hasMemberRole = member.roles.cache.has(MEMBER_ROLE_ID);
 
+            // ✅ Back in an allied clan — end any war-leave monitoring first, so
+            // the role branch below does not keep a stale "away" state forever.
+            if (isRegistered && !isPilot && inAlliedClan && ownerData?.warLeave) {
+                clearWarLeave(ownerData);
+                logEvent(`✅ [War Leave] ${ownerData.nickname} is back in an allied clan — monitoring ended`);
+            }
+
+            // 🛡️ Active war leave — refresh the forum location and re-ask when
+            // the clan/server changed or the 30-day review is due.
+            if (isRegistered && !isPilot && isWarLeaveActive(ownerData)) {
+                await trackWarLeaveMember(client, db, effectiveOwnerId, ownerData, logEvent);
+            }
+
             // ── ROLE MANAGEMENT ──
             if (isRegistered) {
                 if (ownerData?.manualPermanent) {
@@ -396,7 +410,15 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         queueRoleRestore(member, member.user.username);
                         logEvent(`[Sync] Restored role for temp user ${member.user.username} (expires ${new Date(ownerData.tempUntil).toLocaleDateString()})`);
                     }
+                } else if (isWarLeaveActive(ownerData)) {
+                    // 🛡️ War leave (pending or approved) — keep/restore the role.
+                    if (!hasMemberRole) {
+                        queueRoleRestore(member, member.user.username);
+                        logEvent(`🛡️ [War Leave] Restored role for ${member.user.username} — war leave active`);
+                    }
+                    deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
                 } else if (inAlliedClan) {
+                    clearWarLeave(ownerData);
                     // ✅ In allied clan — ensure role is present
                     if (!hasMemberRole) {
                         queueRoleRestore(member, member.user.username);
@@ -414,6 +436,14 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     // Only run when the ranking cache is available: if the cache is
                     // missing/unavailable, skip role changes (fail-safe, keep roles).
                     //
+                    // 🛡️ Exact forum check BEFORE the grace/removal: a member who
+                    // left to fight a war keeps the role while approvers decide.
+                    // (Only when the name is not in the ranking at all — a member
+                    // found in a non-allied clan still follows the 72h grace.)
+                    const warProtected = !isPilot && !lookup?.found && !isWarLeaveDenied(ownerData)
+                        ? (await openWarLeave(client, db, effectiveOwnerId, ownerData, logEvent))?.protected
+                        : false;
+
                     // Safety: a fuzzy-only match must never remove the role. A fuzzy
                     // match can be a DIFFERENT player with a similar name on another
                     // server (e.g. an EU member resolved to someone on NA022 in a
@@ -421,7 +451,11 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     // the allied clans. Only an exact match in a non-allied clan — or
                     // no match at all — justifies stripping the role.
                     const fuzzyOnlyMatch = !!(lookup && lookup.found && lookup.exactMatch === false);
-                    if (fuzzyOnlyMatch && lookup.inAlliedClan) {
+                    if (warProtected) {
+                        if (!hasMemberRole) queueRoleRestore(member, member.user.username);
+                        deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
+                        logEvent(`🛡️ [War Leave] ${member.user.username} kept the member role while approvers decide`);
+                    } else if (fuzzyOnlyMatch && lookup.inAlliedClan) {
                         // Fuzzy-only match in an ALLIED clan — keep the role.
                         // The fuzzy hit is likely the same player found in a clan we trust,
                         // so removing the role would be a false positive.
