@@ -23,6 +23,7 @@ import {
     getOutOfAlliedGraceStatus,
     isPendingPilot,
     pendingPilotNickname,
+    canManageGuildMember,
     runDailySynchronization
 } from '../src/core/ranking-sync-engine.js';
 import { OUT_OF_ALLIED_GRACE_MS } from '../src/core/ranking-constants.js';
@@ -47,6 +48,31 @@ describe('pilots in the legacy scan queue', () => {
         expect(pendingPilotNickname({ scanPilotPending: {} }, '5')).toBeNull();
         expect(pendingPilotNickname({}, '5')).toBeNull();
         expect(pendingPilotNickname(undefined, '5')).toBeNull();
+    });
+});
+
+describe('canManageGuildMember (pre-flight 50013 guard)', () => {
+    it('skips the guild owner and members above the bot in the role hierarchy', () => {
+        expect(canManageGuildMember({ id: '1', manageable: false })).toBe(false);
+    });
+
+    it('allows members the bot can manage', () => {
+        expect(canManageGuildMember({ id: '2', manageable: true })).toBe(true);
+    });
+
+    it('allows the write when the check cannot be evaluated (cold member cache)', () => {
+        const member = {
+            id: '3',
+            get manageable() {
+                throw new TypeError('Cannot read properties of null');
+            }
+        };
+        expect(canManageGuildMember(member)).toBe(true);
+    });
+
+    it('never manages a missing member', () => {
+        expect(canManageGuildMember(null)).toBe(false);
+        expect(canManageGuildMember(undefined)).toBe(false);
     });
 });
 

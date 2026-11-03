@@ -1,3 +1,4 @@
+import { PermissionFlagsBits } from 'discord.js';
 import { DISCORD_SERVER_ID, MEMBER_ROLE_ID, OUT_OF_ALLIED_GRACE_MS, MAX_PILOTS_PER_OWNER, ensureConfig } from './ranking-constants.js';
 import { fetchMir4RankingData, safelyFetchGuildMembers } from './ranking-scraper.js';
 import { getLocalRankingCache } from './ranking-cache.js';
@@ -42,6 +43,35 @@ export function pendingPilotNickname(db, memberId) {
     return buildPrefixedNickname(pending.ownerName, db, 'Pilot');
 }
 
+/**
+ * True when Discord will accept a role/nickname change for this member.
+ *
+ * `GuildMember#manageable` is false for the guild owner, for the bot itself and
+ * for every member whose highest role sits at or above the bot's highest role —
+ * exactly the members Discord answers with 50013 Missing Permissions. Retrying
+ * those writes on every sync only floods the log and burns the member-role
+ * rate-limit bucket.
+ *
+ * Returns true when the check cannot be evaluated (cold member cache), so the
+ * write still happens instead of silently skipping everyone.
+ *
+ * @param {object} member - GuildMember (or a partial one)
+ * @returns {boolean}
+ */
+export function canManageGuildMember(member) {
+    if (!member) return false;
+    try {
+        return member.manageable !== false;
+    } catch {
+        return true;
+    }
+}
+
+// Discord limits the member-role endpoints to roughly one write per second per
+// guild. Firing 8 at a time only produced 429s whose 5-8s retries stalled the
+// sync far longer than pacing the writes does.
+export const ROLE_WRITE_MIN_INTERVAL_MS = 1100;
+
 // Global lock: only one sync may run at a time. Concurrent syncs (startup sync +
 // /forcesync + the 20:00 cron) pile up CPU-heavy member loops and
 // hundreds of Discord API calls, which can stall interaction handling long enough
@@ -70,20 +100,93 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         onError: (error) => logEvent(`❌ [Sync] Discord refused a role/nickname change — ${error?.code ? `[${error.code}] ` : ''}${error?.message || error}`)
     });
 
+    // ── Writes Discord will refuse (50013 Missing Permissions) ──
+    // The sync used to attempt roles.remove()/setNickname() for every member and
+    // let Discord reject the ones the bot cannot manage (guild owner, staff with
+    // a role above the bot, or the Member role itself above the bot's role).
+    // Those members are now skipped up front and reported once at the end of the
+    // run, instead of one "Missing Permissions" error per member per sync.
+    const skippedWrites = { role: new Set(), nickname: new Set() };
+    let memberRoleEditable = true;
+
+    const canTouchMemberRole = (member) => memberRoleEditable && canManageGuildMember(member);
+
+    const canTouchNickname = (member) => {
+        if (!member) return false;
+        try {
+            if (member.guild?.ownerId && member.id === member.guild.ownerId) return false;
+            const botMember = member.guild?.members?.me;
+            if (botMember?.permissions?.has && !botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) return false;
+        } catch {
+            // Member cache unavailable — let Discord decide.
+        }
+        return canManageGuildMember(member);
+    };
+
+    const noteSkipped = (kind, member) => {
+        const label = member?.nickname || member?.user?.username || member?.id || 'unknown member';
+        skippedWrites[kind].add(label);
+    };
+
+    const logSkippedWrites = () => {
+        const nameList = (set) => `${[...set].slice(0, 15).join(', ')}${set.size > 15 ? ', …' : ''}`;
+        if (skippedWrites.role.size > 0) {
+            logEvent(`⚠️ [Sync] Skipped role changes for ${skippedWrites.role.size} member(s) the bot cannot manage (their highest role is at/above the bot's, or the Member role is above the bot's role): ${nameList(skippedWrites.role)}`);
+        }
+        if (skippedWrites.nickname.size > 0) {
+            logEvent(`⚠️ [Sync] Skipped nickname changes for ${skippedWrites.nickname.size} member(s) the bot cannot rename (role hierarchy, guild owner, or missing "Manage Nicknames"): ${nameList(skippedWrites.nickname)}`);
+        }
+        skippedWrites.role.clear();
+        skippedWrites.nickname.clear();
+    };
+
+    // Serial, ~1 write per second for Member-role changes (see
+    // ROLE_WRITE_MIN_INTERVAL_MS). The chain only spaces the calls; it never
+    // blocks on the operation itself.
+    let roleWriteChain = Promise.resolve();
+    let lastRoleWriteAt = 0;
+    const paceRoleWrite = () => {
+        const run = roleWriteChain.then(async () => {
+            const wait = ROLE_WRITE_MIN_INTERVAL_MS - (Date.now() - lastRoleWriteAt);
+            if (wait > 0) await sleep(wait);
+            lastRoleWriteAt = Date.now();
+        });
+        roleWriteChain = run.catch(() => {});
+        return run;
+    };
+
     // Count role mutations so the channel-access refresh below only runs when a
     // member's roles actually changed during this run — no pointless
     // CHANNEL_UPDATE storm on a sync that touched nothing.
     const syncStartedAt = Date.now();
     let roleWriteCount = 0;
-    const queueRoleWrite = (op) => {
+    const queueRoleWrite = (member, op) => {
+        if (!canTouchMemberRole(member)) {
+            noteSkipped('role', member);
+            return false;
+        }
         roleWriteCount++;
-        queueWrite(op);
+        queueWrite(async () => {
+            await paceRoleWrite();
+            return op();
+        });
+        return true;
+    };
+    // Nickname writes share the same pre-flight check: a refused setNickname()
+    // costs a rate-limited request and an error line on every sync.
+    const queueNicknameWrite = (member, nickname) => {
+        if (!canTouchNickname(member)) {
+            noteSkipped('nickname', member);
+            return false;
+        }
+        queueWrite(() => member.setNickname(nickname));
+        return true;
     };
     // A role the sync RESTORES is a fresh grant for the member's client as well, so
     // it gets the same remove/re-add nudge the single-member flows use
     // (see reapplyMemberRole in ranking-utils). Without it the member keeps the
     // role on the profile but may not see the channels it unlocks.
-    const queueRoleRestore = (member, username) => queueRoleWrite(async () => {
+    const queueRoleRestore = (member, username) => queueRoleWrite(member, async () => {
         await member.roles.add(MEMBER_ROLE_ID);
         const reapplyOutcome = await reapplyMemberRole(member, logEvent, { assumeHasRole: true });
         if (reapplyOutcome.roleRemoved) {
@@ -101,6 +204,19 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         const rankingCache = getLocalRankingCache();
         const activeGuild = client.guilds.cache.get(DISCORD_SERVER_ID);
         if (!activeGuild) return false;
+
+        // Guild-wide check: when the Member role sits above the bot's highest
+        // role, EVERY member-role write is refused — detect it once instead of
+        // letting Discord reject every call.
+        try {
+            const memberRole = activeGuild.roles?.cache?.get?.(MEMBER_ROLE_ID);
+            memberRoleEditable = memberRole ? memberRole.editable !== false : true;
+        } catch {
+            memberRoleEditable = true;
+        }
+        if (!memberRoleEditable) {
+            logEvent('⚠️ [Sync] The Member role is above the bot\'s highest role — role changes are skipped this run. Move the bot\'s role above the Member role.');
+        }
 
         if (!db.users) db.users = {};
         
@@ -162,8 +278,8 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 const ownerData = ownerEntry.data;
                 if (memberId !== registeredOwnerId && (!ownerData.pilotIds || !ownerData.pilotIds.includes(memberId))) {
                     logEvent(getMsg('ranking.logs.imposterDetected', { username: member.user.username, nickname: ownerData.nickname }));
-                    queueWrite(() => member.setNickname(member.user.username));
-                    if (member.roles.cache.has(MEMBER_ROLE_ID)) queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                    queueNicknameWrite(member, member.user.username);
+                    if (member.roles.cache.has(MEMBER_ROLE_ID)) queueRoleWrite(member, () => member.roles.remove(MEMBER_ROLE_ID));
                     continue; 
                 }
             }
@@ -246,7 +362,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         const member = members.get(memberId);
                         if (member) {
                             if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-                                queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
+                                queueRoleWrite(member, () => member.roles.remove(MEMBER_ROLE_ID));
                             }
                         }
 
@@ -259,7 +375,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                                 const pilotMember = members.get(pId);
                                 if (pilotMember) {
                                     if (pilotMember.roles.cache.has(MEMBER_ROLE_ID)) {
-                                        queueRoleWrite(() => pilotMember.roles.remove(MEMBER_ROLE_ID));
+                                        queueRoleWrite(pilotMember, () => pilotMember.roles.remove(MEMBER_ROLE_ID));
                                     }
                                 }
                                 const pilotData = db.users[pId];
@@ -316,7 +432,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         registeredAt: new Date().toISOString(),
                         pilotIds: []
                     };
-                    queueWrite(() => prodMember.setNickname(buildPrefixedNickname(preReg.ownerNick, db, 'Pilot')));
+                    queueNicknameWrite(prodMember, buildPrefixedNickname(preReg.ownerNick, db, 'Pilot'));
                     logEvent(`✅ [PreReg Sync] Auto-converted pilot "${preReg.nickname}" (${memberId}) → pilot of "${preReg.ownerNick}"`);
                 } else {
                     // Owner
@@ -325,7 +441,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         registeredAt: new Date().toISOString(),
                         pilotIds: preReg.pilotIds || []
                     };
-                    queueWrite(() => prodMember.setNickname(buildPrefixedNickname(preReg.nickname, db)));
+                    queueNicknameWrite(prodMember, buildPrefixedNickname(preReg.nickname, db));
                     logEvent(`✅ [PreReg Sync] Auto-converted owner "${preReg.nickname}" (${memberId}) — allied clan: ${lookup.clanName}`);
                 }
 
@@ -404,28 +520,24 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             if (isRegistered) {
                 if (ownerData?.manualPermanent) {
                     // 👑 ManualForce user — always ensure role is present, never remove
-                    if (!hasMemberRole) {
-                        queueRoleRestore(member, member.user.username);
+                    if (!hasMemberRole && queueRoleRestore(member, member.user.username)) {
                         logEvent(`[Sync] Restored role for manualforce user ${member.user.username}`);
                     }
                 } else if (ownerData?.tempUntil) {
                     // ⏳ Temporary registration — keep role until expiry (handled in step 2.75)
-                    if (!hasMemberRole) {
-                        queueRoleRestore(member, member.user.username);
+                    if (!hasMemberRole && queueRoleRestore(member, member.user.username)) {
                         logEvent(`[Sync] Restored role for temp user ${member.user.username} (expires ${new Date(ownerData.tempUntil).toLocaleDateString()})`);
                     }
                 } else if (isWarLeaveActive(ownerData)) {
                     // 🛡️ War leave (pending or approved) — keep/restore the role.
-                    if (!hasMemberRole) {
-                        queueRoleRestore(member, member.user.username);
+                    if (!hasMemberRole && queueRoleRestore(member, member.user.username)) {
                         logEvent(`🛡️ [War Leave] Restored role for ${member.user.username} — war leave active`);
                     }
                     deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
                 } else if (inAlliedClan) {
                     clearWarLeave(ownerData);
                     // ✅ In allied clan — ensure role is present
-                    if (!hasMemberRole) {
-                        queueRoleRestore(member, member.user.username);
+                    if (!hasMemberRole && queueRoleRestore(member, member.user.username)) {
                         // Log the REAL role name so a renamed/recreated role id is visible in the logs.
                         const roleName = activeGuild?.roles?.cache?.get?.(MEMBER_ROLE_ID)?.name || 'Member';
                         logEvent(getMsg('ranking.logs.roleAdded', { clan: roleName, username: member.user.username }));
@@ -484,16 +596,18 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                         const grace = getOutOfAlliedGraceStatus(db, memberId);
                         if (!graceEnabled) {
                             // Grace disabled — remove role immediately
-                            queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
-                            logEvent(`⚠️ [Sync] ${member.user.username} not in allied clan — grace disabled, role removed immediately (registration kept)`);
+                            if (queueRoleWrite(member, () => member.roles.remove(MEMBER_ROLE_ID))) {
+                                logEvent(`⚠️ [Sync] ${member.user.username} not in allied clan — grace disabled, role removed immediately (registration kept)`);
+                            }
                         } else if (!grace.started) {
                             startOutOfAlliedGrace(db, memberId);
                             logEvent(`⏳ [Sync] ${member.user.username} not in allied clan — 72h grace started, role kept (registration kept)`);
                         } else if (grace.expired) {
-                            queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
-                            logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan for over 72h (registration kept)`);
-                            // Grace consumed — clear so a later re-entry restarts the countdown
-                            deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
+                            if (queueRoleWrite(member, () => member.roles.remove(MEMBER_ROLE_ID))) {
+                                logEvent(`[Sync] Removed role from ${member.user.username} — not in allied clan for over 72h (registration kept)`);
+                                // Grace consumed — clear so a later re-entry restarts the countdown
+                                deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
+                            }
                         } else {
                             logEvent(`⏳ [Sync] ${member.user.username} not in allied clan — within 72h grace (${grace.hoursLeft}h left), role kept`);
                         }
@@ -504,8 +618,9 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 // registered through the bot (panel, /manualregister, /manualforce)
                 // to keep their role. Manually-assigned roles from the merge are
                 // cleaned up here automatically.
-                queueRoleWrite(() => member.roles.remove(MEMBER_ROLE_ID));
-                logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
+                if (queueRoleWrite(member, () => member.roles.remove(MEMBER_ROLE_ID))) {
+                    logEvent(getMsg('ranking.logs.roleRemoved', { clan: 'Member', username: member.user.username }));
+                }
             }
 
             // ── NICKNAME MANAGEMENT ──
@@ -536,7 +651,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                 }
 
                 if (desiredNickname && (member.nickname || '').normalize('NFC') !== desiredNickname) {
-                    queueWrite(() => member.setNickname(desiredNickname));
+                    queueNicknameWrite(member, desiredNickname);
                 }
             }
         }
@@ -577,6 +692,7 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
         // exception never silently drops pending role/nickname corrections
         // (no-op when the queue is already empty).
         if (flush) await flush();
+        logSkippedWrites();
         syncInProgress = false;
     }
 }
