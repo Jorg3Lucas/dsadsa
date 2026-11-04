@@ -164,7 +164,8 @@ import {
     handleManageAlliedWorld,
     handleManageAlliedPage,
     handleManageAlliedRemove,
-    handleManageAction
+    handleManageAction,
+    handleManageWarLeave
 } from '../src/handlers/ranking-management.js';
 
 function createMockInteraction(customId, values = [], permissions = true) {
@@ -325,5 +326,61 @@ describe('Pagination customId parsing', () => {
             expect(worldId).toBe(tc.expectedWorldId);
             expect(index).toBe(tc.expectedIndex);
         }
+    });
+});
+
+describe('War Leave overview — Discord content limit', () => {
+    function warLeaveDb(count) {
+        const users = {};
+        for (let i = 0; i < count; i++) {
+            users['9000000000000' + String(i).padStart(5, '0')] = {
+                nickname: 'WLPlayer' + i,
+                warLeave: {
+                    status: i % 2 ? 'approved' : 'pending',
+                    lastClan: 'ToxicFamilyシ',
+                    lastServer: 'EU021',
+                    since: '2026-10-01T00:00:00.000Z'
+                }
+            };
+        }
+        return { users, config: {} };
+    }
+
+    function buildInteraction() {
+        return {
+            customId: 'manage_warleave',
+            user: { id: '999', tag: 'Admin#0001' },
+            member: { permissions: { has: () => true } },
+            update: vi.fn().mockResolvedValue(undefined)
+        };
+    }
+
+    it('keeps the overview under the 2000-char limit and caps the menu at 25 options', async () => {
+        // A fixed 25-row page overflowed Discord's limit at ~22 members: the
+        // update failed with a 400 that the handler swallowed, so the button
+        // seemed to do nothing.
+        const interaction = buildInteraction();
+
+        await handleManageWarLeave(interaction, warLeaveDb(40), vi.fn(), vi.fn());
+
+        const payload = interaction.update.mock.calls[0][0];
+        expect(payload.content.length).toBeLessThanOrEqual(2000);
+        expect(payload.content).toContain('40 member(s) protected');
+        expect(payload.content).toContain('more (end one to be able to see the rest)');
+
+        const endMenu = payload.components[0].components[0];
+        expect(endMenu._options.length).toBeGreaterThan(0);
+        expect(endMenu._options.length).toBeLessThanOrEqual(25);
+    });
+
+    it('lists every member (and no overflow note) when they all fit', async () => {
+        const interaction = buildInteraction();
+
+        await handleManageWarLeave(interaction, warLeaveDb(5), vi.fn(), vi.fn());
+
+        const payload = interaction.update.mock.calls[0][0];
+        expect(payload.content).toContain('5 member(s) protected');
+        expect(payload.content).not.toContain('more (end one');
+        expect(payload.components[0].components[0]._options).toHaveLength(5);
     });
 });

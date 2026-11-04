@@ -46,6 +46,13 @@ function activeWarLeaveEntries(db) {
         });
 }
 
+/**
+ * Discord rejects a message whose content exceeds 2000 characters, and the
+ * update sending this overview swallowed the resulting 400 — the War Leaves
+ * button then looked dead. Build the list against this budget instead.
+ */
+const WAR_LEAVE_CONTENT_BUDGET = 1900;
+
 /** Content + components for the war-leave overview (also used after ending one). */
 function buildWarLeaveOverview(db, note = null) {
     const entries = activeWarLeaveEntries(db);
@@ -60,10 +67,26 @@ function buildWarLeaveOverview(db, note = null) {
         };
     }
 
-    const listed = entries.slice(0, 25);
-    const lines = listed.map(([id, data]) =>
-        `• <@${id}> — **${data.nickname}** — ${warLeaveStatusLabel(data, db)}\n   🌐 ${recordLabel(data.warLeave)}`
-    );
+    // A fixed 25-row page overflows Discord's content limit at ~22 protected
+    // members (each row is ~95 chars), so the list is filled until the budget
+    // is spent — the "…and N more" trailer keeps it honest.
+    const prefix = note ? `${note}\n\n` : '';
+    const header = `${prefix}🛡️ **War Leave — ${entries.length} member(s) protected**\n\n`;
+    const trailerReserve = 80; // room for the "…and N more" line
+    const listed = [];
+    const lines = [];
+
+    for (const entry of entries) {
+        if (listed.length >= 25) break;
+        const [id, data] = entry;
+        const line = `• <@${id}> — **${data.nickname}** — ${warLeaveStatusLabel(data, db)}\n   🌐 ${recordLabel(data.warLeave)}`;
+        const used = header.length + lines.join('\n').length;
+        // Always show at least one member, even with an abnormally long line.
+        if (listed.length > 0 && used + line.length + trailerReserve > WAR_LEAVE_CONTENT_BUDGET) break;
+        lines.push(line);
+        listed.push(entry);
+    }
+
     const overflow = entries.length - listed.length;
     if (overflow > 0) lines.push(`…and ${overflow} more (end one to be able to see the rest)`);
 
@@ -77,7 +100,7 @@ function buildWarLeaveOverview(db, note = null) {
         })));
 
     return {
-        content: `${note ? `${note}\n\n` : ''}🛡️ **War Leave — ${entries.length} member(s) protected**\n\n${lines.join('\n')}`,
+        content: `${header}${lines.join('\n')}`,
         components: [new ActionRowBuilder().addComponents(endMenu), backRow]
     };
 }
