@@ -626,3 +626,72 @@ describe('handleRankingCommand — /cleandb', () => {
         expect(interaction.editReply).toHaveBeenCalledWith('ranking.responses.cleandb.noDuplicates');
     });
 });
+
+// ──────────────────────────────────────────
+// handleRankingCommand — /manage
+// ──────────────────────────────────────────
+
+describe('handleRankingCommand — /manage', () => {
+    const ADMIN_ID = '999999999999999999';
+    const ADMIN_TAG = 'AdminUser#0001';
+    const USER_ID = '111111111111111111';
+
+    function buildInteraction() {
+        const interaction = {
+            commandName: 'manage',
+            deferred: false,
+            replied: false,
+            deferReply: vi.fn(async () => { interaction.deferred = true; }),
+            reply: vi.fn(async () => { interaction.replied = true; }),
+            editReply: vi.fn().mockResolvedValue(),
+            user: { id: ADMIN_ID, tag: ADMIN_TAG },
+            member: { permissions: { has: () => true } },
+            guild: { members: { fetch: vi.fn().mockResolvedValue(null) } },
+            options: { getMember: vi.fn(() => null), getString: vi.fn(() => null) }
+        };
+        return interaction;
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('defers before building the panel and answers with editReply', async () => {
+        // Building the panel scans every registration (allied-clan suggestions),
+        // which exceeds Discord's 3s reply window on a real database.
+        const interaction = buildInteraction();
+        const db = { users: { [USER_ID]: { nickname: 'PlayerOne', pilotIds: [] } }, config: { alliedClans: {} } };
+
+        await handleRankingCommand(interaction, db, vi.fn(), vi.fn());
+
+        expect(interaction.deferReply).toHaveBeenCalledOnce();
+        expect(interaction.deferReply).toHaveBeenCalledWith({ flags: 64 });
+        expect(interaction.reply).not.toHaveBeenCalled();
+        expect(interaction.editReply).toHaveBeenCalledOnce();
+
+        const payload = interaction.editReply.mock.calls[0][0];
+        expect(payload.content).toBe('ranking.responses.manage.pageInfo');
+        expect(payload.components).toHaveLength(2);
+    });
+
+    it('defers and reports an empty database via editReply', async () => {
+        const interaction = buildInteraction();
+
+        await handleRankingCommand(interaction, { users: {}, config: { alliedClans: {} } }, vi.fn(), vi.fn());
+
+        expect(interaction.deferReply).toHaveBeenCalledOnce();
+        expect(interaction.editReply).toHaveBeenCalledWith({
+            content: 'ranking.responses.manage.noUsers',
+            components: []
+        });
+    });
+
+    it('stops when the interaction is already gone', async () => {
+        const interaction = buildInteraction();
+        interaction.deferReply.mockRejectedValue(new Error('Unknown interaction'));
+
+        await handleRankingCommand(interaction, { users: { [USER_ID]: { nickname: 'PlayerOne' } } }, vi.fn(), vi.fn());
+
+        expect(interaction.editReply).not.toHaveBeenCalled();
+    });
+});

@@ -440,11 +440,18 @@ export async function handleRankingCommand(interaction, db, saveLocalStorage, lo
 
     // ── manage (/manage slash command) ──
     if (commandName === 'manage') {
+        // Defer BEFORE building the panel: with a few hundred registrations the
+        // allied-clan suggestion scan takes several seconds, which blew past
+        // Discord's 3s reply window — the command then silently failed with
+        // "The application did not respond". Same rule as the manage-panel
+        // navigation handlers: after deferring, respond with editReply.
+        if (!await deferReplySafe(interaction)) return;
+
         const { content, components, count } = buildUserListPage(db, 0, { withAlliedButton: true });
         if (count === 0) {
-            return interaction.reply({ content: getMsg('ranking.responses.manage.noUsers'), flags: 64 });
+            return interaction.editReply({ content: getMsg('ranking.responses.manage.noUsers'), components: [] });
         }
-        return interaction.reply({ content, components, flags: 64 });
+        return interaction.editReply({ content, components });
     }
 
     // ── manualremove ──
