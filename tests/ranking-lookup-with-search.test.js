@@ -160,6 +160,24 @@ describe('lookupNicknameWithSearch — priority: exact → forum → fuzzy', () 
         expect(result.serverName).toBe('EU011');
     });
 
+    it('prefers the allied-clan forum hit over a non-allied homonym', async () => {
+        findAllNicknameMatchesInCache.mockReturnValue([]);
+        // Same character name listed on two servers: non-allied clan first.
+        mockAxiosGet.mockResolvedValue({
+            data: `<html><body><table><tbody>
+                <tr><td>1500</td><td>MaloYツ</td><td></td><td>RandomClan</td><td>100000</td></tr>
+                <tr><td>900</td><td>MaloYツ</td><td></td><td>ToxicFamily</td><td>200000</td></tr>
+            </tbody></table></body></html>`
+        });
+
+        const result = await lookupNicknameWithSearch('MaloYツ', mockDb, mockCache);
+
+        expect(result.found).toBe(true);
+        expect(result.clanName).toBe('ToxicFamily');
+        expect(result.inAlliedClan).toBe(true);
+        expect(result.worldId).toBe('611');
+    });
+
     // ── Priority 3: Fuzzy match in cache (when forum also fails) ──
 
     it('falls back to fuzzy cache match when forum returns no results', async () => {

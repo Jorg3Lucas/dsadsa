@@ -508,12 +508,15 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
             }
 
             // 🛡️ Active war leave — refresh the forum location and re-ask when
-            // the clan/server changed or the 30-day review is due.
+            // the clan/server changed or the 30-day review is due. When the forum
+            // finds the member back in an allied clan the record is dropped here
+            // instead: a clan switch inside the alliance must never re-prompt.
             if (isRegistered && !isPilot && isWarLeaveActive(ownerData)) {
-                await trackWarLeaveMember(client, db, effectiveOwnerId, ownerData, logEvent, {
+                const tracked = await trackWarLeaveMember(client, db, effectiveOwnerId, ownerData, logEvent, {
                     ranking: lookup?.found ? lookup : null,
                     hasRole: member.roles.cache.has(MEMBER_ROLE_ID)
                 });
+                if (tracked?.allied) inAlliedClan = true;
             }
 
             // ── ROLE MANAGEMENT ──
@@ -561,12 +564,13 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     const canAskApprovers = !isPilot
                         && !isWarLeaveDenied(ownerData)
                         && (!lookup?.found || lookup.exactMatch !== false);
-                    const warProtected = canAskApprovers
-                        ? (await openWarLeave(client, db, effectiveOwnerId, ownerData, logEvent, {
+                    const opened = canAskApprovers
+                        ? await openWarLeave(client, db, effectiveOwnerId, ownerData, logEvent, {
                             ranking: lookup?.found ? lookup : null,
                             hasRole: hasMemberRole
-                        }))?.protected
-                        : false;
+                        })
+                        : null;
+                    const warProtected = !!opened?.protected;
 
                     // Safety: a fuzzy-only match must never remove the role. A fuzzy
                     // match can be a DIFFERENT player with a similar name on another
@@ -575,7 +579,14 @@ export async function runDailySynchronization(client, db, saveLocalStorage, logE
                     // the allied clans. Only an exact match in a non-allied clan — or
                     // no match at all — justifies stripping the role.
                     const fuzzyOnlyMatch = !!(lookup && lookup.found && lookup.exactMatch === false);
-                    if (warProtected) {
+                    if (opened?.allied) {
+                        // The forum shows them in an allied clan (often a different
+                        // allied clan than before) — there is nothing to decide, so
+                        // keep the role and never ping the approvers.
+                        if (!hasMemberRole) queueRoleRestore(member, member.user.username);
+                        deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
+                        logEvent(`✅ [Sync] ${member.user.username} is in an allied clan (forum) — role kept, no approver prompt`);
+                    } else if (warProtected) {
                         if (!hasMemberRole) queueRoleRestore(member, member.user.username);
                         deleteRoleNotifyFlag(db, memberId, 'outOfAlliedSince');
                         logEvent(`🛡️ [War Leave] ${member.user.username} kept the member role while approvers decide`);

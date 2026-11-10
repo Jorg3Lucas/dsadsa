@@ -204,6 +204,9 @@ export function sameLocation(previous, current) {
 /** True when approvers must be asked (first detection or a clan/server change). */
 export function shouldAskElders(warLeave, location) {
     if (!warLeave) return true;
+    // The member is in an allied clan — moving from one allied clan to another
+    // is not a war leave, so there is nothing to ask the approvers.
+    if (location?.inAlliedClan) return false;
     // The previous prompt could not be sent (no channel) — retry on this sync.
     if (!warLeave.lastAskedAt) return true;
     if (!location?.found) return false; // no new information — don't re-ask on every sync
@@ -419,6 +422,15 @@ export async function openWarLeave(client, db, userId, userData, logEvent, { ran
             logEvent(`🔎 [War Leave] ${userData.nickname} (${userId}) has no exact match on the forum ranking — no approver prompt`);
             return { location, asked: false, protected: false, warLeave: null };
         }
+
+        // The forum shows the character in an allied clan (e.g. they moved from
+        // one allied clan to another, or the clan is allied on another server).
+        // Nothing to decide: drop any stale record and never ping the approvers.
+        if (location.inAlliedClan) {
+            clearWarLeave(userData);
+            logEvent(`✅ [War Leave] ${userData.nickname} (${userId}) is in an allied clan — ${locationLabel(location)} — no approver prompt`);
+            return { location, asked: false, protected: true, allied: true, warLeave: null };
+        }
     }
 
     const warLeave = createWarLeave(userData, location);
@@ -445,6 +457,13 @@ export async function trackWarLeaveMember(client, db, userId, userData, logEvent
     let location;
     let forumChecked = false;
 
+    // Already back in an allied clan — end the monitoring instead of asking again.
+    if (ranking?.found && ranking.inAlliedClan) {
+        clearWarLeave(userData);
+        logEvent?.(`✅ [War Leave] ${userData.nickname} is in an allied clan — monitoring ended`);
+        return { allied: true };
+    }
+
     if (ranking?.found && !ranking.inAlliedClan) {
         // Listed on a server ranking — the cache is cheaper and more precise
         // than a forum request, and it is what the approvers must see.
@@ -463,8 +482,16 @@ export async function trackWarLeaveMember(client, db, userId, userData, logEvent
         if (!location.forumOk) {
             warLeave.lastCheckedAt = new Date().toISOString();
             logEvent?.(`⚠️ [War Leave] Forum lookup failed for ${userData.nickname} — keeping the last known location`);
-            return false;
+            return { allied: false };
         }
+    }
+
+    // The forum put the character back in an allied clan (possibly a different
+    // one): stop monitoring and clear the record so the switch never re-prompts.
+    if (location.inAlliedClan) {
+        clearWarLeave(userData);
+        logEvent?.(`✅ [War Leave] ${userData.nickname} is in an allied clan — ${locationLabel(location)} — monitoring ended`);
+        return { allied: true };
     }
 
     if (shouldAskElders(warLeave, location) || isWarLeaveReviewDue(warLeave, db)) {
@@ -481,11 +508,11 @@ export async function trackWarLeaveMember(client, db, userId, userData, logEvent
             forumChecked,
             logEvent
         });
-        return false;
+        return { allied: false };
     }
 
     rememberLocation(userData, location);
-    return false;
+    return { allied: false };
 }
 
 // ==========================================

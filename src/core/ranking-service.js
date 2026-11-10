@@ -308,7 +308,11 @@ export async function lookupNicknameWithSearch(nickname, db, cache) {
     // Priority 2: forum search (live, async)
     const forumResults = await searchRankingForum(nickname);
     if (forumResults.length > 0) {
-        const match = forumResults[0];
+        // The same character name can exist on several servers. Prefer the hit in
+        // an allied clan so a homonym in a non-allied clan does not make the member
+        // look like they left the alliance (that would trigger a false war-leave
+        // prompt on every sync).
+        const match = forumResults.find(r => findWorldFromAlliedClans(r.clanName, db)) || forumResults[0];
 
         // Try to determine worldId + allied status from the clan name.
         // Priority: check allied-clans config (authoritative) first,
