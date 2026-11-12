@@ -120,7 +120,7 @@ async function handleReserveConfirm(interaction) {
 
     delete reserveFlowCache[uid];
     if (appliedCount === 0) { return await interaction.update({ content: getMsg("reserve.noEvent", { event: eventName.charAt(0).toUpperCase() + eventName.slice(1) }), components: [], flags: 64 }).catch(noop); }
-    for (const key in db) { if (!db[key] || key.startsWith("_")) continue; await refreshVisualPanel(key); }
+    for (const key in db) { if (!db[key] || key.startsWith("_")) continue; refreshVisualPanel(key); }
 
     const eventLabel = eventName.charAt(0).toUpperCase() + eventName.slice(1);
     const floorsLabel = floors.includes("11") && floors.includes("12") ? "MS11 + MS12" : floors.map(f => `MS${f}`).join(", ");
