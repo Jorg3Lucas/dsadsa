@@ -73,7 +73,7 @@ export async function saveTicketLog(channel, ticketOwnerId) {
                     try {
                         const safeName = `${msg.id}-${att.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
                         const attPath = path.join(mediaDir, safeName);
-                        const response = await axios.get(att.url, { responseType: "arraybuffer" });
+                        const response = await axios.get(att.url, { responseType: "arraybuffer", timeout: 15000 });
                         fs.writeFileSync(attPath, Buffer.from(response.data));
                         totalAttachments++;
                     } catch (dlErr) { console.error(`❌ [Tickets] Failed to download ${att.url}:`, dlErr.message); }

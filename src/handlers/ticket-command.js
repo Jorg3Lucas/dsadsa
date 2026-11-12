@@ -17,11 +17,11 @@ export function initTicketCommand(client) {
         const command = args.shift().toLowerCase();
         if (command !== 'ticket' && command !== 'ticketpanel') return;
 
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-            return message.reply(getMsg('system.permissionDeniedAdminDropped'));
+        if (!message.member?.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            return message.reply(getMsg('system.permissionDeniedAdminDropped')).catch(() => {});
         }
 
-        await setupTicketPanel(message.channel);
+        await setupTicketPanel(message.channel).catch((err) => console.error('❌ [Tickets] Failed to refresh the ticket panel:', err.message));
         await message.delete().catch(() => {});
     });
 }

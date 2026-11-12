@@ -73,7 +73,7 @@ async function handleAdminResetMenu(interaction) {
         for (const key in db) {
             if (!db[key] || key.startsWith("_")) continue;
             resetPanelData(key);
-            await refreshVisualPanel(key);
+            refreshVisualPanel(key);
             count++;
         }
         return await interaction.update({
@@ -89,7 +89,7 @@ async function handleAdminResetMenu(interaction) {
     }).catch(noop);}
 
     resetPanelData(resetKey);
-    await refreshVisualPanel(resetKey);
+    refreshVisualPanel(resetKey);
     return await interaction.update({
         content: getMsg("system.resetPanelSuccess", { key: resetKey }),
         components: []
@@ -151,7 +151,7 @@ async function handleAdminKickMenu(interaction, _uid) {
                 }
                 
                 saveLocalStorage();
-                await refreshVisualPanel(pKey);
+                refreshVisualPanel(pKey);
                 return await interaction.update({
                     content: getMsg("system.kickSuccess"),
                     components: []
@@ -165,7 +165,7 @@ async function handleAdminKickMenu(interaction, _uid) {
                 reason: getMsg("logs.adminRemove")
             }));
             freeFloorAndActivateNextGracePeriod(targetFloor);
-            await refreshVisualPanel(pKey);
+            refreshVisualPanel(pKey);
             return await interaction.update({
                 content: getMsg("system.kickSuccess"),
                 components: []
@@ -187,7 +187,7 @@ async function handleAdminKickMenu(interaction, _uid) {
                 freeAntidemonRoom(targetFloor, rm);
             }
         }
-        await refreshVisualPanel(pKey);
+        refreshVisualPanel(pKey);
         return await interaction.update({
             content: getMsg("system.kickSuccess"),
             components: []
