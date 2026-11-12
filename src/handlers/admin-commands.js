@@ -51,7 +51,7 @@ async function handleResetDirect(msg, resetKey) {
         for (const key in db) {
             if (!db[key] || key.startsWith('_')) continue;
             resetPanelData(key);
-            await refreshVisualPanel(key);
+            refreshVisualPanel(key);
             count++;
         }
         return msg.reply(`✅ Reset ${count} panels to defaults.`).catch(() => {});
@@ -61,7 +61,7 @@ async function handleResetDirect(msg, resetKey) {
         return msg.reply(getMsg('system.resetPanelNotFound', { key: resetKey })).catch(() => {});
     }
     resetPanelData(resetKey);
-    await refreshVisualPanel(resetKey);
+    refreshVisualPanel(resetKey);
     return msg.reply(getMsg('system.resetPanelSuccess', { key: resetKey })).catch(() => {});
 }
 

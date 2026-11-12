@@ -18,30 +18,30 @@ export function initTextCommands(client) {
         const command = args.shift().toLowerCase();
 
         if (command === 'setreminders') {
-            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return message.reply('❌ You must be an Administrator to use this command.');
+            if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+                return message.reply('❌ You must be an Administrator to use this command.').catch(() => {});
             }
             dailyLogs.bossSpawnChannelId = message.channel.id;
             saveDailyLogs();
-            return message.reply(`✅ Boss spawn alerts will be sent to ${message.channel.toString()}.`);
+            return message.reply(`✅ Boss spawn alerts will be sent to ${message.channel.toString()}.`).catch(() => {});
         }
 
         if (command === 'setevents') {
-            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return message.reply('❌ You must be an Administrator to use this command.');
+            if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+                return message.reply('❌ You must be an Administrator to use this command.').catch(() => {});
             }
             dailyLogs.scheduledEventChannelId = message.channel.id;
             saveDailyLogs();
-            return message.reply(`✅ Event alerts will be sent to ${message.channel.toString()}.`);
+            return message.reply(`✅ Event alerts will be sent to ${message.channel.toString()}.`).catch(() => {});
         }
 
         if (command === 'setlogs') {
-            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return message.reply('❌ You must be an Administrator to use this command.');
+            if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+                return message.reply('❌ You must be an Administrator to use this command.').catch(() => {});
             }
             dailyLogs.configChannelId = message.channel.id;
             saveDailyLogs();
-            return message.reply(`✅ Daily claim reports will be sent to ${message.channel.toString()}.`);
+            return message.reply(`✅ Daily claim reports will be sent to ${message.channel.toString()}.`).catch(() => {});
         }
     });
 }

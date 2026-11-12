@@ -6,6 +6,7 @@
 
 import { ActionRowBuilder, StringSelectMenuBuilder, UserSelectMenuBuilder, OverwriteType } from "discord.js";
 import { noop } from "../core/config.js";
+import { deferReplySafe, editReplySafe } from "../core/interaction-utils.js";
 import { STAFF_ROLE_ID, openTickets } from "./ticket-core.js";
 
 /** Show member selection menu to add to ticket. */
@@ -48,19 +49,30 @@ export async function handleRemoveMember(interaction) {
     const addedOverwrites = channel.permissionOverwrites.cache.filter(
         ow => ow.type === OverwriteType.Member && ow.id !== ticketOwnerId
     );
+
+    // Defer first: resolving display names for uncached members needs network
+    // round-trips, which would blow past Discord's 3s interaction deadline.
+    if (!await deferReplySafe(interaction, 64)) return;
+
+    // One bulk request for every uncached member instead of one per member.
+    const missingIds = [...addedOverwrites.keys()].filter(id => !interaction.guild.members.cache.has(id));
+    if (missingIds.length > 0) {
+        await interaction.guild.members.fetch({ user: missingIds }).catch(() => null);
+    }
+
     const options = [];
     for (const ow of addedOverwrites.values()) {
-        const member = interaction.guild.members.cache.get(ow.id) || await interaction.guild.members.fetch(ow.id).catch(() => null);
+        const member = interaction.guild.members.cache.get(ow.id);
         if (member) options.push({ label: member.displayName || member.user.username, value: ow.id, description: member.user.tag });
     }
     if (options.length === 0) {
-        return await interaction.reply({ content: "⚠️ There are no added members to remove from this ticket.", flags: 64 }).catch(noop);
+        return await editReplySafe(interaction, { content: "⚠️ There are no added members to remove from this ticket.", components: [] });
     }
 
     const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId("ticket_remove_select").setPlaceholder("Select a member to remove...").addOptions(options)
     );
-    return await interaction.reply({ content: "🚫 **Select a member to remove from this ticket:**", components: [row], flags: 64 }).catch(noop);
+    return await editReplySafe(interaction, { content: "🚫 **Select a member to remove from this ticket:**", components: [row] });
 }
 
 /** Remove selected member from ticket channel. */
