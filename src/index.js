@@ -15,6 +15,11 @@ import { initKickCommand } from './handlers/kick-command.js';
 import { initAdminCommands } from './handlers/admin-commands.js';
 import { initTicketSystem } from './handlers/ticket-system.js';
 import { initTicketCommand } from './handlers/ticket-command.js';
+import { initSalaryCommand } from './handlers/salary-command.js';
+import { loadSalaryState } from './handlers/salary-state.js';
+import { initSalaryCron } from './handlers/salary-lifecycle.js';
+import { exportVotesToSheets } from './handlers/salary-sheets.js';
+import { setSalaryRankingDb } from './handlers/salary-ranking.js';
 import { noop, getBotToken, DISCORD_SERVER_ID, RANKING_ENABLED } from './core/config.js';
 import { logger, installGlobalErrorHandlers } from './core/logger.js';
 
@@ -134,6 +139,7 @@ client.once('clientReady', async () => {
     } else try {
         rankingDb = loadLocalStorageRanking();
         rankingDbLoaded = true;
+        setSalaryRankingDb(rankingDb);
         logRankingEvent(`[Ranking Bot] Connected successfully as ${client.user.tag}`);
 
         // Ensure db.config and alliedClans are initialized before any system runs
@@ -232,6 +238,20 @@ client.once('clientReady', async () => {
     // the panel before the command listener is registered.
     await initTicketSystem(client);
     initTicketCommand(client);
+    initSalaryCommand(client);
+
+    // 💰 Salary poll (weekly stone request): restores/reopens the poll, schedules
+    // the open/close/report/reset jobs and re-exports votes to Google Sheets.
+    // Config comes from salary-poll-db.json or SALARY_CHANNEL_ID / SALARY_SPREADSHEET_ID.
+    loadSalaryState();
+    initSalaryCron();
+    setTimeout(async () => {
+        try {
+            await exportVotesToSheets();
+        } catch (err) {
+            logger.error('Salary', 'Error re-exporting votes to sheets', err);
+        }
+    }, 3000);
 });
 
 // Graceful shutdown handlers — save ranking db on exit

@@ -16,6 +16,8 @@ web-accounts.json
 web-sessions.json
 tickets.json
 ticket-logs/
+salary-poll-db.json
+google_credentials.json
 
 # Ranking / registration system data
 database_ranking.json

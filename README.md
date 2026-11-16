@@ -2,7 +2,7 @@
 
 Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** — floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and daily claim reports.
 
-> The bot is **claim-only**: registration, ranking sync, salary polls, and temp-voice were removed. The 🎫 support-ticket system is available (see [Support Tickets](#-support-tickets)).
+> The bot is **claim-only**: registration, ranking sync, and temp-voice were removed. The 🎫 support-ticket system and the 💰 weekly salary poll are available (see [Support Tickets](#-support-tickets) and [Salary Poll](#-salary-poll-weekly-stones)).
 
 ---
 
@@ -55,6 +55,46 @@ Single **Summon** panel for summon location claims.
 
 ### 🔔 DM Notifications
 Claim confirmations, boss respawn reminders, and warnings are sent via **DM**. Each user can toggle DMs with the **🔕** button on any panel.
+
+### 💰 Salary Poll (weekly stones)
+Members choose how their weekly salary is split between **🎨 Yellow Stones**, **🟣 Purple Stones** and **⚪ Darksteel** (the remainder is always Darksteel, and both stone percentages together cannot exceed 100%).
+
+| When (BRT) | Action |
+|------------|--------|
+| **Monday 12:30** | Poll opens (`@everyone`) |
+| **Wednesday 13:00** | Poll closes and votes are exported to Google Sheets |
+| **Wednesday 16:00** | Salary report is posted with a **🔍 Check Your Salary** breakdown |
+| **Friday 13:00** | Votes are reset to 100% Darksteel |
+
+The poll is restored automatically when the bot restarts mid-week. It needs the salary channel configured with `SALARY_CHANNEL_ID` (or the channel saved in `salary-poll-db.json`), or set from Discord with **Manage Server**:
+
+| Command | Description |
+|---------|-------------|
+| `!salary` | Show the current salary configuration (status, week, votes, channel, spreadsheet) |
+| `!salary channel` | Set the salary channel to the current one and post/refresh the poll |
+| `!salary sheet <id>` | Set the Google Sheets ID (`!salary sheet clear` unsets it) |
+
+> The Google Sheets export is optional and only runs when `google_credentials.json` exists (and `googleapis` is installed); without it the poll and the breakdown still work with percentages only.
+
+#### 🔑 Google Sheets setup (`google_credentials.json`)
+
+The bot writes to the spreadsheet through a **service account** (a robot Google account). To get the credentials file:
+
+1. **Create a Google Cloud project** — open [console.cloud.google.com](https://console.cloud.google.com/), click the project picker → **New project** (any name, e.g. `salary-bot`) and select it.
+2. **Enable the Google Sheets API** — **APIs & Services → Library**, search *Google Sheets API* → **Enable**.
+3. **Create the service account** — **APIs & Services → Credentials → Create credentials → Service account**, give it a name (e.g. `salary-bot`), skip the optional role/grant steps → **Done**.
+4. **Download the key** — open the service account → **Keys → Add key → Create new key → JSON → Create**. The JSON file downloads immediately — this is the only time it can be downloaded.
+5. **Save it in the bot root** — rename the download to **`google_credentials.json`** and put it next to `package.json`, because the bot reads `./google_credentials.json`. It contains a `client_email` and a `private_key`: treat it like a password and never commit it (already listed in `.gitignore`).
+6. **Share the spreadsheet with it** — open the spreadsheet → **Share** → paste the service account's `client_email` (looks like `salary-bot@project-id.iam.gserviceaccount.com`) → **Editor** → Send. Without this step Google replies `403 PERMISSION_DENIED` and nothing is written.
+7. **Install the library** — `npm install` (the `googleapis` dependency is already in `package.json`).
+8. **Point the bot at the spreadsheet** — the ID is the part between `/d/` and `/edit` in the spreadsheet URL. Set it in Discord with `!salary sheet <id>` (needs **Manage Server**) or with `SALARY_SPREADSHEET_ID=<id>` in `.env`. If you leave it unset, the default spreadsheet is used.
+9. **Restart the bot** and watch the log: the `⚠️ [Salary Sheets] google_credentials.json not found` warning must be gone. Votes are exported every **Wednesday 13:00**, and the report is posted at 16:00.
+
+**Spreadsheet layout the bot expects**
+- `PLAYERS` tab: one member per row starting at **row 7**, name in **column B**. The bot writes Darksteel % in **J**, Yellow % in **N** and Purple % in **Q**, and reads `B7:S` to build the salary report. If `PLAYERS` is missing, the export still runs but the report is skipped.
+- `Salary Poll` tab: created automatically with the headers `Discord ID | Discord Name | % Yellow Stones | % Purple Stones | % Darksteel | Vote Date`.
+
+> 🔁 **Key leaked or lost?** Delete it under **Keys** in the service account, create a new one and replace `google_credentials.json`. To change the target spreadsheet later, run `!salary sheet <new-id>`; `!salary sheet clear` goes back to the default.
 
 ---
 
@@ -213,6 +253,7 @@ Existing channels are matched by pretty name, legacy name or key, so renamed/leg
 | `web-accounts.json` | Website accounts (scrypt password hashes) |
 | `web-sessions.json` | Website login sessions (opaque tokens + expiry) |
 | `tickets.json` | Ticket panel channel + open tickets (user → channel) |
+| `salary-poll-db.json` | Salary poll state: channel, spreadsheet, week and votes |
 | `ticket-logs/` | Ticket transcripts and saved attachments |
 
 All are gitignored.
@@ -236,6 +277,8 @@ Every value is read from `.env`; each one also has a fallback in code, so a miss
 | `RANKING_ENABLED` | `true` re-enables the ranking/registration system (default `false`) |
 | `WEB_ENABLED` | `true` serves the claim website (default `false`) |
 | `WEB_HOST` / `WEB_PORT` / `WEB_HTTPS` | Website bind address (default `0.0.0.0:3000`, HTTPS off) |
+| `SALARY_CHANNEL_ID` | Channel for the weekly salary poll + report (falls back to `salary-poll-db.json`) |
+| `SALARY_SPREADSHEET_ID` | Google Sheets ID for the salary export (optional) |
 | `MEMBER_ROLE_ID` | Membership role the bot manages |
 | `STAFF_ROLE_ID` | Ticket staff role (empty = Manage Messages only) |
 | `ELDER_ROLE_ID` | Elder role (tower-rules / announcements / allied-list) |
