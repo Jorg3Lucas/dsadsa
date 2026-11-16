@@ -21,6 +21,7 @@ import {
     isRoomOpen
 } from "../core/time-utils.js";
 import { noop } from "../core/config.js";
+import { getScheduleToleranceMs, runAt } from "../core/schedule-tolerance.js";
 import { egSummonCache } from "./floor-eventgroup-cache.js";
 
 /** Handle event selection from slide menu. Routes to schedule/fixed/summon claim logic. @param {import('discord.js').StringSelectMenuInteraction} interaction @param {string} uid @param {string} uName @returns {Promise<void>} */
@@ -82,8 +83,8 @@ export async function handleEGSlide(interaction, uid, uName) {
         } else {
             eventStart = calculateNextOpening(evData.schedules, minuteOffset);
             claimedHour = eventStart.getHours();
-            // Event is closed until its opening time
-            if (now < eventStart) {
+            // Event is closed until its opening time (small client tolerance allowed)
+            if (now.getTime() + getScheduleToleranceMs(uid) < eventStart.getTime()) {
                 const diffMs = eventStart.getTime() - now.getTime();
                 const diffMins = Math.ceil(diffMs / 6e4);
                 return await interaction.update({
@@ -109,14 +110,26 @@ export async function handleEGSlide(interaction, uid, uName) {
 
         const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
         const windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
-        evData.ownerId = uid;
-        evData.ownerName = uName;
-        evData.timeWindow = windowStr;
-        evData._claimTimestamp = now.getTime();
-        pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
-        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
-        saveLocalStorage();
-        refreshVisualPanel(pKey);
+        const claimedAt = Math.max(now.getTime(), eventStart.getTime());
+
+        const commitClaim = async () => {
+            evData.ownerId = uid;
+            evData.ownerName = uName;
+            evData.timeWindow = windowStr;
+            evData._claimTimestamp = claimedAt;
+            pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
+            notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
+            saveLocalStorage();
+            refreshVisualPanel(pKey);
+        };
+
+        const earlyMs = eventStart.getTime() - now.getTime();
+        if (earlyMs > 0) {
+            // Settle the claim when the window actually opens.
+            runAt(earlyMs, () => { commitClaim().catch(noop); });
+        } else {
+            await commitClaim();
+        }
         return await interaction.update({ content: `🏆 ${evData.name} secured!`, components: [], flags: 64 }).catch(noop);
     } else if (evData.type === "summon") {
         egSummonCache.set(uid, { panelId: pKey, event: selectedEvent });

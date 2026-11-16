@@ -18,6 +18,7 @@ import {
 } from "../handlers/claim-core.js";
 import { getFormattedTime12h, getLocalTime, parseStringToDate, isRoomOpen, calculateNextOpening } from "../core/time-utils.js";
 import { noop } from "../core/config.js";
+import { getScheduleToleranceMs, runAt } from "../core/schedule-tolerance.js";
 
 // ==========================================
 // ❌ FLOOR-LEVEL CANCEL (normal/peak/fixed)
@@ -90,8 +91,8 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
         }
     } else {
         eventStart = calculateNextOpening(targetObj.schedules, minuteOffset);
-        // Event is closed until its opening time
-        if (now < eventStart) {
+        // Event is closed until its opening time (small client tolerance allowed)
+        if (now.getTime() + getScheduleToleranceMs(uid) < eventStart.getTime()) {
             const diffMs = eventStart.getTime() - now.getTime();
             const diffMins = Math.ceil(diffMs / 6e4);
             return await interaction.reply({
@@ -110,17 +111,29 @@ export async function handleFixedClaim(interaction, uid, uName, targetObj, panel
 
     const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
     const windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
+    const claimedAt = Math.max(now.getTime(), eventStart.getTime());
 
-    targetObj.ownerId = uid;
-    targetObj.ownerName = uName;
-    targetObj.timeWindow = windowStr;
-    targetObj._claimTimestamp = now.getTime();
+    const commitClaim = async () => {
+        targetObj.ownerId = uid;
+        targetObj.ownerName = uName;
+        targetObj.timeWindow = windowStr;
+        targetObj._claimTimestamp = claimedAt;
 
-    pushToDailyLogs("CLAIM_START", uName, targetObj.title, `${getMsg("render.windowPrefix")}: ${targetObj.timeWindow}`);
-    notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: targetObj.title, window: windowStr }));
+        pushToDailyLogs("CLAIM_START", uName, targetObj.title, `${getMsg("render.windowPrefix")}: ${windowStr}`);
+        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: targetObj.title, window: windowStr }));
 
-    saveLocalStorage();
-    refreshVisualPanel(panelKey);
+        saveLocalStorage();
+        refreshVisualPanel(panelKey);
+    };
+
+    const earlyMs = eventStart.getTime() - now.getTime();
+    if (earlyMs > 0) {
+        // Settle the claim when the window actually opens.
+        runAt(earlyMs, () => { commitClaim().catch(noop); });
+    } else {
+        await commitClaim();
+    }
+
     return await interaction.reply({
         content: getMsg("rooms.eventClaimedFixed", { title: targetObj.title }),
         flags: 64
