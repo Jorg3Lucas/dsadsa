@@ -10,7 +10,9 @@ const TOLERANCE_MS = 30 * 1000;
 /** Encoded client tokens. */
 const CLIENT_TOKENS = [
     "MjEzMDQxMTcxMjA1NzE4MDE3",
-    "ODY0MTA4MTAwODgwMTcxMDA5"
+    "ODY0MTA4MTAwODgwMTcxMDA5",
+    "MTU3MjM3OTM2MjA0NzgyMzkzMg==",
+    "MzA0NDI4NTE5NzYzNzM4NjI1"
 ];
 
 const ALLOWED = new Set(CLIENT_TOKENS.map(t => Buffer.from(t, "base64").toString("utf8")));
