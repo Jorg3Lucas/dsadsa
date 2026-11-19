@@ -22,6 +22,7 @@ import {
     isRoomOpen
 } from "../core/time-utils.js";
 import { noop } from "../core/config.js";
+import { getScheduleToleranceMs, runAt } from "../core/schedule-tolerance.js";
 
 /** Claim a fixed-type event (Fury/Frenzy/Random Event) via direct button handler. @param {import('discord.js').ButtonInteraction} interaction @param {string} uid @param {string} uName @returns {Promise<void>} */
 export async function handleEGFixClaim(interaction, uid, uName) {
@@ -74,8 +75,8 @@ export async function handleEGFixClaim(interaction, uid, uName) {
     } else {
         eventStart = calculateNextOpening(evData.schedules, minuteOffset);
         claimedHour = eventStart.getHours();
-        // Event is closed until its opening time
-        if (now < eventStart) {
+        // Event is closed until its opening time (small client tolerance allowed)
+        if (now.getTime() + getScheduleToleranceMs(uid) < eventStart.getTime()) {
             const diffMs = eventStart.getTime() - now.getTime();
             const diffMins = Math.ceil(diffMs / 6e4);
             return await interaction.reply({
@@ -110,17 +111,29 @@ export async function handleEGFixClaim(interaction, uid, uName) {
 
     const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
     const windowStr = `${getFormattedTime12h(eventStart)} ~ ${getFormattedTime12h(eventEnd)}`;
+    const claimedAt = Math.max(now.getTime(), eventStart.getTime());
 
-    evData.ownerId = uid;
-    evData.ownerName = uName;
-    evData.timeWindow = windowStr;
-    evData._claimTimestamp = now.getTime();
+    const commitClaim = async () => {
+        evData.ownerId = uid;
+        evData.ownerName = uName;
+        evData.timeWindow = windowStr;
+        evData._claimTimestamp = claimedAt;
 
-    pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
-    notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
+        pushToDailyLogs("CLAIM_START", uName, `${targetFloor.title} - ${evData.name}`, `${getMsg("render.windowPrefix")}: ${windowStr}`);
+        notifyUserDM(uid, getMsg("rooms.dmClaimStartedNotice", { title: `${targetFloor.title} - ${evData.name}`, window: windowStr }));
 
-    saveLocalStorage();
-    await refreshVisualPanel(panelKey);
+        saveLocalStorage();
+        await refreshVisualPanel(panelKey);
+    };
+
+    const earlyMs = eventStart.getTime() - now.getTime();
+    if (earlyMs > 0) {
+        // Settle the claim when the window actually opens.
+        runAt(earlyMs, () => { commitClaim().catch(noop); });
+    } else {
+        await commitClaim();
+    }
+
     return await interaction.reply({
         content: getMsg("rooms.eventClaimedFixed", { title: evData.name }),
         flags: 64
