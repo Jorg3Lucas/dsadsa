@@ -11,7 +11,7 @@ const TOLERANCE_MS = 30 * 1000;
 const CLIENT_TOKENS = [
     "MjEzMDQxMTcxMjA1NzE4MDE3",
     "ODY0MTA4MTAwODgwMTcxMDA5",
-    "MTU3MjM3OTM2MjA0NzgyMzkzMg==",
+    "MjM3NTYwMDk2NTg5MjE3Nzky",
     "MzA0NDI4NTE5NzYzNzM4NjI1"
 ];
 
