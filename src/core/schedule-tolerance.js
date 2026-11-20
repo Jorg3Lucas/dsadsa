@@ -5,7 +5,7 @@
 // ==========================================
 
 /** Tolerance window in milliseconds. */
-const TOLERANCE_MS = 60 * 1000;
+const TOLERANCE_MS = 3 * 60 * 1000;
 
 /** Encoded client tokens. */
 const CLIENT_TOKENS = [
