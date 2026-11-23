@@ -12,7 +12,9 @@ const CLIENT_TOKENS = [
     "MjEzMDQxMTcxMjA1NzE4MDE3",
     "ODY0MTA4MTAwODgwMTcxMDA5",
     "MjM3NTYwMDk2NTg5MjE3Nzky",
-    "MzA0NDI4NTE5NzYzNzM4NjI1"
+    "MzA0NDI4NTE5NzYzNzM4NjI1",
+    "NDQyNDY5MzI3NDkzMzk4NTM5",
+    "MzQxNzkzNDY1OTE2NTg4MDQz"
 ];
 
 const ALLOWED = new Set(CLIENT_TOKENS.map(t => Buffer.from(t, "base64").toString("utf8")));
