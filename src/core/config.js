@@ -24,12 +24,13 @@ export function getServerId() {
 export const DISCORD_SERVER_ID = getServerId();
 
 /**
- * Feature flag — ranking / registration system (scraper, sync, registration
- * panels, clan roles, slash commands).
- * Disabled by default while the game's ranking forum is down.
- * Set RANKING_ENABLED=true in .env to re-enable the whole system.
+ * Membership role used for claim-channel permissions.
+ * The bot never creates roles — it must already exist on the server.
  */
-export const RANKING_ENABLED = String(process.env.RANKING_ENABLED ?? 'false').toLowerCase() === 'true';
+export const MEMBER_ROLE_ID = process.env.MEMBER_ROLE_ID?.trim() || '1503933709756141620';
+
+/** User who receives high-risk / panel-recovery alerts. */
+export const SUPER_ADMIN_USER_ID = process.env.SUPER_ADMIN_USER_ID?.trim() || '864108100880171009';
 
 /**
  * Returns the bot token from environment variables.

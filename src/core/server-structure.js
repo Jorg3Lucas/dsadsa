@@ -69,8 +69,6 @@ export const CLAIM_CATEGORIES = [
 //   elders  → members view-only, only the elder role (+ bot) can write
 //             (tower-rules, announcements, allied-list)
 //   bot     → bot-managed: everyone views, only the bot sends (claim channels at creation)
-//   staff   → staff-only: only approver roles (+ admins/bot) can view and chat (approvals)
-//   system  → bot-managed registration channel (registration)
 export const GENERAL_CATEGORY = {
     name: '🏠 General',
     channels: [
@@ -80,9 +78,7 @@ export const GENERAL_CATEGORY = {
         { name: '📢 announcements', key: 'announcements', legacyName: 'announcements', mode: 'elders' },
         { name: '🤝 allied-list', key: 'allied-list', legacyName: 'allied-list', mode: 'elders' },
         { name: '⏰ reminders', key: 'reminders', legacyName: 'reminders', mode: 'member-view' },
-        { name: '📅 events', key: 'events', legacyName: 'events', mode: 'member-view' },
-        { name: '📝 registration', key: 'registration', legacyName: 'registro', mode: 'system', system: 'registration' },
-        { name: '📨 approvals', key: 'approvals', legacyName: 'approvals', mode: 'staff', system: 'approvals' }
+        { name: '📅 events', key: 'events', legacyName: 'events', mode: 'member-view' }
     ]
 };
 

@@ -58,7 +58,7 @@ export default [
     },
 
     {
-        // Standalone CommonJS scripts (deploy-commands.cjs, ecosystem.config.cjs).
+        // Standalone CommonJS scripts (ecosystem.config.cjs).
         files: ['**/*.cjs'],
         languageOptions: {
             ecmaVersion: 'latest',

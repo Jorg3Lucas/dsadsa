@@ -1,8 +1,6 @@
 // ==========================================
 // 💬 CLAIM TEXT COMMANDS (!setreminders, !setevents, !setlogs)
-// Always registered — independent of the RANKING_ENABLED flag.
-// (They configure the claim system's alert channels, so they
-// must work even with the ranking/registration system off.)
+// They configure the claim system's alert channels.
 // ==========================================
 
 import { PermissionFlagsBits } from 'discord.js';

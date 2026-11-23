@@ -12,7 +12,7 @@
 import { client, db, lastMessages, saveLocalStorage, logEvent } from "../core/state.js";
 import { renderEmbed, renderButtons } from "./panel-render.js";
 import { CLAIM_CATEGORIES, findClaimCategory, buildClaimOverwrites } from "../core/server-structure.js";
-import { noop } from "../core/config.js";
+import { noop, MEMBER_ROLE_ID, SUPER_ADMIN_USER_ID } from "../core/config.js";
 import { logger } from "../core/logger.js";
 import {
     refreshVisualPanel,
@@ -21,7 +21,6 @@ import {
     getPanelHealth,
     notifyUserDM
 } from "./panel-dm.js";
-import { SUPER_ADMIN_USER_ID, MEMBER_ROLE_ID } from "../core/ranking-constants.js";
 
 // A panel that has not refreshed successfully for this long is escalated.
 const STALE_PANEL_MS = 60 * 60 * 1000;        // 1h
@@ -161,7 +160,7 @@ export async function runPanelHealthCheck(guildId) {
     for (const key in db) {
         try {
             if (!db[key] || key.startsWith("_")) continue;
-            // Only claim panels are monitored (registration/approval panels are static).
+            // Only claim panels are monitored (other panels are static).
             if (!isClaimPanel(key)) continue;
 
             let health = getPanelHealth(key);

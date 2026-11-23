@@ -8,7 +8,6 @@ import { canHandleAdminInteraction, handleAdminInteraction } from "../interactio
 import { canHandleAntidemonInteraction, handleAntidemonInteraction, canHandleAntidemonModal, handleAntidemonModal } from "../interactions/antidemon-interactions.js";
 import { canHandleSummonInteraction, handleSummonInteraction } from "../interactions/summon-interactions.js";
 import { canHandleFloorInteraction, handleFloorInteraction } from "../interactions/floor-interactions.js";
-import { canHandleSalaryInteraction, handleSalaryInteraction } from "../interactions/salary-interactions.js";
 import { dmOptOut, saveDmOptOutToDisk } from "../core/state.js";
 
 
@@ -28,11 +27,6 @@ export async function handleClaimInteractions(interaction) {
     // 1. Admin interactions (reset menu, kick menu, reset logs, reserve flow)
     if (canHandleAdminInteraction(interaction)) {
         return await handleAdminInteraction(interaction, uid);
-    }
-
-    // 1b. Salary poll interactions (vote/change vote, check salary, refresh)
-    if (canHandleSalaryInteraction(interaction)) {
-        return await handleSalaryInteraction(interaction);
     }
 
     // 2. Antidemon interactions (slide, ticket, queue)
