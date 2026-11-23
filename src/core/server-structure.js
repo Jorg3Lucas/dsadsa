@@ -23,10 +23,6 @@ export const ELDER_ROLE_ID = process.env.ELDER_ROLE_ID?.trim() || '1503934006431
 const SP_SUMMONS_CATEGORY_ID = process.env.CLAIM_CATEGORY_SP_SUMMONS_ID?.trim() || '1548033121012813905';
 const MS_CATEGORY_ID = process.env.CLAIM_CATEGORY_MS_ID?.trim() || '1548033184619438162';
 
-// Explicit Discord category ID for the ticket category.
-// Override per deployment with TICKET_CATEGORY_ID (.env).
-const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID?.trim() || '1557229285629235220';
-
 // ── Claim categories (members view-only, bot sends panels) ──
 // Only TWO categories are used:
 //   • SP & Summons → every Secret Peak floor + the summon panel
@@ -63,22 +59,6 @@ export const CLAIM_CATEGORIES = [
         ]
     }
 ];
-
-// ── Ticket category — panel channel + transcript log ──
-// On boot the bot rebuilds ONLY the panel channel (panel: true) — like the
-// claim channels — so its permissions and panel are always current. It NEVER
-// touches the transcript log or the open ticket-* rooms: those are preserved
-// so the log history and every created ticket survive restarts.
-//   panel: true → channel rebuilt on boot + receives the ticket panel
-//   key          → stable logical id used to resolve the transcript log channel
-export const TICKET_CATEGORY = {
-    id: TICKET_CATEGORY_ID,
-    name: '🎫 Tickets',
-    channels: [
-        { name: '🎫 open-ticket', key: 'ticket-panel', legacyName: 'open-ticket', panel: true },
-        { name: '📜 ticket-logs', key: 'ticket-logs', legacyName: 'ticket-logs' }
-    ]
-};
 
 // ── General category — one category with every general channel ──
 // mode:

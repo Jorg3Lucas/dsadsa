@@ -13,8 +13,6 @@ import {
 import { initTextCommands } from './handlers/text-commands.js';
 import { initKickCommand } from './handlers/kick-command.js';
 import { initAdminCommands } from './handlers/admin-commands.js';
-import { initTicketSystem } from './handlers/ticket-system.js';
-import { initTicketCommand } from './handlers/ticket-command.js';
 import { initSalaryCommand } from './handlers/salary-command.js';
 import { loadSalaryState } from './handlers/salary-state.js';
 import { initSalaryCron } from './handlers/salary-lifecycle.js';
@@ -232,12 +230,6 @@ client.once('clientReady', async () => {
     // independent of the ranking feature flag.
     initTextCommands(client);
 
-    // 🎫 Support ticket system (panel + open/close/add-member handlers).
-    // Rebuilds ONLY the panel channel (🎫 open-ticket) and reposts the panel;
-    // never deletes 📜 ticket-logs or the open ticket-* rooms, and restores
-    // the panel before the command listener is registered.
-    await initTicketSystem(client);
-    initTicketCommand(client);
     initSalaryCommand(client);
 
     // 💰 Salary poll (weekly stone request): restores/reopens the poll, schedules

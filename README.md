@@ -2,7 +2,7 @@
 
 Discord bot for managing **MIR4 Magic Square / Secret Peak claim rotations** — floor claims, antidemon rooms, event groups (Fury/Frenzy), summons, reservations, and daily claim reports.
 
-> The bot is **claim-only**: registration, ranking sync, and temp-voice were removed. The 🎫 support-ticket system and the 💰 weekly salary poll are available (see [Support Tickets](#-support-tickets) and [Salary Poll](#-salary-poll-weekly-stones)).
+> The bot is **claim-only**: registration, ranking sync, and temp-voice were removed. The 💰 weekly salary poll is available (see [Salary Poll](#-salary-poll-weekly-stones)).
 
 ---
 
@@ -168,18 +168,6 @@ Multi-step interactive flow:
 
 Reserved slots are blocked for other users until the reservation passes.
 
-## 🎫 Support Tickets
-
-Members open a private ticket with the **🎫 Open Ticket** button on the ticket panel, pick a category (Support / Report / Doubt), and a private channel is created for them + staff. Staff can **add/remove members** and **close** the ticket; on close a `.txt` transcript (plus saved attachments) is sent to the **📜 ticket-logs** channel inside the ticket category — never to the claim logs channel. The **Remove Member** menu lists only the members that were explicitly added to the ticket (those with their own permission overwrite).
-
-**On boot** the bot rebuilds **only the panel channel**: `🎫 open-ticket` is deleted and recreated fresh (like the claim channels) and gets the panel posted. The `📜 ticket-logs` channel and every existing `ticket-*` room are **never deleted** — log history and all created tickets survive restarts. `📜 ticket-logs` is created only when missing.
-
-| Command | Description |
-|---------|-------------|
-| `!ticket` (or `!ticketpanel`) | Post/refresh the ticket panel in the current channel (requires **Manage Messages**) |
-
-State lives in `tickets.json`; transcripts are written to `ticket-logs/` (both gitignored). The staff role is read from `STAFF_ROLE_ID` in `.env`.
-
 ---
 
 ### 📢 Channel Setup (`!setreminders` / `!setevents` / `!setlogs`)
@@ -222,24 +210,6 @@ The two categories are matched by their explicit **ID** (defined in `src/core/se
 
 Each channel gets its panel embeds + buttons posted automatically.
 
-### 🎫 Ticket category
-
-The ticket category (`TICKET_CATEGORY_ID`) mirrors the claim setup, with one exception that protects history: only the **panel channel** is rebuilt on boot. Defined in `src/core/server-structure.js` as `TICKET_CATEGORY`:
-
-```
-🎫 Tickets  (category from TICKET_CATEGORY_ID)
-  🎫 open-ticket   ← panel channel, deleted + recreated on boot (panel reposted)
-  📜 ticket-logs   ← closed-ticket transcripts, created only when missing, never deleted
-```
-
-How it differs from the claim categories:
-
-- `🎫 open-ticket` is **deleted and recreated** on every boot, so its permissions and panel message are always current.
-- `📜 ticket-logs` is **never deleted or recreated** — the transcript history is kept. It is only created when missing.
-- Open `ticket-*` rooms are **never deleted on restart**. Tickets that exist on Discord but are missing from `tickets.json` are re-adopted from their channel topic, so their owner can still close them.
-
-Existing channels are matched by pretty name, legacy name or key, so renamed/legacy channels are reused instead of duplicated. When the category can't be resolved, the bot falls back to restoring the panel in the channel stored in `tickets.json`.
-
 ---
 
 ## 📦 Data Files
@@ -252,9 +222,7 @@ Existing channels are matched by pretty name, legacy name or key, so renamed/leg
 | `dm-optout.json` | Users who disabled DMs |
 | `web-accounts.json` | Website accounts (scrypt password hashes) |
 | `web-sessions.json` | Website login sessions (opaque tokens + expiry) |
-| `tickets.json` | Ticket panel channel + open tickets (user → channel) |
 | `salary-poll-db.json` | Salary poll state: channel, spreadsheet, week and votes |
-| `ticket-logs/` | Ticket transcripts and saved attachments |
 
 All are gitignored.
 
@@ -280,9 +248,7 @@ Every value is read from `.env`; each one also has a fallback in code, so a miss
 | `SALARY_CHANNEL_ID` | Channel for the weekly salary poll + report (falls back to `salary-poll-db.json`) |
 | `SALARY_SPREADSHEET_ID` | Google Sheets ID for the salary export (optional) |
 | `MEMBER_ROLE_ID` | Membership role the bot manages |
-| `STAFF_ROLE_ID` | Ticket staff role (empty = Manage Messages only) |
 | `ELDER_ROLE_ID` | Elder role (tower-rules / announcements / allied-list) |
-| `TICKET_CATEGORY_ID` | Category where ticket channels are created |
 | `CLAIM_CATEGORY_SP_SUMMONS_ID` / `CLAIM_CATEGORY_MS_ID` | The two claim categories |
 | `WORLD_BOSS_ARENA_CHANNEL_ID` | Channel for the world-boss arena alert |
 | `APPROVER_ROLE_IDS` | Comma-separated roles allowed to approve registrations |
@@ -290,8 +256,6 @@ Every value is read from `.env`; each one also has a fallback in code, so a miss
 | `REGISTRATION_CHANNEL_ID` | Fallback channel for registration DMs |
 
 `MEMBER_ROLE_ID` is the single membership role the bot manages (granted/revoked by the sync, used for claim-channel permissions). The bot **never creates roles** — create it manually on the server first. When the variable is unset the bot falls back to a hardcoded legacy ID and logs a warning at boot; if that fallback role no longer exists, claim-channel permissions are silently skipped (`reason: 'no-roles'`). Always set it explicitly.
-
-`STAFF_ROLE_ID` is the role treated as staff by the ticket system (added to every ticket, allowed to manage/close it). Leave it empty to rely on the **Manage Messages** permission only.
 
 `DISCORD_SERVER_ID` is defined once in `src/core/config.js` (from `.env`) and re-used by the ranking/registration system (`src/core/ranking-constants.js`), the claim bot, the web server and `deploy-commands.cjs`. Changing guild only requires editing `.env`.
 
@@ -310,7 +274,7 @@ With the flag off, the bot skips the ranking boot, does not register/answer slas
 ### 3. Permissions
 | Permission | Required For |
 |-----------|-------------|
-| **Manage Messages** | `!ticket`, reset/kick/reset-logs admin actions |
+| **Manage Messages** | reset/kick/reset-logs admin actions |
 | **Manage Channels** | Auto channel setup (delete/recreate channels on boot) |
 
 ### 4. Run
@@ -353,10 +317,6 @@ src/
 │   ├── boss-spawn-scheduler.js     # Boss + scheduled event alerts
 │   ├── kick-command.js             # !kick admin command
 │   ├── admin-commands.js           # !reset / !reserve admin commands
-│   ├── ticket-system.js            # Ticket router + panel bootstrap
-│   ├── ticket-core.js              # Ticket state, panel, orphan cleanup
-│   ├── ticket-handlers*.js         # Open/close, member add/remove, transcripts
-│   └── ticket-command.js           # !ticket admin command (post panel)
 └── interactions/
     ├── floor-interactions.js       # Floor/peak buttons (claim, cancel, next)
     ├── floor-*.js                  # Floor-specific handlers
@@ -384,7 +344,7 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] Auto-setup deletes every text channel in the two claim categories and recreates them with fresh panels — no duplicate panels are left behind
 - [ ] `applyClaimChannelPermissions` restricts claim + member channels to `MEMBER_ROLE_ID` (skipped, with a warning, when the role is missing)
 - [ ] The 15 s tick starts, then the panel watchdog (first pass ~60 s after boot)
-- [ ] Web server (`WEB_ENABLED=true`) and the `!set*` / `!kick` / `!reset` / `!reserve` / `!ticket` text commands come up last
+- [ ] Web server (`WEB_ENABLED=true`) and the `!set*` / `!kick` / `!reset` / `!reserve` text commands come up last
 
 ### Claim flows
 - [ ] **Floor claim** — claim, leave, queue promotion, grace period
@@ -394,7 +354,6 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] **Fury/Frenzy fixed events** — claim inside window, reservation blocks
 - [ ] **Admin** — reset panel (single + all), kick user, reset logs
 - [ ] **Reserve flow** — reserve Fury/Frenzy slots, panel refresh
-- [ ] **Tickets** — boot rebuilds only the `🎫 open-ticket` panel channel (reposts the panel) and never deletes `📜 ticket-logs` or open `ticket-*` rooms; `!ticket` posts panel; open → category → channel; add/remove member; close → transcript to the ticket-logs channel
 - [ ] **🔕 DM opt-out** — toggle disables/re-enables DMs
 - [ ] **Daily report** — dispatches at 18:00 with `.txt` attachment
 - [ ] **Boss alerts** — 5 min boss spawn + 10 min event alerts

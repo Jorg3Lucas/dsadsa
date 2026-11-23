@@ -14,8 +14,6 @@ punishments.json
 dm-optout.json
 web-accounts.json
 web-sessions.json
-tickets.json
-ticket-logs/
 salary-poll-db.json
 google_credentials.json
 
