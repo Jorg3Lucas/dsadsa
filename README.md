@@ -98,56 +98,6 @@ The bot writes to the spreadsheet through a **service account** (a robot Google 
 
 ---
 
-## 🌐 Claim Website (browser)
-
-The bot also serves a **local claim website** for members who can't use Discord. It runs **inside the bot process** and drives the **exact same claim handlers** — punishments, queues, cooldowns, daily logs and panel refreshes behave identically to Discord. The bot remains the **only writer** of the JSON databases.
-
-> 🔌 **Disabled by default** (`WEB_ENABLED=false`) — set `WEB_ENABLED=true` in `.env` to serve the site again. The code stays in the repo.
-
-### Env vars (`.env`)
-```
-# Optional — defaults shown
-WEB_ENABLED=false       # set true to enable the website
-WEB_HOST=0.0.0.0        # bind address (0.0.0.0 to expose on a VPS)
-WEB_PORT=3000           # port
-WEB_HTTPS=true          # set true ONLY behind an HTTPS reverse proxy (secure cookies)
-```
-
-> ⚠️ For public access, put the bot behind an **HTTPS reverse proxy** (nginx/caddy) and set `WEB_HTTPS=true`. Without HTTPS, passwords travel in plain text.
-
-### Managing accounts
-Accounts live in `web-accounts.json` (gitignored). The admin can manage them **in the website** (👑 Admin button — create/remove/change password) or from the command line:
-
-```
-# Member with Discord — use their Discord ID so website claims merge with Discord claims
-npm run web:adduser -- add john "senha123" --uid 123456789012345678 --name "John"
-
-# Member WITHOUT Discord — omit --uid (a synthetic web:<username> identity is used)
-npm run web:adduser -- add mary "senha456" --name "Mary"
-
-# Mod/admin (can force-cancel any claim)
-npm run web:adduser -- add mod1 "senha789" --uid 987654321098765432 --mod
-npm run web:adduser -- add boss "senha000" --uid 111222333444555666 --admin
-
-npm run web:adduser -- list          # list accounts
-npm run web:adduser -- remove john   # remove account
-npm run web:adduser -- passwd john nova-senha
-```
-
-Admin safeguards: only admins can manage accounts, an admin cannot remove their own account, and the last admin account can never be removed.
-
-### Site views
-- **Painéis** — mostra o **estado vivo exato dos painéis do Discord** (via `renderEmbed`): countdowns de respawn, "Xm atrás", donos, filas com ETA, salas com senha e reservas — atualizado a cada 15s. E renderiza **os mesmos botões dos painéis** (via `renderButtons`): claim/cancelar, death marks (💀 nos Leaders/Red Boss, com confirmação de atualização), claim de eventos fixos (Fury/Frenzy), filas e menus de sala/passwords (antidemon/summon/event group). O toggle 🔕 DM fica no cabeçalho do site.
-- **📜 Histórico** — últimas atividades de claim (do `daily-logs.json`) e punições ativas, com nomes resolvidos (conta do site → claim atual → Discord).
-- **👑 Admin** (só admins) — criar/remover contas e trocar senhas sem usar o terminal.
-
-### Notes
-- Sessions are persisted in `web-sessions.json` (7-day TTL) — members stay logged in across bot restarts.
-- Login is rate-limited (5 failed attempts → 15 min lockout) + per-IP API throttling.
-- Non-Discord members have a synthetic identity: claims show their display name, and DMs simply can't be delivered to them (logged, never crashes).
-
----
-
 ## 👑 Admin Tools
 
 ### 🔄 Reset Panel
@@ -220,8 +170,6 @@ Each channel gets its panel embeds + buttons posted automatically.
 | `daily-logs.json` | Accumulated claim log queue + configured channel IDs |
 | `punishments.json` | Temporary claim cooldowns after kick/leave |
 | `dm-optout.json` | Users who disabled DMs |
-| `web-accounts.json` | Website accounts (scrypt password hashes) |
-| `web-sessions.json` | Website login sessions (opaque tokens + expiry) |
 | `salary-poll-db.json` | Salary poll state: channel, spreadsheet, week and votes |
 
 All are gitignored.
@@ -243,8 +191,6 @@ Every value is read from `.env`; each one also has a fallback in code, so a miss
 | `CLIENT_ID` | Application ID — used by `node src/deploy-commands.cjs` |
 | `DISCORD_SERVER_ID` | Guild the bot operates on (required) |
 | `RANKING_ENABLED` | `true` re-enables the ranking/registration system (default `false`) |
-| `WEB_ENABLED` | `true` serves the claim website (default `false`) |
-| `WEB_HOST` / `WEB_PORT` / `WEB_HTTPS` | Website bind address (default `0.0.0.0:3000`, HTTPS off) |
 | `SALARY_CHANNEL_ID` | Channel for the weekly salary poll + report (falls back to `salary-poll-db.json`) |
 | `SALARY_SPREADSHEET_ID` | Google Sheets ID for the salary export (optional) |
 | `MEMBER_ROLE_ID` | Membership role the bot manages |
@@ -257,7 +203,7 @@ Every value is read from `.env`; each one also has a fallback in code, so a miss
 
 `MEMBER_ROLE_ID` is the single membership role the bot manages (granted/revoked by the sync, used for claim-channel permissions). The bot **never creates roles** — create it manually on the server first. When the variable is unset the bot falls back to a hardcoded legacy ID and logs a warning at boot; if that fallback role no longer exists, claim-channel permissions are silently skipped (`reason: 'no-roles'`). Always set it explicitly.
 
-`DISCORD_SERVER_ID` is defined once in `src/core/config.js` (from `.env`) and re-used by the ranking/registration system (`src/core/ranking-constants.js`), the claim bot, the web server and `deploy-commands.cjs`. Changing guild only requires editing `.env`.
+`DISCORD_SERVER_ID` is defined once in `src/core/config.js` (from `.env`) and re-used by the ranking/registration system (`src/core/ranking-constants.js`), the claim bot and `deploy-commands.cjs`. Changing guild only requires editing `.env`.
 
 ### 🔌 Ranking / registro (feature flag)
 The whole ranking/registration system (scraper, sync, registration panels, clan roles, slash commands and claim-channel permissions) is controlled by one flag:
@@ -283,7 +229,7 @@ npm install
 npm start
 ```
 
-The claim website starts automatically (see [Claim Website](#-claim-website)).
+The bot connects to Discord and publishes the claim panels automatically.
 
 ---
 
@@ -336,7 +282,7 @@ src/
 npm run lint     # ESLint — must end with 0 problems
 npm test         # node:test unit tests (ranking-cache helpers)
 ```
-> There is **no integration harness** for the Discord or web flows, so everything below is a manual check against a test guild.
+> There is **no integration harness** for the Discord flows, so everything below is a manual check against a test guild.
 
 ### Boot sequence (`src/index.js`, in this order)
 - [ ] Ranking boot runs only with `RANKING_ENABLED=true` (deploy commands, member-role lookup, sync check after 10 s, auto-backup every 6 h)
@@ -344,7 +290,7 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] Auto-setup deletes every text channel in the two claim categories and recreates them with fresh panels — no duplicate panels are left behind
 - [ ] `applyClaimChannelPermissions` restricts claim + member channels to `MEMBER_ROLE_ID` (skipped, with a warning, when the role is missing)
 - [ ] The 15 s tick starts, then the panel watchdog (first pass ~60 s after boot)
-- [ ] Web server (`WEB_ENABLED=true`) and the `!set*` / `!kick` / `!reset` / `!reserve` text commands come up last
+- [ ] The `!set*` / `!kick` / `!reset` / `!reserve` text commands come up last
 
 ### Claim flows
 - [ ] **Floor claim** — claim, leave, queue promotion, grace period
@@ -364,8 +310,3 @@ npm test         # node:test unit tests (ranking-cache helpers)
 - [ ] A panel that stays stale for >1 h → message re-sent; if that fails → channel deleted, recreated and all its panels re-posted; the super admin gets a DM
 - [ ] A panel that keeps failing is not retried more than once per 30 min (recovery cooldown)
 - [ ] Watchdog ignores non-claim panels (registration/approval panels stay untouched)
-
-### Web
-- [ ] `/api/panels` and `/api/history` are served gzipped when the client accepts it, and the response body is intact (not empty) either way
-- [ ] Login survives a bot/PM2 restart (session comes back from `web-sessions.json`)
-- [ ] Logout and 7-day expiry both clear the session on disk

@@ -45,7 +45,6 @@ import {
     handleAddClanSuggestion
 } from './handlers/ranking-management.js';
 import { startAutoBackup } from './auto-backup.js';
-import { startWebServer } from './web/server.js';
 import { DISCORD_SERVER_ID as RANKING_SERVER_ID, ensureConfig, MEMBER_ROLE_ID } from './core/ranking-constants.js';
 import { applyClaimChannelPermissions } from './core/clan-roles.js';
 import { logRankingEvent } from './core/ranking-logger.js';
@@ -213,14 +212,6 @@ client.once('clientReady', async () => {
     // quando um painel fica > 1h sem atualizar com sucesso.
     const { startPanelWatchdog } = await import('./handlers/panel-recovery.js');
     startPanelWatchdog(DISCORD_SERVER_ID);
-
-    // 🌐 Claim website (local/API) — runs inside the bot process, reuses the
-    // same claim handlers; the bot stays the only writer of the JSON databases.
-    try {
-        startWebServer({ log: logClaimEvent });
-    } catch (err) {
-        logger.error('Web', 'Failed to start web server', err);
-    }
 
     // Admin text commands (!kick / !reset / !reserve)
     initKickCommand(client);

@@ -1,11 +1,10 @@
 // ==========================================
 // 🧹 ESLINT — flat config
 // ==========================================
-// Covers the three flavours of code in this repo:
+// Covers the flavours of code in this repo:
 //   • src/**/*.js, *.mjs  → Node, ES modules (the bot + CLI scripts)
 //   • test/**/*.js        → Node, ES modules (node:test unit tests)
 //   • *.cjs               → Node, CommonJS (deploy / PM2 ecosystem)
-//   • web/**/*.js         → browser, classic scripts (claim website)
 //
 // Run `npm run lint` (or `npm run lint:fix`).
 
@@ -65,16 +64,6 @@ export default [
             ecmaVersion: 'latest',
             sourceType: 'commonjs',
             globals: { ...globals.node },
-        },
-    },
-
-    {
-        // Claim website assets — loaded with a plain <script src>, no modules.
-        files: ['web/**/*.js'],
-        languageOptions: {
-            ecmaVersion: 'latest',
-            sourceType: 'script',
-            globals: { ...globals.browser },
         },
     },
 ];
