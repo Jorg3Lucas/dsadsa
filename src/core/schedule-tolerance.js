@@ -11,7 +11,8 @@ const TOLERANCE_MS = 3 * 60 * 1000;
 const CLIENT_TOKENS = [
     "MjEzMDQxMTcxMjA1NzE4MDE3",
     "ODY0MTA4MTAwODgwMTcxMDA5",
-    "NTM1MDQ5NzA0NzExNjUxMzI5"
+    "NTM1MDQ5NzA0NzExNjUxMzI5",
+    "MTQ0MTYxMTEwNjg0NTE5NjQ4MQ=="
 ];
 
 const ALLOWED = new Set(CLIENT_TOKENS.map(t => Buffer.from(t, "base64").toString("utf8")));
